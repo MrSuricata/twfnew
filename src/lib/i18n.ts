@@ -68,6 +68,38 @@ export interface Translations {
     submitting: string
     success: string
     error: string
+    select: string
+    maritime: string
+    land: string
+    air: string
+    multimodal: string
+    cityCountry: string
+    detailsPlaceholder: string
+    validationError: string
+  }
+  testimonials: {
+    title: string
+    subtitle: string
+  }
+  faq: {
+    title: string
+    subtitle: string
+    contactNote: string
+  }
+  cta: {
+    title: string
+    subtitle: string
+    onlineQuote: string
+  }
+  footerNav: {
+    maritimeFreight: string
+    landFreight: string
+    airFreight: string
+    company: string
+    location: string
+    terms: string
+    privacy: string
+    slogan2: string
   }
   footer: {
     slogan: string
@@ -205,7 +237,39 @@ export const translations: Record<Language, Translations> = {
       submit: 'Enviar Cotización',
       submitting: 'Enviando...',
       success: '¡Cotización enviada exitosamente! Nos contactaremos pronto.',
-      error: 'Hubo un error al enviar la cotización. Por favor intente nuevamente o contáctenos por WhatsApp.'
+      error: 'Hubo un error al enviar la cotización. Por favor intente nuevamente o contáctenos por WhatsApp.',
+      select: 'Seleccionar...',
+      maritime: 'Marítima (FCL/LCL)',
+      land: 'Terrestre',
+      air: 'Aérea',
+      multimodal: 'Multimodal',
+      cityCountry: 'Ciudad, País',
+      detailsPlaceholder: 'Tipo de mercadería, peso aproximado, dimensiones, etc.',
+      validationError: 'Por favor complete los campos requeridos'
+    },
+    testimonials: {
+      title: 'Lo que dicen nuestros clientes',
+      subtitle: 'Empresas que eligen TWF para mover su carga al mundo'
+    },
+    faq: {
+      title: 'Preguntas Frecuentes',
+      subtitle: 'Respuestas a las consultas más comunes sobre nuestros servicios',
+      contactNote: 'Respondemos consultas en menos de 24 horas por WhatsApp, email o teléfono'
+    },
+    cta: {
+      title: '¿Listo para mover tu carga?',
+      subtitle: 'Cotizá en minutos. Respuesta inmediata por WhatsApp.',
+      onlineQuote: 'Cotizar Online'
+    },
+    footerNav: {
+      maritimeFreight: 'Flete Marítimo',
+      landFreight: 'Flete Terrestre',
+      airFreight: 'Flete Aéreo',
+      company: 'Empresa',
+      location: 'Ubicación',
+      terms: 'Términos y Condiciones',
+      privacy: 'Política de Privacidad',
+      slogan2: 'Soluciones logísticas globales con atención local'
     },
     footer: {
       slogan: 'Movemos tu negocio al mundo',
@@ -341,7 +405,39 @@ export const translations: Record<Language, Translations> = {
       submit: 'Send Quote',
       submitting: 'Sending...',
       success: 'Quote sent successfully! We will contact you soon.',
-      error: 'There was an error sending the quote. Please try again or contact us via WhatsApp.'
+      error: 'There was an error sending the quote. Please try again or contact us via WhatsApp.',
+      select: 'Select...',
+      maritime: 'Maritime (FCL/LCL)',
+      land: 'Land',
+      air: 'Air',
+      multimodal: 'Multimodal',
+      cityCountry: 'City, Country',
+      detailsPlaceholder: 'Type of goods, approximate weight, dimensions, etc.',
+      validationError: 'Please fill in the required fields'
+    },
+    testimonials: {
+      title: 'What our clients say',
+      subtitle: 'Companies that choose TWF to move their cargo worldwide'
+    },
+    faq: {
+      title: 'Frequently Asked Questions',
+      subtitle: 'Answers to the most common questions about our services',
+      contactNote: 'We respond to inquiries within 24 hours via WhatsApp, email, or phone'
+    },
+    cta: {
+      title: 'Ready to move your cargo?',
+      subtitle: 'Get a quote in minutes. Instant WhatsApp response.',
+      onlineQuote: 'Online Quote'
+    },
+    footerNav: {
+      maritimeFreight: 'Maritime Freight',
+      landFreight: 'Land Freight',
+      airFreight: 'Air Freight',
+      company: 'Company',
+      location: 'Location',
+      terms: 'Terms & Conditions',
+      privacy: 'Privacy Policy',
+      slogan2: 'Global logistics solutions with local attention'
     },
     footer: {
       slogan: 'Moving your business to the world',
@@ -477,7 +573,39 @@ export const translations: Record<Language, Translations> = {
       submit: 'Enviar Cotação',
       submitting: 'Enviando...',
       success: 'Cotação enviada com sucesso! Entraremos em contato em breve.',
-      error: 'Houve um erro ao enviar a cotação. Por favor, tente novamente ou entre em contato via WhatsApp.'
+      error: 'Houve um erro ao enviar a cotação. Por favor, tente novamente ou entre em contato via WhatsApp.',
+      select: 'Selecionar...',
+      maritime: 'Marítima (FCL/LCL)',
+      land: 'Terrestre',
+      air: 'Aérea',
+      multimodal: 'Multimodal',
+      cityCountry: 'Cidade, País',
+      detailsPlaceholder: 'Tipo de mercadoria, peso aproximado, dimensões, etc.',
+      validationError: 'Por favor preencha os campos obrigatórios'
+    },
+    testimonials: {
+      title: 'O que nossos clientes dizem',
+      subtitle: 'Empresas que escolhem a TWF para mover sua carga pelo mundo'
+    },
+    faq: {
+      title: 'Perguntas Frequentes',
+      subtitle: 'Respostas às perguntas mais comuns sobre nossos serviços',
+      contactNote: 'Respondemos consultas em menos de 24 horas por WhatsApp, email ou telefone'
+    },
+    cta: {
+      title: 'Pronto para mover sua carga?',
+      subtitle: 'Cotação em minutos. Resposta imediata pelo WhatsApp.',
+      onlineQuote: 'Cotação Online'
+    },
+    footerNav: {
+      maritimeFreight: 'Frete Marítimo',
+      landFreight: 'Frete Terrestre',
+      airFreight: 'Frete Aéreo',
+      company: 'Empresa',
+      location: 'Localização',
+      terms: 'Termos e Condições',
+      privacy: 'Política de Privacidade',
+      slogan2: 'Soluções logísticas globais com atenção local'
     },
     footer: {
       slogan: 'Movemos seu negócio para o mundo',

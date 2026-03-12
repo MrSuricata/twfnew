@@ -245,9 +245,7 @@ export default function PublicSite({
     e.preventDefault()
     
     if (!formData.name || !formData.email || !formData.cargoType) {
-      toast.error(language === 'es' ? 'Por favor complete los campos requeridos' : 
-                   language === 'en' ? 'Please complete required fields' :
-                   'Por favor preencha os campos obrigatórios')
+      toast.error(t.quote.validationError)
       return
     }
 
@@ -266,6 +264,13 @@ export default function PublicSite({
 
     try {
       trackQuoteSubmission(formData.cargoType)
+
+      // Send quote via server-side email
+      fetch('/api/quotes/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...formData, language })
+      }).catch(err => console.warn('Quote email failed:', err))
 
       toast.success(t.quote.success, { duration: 3000 })
 
@@ -733,20 +738,20 @@ export default function PublicSite({
                       <Label htmlFor="cargoType">{t.quote.cargoType} *</Label>
                       <Select value={formData.cargoType} onValueChange={(value) => setFormData({ ...formData, cargoType: value })}>
                         <SelectTrigger id="cargoType">
-                          <SelectValue placeholder={language === 'es' ? 'Seleccionar...' : language === 'en' ? 'Select...' : 'Selecionar...'} />
+                          <SelectValue placeholder={t.quote.select} />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="maritima">
-                            {language === 'es' ? 'Marítima (FCL/LCL)' : language === 'en' ? 'Maritime (FCL/LCL)' : 'Marítima (FCL/LCL)'}
+                            {t.quote.maritime}
                           </SelectItem>
                           <SelectItem value="terrestre">
-                            {language === 'es' ? 'Terrestre' : language === 'en' ? 'Land' : 'Terrestre'}
+                            {t.quote.land}
                           </SelectItem>
                           <SelectItem value="aerea">
-                            {language === 'es' ? 'Aérea' : language === 'en' ? 'Air' : 'Aérea'}
+                            {t.quote.air}
                           </SelectItem>
                           <SelectItem value="multiple">
-                            {language === 'es' ? 'Multimodal' : language === 'en' ? 'Multimodal' : 'Multimodal'}
+                            {t.quote.multimodal}
                           </SelectItem>
                         </SelectContent>
                       </Select>
@@ -760,7 +765,7 @@ export default function PublicSite({
                         id="origin"
                         value={formData.origin}
                         onChange={(e) => setFormData({ ...formData, origin: e.target.value })}
-                        placeholder={language === 'es' ? 'Ciudad, País' : language === 'en' ? 'City, Country' : 'Cidade, País'}
+                        placeholder={t.quote.cityCountry}
                       />
                     </div>
                     <div className="space-y-2">
@@ -769,7 +774,7 @@ export default function PublicSite({
                         id="destination"
                         value={formData.destination}
                         onChange={(e) => setFormData({ ...formData, destination: e.target.value })}
-                        placeholder={language === 'es' ? 'Ciudad, País' : language === 'en' ? 'City, Country' : 'Cidade, País'}
+                        placeholder={t.quote.cityCountry}
                       />
                     </div>
                   </div>
@@ -780,9 +785,7 @@ export default function PublicSite({
                       id="details"
                       value={formData.details}
                       onChange={(e) => setFormData({ ...formData, details: e.target.value })}
-                      placeholder={language === 'es' ? 'Tipo de mercadería, peso aproximado, dimensiones, etc.' : 
-                                 language === 'en' ? 'Type of goods, approximate weight, dimensions, etc.' :
-                                 'Tipo de mercadoria, peso aproximado, dimensões, etc.'}
+                      placeholder={t.quote.detailsPlaceholder}
                       rows={4}
                     />
                   </div>
@@ -822,14 +825,10 @@ export default function PublicSite({
             className="text-center mb-12"
           >
             <h2 className="text-3xl md:text-4xl font-bold mb-4 text-primary-foreground">
-              {language === 'es' ? 'Lo que dicen nuestros clientes' :
-               language === 'en' ? 'What Our Clients Say' :
-               'O que dizem nossos clientes'}
+              {t.testimonials.title}
             </h2>
             <p className="text-lg text-primary-foreground/70">
-              {language === 'es' ? 'Empresas que eligen TWF para mover su carga al mundo' :
-               language === 'en' ? 'Companies that choose TWF to move their cargo worldwide' :
-               'Empresas que escolhem a TWF para mover sua carga ao mundo'}
+              {t.testimonials.subtitle}
             </p>
           </motion.div>
 
@@ -859,9 +858,7 @@ export default function PublicSite({
               <h2 className="text-3xl md:text-4xl font-bold text-foreground">{t.nav.faq}</h2>
             </div>
             <p className="text-lg text-muted-foreground">
-              {language === 'es' ? 'Respuestas a las consultas más comunes sobre nuestros servicios' :
-               language === 'en' ? 'Answers to the most common questions about our services' :
-               'Respostas às perguntas mais frequentes sobre nossos serviços'}
+              {t.faq.subtitle}
             </p>
           </motion.div>
 
@@ -932,9 +929,7 @@ export default function PublicSite({
               {t.nav.contact} - Transit World Forwarding
             </h2>
             <p className="text-lg text-muted-foreground">
-              {language === 'es' ? 'Respondemos consultas en menos de 24 horas por WhatsApp, email o teléfono' :
-               language === 'en' ? 'We respond to inquiries within 24 hours via WhatsApp, email, or phone' :
-               'Respondemos consultas em menos de 24 horas por WhatsApp, email ou telefone'}
+              {t.faq.contactNote}
             </p>
           </motion.div>
 
@@ -989,7 +984,7 @@ export default function PublicSite({
                     <MapPin size={32} weight="fill" className="text-accent" />
                   </div>
                   <h3 className="font-semibold mb-2">
-                    {language === 'es' ? 'Ubicación' : language === 'en' ? 'Location' : 'Localização'}
+                    {t.footerNav.location}
                   </h3>
                   <div className="text-sm text-muted-foreground">
                     Montevideo, Uruguay
@@ -1007,23 +1002,18 @@ export default function PublicSite({
           <div className="bg-primary-foreground/10 border border-primary-foreground/20 rounded-2xl p-6 md:p-8 mb-12 flex flex-col md:flex-row items-center justify-between gap-4">
             <div>
               <h3 className="text-xl md:text-2xl font-bold mb-1">
-                {language === 'es' ? '¿Listo para mover tu carga?' :
-                 language === 'en' ? 'Ready to move your cargo?' :
-                 'Pronto para mover sua carga?'}
+                {t.cta.title}
               </h3>
               <p className="text-primary-foreground/70 text-sm">
-                {language === 'es' ? 'Cotizá en minutos. Respuesta inmediata por WhatsApp.' :
-                 language === 'en' ? 'Get a quote in minutes. Instant WhatsApp response.' :
-                 'Cotação em minutos. Resposta imediata pelo WhatsApp.'}
+                {t.cta.subtitle}
               </p>
             </div>
             <div className="flex gap-3">
               <Button
                 onClick={() => scrollToSection('cotizacion')}
-                variant="outline"
-                className="border-primary-foreground/30 text-primary-foreground hover:bg-primary-foreground/10"
+                className="bg-accent hover:bg-accent/90 text-accent-foreground font-semibold"
               >
-                {language === 'es' ? 'Cotizar Online' : language === 'en' ? 'Online Quote' : 'Cotação Online'}
+                {t.cta.onlineQuote}
               </Button>
               <Button
                 onClick={() => {
@@ -1044,9 +1034,7 @@ export default function PublicSite({
                 <img src="/images/twf-text-white.png" alt="TWF" className="h-6 w-auto" />
               </div>
               <p className="text-sm text-primary-foreground/70 mb-4">
-                {language === 'es' ? 'Soluciones logísticas globales con atención local' :
-                 language === 'en' ? 'Global logistics solutions with local attention' :
-                 'Soluções logísticas globais com atenção local'}
+                {t.footerNav.slogan2}
               </p>
               <div className="flex gap-3">
                 <a href="mailto:info@twf.uy" className="text-primary-foreground/60 hover:text-accent transition-colors">
@@ -1062,20 +1050,20 @@ export default function PublicSite({
               <h4 className="font-semibold mb-4 text-primary-foreground/90">{t.nav.services}</h4>
               <ul className="space-y-2 text-sm text-primary-foreground/60">
                 <li><button onClick={() => scrollToSection('servicios')} className="hover:text-primary-foreground hover:translate-x-1 transition-all duration-200">
-                  {language === 'es' ? 'Flete Marítimo' : language === 'en' ? 'Maritime Freight' : 'Frete Marítimo'}
+                  {t.footerNav.maritimeFreight}
                 </button></li>
                 <li><button onClick={() => scrollToSection('servicios')} className="hover:text-primary-foreground hover:translate-x-1 transition-all duration-200">
-                  {language === 'es' ? 'Flete Terrestre' : language === 'en' ? 'Land Freight' : 'Frete Terrestre'}
+                  {t.footerNav.landFreight}
                 </button></li>
                 <li><button onClick={() => scrollToSection('servicios')} className="hover:text-primary-foreground hover:translate-x-1 transition-all duration-200">
-                  {language === 'es' ? 'Flete Aéreo' : language === 'en' ? 'Air Freight' : 'Frete Aéreo'}
+                  {t.footerNav.airFreight}
                 </button></li>
               </ul>
             </div>
 
             <div>
               <h4 className="font-semibold mb-4 text-primary-foreground/90">
-                {language === 'es' ? 'Empresa' : language === 'en' ? 'Company' : 'Empresa'}
+                {t.footerNav.company}
               </h4>
               <ul className="space-y-2 text-sm text-primary-foreground/60">
                 <li><button onClick={() => scrollToSection('nosotros')} className="hover:text-primary-foreground hover:translate-x-1 transition-all duration-200">{t.nav.about}</button></li>
@@ -1089,14 +1077,10 @@ export default function PublicSite({
               <h4 className="font-semibold mb-4 text-primary-foreground/90">Legal</h4>
               <ul className="space-y-2 text-sm text-primary-foreground/60">
                 <li className="hover:text-primary-foreground transition-colors cursor-default">
-                  {language === 'es' ? 'Términos y Condiciones' :
-                   language === 'en' ? 'Terms and Conditions' :
-                   'Termos e Condições'}
+                  {t.footerNav.terms}
                 </li>
                 <li className="hover:text-primary-foreground transition-colors cursor-default">
-                  {language === 'es' ? 'Política de Privacidad' :
-                   language === 'en' ? 'Privacy Policy' :
-                   'Política de Privacidade'}
+                  {t.footerNav.privacy}
                 </li>
               </ul>
             </div>
