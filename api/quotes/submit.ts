@@ -48,33 +48,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const serviceId = process.env.EMAILJS_SERVICE_ID
     const templateId = process.env.EMAILJS_TEMPLATE_QUOTE || process.env.EMAILJS_TEMPLATE_OTP
     const publicKey = process.env.EMAILJS_PUBLIC_KEY
+    const privateKey = process.env.EMAILJS_PRIVATE_KEY
     const toEmail = process.env.QUOTE_TO_EMAIL || 'bridvanovich@twf.uy'
 
     let emailSent = false
 
     if (serviceId && templateId && publicKey) {
       try {
+        const body: Record<string, unknown> = {
+          service_id: serviceId,
+          template_id: templateId,
+          user_id: publicKey,
+          template_params: {
+            to_email: toEmail,
+            from_name: name,
+            from_email: email,
+            phone: phone || 'No proporcionado',
+            cargo_type: cargoType,
+            origin: origin || 'No especificado',
+            destination: destination || 'No especificado',
+            details: details || 'Sin detalles adicionales',
+            language: language || 'es',
+            message: `Nueva cotización de ${name} (${email})\n\nTipo: ${cargoType}\nOrigen: ${origin || '-'}\nDestino: ${destination || '-'}\nTeléfono: ${phone || '-'}\n\nDetalles:\n${details || 'Sin detalles'}`,
+            subject: `Nueva cotización - ${name} - ${cargoType}`
+          }
+        }
+        // Private key needed for server-side sends
+        if (privateKey) {
+          body.accessToken = privateKey
+        }
+
         const emailResponse = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            service_id: serviceId,
-            template_id: templateId,
-            user_id: publicKey,
-            template_params: {
-              to_email: toEmail,
-              from_name: name,
-              from_email: email,
-              phone: phone || 'No proporcionado',
-              cargo_type: cargoType,
-              origin: origin || 'No especificado',
-              destination: destination || 'No especificado',
-              details: details || 'Sin detalles adicionales',
-              language: language || 'es',
-              message: `Nueva cotización de ${name} (${email})\n\nTipo: ${cargoType}\nOrigen: ${origin || '-'}\nDestino: ${destination || '-'}\nTeléfono: ${phone || '-'}\n\nDetalles:\n${details || 'Sin detalles'}`,
-              subject: `Nueva cotización - ${name} - ${cargoType}`
-            }
-          })
+          body: JSON.stringify(body),
         })
         emailSent = emailResponse.ok
         if (!emailResponse.ok) {

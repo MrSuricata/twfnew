@@ -35,6 +35,7 @@ async function sendOTPEmail(email: string, code: string): Promise<boolean> {
   const serviceId = process.env.EMAILJS_SERVICE_ID
   const templateId = process.env.EMAILJS_TEMPLATE_OTP
   const publicKey = process.env.EMAILJS_PUBLIC_KEY
+  const privateKey = process.env.EMAILJS_PRIVATE_KEY // Required for server-side sends
 
   if (!serviceId || !templateId || !publicKey) {
     console.error('EmailJS env vars not configured')
@@ -42,21 +43,35 @@ async function sendOTPEmail(email: string, code: string): Promise<boolean> {
   }
 
   try {
+    // Build request body — accessToken (private key) is needed for server-side
+    const body: Record<string, unknown> = {
+      service_id: serviceId,
+      template_id: templateId,
+      user_id: publicKey,
+      template_params: {
+        email,
+        to_email: email,
+        otp_code: code,
+        passcode: code,
+        time: '5 minutos',
+      },
+    }
+
+    // Private key authenticates server-side requests
+    if (privateKey) {
+      body.accessToken = privateKey
+    }
+
     const res = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        service_id: serviceId,
-        template_id: templateId,
-        user_id: publicKey,
-        template_params: {
-          email,
-          otp_code: code,
-          passcode: code,
-          time: '5 minutos',
-        },
-      }),
+      body: JSON.stringify(body),
     })
+
+    if (!res.ok) {
+      const errText = await res.text()
+      console.error(`EmailJS OTP error (${res.status}):`, errText)
+    }
 
     return res.ok
   } catch (err) {
