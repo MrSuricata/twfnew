@@ -28,6 +28,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return handleDocuments(req, res, db)
       case 'reports':
         return handleReports(req, res, db)
+      case 'clients':
+        return handleClients(req, res, db)
       case 'settings':
         return handleSettings(req, res, db)
       case 'shipments-cache':
@@ -183,6 +185,54 @@ async function handleReports(req: VercelRequest, res: VercelResponse, db: any) {
     const id = req.query.id as string
     if (!id) return res.status(400).json({ error: 'id query parameter required' })
     const { error } = await db.from('reports').delete().eq('id', id)
+    if (error) throw error
+    return res.status(200).json({ deleted: true })
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' })
+}
+
+// ── Clients ─────────────────────────────────────────────────────────
+
+async function handleClients(req: VercelRequest, res: VercelResponse, db: any) {
+  if (req.method === 'GET') {
+    const { data, error } = await db
+      .from('clients')
+      .select('*')
+      .order('created_at_ts', { ascending: false })
+    if (error) throw error
+
+    const clients = (data || []).map((c: any) => ({
+      id: c.id,
+      email: c.email,
+      name: c.name,
+      company: c.company,
+      createdAt: c.created_at_ts,
+      clientePattern: c.cliente_pattern,
+    }))
+    return res.status(200).json({ clients })
+  }
+
+  if (req.method === 'POST') {
+    const body = req.body
+    const items = Array.isArray(body) ? body : [body]
+    const rows = items.map((c: any) => ({
+      id: c.id,
+      email: c.email,
+      name: c.name,
+      company: c.company || '',
+      created_at_ts: c.createdAt || c.created_at_ts || Date.now(),
+      cliente_pattern: c.clientePattern || c.cliente_pattern || '',
+    }))
+    const { error } = await db.from('clients').upsert(rows, { onConflict: 'id' })
+    if (error) throw error
+    return res.status(200).json({ saved: true, count: rows.length })
+  }
+
+  if (req.method === 'DELETE') {
+    const id = req.query.id as string
+    if (!id) return res.status(400).json({ error: 'id query parameter required' })
+    const { error } = await db.from('clients').delete().eq('id', id)
     if (error) throw error
     return res.status(200).json({ deleted: true })
   }

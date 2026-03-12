@@ -5,7 +5,7 @@
 // ─────────────────────────────────────────────────────────────────────
 
 import { authFetch } from './authClient'
-import type { QuoteFormData, ShipmentDocument, OperativeReport } from './quotationTypes'
+import type { QuoteFormData, ClientAccount, ShipmentDocument, OperativeReport } from './quotationTypes'
 import type { ParsedShipment } from './shipmentTypes'
 
 // ── Shipments (cached from Google Sheets sync) ──
@@ -94,6 +94,34 @@ export async function saveReports(reports: OperativeReport[]): Promise<void> {
   }
 }
 
+// ── Clients ──
+
+export async function fetchClients(): Promise<ClientAccount[]> {
+  const res = await authFetch('/api/data/clients')
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const data = await res.json()
+  return (data.clients || []).map((c: any) => ({
+    id: c.id,
+    email: c.email,
+    name: c.name,
+    company: c.company,
+    createdAt: c.created_at_ts || c.createdAt,
+    clientePattern: c.cliente_pattern || c.clientePattern || '',
+  }))
+}
+
+export async function saveClients(clients: ClientAccount[]): Promise<void> {
+  const res = await authFetch('/api/data/clients', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(clients),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
+}
+
 // ── Settings ──
 
 export async function fetchAllSettings(): Promise<Record<string, any>> {
@@ -122,15 +150,17 @@ export interface AdminData {
   quotes: QuoteFormData[]
   documents: ShipmentDocument[]
   reports: OperativeReport[]
+  clients: ClientAccount[]
   syncedAt: string | null
 }
 
 export async function loadAdminData(): Promise<AdminData> {
-  const [shipmentsRes, quotes, documents, reports] = await Promise.all([
+  const [shipmentsRes, quotes, documents, reports, clients] = await Promise.all([
     fetchShipmentsFromDB(),
     fetchQuotes(),
     fetchDocuments(),
     fetchReports(),
+    fetchClients(),
   ])
 
   return {
@@ -138,6 +168,7 @@ export async function loadAdminData(): Promise<AdminData> {
     quotes,
     documents,
     reports,
+    clients,
     syncedAt: shipmentsRes.syncedAt,
   }
 }

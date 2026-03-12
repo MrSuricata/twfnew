@@ -6,7 +6,7 @@ import { ParsedShipment } from '@/lib/shipmentTypes'
 import { getDemoShipments } from '@/lib/demoShipments'
 import { filterShipments } from '@/lib/sheetsSync'
 import { verifySession, clearAuth, authFetch } from '@/lib/authClient'
-import { loadAdminData, saveQuotes, saveDocuments, saveReports } from '@/lib/dataClient'
+import { loadAdminData, saveQuotes, saveDocuments, saveReports, saveClients } from '@/lib/dataClient'
 
 import Login from './components/Login'
 import ClientLogin from './components/ClientLogin'
@@ -93,6 +93,12 @@ function App() {
         setReports(data.reports)
         saveToStorage('twf-reports', data.reports)
         console.log(`[DB] Loaded ${data.reports.length} reports`)
+      }
+
+      if (data.clients.length > 0) {
+        setClients(data.clients)
+        saveToStorage('twf-clients', data.clients)
+        console.log(`[DB] Loaded ${data.clients.length} clients`)
       }
 
       toast.success('Datos sincronizados desde la base de datos')
@@ -201,8 +207,12 @@ function App() {
   const handleUpdateClients = (updated: ClientAccount[]) => {
     setClients(updated)
     saveToStorage('twf-clients', updated)
-    // Note: clients are managed via CLIENTS_JSON env var,
-    // local client list is just for UI state
+    // Save to Supabase so clients are shared across machines + OTP works
+    if (isAdminLoggedIn) {
+      saveClients(updated).catch(err =>
+        console.warn('[DB] Failed to save clients:', err)
+      )
+    }
   }
 
   const handleUpdateShipments = (updated: ParsedShipment[]) => {

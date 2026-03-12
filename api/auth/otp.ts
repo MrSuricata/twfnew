@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { generateOTP, storeOTP, verifyOTP } from '../_lib/otpStore.js'
 import { signClientToken } from '../_lib/jwt.js'
+import { getSupabase } from '../_lib/supabase.js'
 
 // ─── Types ──────────────────────────────────────────────────────────
 interface ClientConfig {
@@ -64,8 +65,8 @@ async function sendOTPEmail(email: string, code: string): Promise<boolean> {
   }
 }
 
-// ─── Get clients from env var ───────────────────────────────────────
-function getClients(): ClientConfig[] {
+// ─── Get clients from env var + Supabase ────────────────────────────
+function getClientsFromEnv(): ClientConfig[] {
   const raw = process.env.CLIENTS_JSON
   if (!raw) return []
   try {
@@ -74,6 +75,35 @@ function getClients(): ClientConfig[] {
     console.error('Invalid CLIENTS_JSON env var')
     return []
   }
+}
+
+async function getClients(): Promise<ClientConfig[]> {
+  // Start with env var clients
+  const envClients = getClientsFromEnv()
+
+  // Also fetch from Supabase (admin-added clients)
+  try {
+    const db = getSupabase()
+    const { data, error } = await db.from('clients').select('*')
+    if (!error && data) {
+      const dbClients: ClientConfig[] = data.map((c: any) => ({
+        email: c.email,
+        name: c.name,
+        company: c.company || '',
+        clientePattern: c.cliente_pattern || '',
+      }))
+
+      // Merge: DB clients override env clients for same email
+      const merged = new Map<string, ClientConfig>()
+      for (const c of envClients) merged.set(c.email.toLowerCase().trim(), c)
+      for (const c of dbClients) merged.set(c.email.toLowerCase().trim(), c)
+      return Array.from(merged.values())
+    }
+  } catch (err) {
+    console.warn('Failed to fetch clients from Supabase:', err)
+  }
+
+  return envClients
 }
 
 // ─── Handler ────────────────────────────────────────────────────────
@@ -99,8 +129,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(429).json({ error: 'Demasiadas solicitudes. Intentá más tarde.' })
     }
 
-    // Validate client exists
-    const clients = getClients()
+    // Validate client exists (checks env var + Supabase)
+    const clients = await getClients()
     const client = clients.find(c => c.email.toLowerCase().trim() === normalizedEmail)
 
     if (!client) {
@@ -133,8 +163,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(401).json({ error: 'Código inválido o expirado' })
     }
 
-    // Find client to include in JWT
-    const clients = getClients()
+    // Find client to include in JWT (checks env var + Supabase)
+    const clients = await getClients()
     const client = clients.find(c => c.email.toLowerCase().trim() === normalizedEmail)
 
     if (!client) {

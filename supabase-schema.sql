@@ -67,15 +67,28 @@ CREATE TABLE IF NOT EXISTS shipments_cache (
 INSERT INTO shipments_cache (id, data) VALUES (1, '[]'::JSONB)
 ON CONFLICT (id) DO NOTHING;
 
+-- 6. Clients (cuentas de clientes)
+CREATE TABLE IF NOT EXISTS clients (
+  id TEXT PRIMARY KEY,
+  email TEXT NOT NULL,
+  name TEXT NOT NULL,
+  company TEXT DEFAULT '',
+  created_at_ts BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
+  cliente_pattern TEXT DEFAULT '',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Disable RLS (security handled by API layer with JWT auth)
 ALTER TABLE quotes DISABLE ROW LEVEL SECURITY;
 ALTER TABLE documents DISABLE ROW LEVEL SECURITY;
 ALTER TABLE reports DISABLE ROW LEVEL SECURITY;
 ALTER TABLE settings DISABLE ROW LEVEL SECURITY;
 ALTER TABLE shipments_cache DISABLE ROW LEVEL SECURITY;
+ALTER TABLE clients DISABLE ROW LEVEL SECURITY;
 
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_documents_shipment_ref ON documents(shipment_ref);
 CREATE INDEX IF NOT EXISTS idx_reports_shipment_ref ON reports(shipment_ref);
 CREATE INDEX IF NOT EXISTS idx_quotes_status ON quotes(status);
 CREATE INDEX IF NOT EXISTS idx_quotes_email ON quotes(email);
+CREATE INDEX IF NOT EXISTS idx_clients_email ON clients(email);
