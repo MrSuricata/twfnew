@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { generateOTP, storeOTP, verifyOTP } from '../lib/otpStore'
-import { signClientToken } from '../lib/jwt'
+import { generateOTP, storeOTP, verifyOTP } from '../lib/otpStore.js'
+import { signClientToken } from '../lib/jwt.js'
 
 // ─── Types ──────────────────────────────────────────────────────────
 interface ClientConfig {

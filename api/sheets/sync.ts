@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { authenticateRequest } from '../lib/jwt'
-import { performServerSync } from '../lib/csvParser'
+import { authenticateRequest } from '../lib/jwt.js'
+import { performServerSync } from '../lib/csvParser.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const allowedOrigin = process.env.ALLOWED_ORIGIN || '*'
