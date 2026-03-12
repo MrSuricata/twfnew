@@ -6,6 +6,7 @@ import { ParsedShipment } from '@/lib/shipmentTypes'
 import { getDemoShipments } from '@/lib/demoShipments'
 import { filterShipments } from '@/lib/sheetsSync'
 import { verifySession, clearAuth, authFetch } from '@/lib/authClient'
+import { loadAdminData, saveQuotes, saveDocuments, saveReports } from '@/lib/dataClient'
 
 import Login from './components/Login'
 import ClientLogin from './components/ClientLogin'
@@ -50,13 +51,56 @@ function App() {
   const [clientEmail, setClientEmail] = useState<string>('')
   const [language, setLanguage] = useState<Language>('es')
 
-  const [quotes, setQuotes] = useState<QuoteFormData[]>([])
+  // Initialize from localStorage (fast local cache), then override from DB
+  const [quotes, setQuotes] = useState<QuoteFormData[]>(() => loadFromStorage('twf-quotes', []))
   const [clients, setClients] = useState<ClientAccount[]>(() => loadFromStorage('twf-clients', DEFAULT_CLIENTS))
   const [documents, setDocuments] = useState<ShipmentDocument[]>(() => loadFromStorage('twf-documents', []))
   const [reports, setReports] = useState<OperativeReport[]>(() => loadFromStorage('twf-reports', []))
   const [shipments, setShipments] = useState<ParsedShipment[]>(() => filterShipments(loadFromStorage('twf-shipments', [])))
 
   const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const dbLoadedRef = useRef(false)
+
+  // ── Load data from Supabase when admin logs in ──
+  const loadDataFromDB = useCallback(async () => {
+    if (dbLoadedRef.current) return
+    try {
+      console.log('[DB] Loading data from Supabase...')
+      const data = await loadAdminData()
+      dbLoadedRef.current = true
+
+      // Update state with DB data (overrides localStorage cache)
+      if (data.shipments.length > 0) {
+        const filtered = filterShipments(data.shipments)
+        setShipments(filtered)
+        saveToStorage('twf-shipments', filtered)
+        console.log(`[DB] Loaded ${filtered.length} shipments (synced: ${data.syncedAt || 'never'})`)
+      }
+
+      if (data.quotes.length > 0 || data.quotes.length === 0) {
+        setQuotes(data.quotes)
+        saveToStorage('twf-quotes', data.quotes)
+        console.log(`[DB] Loaded ${data.quotes.length} quotes`)
+      }
+
+      if (data.documents.length > 0 || data.documents.length === 0) {
+        setDocuments(data.documents)
+        saveToStorage('twf-documents', data.documents)
+        console.log(`[DB] Loaded ${data.documents.length} documents`)
+      }
+
+      if (data.reports.length > 0 || data.reports.length === 0) {
+        setReports(data.reports)
+        saveToStorage('twf-reports', data.reports)
+        console.log(`[DB] Loaded ${data.reports.length} reports`)
+      }
+
+      toast.success('Datos sincronizados desde la base de datos')
+    } catch (error) {
+      console.warn('[DB] Failed to load from Supabase, using local cache:', error)
+      // Non-fatal: localStorage data still available
+    }
+  }, [])
 
   // ── Session restore on mount ──
   useEffect(() => {
@@ -73,6 +117,13 @@ function App() {
       }
     })
   }, [])
+
+  // Load from DB when admin becomes logged in
+  useEffect(() => {
+    if (isAdminLoggedIn) {
+      loadDataFromDB()
+    }
+  }, [isAdminLoggedIn, loadDataFromDB])
 
   useEffect(() => {
     // Load demo shipments only if no persisted data
@@ -95,6 +146,7 @@ function App() {
       if (synced.length > 0) {
         setShipments(synced)
         saveToStorage('twf-shipments', synced)
+        // Note: sync endpoint already caches to Supabase
         console.log(`[Auto-sync] ${synced.length} registros actualizados — ${new Date().toLocaleTimeString('es-UY')}`)
       }
     } catch (error) {
@@ -144,24 +196,52 @@ function App() {
     }
   }, [runBackgroundSync])
 
+  // ── Data update handlers (save to localStorage + Supabase) ──
+
   const handleUpdateClients = (updated: ClientAccount[]) => {
     setClients(updated)
     saveToStorage('twf-clients', updated)
+    // Note: clients are managed via CLIENTS_JSON env var,
+    // local client list is just for UI state
   }
 
   const handleUpdateShipments = (updated: ParsedShipment[]) => {
     setShipments(updated)
     saveToStorage('twf-shipments', updated)
+    // Note: shipments are cached to Supabase by the sync endpoint
   }
 
   const handleUpdateDocuments = (docs: ShipmentDocument[]) => {
     setDocuments(docs)
     saveToStorage('twf-documents', docs)
+    // Save to Supabase in background
+    if (isAdminLoggedIn) {
+      saveDocuments(docs).catch(err =>
+        console.warn('[DB] Failed to save documents:', err)
+      )
+    }
   }
 
   const handleUpdateReports = (updated: OperativeReport[]) => {
     setReports(updated)
     saveToStorage('twf-reports', updated)
+    // Save to Supabase in background
+    if (isAdminLoggedIn) {
+      saveReports(updated).catch(err =>
+        console.warn('[DB] Failed to save reports:', err)
+      )
+    }
+  }
+
+  const handleUpdateQuotes = (updated: QuoteFormData[]) => {
+    setQuotes(updated)
+    saveToStorage('twf-quotes', updated)
+    // Save to Supabase in background
+    if (isAdminLoggedIn) {
+      saveQuotes(updated).catch(err =>
+        console.warn('[DB] Failed to save quotes:', err)
+      )
+    }
   }
 
   // Sync URL with view changes
@@ -198,12 +278,14 @@ function App() {
 
   const handleAdminLogin = () => {
     setIsAdminLoggedIn(true)
+    dbLoadedRef.current = false // Reset so data loads from DB
     navigateTo('admin-dashboard')
   }
 
   const handleAdminLogout = () => {
     clearAuth()
     setIsAdminLoggedIn(false)
+    dbLoadedRef.current = false
     navigateTo('public')
   }
 
@@ -277,7 +359,7 @@ function App() {
         onAdminClick={() => setCurrentView('admin-login')}
         onClientPortalClick={() => setCurrentView('client-login')}
         quotes={quotes || []}
-        onUpdateQuotes={setQuotes}
+        onUpdateQuotes={handleUpdateQuotes}
         shipments={shipments}
       />
     </>

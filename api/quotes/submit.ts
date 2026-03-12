@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { getSupabase } from '../lib/supabase.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const allowedOrigin = process.env.ALLOWED_ORIGIN || '*'
@@ -16,51 +17,88 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Name, email, and cargo type are required' })
     }
 
+    // Generate a unique ID for this quote
+    const quoteId = `q-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`
+
+    // Save quote to Supabase
+    let dbSaved = false
+    try {
+      const db = getSupabase()
+      const { error } = await db.from('quotes').insert({
+        id: quoteId,
+        name,
+        email,
+        phone: phone || '',
+        cargo_type: cargoType,
+        origin: origin || '',
+        destination: destination || '',
+        details: details || '',
+        timestamp: Date.now(),
+        status: 'pending',
+        notes: [],
+        language: language || 'es',
+      })
+      if (!error) dbSaved = true
+      else console.warn('Supabase quote save warning:', error.message)
+    } catch (dbError) {
+      console.warn('Failed to save quote to Supabase:', dbError)
+    }
+
     // Send email via EmailJS REST API
     const serviceId = process.env.EMAILJS_SERVICE_ID
     const templateId = process.env.EMAILJS_TEMPLATE_QUOTE || process.env.EMAILJS_TEMPLATE_OTP
     const publicKey = process.env.EMAILJS_PUBLIC_KEY
     const toEmail = process.env.QUOTE_TO_EMAIL || 'bridvanovich@twf.uy'
 
-    if (!serviceId || !templateId || !publicKey) {
-      console.error('EmailJS not configured for quotes')
-      // Still return success — quote is saved locally in the dashboard
-      return res.status(200).json({ sent: false, saved: true, message: 'Quote saved but email not configured' })
-    }
+    let emailSent = false
 
-    const emailResponse = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        service_id: serviceId,
-        template_id: templateId,
-        user_id: publicKey,
-        template_params: {
-          to_email: toEmail,
-          from_name: name,
-          from_email: email,
-          phone: phone || 'No proporcionado',
-          cargo_type: cargoType,
-          origin: origin || 'No especificado',
-          destination: destination || 'No especificado',
-          details: details || 'Sin detalles adicionales',
-          language: language || 'es',
-          // Common template vars
-          message: `Nueva cotización de ${name} (${email})\n\nTipo: ${cargoType}\nOrigen: ${origin || '-'}\nDestino: ${destination || '-'}\nTeléfono: ${phone || '-'}\n\nDetalles:\n${details || 'Sin detalles'}`,
-          subject: `Nueva cotización - ${name} - ${cargoType}`
+    if (serviceId && templateId && publicKey) {
+      try {
+        const emailResponse = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            service_id: serviceId,
+            template_id: templateId,
+            user_id: publicKey,
+            template_params: {
+              to_email: toEmail,
+              from_name: name,
+              from_email: email,
+              phone: phone || 'No proporcionado',
+              cargo_type: cargoType,
+              origin: origin || 'No especificado',
+              destination: destination || 'No especificado',
+              details: details || 'Sin detalles adicionales',
+              language: language || 'es',
+              message: `Nueva cotización de ${name} (${email})\n\nTipo: ${cargoType}\nOrigen: ${origin || '-'}\nDestino: ${destination || '-'}\nTeléfono: ${phone || '-'}\n\nDetalles:\n${details || 'Sin detalles'}`,
+              subject: `Nueva cotización - ${name} - ${cargoType}`
+            }
+          })
+        })
+        emailSent = emailResponse.ok
+        if (!emailResponse.ok) {
+          console.error('EmailJS quote error:', await emailResponse.text())
         }
-      })
-    })
-
-    if (!emailResponse.ok) {
-      const errorText = await emailResponse.text()
-      console.error('EmailJS quote error:', errorText)
-      return res.status(200).json({ sent: false, saved: true, message: 'Quote saved but email failed' })
+      } catch (emailError) {
+        console.error('EmailJS send error:', emailError)
+      }
+    } else {
+      console.warn('EmailJS not configured for quotes')
     }
 
-    return res.status(200).json({ sent: true, saved: true })
+    return res.status(200).json({
+      sent: emailSent,
+      saved: dbSaved,
+      quoteId,
+      message: !emailSent && !dbSaved
+        ? 'Quote could not be saved or emailed'
+        : !emailSent
+          ? 'Quote saved but email not sent'
+          : 'Quote saved and email sent',
+    })
   } catch (error: any) {
     console.error('Quote submit error:', error?.message || error)
-    return res.status(200).json({ sent: false, saved: true, message: 'Quote saved but email failed' })
+    return res.status(200).json({ sent: false, saved: false, message: 'Quote processing failed' })
   }
 }

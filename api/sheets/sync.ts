@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { authenticateRequest } from '../lib/jwt.js'
 import { performServerSync } from '../lib/csvParser.js'
+import { getSupabase } from '../lib/supabase.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const allowedOrigin = process.env.ALLOWED_ORIGIN || '*'
@@ -25,11 +26,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const shipments = await performServerSync(sheetsUrl)
+    const syncedAt = new Date().toISOString()
+
+    // Cache shipments to Supabase for cross-machine access
+    try {
+      const db = getSupabase()
+      await db
+        .from('shipments_cache')
+        .upsert({ id: 1, data: shipments, synced_at: syncedAt }, { onConflict: 'id' })
+    } catch (cacheError) {
+      console.warn('Failed to cache shipments to Supabase:', cacheError)
+      // Non-fatal — sync still succeeds
+    }
 
     return res.status(200).json({
       shipments,
       count: shipments.length,
-      syncedAt: new Date().toISOString(),
+      syncedAt,
     })
   } catch (error) {
     console.error('Sheets sync error:', error)
