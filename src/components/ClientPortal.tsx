@@ -6,6 +6,13 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   SignOut,
   Package,
   FileText,
@@ -24,7 +31,10 @@ import {
   CalendarBlank,
   Timer,
   Anchor,
-  ArrowRight
+  ArrowRight,
+  MagnifyingGlass,
+  Funnel,
+  Boat,
 } from '@phosphor-icons/react'
 import { ParsedShipment, getShipmentStatus, generateShipmentAlerts, isShipmentCompleted, ShipmentAlert } from '@/lib/shipmentTypes'
 import { ClientAccount, OperativeReport } from '@/lib/quotationTypes'
@@ -47,6 +57,14 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
   const [showNotifications, setShowNotifications] = useState(false)
   const [serverShipments, setServerShipments] = useState<ParsedShipment[]>([])
   const [isLoadingData, setIsLoadingData] = useState(true)
+
+  // ── Filter states ──
+  const [filterStatus, setFilterStatus] = useState('__all__')
+  const [filterSearch, setFilterSearch] = useState('')
+  const [filterDateFrom, setFilterDateFrom] = useState('')
+  const [filterDateTo, setFilterDateTo] = useState('')
+  const [showFilters, setShowFilters] = useState(false)
+
   const [dismissedAlerts, setDismissedAlerts] = useState<string[]>(() => {
     try {
       return JSON.parse(localStorage.getItem('twf-dismissed-alerts') || '[]')
@@ -102,8 +120,70 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
     return daysUntilFree >= -30
   }
 
-  const activeShipments = clientShipments.filter(isActiveShipment)
-  const historyShipments = clientShipments.filter(s => !isActiveShipment(s))
+  const activeShipmentsRaw = clientShipments.filter(isActiveShipment)
+  const historyShipmentsRaw = clientShipments.filter(s => !isActiveShipment(s))
+
+  // ── Apply filters ──
+  const applyFilters = (list: ParsedShipment[]) => {
+    let filtered = list
+
+    // Status filter
+    if (filterStatus !== '__all__') {
+      filtered = filtered.filter(s => {
+        const st = getShipmentStatus(s)
+        return st.code === filterStatus
+      })
+    }
+
+    // Text search (REF, BUQUE, CNTR, DESCRIPCION)
+    if (filterSearch.trim()) {
+      const q = filterSearch.toLowerCase().trim()
+      filtered = filtered.filter(s => {
+        const ops = s.operativas || []
+        const desc = ops[0]?.DESCRIPCION || ''
+        const containers = s.containers.map(c => c.number).join(' ')
+        const opsContainers = ops.map(o => o.CNTR_OP).join(' ')
+        return (
+          s.REF.toLowerCase().includes(q) ||
+          (s.BUQUE || '').toLowerCase().includes(q) ||
+          (s.LINEA || '').toLowerCase().includes(q) ||
+          containers.toLowerCase().includes(q) ||
+          opsContainers.toLowerCase().includes(q) ||
+          desc.toLowerCase().includes(q)
+        )
+      })
+    }
+
+    // Date range filter (by ETA)
+    if (filterDateFrom) {
+      const from = new Date(filterDateFrom)
+      filtered = filtered.filter(s => {
+        if (!s.ETA) return false
+        try { return new Date(s.ETA) >= from } catch { return true }
+      })
+    }
+    if (filterDateTo) {
+      const to = new Date(filterDateTo)
+      to.setHours(23, 59, 59)
+      filtered = filtered.filter(s => {
+        if (!s.ETA) return true
+        try { return new Date(s.ETA) <= to } catch { return true }
+      })
+    }
+
+    return filtered
+  }
+
+  const activeShipments = applyFilters(activeShipmentsRaw)
+  const historyShipments = applyFilters(historyShipmentsRaw)
+  const hasActiveFilters = filterStatus !== '__all__' || filterSearch.trim() !== '' || filterDateFrom !== '' || filterDateTo !== ''
+
+  const clearFilters = () => {
+    setFilterStatus('__all__')
+    setFilterSearch('')
+    setFilterDateFrom('')
+    setFilterDateTo('')
+  }
 
   // ── Alerts System ──
   const clientReports = useMemo(() => {
@@ -370,14 +450,148 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
           </TabsList>
 
           <TabsContent value="active" className="space-y-4 mt-6">
+            {/* ── Filter Bar ── */}
+            <div className="space-y-3">
+              {/* Quick search + toggle */}
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <MagnifyingGlass size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar por REF, buque, contenedor..."
+                    value={filterSearch}
+                    onChange={(e) => setFilterSearch(e.target.value)}
+                    className="pl-9 h-9"
+                  />
+                </div>
+                <Button
+                  variant={showFilters ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setShowFilters(!showFilters)}
+                  className="gap-1.5 shrink-0"
+                >
+                  <Funnel size={16} />
+                  <span className="hidden sm:inline">Filtros</span>
+                  {hasActiveFilters && (
+                    <span className="bg-accent text-accent-foreground text-[10px] rounded-full w-4 h-4 flex items-center justify-center">!</span>
+                  )}
+                </Button>
+                {hasActiveFilters && (
+                  <Button variant="ghost" size="sm" onClick={clearFilters} className="text-xs text-muted-foreground">
+                    Limpiar
+                  </Button>
+                )}
+              </div>
+
+              {/* Expanded filters */}
+              {showFilters && (
+                <Card>
+                  <CardContent className="pt-4 pb-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {/* Status filter */}
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-medium flex items-center gap-1">
+                          <Boat size={14} /> Estado
+                        </Label>
+                        <Select value={filterStatus} onValueChange={setFilterStatus}>
+                          <SelectTrigger className="h-9">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__all__">Todos los estados</SelectItem>
+                            <SelectItem value="en_transito">🚢 En Tránsito Marítimo</SelectItem>
+                            <SelectItem value="en_puerto">⚓ En Terminal / Puerto</SelectItem>
+                            <SelectItem value="salio_montevideo">🚛 Salió de Montevideo</SelectItem>
+                            <SelectItem value="en_frontera">🛃 En Frontera</SelectItem>
+                            <SelectItem value="llego_fiscal">📦 En Depósito Fiscal</SelectItem>
+                            <SelectItem value="devuelto">✅ Contenedor Devuelto</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Date from */}
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-medium flex items-center gap-1">
+                          <CalendarBlank size={14} /> ETA desde
+                        </Label>
+                        <Input
+                          type="date"
+                          value={filterDateFrom}
+                          onChange={(e) => setFilterDateFrom(e.target.value)}
+                          className="h-9"
+                        />
+                      </div>
+
+                      {/* Date to */}
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-medium flex items-center gap-1">
+                          <CalendarBlank size={14} /> ETA hasta
+                        </Label>
+                        <Input
+                          type="date"
+                          value={filterDateTo}
+                          onChange={(e) => setFilterDateTo(e.target.value)}
+                          className="h-9"
+                        />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Active filter summary */}
+              {hasActiveFilters && (
+                <div className="flex items-center gap-2 flex-wrap text-xs">
+                  <span className="text-muted-foreground">Mostrando {activeShipments.length} de {activeShipmentsRaw.length} cargas</span>
+                  {filterStatus !== '__all__' && (
+                    <Badge variant="secondary" className="text-xs gap-1">
+                      {filterStatus === 'en_transito' ? '🚢 En Tránsito' :
+                       filterStatus === 'en_puerto' ? '⚓ En Puerto' :
+                       filterStatus === 'salio_montevideo' ? '🚛 Salió MVD' :
+                       filterStatus === 'en_frontera' ? '🛃 Frontera' :
+                       filterStatus === 'llego_fiscal' ? '📦 Fiscal' :
+                       filterStatus === 'devuelto' ? '✅ Devuelto' : filterStatus}
+                      <button onClick={() => setFilterStatus('__all__')} className="ml-0.5 hover:text-foreground"><XIcon size={12} /></button>
+                    </Badge>
+                  )}
+                  {filterSearch && (
+                    <Badge variant="secondary" className="text-xs gap-1">
+                      "{filterSearch}"
+                      <button onClick={() => setFilterSearch('')} className="ml-0.5 hover:text-foreground"><XIcon size={12} /></button>
+                    </Badge>
+                  )}
+                  {filterDateFrom && (
+                    <Badge variant="secondary" className="text-xs gap-1">
+                      Desde: {filterDateFrom}
+                      <button onClick={() => setFilterDateFrom('')} className="ml-0.5 hover:text-foreground"><XIcon size={12} /></button>
+                    </Badge>
+                  )}
+                  {filterDateTo && (
+                    <Badge variant="secondary" className="text-xs gap-1">
+                      Hasta: {filterDateTo}
+                      <button onClick={() => setFilterDateTo('')} className="ml-0.5 hover:text-foreground"><XIcon size={12} /></button>
+                    </Badge>
+                  )}
+                </div>
+              )}
+            </div>
+
             {activeShipments.length === 0 ? (
               <Card>
                 <CardContent className="pt-12 pb-12 text-center">
                   <Package size={48} className="mx-auto mb-4 text-muted-foreground" />
-                  <h3 className="text-lg font-semibold mb-2">No hay cargas activas</h3>
+                  <h3 className="text-lg font-semibold mb-2">
+                    {hasActiveFilters ? 'Sin resultados' : 'No hay cargas activas'}
+                  </h3>
                   <p className="text-muted-foreground">
-                    Actualmente no tienes cargas en tránsito
+                    {hasActiveFilters
+                      ? 'No se encontraron cargas con los filtros aplicados'
+                      : 'Actualmente no tienes cargas en tránsito'}
                   </p>
+                  {hasActiveFilters && (
+                    <Button variant="outline" size="sm" onClick={clearFilters} className="mt-3">
+                      Limpiar filtros
+                    </Button>
+                  )}
                 </CardContent>
               </Card>
             ) : (
