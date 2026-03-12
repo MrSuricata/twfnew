@@ -42,8 +42,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       role: 'admin',
       user: username,
     })
-  } catch (error) {
-    console.error('Admin login error:', error)
-    return res.status(500).json({ error: 'Internal server error' })
+  } catch (error: any) {
+    console.error('Admin login error:', error?.message || error, error?.stack)
+    return res.status(500).json({ error: 'Internal server error', detail: error?.message })
   }
 }

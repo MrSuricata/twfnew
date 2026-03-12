@@ -1,4 +1,5 @@
-import jwt from 'jsonwebtoken'
+import * as jsonwebtoken from 'jsonwebtoken'
+const jwt = (jsonwebtoken as any).default || jsonwebtoken
 
 // ─── Types ──────────────────────────────────────────────────────────────
 export interface AdminPayload {
