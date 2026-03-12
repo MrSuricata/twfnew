@@ -61,13 +61,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           user_id: publicKey,
           template_params: {
             to_email: toEmail,
+            name: name,
             from_name: name,
+            email: email,
             from_email: email,
             phone: phone || 'No proporcionado',
             cargo_type: cargoType,
             origin: origin || 'No especificado',
             destination: destination || 'No especificado',
             details: details || 'Sin detalles adicionales',
+            date: new Date().toLocaleDateString('es-UY', { year: 'numeric', month: 'long', day: 'numeric' }),
             language: language || 'es',
             message: `Nueva cotización de ${name} (${email})\n\nTipo: ${cargoType}\nOrigen: ${origin || '-'}\nDestino: ${destination || '-'}\nTeléfono: ${phone || '-'}\n\nDetalles:\n${details || 'Sin detalles'}`,
             subject: `Nueva cotización - ${name} - ${cargoType}`
