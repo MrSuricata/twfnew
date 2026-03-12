@@ -25,11 +25,11 @@ export interface QuoteFormData {
 export interface ClientAccount {
   id: string
   email: string
-  password: string
+  password?: string
   name: string
   company: string
   createdAt: number
-  assignedShipments: string[]
+  clientePattern: string
 }
 
 export interface ShipmentDocument {
@@ -41,4 +41,16 @@ export interface ShipmentDocument {
   uploadedBy: string
   url?: string
   data?: string
+}
+
+export interface OperativeReport {
+  id: string
+  shipmentRef: string
+  title: string
+  content: string          // optional text description/notes
+  fileName: string         // original file name (e.g. "informe-A7039.pdf")
+  fileType: string         // mime type (e.g. "application/pdf")
+  fileData?: string        // base64 data URL for the file
+  createdAt: number
+  createdBy: string
 }

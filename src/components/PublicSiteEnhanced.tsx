@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -26,12 +26,17 @@ import {
   Star,
   Question,
   MagnifyingGlass,
-  User
+  User,
+  Globe,
+  Headset,
+  CalendarBlank,
+  CaretUp
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import { motion } from 'framer-motion'
 import { initGA, trackQuoteSubmission, trackWhatsAppClick, trackNavigationClick } from '@/lib/analytics'
 import PublicTracking from './PublicTracking'
+import { ParsedShipment } from '@/lib/shipmentTypes'
 import TestimonialsCarousel from './TestimonialsCarousel'
 import CasosExito from './CasosExito'
 import LanguageSelector from './LanguageSelector'
@@ -45,6 +50,45 @@ interface Service {
   details: string[]
 }
 
+// Animated counter component for stats
+function AnimatedCounter({ target, prefix }: { target: number; prefix: string }) {
+  const [count, setCount] = useState(0)
+  const [hasAnimated, setHasAnimated] = useState(false)
+  const ref = useRef<HTMLSpanElement>(null)
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !hasAnimated) {
+          setHasAnimated(true)
+          const duration = 1500
+          const steps = 40
+          const increment = target / steps
+          let current = 0
+          const interval = setInterval(() => {
+            current += increment
+            if (current >= target) {
+              setCount(target)
+              clearInterval(interval)
+            } else {
+              setCount(Math.floor(current))
+            }
+          }, duration / steps)
+        }
+      },
+      { threshold: 0.5 }
+    )
+
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [target, hasAnimated])
+
+  return <span ref={ref}>{prefix}{count}</span>
+}
+
 interface PublicSiteProps {
   language: Language
   onLanguageChange: (lang: Language) => void
@@ -52,19 +96,24 @@ interface PublicSiteProps {
   onClientPortalClick: () => void
   quotes: QuoteFormData[]
   onUpdateQuotes: (quotes: QuoteFormData[] | ((old?: QuoteFormData[]) => QuoteFormData[])) => void
+  shipments?: ParsedShipment[]
 }
 
-export default function PublicSite({ 
-  language, 
-  onLanguageChange, 
-  onAdminClick, 
+export default function PublicSite({
+  language,
+  onLanguageChange,
+  onAdminClick,
   onClientPortalClick,
   quotes,
-  onUpdateQuotes
+  onUpdateQuotes,
+  shipments = []
 }: PublicSiteProps) {
   const t = useTranslation(language)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [scrolled, setScrolled] = useState(false)
+  const [activeSection, setActiveSection] = useState('inicio')
+  const [showScrollTop, setShowScrollTop] = useState(false)
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -77,6 +126,41 @@ export default function PublicSite({
 
   useEffect(() => {
     initGA()
+  }, [])
+
+  // Navbar scroll effect + scroll-to-top visibility
+  useEffect(() => {
+    const handleScroll = () => {
+      setScrolled(window.scrollY > 50)
+      setShowScrollTop(window.scrollY > 600)
+    }
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
+
+  // Active section detection via IntersectionObserver
+  useEffect(() => {
+    const sectionIds = ['inicio', 'servicios', 'tracking', 'nosotros', 'casos-exito', 'cotizacion', 'testimonios', 'faq', 'contacto']
+    const observers: IntersectionObserver[] = []
+
+    sectionIds.forEach(id => {
+      const el = document.getElementById(id)
+      if (!el) return
+      const observer = new IntersectionObserver(
+        ([entry]) => {
+          if (entry.isIntersecting) setActiveSection(id)
+        },
+        { rootMargin: '-40% 0px -50% 0px' }
+      )
+      observer.observe(el)
+      observers.push(observer)
+    })
+
+    return () => observers.forEach(o => o.disconnect())
+  }, [])
+
+  const scrollToTop = useCallback(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }, [])
 
   const services: Service[] = [
@@ -227,38 +311,47 @@ export default function PublicSite({
         </motion.span>
       </motion.a>
 
-      <nav className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-sm border-b border-border">
+      <nav className={`fixed top-0 left-0 right-0 z-50 backdrop-blur-sm border-b transition-all duration-300 ${
+        scrolled ? 'bg-background/98 border-border shadow-md' : 'bg-background/80 border-transparent'
+      }`}>
         <div className="max-w-7xl mx-auto px-4 md:px-6">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-2">
               <img src="/images/twf-logo.png" alt="Transit World Forwarding" className="h-10 w-auto" />
             </div>
 
-            <div className="hidden md:flex items-center gap-8">
-              <button onClick={() => scrollToSection('inicio')} className="text-sm font-semibold text-foreground hover:text-accent transition-colors">
-                {t.nav.home}
-              </button>
-              <button onClick={() => scrollToSection('servicios')} className="text-sm font-semibold text-foreground hover:text-accent transition-colors">
-                {t.nav.services}
-              </button>
-              <button onClick={() => scrollToSection('tracking')} className="text-sm font-semibold text-foreground hover:text-accent transition-colors">
-                {t.nav.tracking}
-              </button>
-              <button onClick={() => scrollToSection('nosotros')} className="text-sm font-semibold text-foreground hover:text-accent transition-colors">
-                {t.nav.about}
-              </button>
-              <button onClick={() => scrollToSection('casos-exito')} className="text-sm font-semibold text-foreground hover:text-accent transition-colors">
-                {t.nav.caseStudies}
-              </button>
-              <button onClick={() => scrollToSection('faq')} className="text-sm font-semibold text-foreground hover:text-accent transition-colors">
-                {t.nav.faq}
-              </button>
-              <button onClick={() => scrollToSection('contacto')} className="text-sm font-semibold text-foreground hover:text-accent transition-colors">
-                {t.nav.contact}
-              </button>
+            <div className="hidden lg:flex items-center gap-6">
+              {([
+                ['inicio', t.nav.home],
+                ['servicios', t.nav.services],
+                ['tracking', t.nav.tracking],
+                ['nosotros', t.nav.about],
+                ['casos-exito', t.nav.caseStudies],
+                ['faq', t.nav.faq],
+                ['contacto', t.nav.contact]
+              ] as const).map(([id, label]) => (
+                <button
+                  key={id}
+                  onClick={() => scrollToSection(id)}
+                  className={`text-sm font-semibold transition-colors relative pb-1 ${
+                    activeSection === id
+                      ? 'text-accent'
+                      : 'text-foreground hover:text-accent'
+                  }`}
+                >
+                  {label}
+                  {activeSection === id && (
+                    <motion.span
+                      layoutId="nav-indicator"
+                      className="absolute bottom-0 left-0 right-0 h-0.5 bg-accent rounded-full"
+                      transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                    />
+                  )}
+                </button>
+              ))}
             </div>
 
-            <div className="hidden md:flex items-center gap-3">
+            <div className="hidden lg:flex items-center gap-3">
               <LanguageSelector 
                 currentLanguage={language} 
                 onLanguageChange={onLanguageChange}
@@ -272,27 +365,19 @@ export default function PublicSite({
                 <User size={18} />
                 {t.nav.clientPortal}
               </Button>
-              <Button 
-                variant="ghost" 
-                size="sm"
-                onClick={onAdminClick} 
-                className="text-foreground/60 hover:text-foreground"
-              >
-                {t.nav.admin}
-              </Button>
               <Button onClick={() => scrollToSection('cotizacion')} className="bg-accent text-accent-foreground hover:bg-accent/90">
                 {t.nav.quote}
               </Button>
             </div>
 
             <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-              <SheetTrigger asChild className="md:hidden">
+              <SheetTrigger asChild className="lg:hidden">
                 <Button variant="ghost" size="icon">
                   <List size={24} />
                 </Button>
               </SheetTrigger>
-              <SheetContent side="right" className="w-64">
-                <div className="flex flex-col gap-6 mt-8">
+              <SheetContent side="right" className="w-72 px-6">
+                <div className="flex flex-col gap-5 mt-8">
                   <LanguageSelector 
                     currentLanguage={language} 
                     onLanguageChange={onLanguageChange}
@@ -333,24 +418,24 @@ export default function PublicSite({
       </nav>
 
       <section id="inicio" className="relative pt-24 pb-16 md:pt-32 md:pb-24 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary via-primary/95 to-secondary -z-10" />
-        <div className="absolute inset-0 opacity-20">
-          <img 
-            src="https://images.unsplash.com/photo-1566576721346-d4a3b4eaeb55?w=1600&auto=format&fit=crop" 
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/80 via-primary/70 to-secondary/80 pointer-events-none" />
+        <div className="absolute inset-0 opacity-40 pointer-events-none">
+          <img
+            src="https://images.unsplash.com/photo-1566576721346-d4a3b4eaeb55?w=1600&auto=format&fit=crop"
             alt="Buque de carga con contenedores navegando en ruta internacional"
             className="w-full h-full object-cover"
             loading="eager"
           />
         </div>
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSAxMCAwIEwgMCAwIDAgMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS1vcGFjaXR5PSIwLjA1IiBzdHJva2Utd2lkdGg9IjEiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JpZCkiLz48L3N2Zz4=')] opacity-40 -z-10" />
-        
-        <div className="max-w-7xl mx-auto px-4 md:px-6">
+        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSAxMCAwIEwgMCAwIDAgMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS1vcGFjaXR5PSIwLjA1IiBzdHJva2Utd2lkdGg9IjEiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JpZCkiLz48L3N2Zz4=')] opacity-40 pointer-events-none" />
+
+        <div className="max-w-7xl mx-auto px-4 md:px-6 relative z-10">
           <div className="text-center text-white">
             <motion.h1 
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6 }}
-              className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6 tracking-tight drop-shadow-lg text-slate-600"
+              className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6 tracking-tight drop-shadow-lg text-white"
             >
               {t.hero.title}
             </motion.h1>
@@ -358,7 +443,7 @@ export default function PublicSite({
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.2 }}
-              className="text-lg md:text-xl mb-8 max-w-3xl mx-auto drop-shadow-md text-slate-950"
+              className="text-lg md:text-xl mb-8 max-w-3xl mx-auto drop-shadow-md text-white/90"
             >
               {t.hero.subtitle}
             </motion.p>
@@ -397,21 +482,21 @@ export default function PublicSite({
                 <CardContent className="pt-6 text-center">
                   <Lightning size={40} weight="fill" className="mx-auto mb-3 text-accent" />
                   <h3 className="font-semibold text-lg mb-2">{t.hero.speed}</h3>
-                  <p className="text-sm text-slate-900">{t.hero.speedDesc}</p>
+                  <p className="text-sm text-white/80">{t.hero.speedDesc}</p>
                 </CardContent>
               </Card>
               <Card className="bg-white/20 backdrop-blur-sm border-white/30">
                 <CardContent className="pt-6 text-center">
                   <Eye size={40} weight="fill" className="mx-auto mb-3 text-accent" />
                   <h3 className="font-semibold text-lg mb-2">{t.hero.transparency}</h3>
-                  <p className="text-sm text-slate-900">{t.hero.transparencyDesc}</p>
+                  <p className="text-sm text-white/80">{t.hero.transparencyDesc}</p>
                 </CardContent>
               </Card>
               <Card className="bg-white/20 backdrop-blur-sm border-white/30">
                 <CardContent className="pt-6 text-center">
                   <Gauge size={40} weight="fill" className="mx-auto mb-3 text-accent" />
                   <h3 className="font-semibold text-lg mb-2">{t.hero.efficiency}</h3>
-                  <p className="text-sm text-slate-900">{t.hero.efficiencyDesc}</p>
+                  <p className="text-sm text-white/80">{t.hero.efficiencyDesc}</p>
                 </CardContent>
               </Card>
             </motion.div>
@@ -419,15 +504,16 @@ export default function PublicSite({
         </div>
       </section>
 
+      {/* Wave: Hero → Servicios */}
+      <div className="relative -mt-1">
+        <svg viewBox="0 0 1440 80" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-auto block" preserveAspectRatio="none">
+          <path d="M0,40 C360,80 720,0 1440,40 L1440,80 L0,80 Z" className="fill-background" />
+        </svg>
+      </div>
+
       <section id="servicios" className="py-16 md:py-24 bg-background relative overflow-hidden">
-        <div className="absolute inset-0 opacity-5">
-          <img 
-            src="https://images.unsplash.com/photo-1605732562742-3023a888e56e?w=1600&auto=format&fit=crop" 
-            alt="Terminal portuaria con contenedores de carga apilados y grúas de puerto"
-            className="w-full h-full object-cover"
-            loading="lazy"
-          />
-        </div>
+        {/* Dot pattern background */}
+        <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: 'radial-gradient(circle, currentColor 1px, transparent 1px)', backgroundSize: '24px 24px' }} />
         <div className="max-w-7xl mx-auto px-4 md:px-6 relative z-10">
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
@@ -446,14 +532,14 @@ export default function PublicSite({
             {services.map((service, index) => (
               <motion.div
                 key={index}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
+                initial={{ opacity: 0, x: index % 2 === 0 ? -30 : 30 }}
+                whileInView={{ opacity: 1, x: 0 }}
                 transition={{ duration: 0.5, delay: index * 0.1 }}
                 viewport={{ once: true }}
               >
-                <Card className="h-full hover:shadow-lg transition-shadow">
+                <Card className="h-full hover:shadow-lg transition-shadow group">
                   <CardContent className="pt-6">
-                    <service.icon size={48} weight="duotone" className="text-accent mb-4" />
+                    <service.icon size={48} weight="duotone" className="text-accent mb-4 group-hover:scale-110 transition-transform" />
                     <h3 className="text-xl font-semibold mb-2 text-foreground">{service.title}</h3>
                     <p className="text-muted-foreground mb-4">{service.description}</p>
                     <ul className="space-y-2">
@@ -472,34 +558,52 @@ export default function PublicSite({
         </div>
       </section>
 
-      <section id="tracking" className="py-16 md:py-24 bg-card">
-        <div className="max-w-7xl mx-auto px-4 md:px-6">
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
+      {/* Wave: Servicios → Tracking */}
+      <div className="relative -mt-1">
+        <svg viewBox="0 0 1440 60" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-auto block" preserveAspectRatio="none">
+          <path d="M0,0 L1440,60 L1440,60 L0,60 Z" className="fill-primary" />
+        </svg>
+      </div>
+
+      <section id="tracking" className="py-16 md:py-24 bg-primary relative overflow-hidden">
+        {/* Grid overlay */}
+        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSAxMCAwIEwgMCAwIDAgMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS1vcGFjaXR5PSIwLjA1IiBzdHJva2Utd2lkdGg9IjEiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JpZCkiLz48L3N2Zz4=')] opacity-40 pointer-events-none" />
+        <div className="max-w-7xl mx-auto px-4 md:px-6 relative z-10">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            whileInView={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.6 }}
             viewport={{ once: true, margin: "-100px" }}
             className="text-center mb-12"
           >
             <div className="flex items-center justify-center gap-3 mb-4">
               <MagnifyingGlass size={40} weight="duotone" className="text-accent" />
-              <h2 className="text-3xl md:text-4xl font-bold text-foreground">{t.tracking.title}</h2>
+              <h2 className="text-3xl md:text-4xl font-bold text-primary-foreground">{t.tracking.title}</h2>
             </div>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+            <p className="text-lg text-primary-foreground/70 max-w-2xl mx-auto">
               {t.tracking.subtitle}
             </p>
           </motion.div>
 
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
+            initial={{ opacity: 0, scale: 0.95 }}
+            whileInView={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.6, delay: 0.1 }}
             viewport={{ once: true, margin: "-100px" }}
           >
-            <PublicTracking />
+            <PublicTracking shipments={shipments} />
           </motion.div>
         </div>
       </section>
+
+      {/* Wave: Tracking → Nosotros */}
+      <div className="relative -mt-1">
+        <svg viewBox="0 0 1440 80" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-auto block" preserveAspectRatio="none">
+          <path d="M0,0 C480,80 960,0 1440,40 L1440,80 L0,80 Z" className="fill-background" />
+          <path d="M0,0 C480,80 960,0 1440,40" stroke="currentColor" strokeOpacity="0.05" strokeWidth="1" fill="none" />
+        </svg>
+        <div className="absolute inset-0 bg-primary -z-10" />
+      </div>
 
       <section id="nosotros" className="py-16 md:py-24 bg-background">
         <div className="max-w-7xl mx-auto px-4 md:px-6">
@@ -520,7 +624,7 @@ export default function PublicSite({
               viewport={{ once: true, margin: "-100px" }}
               className="text-lg text-muted-foreground mb-6 leading-relaxed"
             >
-              En <span className="font-semibold text-foreground">Transit World Forwarding</span> combinamos experiencia local con visión global para brindar soluciones logísticas eficientes y transparentes.
+              Con más de 15 años en comercio exterior, <span className="font-semibold text-foreground">Transit World Forwarding</span> conecta tu negocio con más de 250 destinos en los 5 continentes.
             </motion.p>
             <motion.p 
               initial={{ opacity: 0, y: 20 }}
@@ -529,43 +633,46 @@ export default function PublicSite({
               viewport={{ once: true, margin: "-100px" }}
               className="text-lg text-muted-foreground mb-8 leading-relaxed"
             >
-              Somos una empresa dinámica con atención cercana, foco regional y alcance internacional. 
-              Contamos con equipos operativos en Uruguay y Argentina, y una red de agentes internacionales confiables que nos permiten ofrecer soluciones integrales de transporte marítimo, terrestre y aéreo.
+              Operamos desde Uruguay y Argentina con una red de agentes de confianza en los principales puertos del mundo. Cada cliente tiene un ejecutivo asignado que coordina su carga de punta a punta.
             </motion.p>
             
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.3 }}
-              viewport={{ once: true, margin: "-100px" }}
-              className="grid grid-cols-1 md:grid-cols-4 gap-6 mt-12"
-            >
-              <div className="text-center">
-                <div className="text-3xl font-bold text-accent mb-2">+15</div>
-                <div className="text-sm text-muted-foreground">Años de Experiencia</div>
-              </div>
-              <div className="text-center">
-                <div className="text-3xl font-bold text-accent mb-2">3</div>
-                <div className="text-sm text-muted-foreground">Oficinas Operativas</div>
-              </div>
-              <div className="text-center">
-                <div className="text-3xl font-bold text-accent mb-2">+250</div>
-                <div className="text-sm text-muted-foreground">Destinos Conectados</div>
-              </div>
-              <div className="text-center">
-                <div className="text-3xl font-bold text-accent mb-2">24/7</div>
-                <div className="text-sm text-muted-foreground">Atención Continua</div>
-              </div>
-            </motion.div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mt-12">
+              {[
+                { icon: CalendarBlank, numValue: 15, prefix: '+', suffix: '', label: 'Años de Experiencia', delay: 0.2 },
+                { icon: MapPin, numValue: 3, prefix: '', suffix: '', label: 'Oficinas Operativas', delay: 0.3 },
+                { icon: Globe, numValue: 250, prefix: '+', suffix: '', label: 'Destinos Conectados', delay: 0.4 },
+                { icon: Headset, numValue: 0, prefix: '', suffix: '24/7', label: 'Atención Continua', delay: 0.5 }
+              ].map((stat, idx) => (
+                <motion.div
+                  key={idx}
+                  initial={{ opacity: 0, y: 30 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: stat.delay }}
+                  viewport={{ once: true }}
+                >
+                  <Card className="bg-accent/5 border-accent/10 hover:bg-accent/10 hover:shadow-lg transition-all duration-300 group">
+                    <CardContent className="pt-6 text-center">
+                      <stat.icon size={32} weight="duotone" className="text-accent mx-auto mb-3 group-hover:scale-110 transition-transform" />
+                      <div className="text-3xl font-bold text-accent mb-1">
+                        {stat.suffix ? stat.suffix : <AnimatedCounter target={stat.numValue} prefix={stat.prefix} />}
+                      </div>
+                      <div className="text-sm text-muted-foreground">{stat.label}</div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              ))}
+            </div>
           </div>
         </div>
       </section>
 
       <CasosExito />
 
-      <section id="cotizacion" className="py-16 md:py-24 bg-background">
-        <div className="max-w-3xl mx-auto px-4 md:px-6">
-          <motion.div 
+      <section id="cotizacion" className="py-16 md:py-24 bg-gradient-to-b from-accent/5 via-background to-accent/10 relative overflow-hidden">
+        {/* Radial glow behind form */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-accent/5 rounded-full blur-3xl pointer-events-none" />
+        <div className="max-w-3xl mx-auto px-4 md:px-6 relative z-10">
+          <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
@@ -584,7 +691,7 @@ export default function PublicSite({
             transition={{ duration: 0.6, delay: 0.1 }}
             viewport={{ once: true, margin: "-100px" }}
           >
-            <Card>
+            <Card className="border-accent/20 shadow-lg">
               <CardContent className="pt-6">
                 <form onSubmit={handleSubmit} className="space-y-6">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -696,24 +803,33 @@ export default function PublicSite({
         </div>
       </section>
 
-      <section id="testimonios" className="py-16 md:py-24 bg-card overflow-hidden">
-        <div className="max-w-7xl mx-auto px-4 md:px-6">
-          <motion.div 
+      {/* Wave: Cotización → Testimonios */}
+      <div className="relative -mt-1">
+        <svg viewBox="0 0 1440 80" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-auto block" preserveAspectRatio="none">
+          <path d="M0,40 C360,0 720,80 1440,20 L1440,80 L0,80 Z" className="fill-primary" />
+        </svg>
+      </div>
+
+      <section id="testimonios" className="py-16 md:py-24 bg-primary relative overflow-hidden">
+        {/* Grid overlay */}
+        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSAxMCAwIEwgMCAwIDAgMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS1vcGFjaXR5PSIwLjA1IiBzdHJva2Utd2lkdGg9IjEiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JpZCkiLz48L3N2Zz4=')] opacity-40 pointer-events-none" />
+        <div className="max-w-7xl mx-auto px-4 md:px-6 relative z-10">
+          <motion.div
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
             viewport={{ once: true, margin: "-100px" }}
             className="text-center mb-12"
           >
-            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-foreground">
-              {language === 'es' ? 'Testimonios de Clientes Satisfechos' :
-               language === 'en' ? 'Satisfied Customer Testimonials' :
-               'Depoimentos de Clientes Satisfeitos'}
+            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-primary-foreground">
+              {language === 'es' ? 'Lo que dicen nuestros clientes' :
+               language === 'en' ? 'What Our Clients Say' :
+               'O que dizem nossos clientes'}
             </h2>
-            <p className="text-lg text-muted-foreground">
-              {language === 'es' ? 'Empresas que confían en TWF para sus operaciones internacionales' :
-               language === 'en' ? 'Companies that trust TWF for their international operations' :
-               'Empresas que confiam na TWF para suas operações internacionais'}
+            <p className="text-lg text-primary-foreground/70">
+              {language === 'es' ? 'Empresas que eligen TWF para mover su carga al mundo' :
+               language === 'en' ? 'Companies that choose TWF to move their cargo worldwide' :
+               'Empresas que escolhem a TWF para mover sua carga ao mundo'}
             </p>
           </motion.div>
 
@@ -721,11 +837,19 @@ export default function PublicSite({
         </div>
       </section>
 
+      {/* Wave: Testimonios → FAQ */}
+      <div className="relative -mt-1">
+        <svg viewBox="0 0 1440 60" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-auto block" preserveAspectRatio="none">
+          <path d="M0,0 L720,60 L1440,0 L1440,60 L0,60 Z" className="fill-background" />
+        </svg>
+        <div className="absolute inset-0 bg-primary -z-10" />
+      </div>
+
       <section id="faq" className="py-16 md:py-24 bg-background">
         <div className="max-w-4xl mx-auto px-4 md:px-6">
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
+          <motion.div
+            initial={{ opacity: 0, x: -30 }}
+            whileInView={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.6 }}
             viewport={{ once: true, margin: "-100px" }}
             className="text-center mb-12"
@@ -748,7 +872,7 @@ export default function PublicSite({
             viewport={{ once: true, margin: "-100px" }}
           >
             <Accordion type="single" collapsible className="w-full space-y-4">
-              <AccordionItem value="item-1" className="border rounded-lg px-6 bg-background">
+              <AccordionItem value="item-1" className="border rounded-lg px-6 bg-background last:border-b">
                 <AccordionTrigger className="text-left font-semibold hover:text-accent">
                   ¿Qué tipo de cargas pueden transportar?
                 </AccordionTrigger>
@@ -759,7 +883,7 @@ export default function PublicSite({
                 </AccordionContent>
               </AccordionItem>
 
-              <AccordionItem value="item-2" className="border rounded-lg px-6 bg-background">
+              <AccordionItem value="item-2" className="border rounded-lg px-6 bg-background last:border-b">
                 <AccordionTrigger className="text-left font-semibold hover:text-accent">
                   ¿Cuánto tarda un envío marítimo desde China?
                 </AccordionTrigger>
@@ -770,7 +894,7 @@ export default function PublicSite({
                 </AccordionContent>
               </AccordionItem>
 
-              <AccordionItem value="item-3" className="border rounded-lg px-6 bg-background">
+              <AccordionItem value="item-3" className="border rounded-lg px-6 bg-background last:border-b">
                 <AccordionTrigger className="text-left font-semibold hover:text-accent">
                   ¿Ofrecen servicio de despacho aduanero?
                 </AccordionTrigger>
@@ -808,110 +932,168 @@ export default function PublicSite({
               {t.nav.contact} - Transit World Forwarding
             </h2>
             <p className="text-lg text-muted-foreground">
-              {language === 'es' ? 'Estamos disponibles para atenderte por múltiples canales' :
-               language === 'en' ? 'We are available to assist you through multiple channels' :
-               'Estamos disponíveis para atendê-lo por múltiplos canais'}
+              {language === 'es' ? 'Respondemos consultas en menos de 24 horas por WhatsApp, email o teléfono' :
+               language === 'en' ? 'We respond to inquiries within 24 hours via WhatsApp, email, or phone' :
+               'Respondemos consultas em menos de 24 horas por WhatsApp, email ou telefone'}
             </p>
           </motion.div>
 
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.1 }}
-            viewport={{ once: true, margin: "-100px" }}
-            className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
-          >
-            <Card className="hover:shadow-lg transition-shadow">
-              <CardContent className="pt-6 text-center">
-                <div className="bg-accent/10 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <EnvelopeSimple size={32} weight="fill" className="text-accent" />
-                </div>
-                <h3 className="font-semibold mb-2">Email</h3>
-                <a href="mailto:bridvanovich@twf.uy" className="text-sm text-muted-foreground hover:text-accent transition-colors">
-                  bridvanovich@twf.uy
-                </a>
-              </CardContent>
-            </Card>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.1 }}
+              viewport={{ once: true }}
+            >
+              <Card className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
+                <CardContent className="pt-6 text-center">
+                  <div className="bg-accent/10 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <EnvelopeSimple size={32} weight="fill" className="text-accent" />
+                  </div>
+                  <h3 className="font-semibold mb-2">Email</h3>
+                  <a href="mailto:bridvanovich@twf.uy" className="text-sm text-muted-foreground hover:text-accent transition-colors">
+                    bridvanovich@twf.uy
+                  </a>
+                </CardContent>
+              </Card>
+            </motion.div>
 
-            <Card className="hover:shadow-lg transition-shadow">
-              <CardContent className="pt-6 text-center">
-                <div className="bg-accent/10 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <WhatsappLogo size={32} weight="fill" className="text-accent" />
-                </div>
-                <h3 className="font-semibold mb-2">WhatsApp</h3>
-                <a href="https://wa.me/59899511196" className="text-sm text-muted-foreground hover:text-accent transition-colors">
-                  +598 99 511 196
-                </a>
-              </CardContent>
-            </Card>
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.25 }}
+              viewport={{ once: true }}
+            >
+              <Card className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
+                <CardContent className="pt-6 text-center">
+                  <div className="bg-accent/10 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <WhatsappLogo size={32} weight="fill" className="text-accent" />
+                  </div>
+                  <h3 className="font-semibold mb-2">WhatsApp</h3>
+                  <a href="https://wa.me/59899511196" className="text-sm text-muted-foreground hover:text-accent transition-colors">
+                    +598 99 511 196
+                  </a>
+                </CardContent>
+              </Card>
+            </motion.div>
 
-            <Card className="hover:shadow-lg transition-shadow">
-              <CardContent className="pt-6 text-center">
-                <div className="bg-accent/10 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <MapPin size={32} weight="fill" className="text-accent" />
-                </div>
-                <h3 className="font-semibold mb-2">
-                  {language === 'es' ? 'Ubicación' : language === 'en' ? 'Location' : 'Localização'}
-                </h3>
-                <div className="text-sm text-muted-foreground">
-                  Montevideo, Uruguay
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.4 }}
+              viewport={{ once: true }}
+            >
+              <Card className="hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
+                <CardContent className="pt-6 text-center">
+                  <div className="bg-accent/10 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <MapPin size={32} weight="fill" className="text-accent" />
+                  </div>
+                  <h3 className="font-semibold mb-2">
+                    {language === 'es' ? 'Ubicación' : language === 'en' ? 'Location' : 'Localização'}
+                  </h3>
+                  <div className="text-sm text-muted-foreground">
+                    Montevideo, Uruguay
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          </div>
         </div>
       </section>
 
       <footer className="bg-primary text-primary-foreground py-12 pb-16">
         <div className="max-w-7xl mx-auto px-4 md:px-6">
+          {/* CTA banner */}
+          <div className="bg-primary-foreground/10 border border-primary-foreground/20 rounded-2xl p-6 md:p-8 mb-12 flex flex-col md:flex-row items-center justify-between gap-4">
+            <div>
+              <h3 className="text-xl md:text-2xl font-bold mb-1">
+                {language === 'es' ? '¿Listo para mover tu carga?' :
+                 language === 'en' ? 'Ready to move your cargo?' :
+                 'Pronto para mover sua carga?'}
+              </h3>
+              <p className="text-primary-foreground/70 text-sm">
+                {language === 'es' ? 'Cotizá en minutos. Respuesta inmediata por WhatsApp.' :
+                 language === 'en' ? 'Get a quote in minutes. Instant WhatsApp response.' :
+                 'Cotação em minutos. Resposta imediata pelo WhatsApp.'}
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <Button
+                onClick={() => scrollToSection('cotizacion')}
+                variant="outline"
+                className="border-primary-foreground/30 text-primary-foreground hover:bg-primary-foreground/10"
+              >
+                {language === 'es' ? 'Cotizar Online' : language === 'en' ? 'Online Quote' : 'Cotação Online'}
+              </Button>
+              <Button
+                onClick={() => {
+                  trackWhatsAppClick()
+                  window.open('https://wa.me/59891000000', '_blank')
+                }}
+                className="bg-green-500 hover:bg-green-600 text-white"
+              >
+                <WhatsappLogo size={20} weight="fill" className="mr-2" />
+                WhatsApp
+              </Button>
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
             <div>
               <div className="flex items-center gap-2 mb-4">
                 <img src="/images/twf-text-white.png" alt="TWF" className="h-6 w-auto" />
               </div>
-              <p className="text-sm text-primary-foreground/80">
+              <p className="text-sm text-primary-foreground/70 mb-4">
                 {language === 'es' ? 'Soluciones logísticas globales con atención local' :
                  language === 'en' ? 'Global logistics solutions with local attention' :
                  'Soluções logísticas globais com atenção local'}
               </p>
+              <div className="flex gap-3">
+                <a href="mailto:info@twf.uy" className="text-primary-foreground/60 hover:text-accent transition-colors">
+                  <EnvelopeSimple size={20} />
+                </a>
+                <a href="https://wa.me/59891000000" target="_blank" rel="noopener noreferrer" className="text-primary-foreground/60 hover:text-green-400 transition-colors">
+                  <WhatsappLogo size={20} />
+                </a>
+              </div>
             </div>
 
             <div>
-              <h4 className="font-semibold mb-4">{t.nav.services}</h4>
-              <ul className="space-y-2 text-sm text-primary-foreground/80">
-                <li><button onClick={() => scrollToSection('servicios')} className="hover:text-primary-foreground transition-colors">
+              <h4 className="font-semibold mb-4 text-primary-foreground/90">{t.nav.services}</h4>
+              <ul className="space-y-2 text-sm text-primary-foreground/60">
+                <li><button onClick={() => scrollToSection('servicios')} className="hover:text-primary-foreground hover:translate-x-1 transition-all duration-200">
                   {language === 'es' ? 'Flete Marítimo' : language === 'en' ? 'Maritime Freight' : 'Frete Marítimo'}
                 </button></li>
-                <li><button onClick={() => scrollToSection('servicios')} className="hover:text-primary-foreground transition-colors">
+                <li><button onClick={() => scrollToSection('servicios')} className="hover:text-primary-foreground hover:translate-x-1 transition-all duration-200">
                   {language === 'es' ? 'Flete Terrestre' : language === 'en' ? 'Land Freight' : 'Frete Terrestre'}
                 </button></li>
-                <li><button onClick={() => scrollToSection('servicios')} className="hover:text-primary-foreground transition-colors">
+                <li><button onClick={() => scrollToSection('servicios')} className="hover:text-primary-foreground hover:translate-x-1 transition-all duration-200">
                   {language === 'es' ? 'Flete Aéreo' : language === 'en' ? 'Air Freight' : 'Frete Aéreo'}
                 </button></li>
               </ul>
             </div>
 
             <div>
-              <h4 className="font-semibold mb-4">
+              <h4 className="font-semibold mb-4 text-primary-foreground/90">
                 {language === 'es' ? 'Empresa' : language === 'en' ? 'Company' : 'Empresa'}
               </h4>
-              <ul className="space-y-2 text-sm text-primary-foreground/80">
-                <li><button onClick={() => scrollToSection('nosotros')} className="hover:text-primary-foreground transition-colors">{t.nav.about}</button></li>
-                <li><button onClick={() => scrollToSection('casos-exito')} className="hover:text-primary-foreground transition-colors">{t.nav.caseStudies}</button></li>
-                <li><button onClick={() => scrollToSection('faq')} className="hover:text-primary-foreground transition-colors">{t.nav.faq}</button></li>
-                <li><button onClick={() => scrollToSection('contacto')} className="hover:text-primary-foreground transition-colors">{t.nav.contact}</button></li>
+              <ul className="space-y-2 text-sm text-primary-foreground/60">
+                <li><button onClick={() => scrollToSection('nosotros')} className="hover:text-primary-foreground hover:translate-x-1 transition-all duration-200">{t.nav.about}</button></li>
+                <li><button onClick={() => scrollToSection('casos-exito')} className="hover:text-primary-foreground hover:translate-x-1 transition-all duration-200">{t.nav.caseStudies}</button></li>
+                <li><button onClick={() => scrollToSection('faq')} className="hover:text-primary-foreground hover:translate-x-1 transition-all duration-200">{t.nav.faq}</button></li>
+                <li><button onClick={() => scrollToSection('contacto')} className="hover:text-primary-foreground hover:translate-x-1 transition-all duration-200">{t.nav.contact}</button></li>
               </ul>
             </div>
 
             <div>
-              <h4 className="font-semibold mb-4">Legal</h4>
-              <ul className="space-y-2 text-sm text-primary-foreground/80">
-                <li>
+              <h4 className="font-semibold mb-4 text-primary-foreground/90">Legal</h4>
+              <ul className="space-y-2 text-sm text-primary-foreground/60">
+                <li className="hover:text-primary-foreground transition-colors cursor-default">
                   {language === 'es' ? 'Términos y Condiciones' :
                    language === 'en' ? 'Terms and Conditions' :
                    'Termos e Condições'}
                 </li>
-                <li>
+                <li className="hover:text-primary-foreground transition-colors cursor-default">
                   {language === 'es' ? 'Política de Privacidad' :
                    language === 'en' ? 'Privacy Policy' :
                    'Política de Privacidade'}
@@ -920,12 +1102,26 @@ export default function PublicSite({
             </div>
           </div>
 
-          <div className="border-t border-primary-foreground/20 pt-8 text-center text-sm text-primary-foreground/80">
+          <div className="border-t border-primary-foreground/10 pt-8 flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-primary-foreground/50">
             <p>&copy; {new Date().getFullYear()} Transit World Forwarding. {t.footer.rights}</p>
-            <p className="mt-2 italic">{t.footer.slogan}</p>
+            <p className="italic">{t.footer.slogan}</p>
           </div>
         </div>
       </footer>
+
+      {/* Scroll to top button */}
+      <motion.button
+        onClick={scrollToTop}
+        className="fixed bottom-6 left-6 z-50 bg-primary text-primary-foreground p-3 rounded-full shadow-lg hover:bg-primary/90 transition-colors"
+        initial={{ scale: 0, opacity: 0 }}
+        animate={showScrollTop ? { scale: 1, opacity: 1 } : { scale: 0, opacity: 0 }}
+        transition={{ duration: 0.2 }}
+        whileHover={{ scale: 1.1 }}
+        whileTap={{ scale: 0.95 }}
+        aria-label="Volver arriba"
+      >
+        <CaretUp size={24} weight="bold" />
+      </motion.button>
     </div>
   )
 }

@@ -1,0 +1,168 @@
+import { useState, useMemo, useCallback } from 'react'
+import type { ParsedShipment } from '@/lib/shipmentTypes'
+import type { AgendaView, CalendarEvent } from '@/lib/agendaTypes'
+import { shipmentsToEvents, groupEventsByDate, countAlertsInRange, getWeekDates, toDateKey } from '@/lib/agendaUtils'
+
+import AgendaToolbar from './AgendaToolbar'
+import AgendaDayView from './AgendaDayView'
+import AgendaWeekView from './AgendaWeekView'
+import AgendaMonthView from './AgendaMonthView'
+import AgendaAnnualView from './AgendaAnnualView'
+import ShipmentDetailsDialog from '../ShipmentDetailsDialog'
+
+interface AgendaCalendarProps {
+  shipments: ParsedShipment[]
+  depotFilter?: string
+}
+
+export default function AgendaCalendar({ shipments, depotFilter }: AgendaCalendarProps) {
+  const [view, setView] = useState<AgendaView>('week')
+  const [currentDate, setCurrentDate] = useState(new Date())
+  const [selectedShipment, setSelectedShipment] = useState<ParsedShipment | null>(null)
+  const [dialogOpen, setDialogOpen] = useState(false)
+
+  // Transform all shipments into calendar events
+  const allEvents = useMemo(
+    () => shipmentsToEvents(shipments, depotFilter),
+    [shipments, depotFilter]
+  )
+
+  // Filter events visible in current range
+  const visibleEvents = useMemo(() => {
+    switch (view) {
+      case 'day': {
+        const key = toDateKey(currentDate)
+        return allEvents.filter(e => e.date === key)
+      }
+      case 'week': {
+        const weekDates = getWeekDates(currentDate)
+        const start = toDateKey(weekDates[0])
+        const end = toDateKey(weekDates[5])
+        return allEvents.filter(e => e.date >= start && e.date <= end)
+      }
+      case 'month': {
+        const y = currentDate.getFullYear()
+        const m = String(currentDate.getMonth() + 1).padStart(2, '0')
+        const prefix = `${y}-${m}`
+        return allEvents.filter(e => e.date.startsWith(prefix))
+      }
+      case 'annual': {
+        const yPrefix = `${currentDate.getFullYear()}-`
+        return allEvents.filter(e => e.date.startsWith(yPrefix))
+      }
+    }
+  }, [allEvents, view, currentDate])
+
+  const alertCount = useMemo(() => countAlertsInRange(visibleEvents), [visibleEvents])
+
+  // Navigation
+  const handleNavigate = useCallback((direction: 'prev' | 'next' | 'today') => {
+    if (direction === 'today') {
+      setCurrentDate(new Date())
+      return
+    }
+
+    setCurrentDate(prev => {
+      const d = new Date(prev)
+      const delta = direction === 'prev' ? -1 : 1
+
+      switch (view) {
+        case 'day':
+          d.setDate(d.getDate() + delta)
+          // Skip Sunday
+          if (d.getDay() === 0) d.setDate(d.getDate() + delta)
+          break
+        case 'week':
+          d.setDate(d.getDate() + 7 * delta)
+          break
+        case 'month':
+          d.setMonth(d.getMonth() + delta)
+          break
+        case 'annual':
+          d.setFullYear(d.getFullYear() + delta)
+          break
+      }
+      return d
+    })
+  }, [view])
+
+  // Event selection → open shipment details
+  const handleSelectShipment = useCallback((event: CalendarEvent) => {
+    setSelectedShipment(event.shipment)
+    setDialogOpen(true)
+  }, [])
+
+  // Day click from week/month → switch to day view
+  const handleDayClick = useCallback((date: Date) => {
+    setCurrentDate(date)
+    setView('day')
+  }, [])
+
+  // Month click from annual → switch to month view
+  const handleMonthClick = useCallback((monthIdx: number) => {
+    setCurrentDate(prev => {
+      const d = new Date(prev)
+      d.setMonth(monthIdx)
+      d.setDate(1)
+      return d
+    })
+    setView('month')
+  }, [])
+
+  return (
+    <div className="space-y-4">
+      <AgendaToolbar
+        view={view}
+        currentDate={currentDate}
+        eventCount={visibleEvents.length}
+        alertCount={alertCount}
+        onViewChange={setView}
+        onNavigate={handleNavigate}
+      />
+
+      {view === 'day' && (
+        <AgendaDayView
+          date={currentDate}
+          events={allEvents}
+          onSelectShipment={handleSelectShipment}
+        />
+      )}
+
+      {view === 'week' && (
+        <AgendaWeekView
+          date={currentDate}
+          events={allEvents}
+          onSelectShipment={handleSelectShipment}
+          onDayClick={handleDayClick}
+        />
+      )}
+
+      {view === 'month' && (
+        <AgendaMonthView
+          date={currentDate}
+          events={allEvents}
+          onSelectShipment={handleSelectShipment}
+          onDayClick={handleDayClick}
+        />
+      )}
+
+      {view === 'annual' && (
+        <AgendaAnnualView
+          date={currentDate}
+          events={allEvents}
+          onMonthClick={handleMonthClick}
+          onDayClick={handleDayClick}
+        />
+      )}
+
+      {/* Reuse existing shipment details dialog */}
+      <ShipmentDetailsDialog
+        shipment={selectedShipment}
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        onSave={() => {}} // Read-only from agenda
+        clientView={false}
+      />
+    </div>
+  )
+}

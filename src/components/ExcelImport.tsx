@@ -1,10 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
@@ -14,34 +12,19 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
-import { Badge } from '@/components/ui/badge'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { 
-  FileArrowUp, 
-  FileCsv, 
-  CheckCircle, 
+  FileArrowUp,
+  CheckCircle,
   Warning,
-  X,
-  Trash,
-  Eye,
   CloudArrowDown,
   ArrowsClockwise,
-  Link as LinkIcon
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import {
-  ShipmentRecord,
   ParsedShipment,
   processShipmentRecord
 } from '@/lib/shipmentTypes'
-import GoogleSheetsGuide from './GoogleSheetsGuide'
+import { parseMainSheetCSV, filterShipments } from '@/lib/sheetsSync'
+import { authFetch } from '@/lib/authClient'
 
 interface ExcelImportProps {
   onImportComplete?: (records: ParsedShipment[]) => void
@@ -51,9 +34,12 @@ interface ExcelImportProps {
 
 export default function ExcelImport({ onImportComplete, shipmentRecords = [], onRecordsUpdate }: ExcelImportProps) {
   const [localShipmentRecords, setLocalShipmentRecords] = useState<ParsedShipment[]>(shipmentRecords)
-  const [googleSheetsUrl, setGoogleSheetsUrl] = useState<string>('')
-  const [autoSyncEnabled, setAutoSyncEnabled] = useState<boolean>(false)
-  const [syncInterval, setSyncInterval] = useState<number>(5)
+  const [autoSyncEnabled, setAutoSyncEnabled] = useState<boolean>(() => {
+    return localStorage.getItem('twf-auto-sync') === 'true'
+  })
+  const [syncInterval, setSyncInterval] = useState<number>(() => {
+    return parseInt(localStorage.getItem('twf-sync-interval') || '10') || 10
+  })
   const [isImporting, setIsImporting] = useState(false)
   const [importPreview, setImportPreview] = useState<ParsedShipment[]>([])
   const [showPreviewDialog, setShowPreviewDialog] = useState(false)
@@ -61,12 +47,22 @@ export default function ExcelImport({ onImportComplete, shipmentRecords = [], on
   const [validationErrors, setValidationErrors] = useState<string[]>([])
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null)
 
+  // Persist auto-sync settings
   useEffect(() => {
-    if (!autoSyncEnabled || !googleSheetsUrl) return
+    localStorage.setItem('twf-auto-sync', String(autoSyncEnabled))
+  }, [autoSyncEnabled])
+
+  useEffect(() => {
+    localStorage.setItem('twf-sync-interval', String(syncInterval))
+  }, [syncInterval])
+
+  // Auto-sync via server API
+  useEffect(() => {
+    if (!autoSyncEnabled) return
 
     const syncData = async () => {
       try {
-        await performGoogleSheetsSync(true)
+        await performServerSync(true)
       } catch (error) {
         console.error('Auto-sync error:', error)
       }
@@ -74,50 +70,35 @@ export default function ExcelImport({ onImportComplete, shipmentRecords = [], on
 
     syncData()
     const intervalId = setInterval(syncData, (syncInterval || 5) * 60 * 1000)
-
     return () => clearInterval(intervalId)
-  }, [autoSyncEnabled, googleSheetsUrl, syncInterval])
+  }, [autoSyncEnabled, syncInterval])
 
-  const performGoogleSheetsSync = async (isSilent: boolean = false) => {
-    if (!googleSheetsUrl || googleSheetsUrl.trim() === '') {
-      if (!isSilent) toast.error('No hay URL de Google Sheets configurada')
-      return
-    }
-
+  // ── Server-side sync via API ──
+  const performServerSync = async (isSilent: boolean = false) => {
     setIsImporting(true)
 
     try {
-      let csvUrl: string = googleSheetsUrl
-      
-      if (csvUrl.includes('/edit')) {
-        const sheetId = csvUrl.match(/\/d\/([a-zA-Z0-9-_]+)/)?.[1]
-        if (!sheetId) {
-          throw new Error('URL de Google Sheets inválida')
-        }
-        csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv`
+      const res = await authFetch('/api/sheets/sync')
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || 'Error al sincronizar')
       }
 
-      const response = await fetch(csvUrl)
-      if (!response.ok) {
-        throw new Error('No se pudo acceder al archivo. Asegúrese que el link sea público.')
-      }
+      const data = await res.json()
+      const processed: ParsedShipment[] = data.shipments || []
 
-      const csvData = await response.text()
-      const rawRecords = parseCSVData(csvData)
-      const processed = rawRecords.map(processShipmentRecord)
-      
-      const processedCopy = [...processed]
-      setLocalShipmentRecords(() => processedCopy)
+      setLocalShipmentRecords(processed)
       setLastSyncTime(new Date())
-      
+
       if (!isSilent) {
-        toast.success(`${processedCopy.length} registros sincronizados desde Google Sheets`, {
-          description: `Última actualización: ${new Date().toLocaleTimeString('es-UY')}`
+        toast.success(`${processed.length} registros sincronizados desde Google Sheets`, {
+          description: `Ultima actualizacion: ${new Date().toLocaleTimeString('es-UY')}`
         })
       }
 
       if (onImportComplete) {
-        onImportComplete(processedCopy)
+        onImportComplete(processed)
       }
     } catch (error) {
       if (!isSilent) {
@@ -128,248 +109,24 @@ export default function ExcelImport({ onImportComplete, shipmentRecords = [], on
     }
   }
 
-  const parseCSVLine = (line: string): string[] => {
-    const result: string[] = []
-    let current = ''
-    let inQuotes = false
-
-    for (let i = 0; i < line.length; i++) {
-      const char = line[i]
-      
-      if (char === '"') {
-        inQuotes = !inQuotes
-      } else if (char === ',' && !inQuotes) {
-        result.push(current.trim())
-        current = ''
-      } else {
-        current += char
-      }
-    }
-    
-    result.push(current.trim())
-    return result
-  }
-
-  const parseDate = (dateStr: string): string => {
-    if (!dateStr || dateStr.trim() === '') return ''
-    
-    const cleaned = dateStr.trim().replace(/"/g, '')
-    
-    if (/^\d{4}-\d{2}-\d{2}$/.test(cleaned)) {
-      return cleaned
-    }
-    
-    if (/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(cleaned)) {
-      const parts = cleaned.split('/')
-      const day = parts[0].padStart(2, '0')
-      const month = parts[1].padStart(2, '0')
-      let year = parts[2]
-      
-      if (year.length === 2) {
-        year = parseInt(year) > 50 ? `19${year}` : `20${year}`
-      }
-      
-      return `${year}-${month}-${day}`
-    }
-    
-    try {
-      const date = new Date(cleaned)
-      if (!isNaN(date.getTime())) {
-        return date.toISOString().split('T')[0]
-      }
-    } catch {
-      return cleaned
-    }
-    
-    return cleaned
-  }
-
-  const parseCSVData = (csvData: string): Partial<ShipmentRecord>[] => {
-    const lines = csvData.split('\n').filter(line => line.trim() !== '')
-    if (lines.length < 2) {
-      throw new Error('El archivo CSV debe contener al menos una fila de encabezados y una fila de datos')
-    }
-
-    const headers = parseCSVLine(lines[0])
-    console.log('Headers detectados:', headers)
-    const records: Partial<ShipmentRecord>[] = []
-    const errors: string[] = []
-
-    for (let i = 1; i < lines.length; i++) {
-      const values = parseCSVLine(lines[i])
-      
-      if (values.length === 0 || values.every(v => v === '')) continue
-
-      const record: Partial<ShipmentRecord> = {}
-
-      headers.forEach((header, index) => {
-        const value = values[index] || ''
-        const normalizedHeader = header.trim().toUpperCase().replace(/\s+/g, '_').replace(/\./g, '').replace(/°/g, '')
-
-        switch (normalizedHeader) {
-          case 'REF':
-          case 'REFERENCIA':
-            record.REF = value.trim()
-            break
-          case 'CLIENTE':
-          case 'CLIENT':
-            record.CLIENTE = value.trim()
-            break
-          case 'ETD':
-            record.ETD = parseDate(value)
-            break
-          case 'ETA':
-            record.ETA = parseDate(value)
-            break
-          case 'FT':
-          case 'FREE_TIME':
-            record.FT = parseInt(value) || 0
-            break
-          case 'LIBRE_HASTA':
-          case 'FREE_UNTIL':
-            record.LIBRE_HASTA = parseDate(value)
-            break
-          case 'CNTR':
-          case 'CONTAINER':
-          case 'CONTENEDOR':
-          case 'CONTENEDORES':
-            record.CNTR = value.trim()
-            break
-          case 'N':
-          case 'N':
-          case 'N':
-          case 'NUM':
-          case 'CANTIDAD':
-            const parsed = parseInt(value)
-            record.N = isNaN(parsed) ? 0 : parsed
-            break
-          case 'MBL':
-          case 'MASTER':
-          case 'BL':
-            record.MBL = value.trim()
-            break
-          case 'LINEA':
-          case 'LÍNEA':
-          case 'LINE':
-          case 'SHIPPING_LINE':
-            record.LINEA = value.trim()
-            break
-          case 'BUQUE':
-          case 'VESSEL':
-          case 'SHIP':
-            record.BUQUE = value.trim()
-            break
-          case 'TERMINAL':
-          case 'TERMIN':
-          case 'PORT':
-          case 'PUERTO':
-            record.TERMINAL = value.trim()
-            break
-          case 'C_TERMINAL':
-          case 'C_TERMINAL':
-          case 'COST_TERMINAL':
-            record.C_TERMINAL = parseFloat(value.replace(/,/g, '')) || 0
-            break
-          case 'C_DEV':
-          case 'C_DEV':
-          case 'C_DEV':
-          case 'COST_DEV':
-            record.C_DEV = parseFloat(value.replace(/,/g, '')) || 0
-            break
-          case 'LOCALES':
-          case 'LOCAL':
-            record.LOCALES = parseFloat(value.replace(/,/g, '')) || 0
-            break
-          case 'FLETE':
-          case 'FREIGHT':
-            record.FLETE = parseFloat(value.replace(/,/g, '')) || 0
-            break
-          case 'FORMA_DE_PAGO':
-          case 'PAYMENT_FORM':
-            const formaPago = value.toLowerCase()
-            if (formaPago.includes('programado')) record.FORMA_DE_PAGO = 'programado'
-            else if (formaPago.includes('cuenta corriente')) record.FORMA_DE_PAGO = 'cuenta corriente'
-            else record.FORMA_DE_PAGO = 'al arribo'
-            break
-          case 'VTO':
-            record.VTO = value
-            break
-          case 'CR':
-            record.CR = value.toLowerCase() === 'true' || value === '1' || value.toLowerCase() === 'sí' || value.toLowerCase() === 'si'
-            break
-          case 'BL':
-            record.BL = value.toLowerCase() === 'true' || value === '1' || value.toLowerCase() === 'sí' || value.toLowerCase() === 'si'
-            break
-          case 'AD':
-            record.AD = value.toLowerCase() === 'true' || value === '1' || value.toLowerCase() === 'sí' || value.toLowerCase() === 'si'
-            break
-          case 'AT':
-            record.AT = value.toLowerCase() === 'true' || value === '1' || value.toLowerCase() === 'sí' || value.toLowerCase() === 'si'
-            break
-        }
-      })
-
-      if (record.REF && record.CLIENTE) {
-        records.push(record)
-      } else {
-        errors.push(`Fila ${i + 1}: Faltan campos obligatorios (REF y CLIENTE)`)
-      }
-    }
-
-    console.log('Registros parseados:', records.length)
-    console.log('Primer registro:', records[0])
-    setValidationErrors(errors)
-    return records
-  }
-
-  const handleCSVImport = () => {
-    if (!csvText.trim()) {
-      toast.error('Por favor pegue el contenido CSV')
-      return
-    }
-
-    try {
-      const rawRecords = parseCSVData(csvText)
-      const processed = rawRecords.map(processShipmentRecord)
-      setImportPreview(processed)
-      setShowPreviewDialog(true)
-      toast.success(`${processed.length} registros listos para importar`)
-    } catch (error) {
-      toast.error(`Error al procesar CSV: ${error instanceof Error ? error.message : 'Error desconocido'}`)
-    }
-  }
-
-  const handleGoogleSheetsImport = async () => {
-    if (!googleSheetsUrl || googleSheetsUrl.trim() === '') {
-      toast.error('Por favor ingrese la URL de Google Sheets')
-      return
-    }
-
+  // ── Manual import via API (same as sync but shows preview) ──
+  const handleImport = async () => {
     setIsImporting(true)
 
     try {
-      let csvUrl: string = googleSheetsUrl
-      
-      if (csvUrl.includes('/edit')) {
-        const sheetId = csvUrl.match(/\/d\/([a-zA-Z0-9-_]+)/)?.[1]
-        if (!sheetId) {
-          throw new Error('URL de Google Sheets inválida')
-        }
-        csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv`
+      const res = await authFetch('/api/sheets/sync')
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || 'Error al importar')
       }
 
-      const response = await fetch(csvUrl)
-      if (!response.ok) {
-        throw new Error('No se pudo acceder al archivo. Asegúrese que el link sea público.')
-      }
+      const data = await res.json()
+      const processed: ParsedShipment[] = data.shipments || []
 
-      const csvData = await response.text()
-      const rawRecords = parseCSVData(csvData)
-      const processed = rawRecords.map(processShipmentRecord)
-      
       setImportPreview(processed)
       setShowPreviewDialog(true)
-      toast.success(`${processed.length} registros descargados desde Google Sheets`)
+      toast.success(`${processed.length} registros descargados`)
     } catch (error) {
       toast.error(`Error al importar: ${error instanceof Error ? error.message : 'Error desconocido'}`)
     } finally {
@@ -377,63 +134,54 @@ export default function ExcelImport({ onImportComplete, shipmentRecords = [], on
     }
   }
 
+  // ── Manual CSV paste (local parsing, no server) ──
+  const handleCSVImport = () => {
+    if (!csvText.trim()) {
+      toast.error('Por favor pegue el contenido CSV')
+      return
+    }
+
+    try {
+      const rawRecords = parseMainSheetCSV(csvText)
+      const processed = rawRecords.map(processShipmentRecord)
+      const filtered = filterShipments(processed)
+      setImportPreview(filtered)
+      setShowPreviewDialog(true)
+      toast.success(`${filtered.length} registros listos para importar`)
+    } catch (error) {
+      toast.error(`Error al procesar CSV: ${error instanceof Error ? error.message : 'Error desconocido'}`)
+    }
+  }
+
   const confirmImport = () => {
     const recordsToImport = [...importPreview]
-    setLocalShipmentRecords(() => recordsToImport)
+    setLocalShipmentRecords(recordsToImport)
     setShowPreviewDialog(false)
     setCsvText('')
     setImportPreview([])
     setValidationErrors([])
-    
+
     toast.success(`${recordsToImport.length} registros importados exitosamente`)
-    
+
     if (onImportComplete) {
       onImportComplete(recordsToImport)
     }
   }
 
-  const handleDeleteRecord = (ref: string) => {
-    setLocalShipmentRecords((current) => 
-      (current || []).filter(r => r.REF !== ref)
-    )
-    toast.success('Registro eliminado')
-  }
-
   const exportToCSV = () => {
-    if (!localShipmentRecords || localShipmentRecords?.length === 0) {
+    if (!localShipmentRecords || localShipmentRecords.length === 0) {
       toast.error('No hay datos para exportar')
       return
     }
 
     const headers = [
-      'REF', 'CLIENTE', 'ETD', 'ETA', 'FT', 'LIBRE HASTA', 'CNTR', 'N°',
-      'MBL', 'LÍNEA', 'BUQUE', 'TERMINAL', 'C. TERMINAL', 'C. DEV.', 'LOCALES',
-      'FLETE', 'FORMA DE PAGO', 'VTO', 'CR', 'BL', 'AD', 'AT'
+      'REF', 'CLIENTE', 'ETD', 'ETA', 'FT', 'LIBRE HASTA', 'CNTR', 'N',
+      'MBL', 'LINEA', 'BUQUE', 'TERMINAL'
     ]
 
     const rows = localShipmentRecords.map(r => [
-      r.REF,
-      r.CLIENTE,
-      r.ETD,
-      r.ETA,
-      r.FT,
-      r.LIBRE_HASTA,
-      r.CNTR,
-      r.N,
-      r.MBL,
-      r.LINEA,
-      r.BUQUE,
-      r.TERMINAL,
-      r.C_TERMINAL,
-      r.C_DEV,
-      r.LOCALES,
-      r.FLETE,
-      r.FORMA_DE_PAGO,
-      r.VTO,
-      r.CR ? 'TRUE' : 'FALSE',
-      r.BL ? 'TRUE' : 'FALSE',
-      r.AD ? 'TRUE' : 'FALSE',
-      r.AT ? 'TRUE' : 'FALSE'
+      r.REF, r.CLIENTE, r.ETD, r.ETA, r.FT, r.LIBRE_HASTA, r.CNTR, r.N,
+      r.MBL, r.LINEA, r.BUQUE, r.TERMINAL
     ])
 
     const csvContent = [
@@ -446,436 +194,206 @@ export default function ExcelImport({ onImportComplete, shipmentRecords = [], on
     link.href = URL.createObjectURL(blob)
     link.download = `twf-tracking-${new Date().toISOString().split('T')[0]}.csv`
     link.click()
-    
+
     toast.success('Archivo CSV descargado')
   }
 
   return (
     <div className="space-y-6">
-      <Tabs defaultValue="google-sheets" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3 max-w-2xl">
-          <TabsTrigger value="google-sheets">
-            <FileCsv size={20} className="mr-2" />
-            Google Sheets
-          </TabsTrigger>
-          <TabsTrigger value="csv-paste">
-            <FileArrowUp size={20} className="mr-2" />
-            Pegar CSV
-          </TabsTrigger>
-          <TabsTrigger value="view-data">
-            <Eye size={20} className="mr-2" />
-            Ver Datos ({shipmentRecords?.length || 0})
-          </TabsTrigger>
-        </TabsList>
+      {/* Status bar */}
+      {localShipmentRecords && localShipmentRecords.length > 0 && (
+        <div className="flex items-center justify-between bg-accent/10 border border-accent/20 rounded-lg px-4 py-3">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <CheckCircle size={20} className="text-accent" />
+              <span className="font-medium">{localShipmentRecords.length} registros cargados</span>
+            </div>
+            <span className="text-sm text-muted-foreground">
+              {localShipmentRecords.reduce((sum, r) => sum + r.N, 0)} contenedores &middot; {new Set(localShipmentRecords.map(r => r.CLIENTE)).size} clientes
+            </span>
+            {lastSyncTime && (
+              <span className="text-xs text-muted-foreground">
+                Sincronizado: {lastSyncTime.toLocaleTimeString('es-UY')}
+              </span>
+            )}
+          </div>
+          <Button variant="outline" size="sm" onClick={exportToCSV}>
+            <CloudArrowDown size={16} className="mr-1" />
+            Exportar
+          </Button>
+        </div>
+      )}
 
-        <TabsContent value="google-sheets">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <FileCsv size={24} />
-                  Importar desde Google Sheets
-                </div>
-                {lastSyncTime && (
-                  <span className="text-sm font-normal text-muted-foreground">
-                    Última sincronización: {lastSyncTime.toLocaleTimeString('es-UY')}
-                  </span>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <Alert>
-                <AlertDescription>
-                  <strong>Instrucciones:</strong>
-                  <ol className="list-decimal ml-4 mt-2 space-y-1 text-sm">
-                    <li>Asegúrese que su Google Sheet sea <strong>público</strong> (cualquiera con el enlace puede ver)</li>
-                    <li>Copie el enlace completo de la hoja</li>
-                    <li>Péguelo abajo y presione "Importar"</li>
-                    <li>Opcionalmente, active la sincronización automática para mantener los datos actualizados</li>
-                  </ol>
-                </AlertDescription>
-              </Alert>
+      {/* Main import card */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <CloudArrowDown size={24} />
+            Importar Datos
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Los datos se sincronizan desde Google Sheets configurado en el servidor.
+          </p>
 
-              <div className="space-y-2">
-                <Label htmlFor="google-sheets-url">URL de Google Sheets</Label>
-                <div className="flex gap-2">
-                  <Input
-                    id="google-sheets-url"
-                    value={googleSheetsUrl || ''}
-                    onChange={(e) => setGoogleSheetsUrl(e.target.value)}
-                    placeholder="https://docs.google.com/spreadsheets/d/..."
-                    className="font-mono text-sm"
-                  />
-                  {googleSheetsUrl && (
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => window.open(googleSheetsUrl, '_blank')}
-                      title="Abrir Google Sheet"
-                    >
-                      <LinkIcon size={20} />
-                    </Button>
-                  )}
-                </div>
-              </div>
+          <div className="flex gap-2">
+            <Button
+              onClick={handleImport}
+              disabled={isImporting}
+              className="flex-1 bg-accent text-accent-foreground hover:bg-accent/90"
+            >
+              <CloudArrowDown size={20} className="mr-2" />
+              {isImporting ? 'Importando...' : 'Importar desde Sheets'}
+            </Button>
+            <Button
+              onClick={() => performServerSync(false)}
+              disabled={isImporting}
+              variant="outline"
+            >
+              <ArrowsClockwise size={20} className="mr-2" />
+              Sincronizar
+            </Button>
+          </div>
 
-              <div className="grid grid-cols-1 gap-4">
-                <Button
-                  onClick={handleGoogleSheetsImport}
-                  disabled={isImporting || !googleSheetsUrl || googleSheetsUrl.trim() === ''}
-                  className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
+          {/* Auto-sync toggle */}
+          <div className="flex items-center justify-between border-t pt-4">
+            <div className="space-y-0.5">
+              <Label htmlFor="auto-sync" className="text-sm">Sincronizacion Automatica</Label>
+              <p className="text-xs text-muted-foreground">Actualiza periodicamente desde Google Sheets</p>
+            </div>
+            <div className="flex items-center gap-2">
+              {autoSyncEnabled && (
+                <Select
+                  value={String(syncInterval || 5)}
+                  onValueChange={(value) => setSyncInterval(parseInt(value))}
                 >
-                  <CloudArrowDown size={20} className="mr-2" />
-                  {isImporting ? 'Importando...' : 'Importar Ahora'}
-                </Button>
+                  <SelectTrigger className="w-[100px] h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="5">5 min</SelectItem>
+                    <SelectItem value="10">10 min</SelectItem>
+                    <SelectItem value="15">15 min</SelectItem>
+                    <SelectItem value="30">30 min</SelectItem>
+                    <SelectItem value="60">1 hora</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+              <Switch
+                id="auto-sync"
+                checked={autoSyncEnabled || false}
+                onCheckedChange={setAutoSyncEnabled}
+              />
+            </div>
+          </div>
 
-                {googleSheetsUrl && googleSheetsUrl.trim() !== '' && (
-                  <Button
-                    onClick={() => performGoogleSheetsSync(false)}
-                    disabled={isImporting}
-                    variant="outline"
-                    className="w-full"
-                  >
-                    <ArrowsClockwise size={20} className="mr-2" />
-                    Sincronizar Datos
-                  </Button>
-                )}
-              </div>
-
-              <div className="border-t pt-4 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label htmlFor="auto-sync">Sincronización Automática</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Actualiza automáticamente los datos desde Google Sheets
-                    </p>
-                  </div>
-                  <Switch
-                    id="auto-sync"
-                    checked={autoSyncEnabled || false}
-                    onCheckedChange={setAutoSyncEnabled}
-                    disabled={!googleSheetsUrl || googleSheetsUrl.trim() === ''}
-                  />
-                </div>
-
-                {autoSyncEnabled && (
-                  <div className="space-y-2">
-                    <Label htmlFor="sync-interval">Intervalo de Sincronización (minutos)</Label>
-                    <Select 
-                      value={String(syncInterval || 5)} 
-                      onValueChange={(value) => setSyncInterval(parseInt(value))}
-                    >
-                      <SelectTrigger id="sync-interval">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="1">1 minuto</SelectItem>
-                        <SelectItem value="5">5 minutos</SelectItem>
-                        <SelectItem value="10">10 minutos</SelectItem>
-                        <SelectItem value="15">15 minutos</SelectItem>
-                        <SelectItem value="30">30 minutos</SelectItem>
-                        <SelectItem value="60">1 hora</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
-          <GoogleSheetsGuide />
-        </TabsContent>
-
-        <TabsContent value="csv-paste">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileArrowUp size={24} />
-                Pegar Datos CSV
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Alert>
-                <AlertDescription>
-                  <strong>Instrucciones:</strong>
-                  <ol className="list-decimal ml-4 mt-2 space-y-1 text-sm">
-                    <li>Seleccione todas las celdas en Excel/Google Sheets (incluyendo encabezados)</li>
-                    <li>Copie (Ctrl+C o Cmd+C)</li>
-                    <li>Pegue en el área de texto abajo</li>
-                  </ol>
-                </AlertDescription>
-              </Alert>
-
-              <div className="space-y-2">
-                <Label htmlFor="csv-text">Contenido CSV</Label>
-                <Textarea
-                  id="csv-text"
-                  value={csvText}
-                  onChange={(e) => setCsvText(e.target.value)}
-                  placeholder="REF,CLIENTE,ETD,ETA,FT,LIBRE HASTA,CNTR,N°,MBL,LÍNEA,BUQUE,TERMINAL..."
-                  rows={10}
-                  className="font-mono text-xs"
-                />
-              </div>
-
+          {/* Collapsible CSV paste */}
+          <details className="border-t pt-4">
+            <summary className="cursor-pointer text-sm text-muted-foreground hover:text-foreground">
+              Pegar datos CSV manualmente
+            </summary>
+            <div className="mt-3 space-y-3">
+              <Textarea
+                value={csvText}
+                onChange={(e) => setCsvText(e.target.value)}
+                placeholder="REF,CLIENTE,ETD,ETA,CNTR,N,MBL,LINEA,BUQUE,TERMINAL..."
+                rows={6}
+                className="font-mono text-xs"
+              />
               <Button
                 onClick={handleCSVImport}
                 disabled={!csvText.trim()}
                 className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
+                size="sm"
               >
-                <FileArrowUp size={20} className="mr-2" />
+                <FileArrowUp size={18} className="mr-2" />
                 Procesar CSV
               </Button>
-            </CardContent>
-          </Card>
-        </TabsContent>
+            </div>
+          </details>
+        </CardContent>
+      </Card>
 
-        <TabsContent value="view-data">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <Eye size={24} />
-                  Datos Importados ({shipmentRecords?.length || 0})
-                </CardTitle>
-                <div className="flex gap-2">
+      <Dialog open={showPreviewDialog} onOpenChange={setShowPreviewDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Resumen de Importacion</DialogTitle>
+          </DialogHeader>
+
+          {(() => {
+            const refCount = new Map<string, number>()
+            importPreview.forEach(r => {
+              refCount.set(r.REF, (refCount.get(r.REF) || 0) + 1)
+            })
+            const duplicateRefs = new Set([...refCount.entries()].filter(([, count]) => count > 1).map(([ref]) => ref))
+            const duplicateCount = [...duplicateRefs].reduce((sum, ref) => sum + (refCount.get(ref) || 0) - 1, 0)
+            const uniqueRecords = importPreview.length - duplicateCount
+            const totalContainers = importPreview.reduce((sum, r) => sum + (r.N || r.containers.length), 0)
+            const uniqueClients = new Set(importPreview.map(r => r.CLIENTE)).size
+            const uniqueLines = new Set(importPreview.filter(r => r.LINEA).map(r => r.LINEA)).size
+
+            return (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-accent/10 rounded-lg p-3 text-center">
+                    <div className="text-2xl font-bold text-accent">{uniqueRecords}</div>
+                    <div className="text-xs text-muted-foreground">Registros nuevos</div>
+                  </div>
+                  <div className="bg-muted rounded-lg p-3 text-center">
+                    <div className="text-2xl font-bold">{totalContainers}</div>
+                    <div className="text-xs text-muted-foreground">Contenedores</div>
+                  </div>
+                  <div className="bg-muted rounded-lg p-3 text-center">
+                    <div className="text-2xl font-bold">{uniqueClients}</div>
+                    <div className="text-xs text-muted-foreground">Clientes</div>
+                  </div>
+                  <div className="bg-muted rounded-lg p-3 text-center">
+                    <div className="text-2xl font-bold">{uniqueLines}</div>
+                    <div className="text-xs text-muted-foreground">Navieras</div>
+                  </div>
+                </div>
+
+                {duplicateCount > 0 && (
+                  <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-3">
+                    <div className="flex items-center gap-2 text-yellow-800 font-medium text-sm">
+                      <Warning size={16} />
+                      {duplicateCount} duplicados ({duplicateRefs.size} REFs repetidas)
+                    </div>
+                    <p className="text-xs text-yellow-700 mt-1">
+                      {[...duplicateRefs].slice(0, 8).join(', ')}{duplicateRefs.size > 8 ? ` y ${duplicateRefs.size - 8} mas` : ''}
+                    </p>
+                  </div>
+                )}
+
+                {validationErrors.length > 0 && (
+                  <details className="border rounded-lg p-3">
+                    <summary className="cursor-pointer text-sm text-muted-foreground font-medium">
+                      {validationErrors.length} advertencias
+                    </summary>
+                    <ul className="list-disc ml-4 mt-2 text-xs text-muted-foreground max-h-24 overflow-y-auto">
+                      {validationErrors.map((error, i) => (
+                        <li key={i}>{error}</li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+
+                <div className="flex gap-2 pt-2">
+                  <Button variant="outline" className="flex-1" onClick={() => setShowPreviewDialog(false)}>
+                    Cancelar
+                  </Button>
                   <Button
-                    variant="outline"
-                    onClick={exportToCSV}
-                    disabled={!localShipmentRecords || localShipmentRecords?.length === 0}
+                    onClick={confirmImport}
+                    className="flex-1 bg-accent text-accent-foreground hover:bg-accent/90"
                   >
-                    <CloudArrowDown size={20} className="mr-2" />
-                    Exportar CSV
+                    <CheckCircle size={20} className="mr-2" />
+                    Importar {importPreview.length}
                   </Button>
                 </div>
               </div>
-            </CardHeader>
-            <CardContent>
-              {!localShipmentRecords || localShipmentRecords?.length === 0 ? (
-                <div className="text-center py-12">
-                  <FileCsv size={48} className="mx-auto mb-4 text-muted-foreground" />
-                  <h3 className="text-lg font-semibold mb-2">No hay datos importados</h3>
-                  <p className="text-muted-foreground mb-4">
-                    Importe datos desde Google Sheets o pegando CSV
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-                    <Card>
-                      <CardContent className="pt-6">
-                        <div className="text-2xl font-bold text-accent">{localShipmentRecords?.length}</div>
-                        <div className="text-sm text-muted-foreground">Total Referencias</div>
-                      </CardContent>
-                    </Card>
-                    <Card>
-                      <CardContent className="pt-6">
-                        <div className="text-2xl font-bold text-accent">
-                          {localShipmentRecords.reduce((sum, r) => sum + r.N, 0)}
-                        </div>
-                        <div className="text-sm text-muted-foreground">Total Contenedores</div>
-                      </CardContent>
-                    </Card>
-                    <Card>
-                      <CardContent className="pt-6">
-                        <div className="text-2xl font-bold text-accent">
-                          {new Set(localShipmentRecords.map(r => r.CLIENTE)).size}
-                        </div>
-                        <div className="text-sm text-muted-foreground">Clientes Únicos</div>
-                      </CardContent>
-                    </Card>
-                    <Card>
-                      <CardContent className="pt-6">
-                        <div className="text-2xl font-bold text-accent">
-                          {new Set(localShipmentRecords.map(r => r.LINEA)).size}
-                        </div>
-                        <div className="text-sm text-muted-foreground">Líneas Navieras</div>
-                      </CardContent>
-                    </Card>
-                  </div>
-
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>REF</TableHead>
-                          <TableHead>Cliente</TableHead>
-                          <TableHead>ETD</TableHead>
-                          <TableHead>ETA</TableHead>
-                          <TableHead>FT</TableHead>
-                          <TableHead>Libre Hasta</TableHead>
-                          <TableHead>CNTR</TableHead>
-                          <TableHead>N°</TableHead>
-                          <TableHead>MBL</TableHead>
-                          <TableHead>Línea</TableHead>
-                          <TableHead>Buque</TableHead>
-                          <TableHead>Terminal</TableHead>
-                          <TableHead>Estado</TableHead>
-                          <TableHead>Acciones</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {localShipmentRecords.map((record, index) => (
-                          <TableRow key={index}>
-                            <TableCell className="font-mono text-xs font-semibold">{record.REF}</TableCell>
-                            <TableCell>{record.CLIENTE}</TableCell>
-                            <TableCell className="text-sm">{record.ETD}</TableCell>
-                            <TableCell className="text-sm">{record.ETA}</TableCell>
-                            <TableCell className="text-sm">{record.FT}</TableCell>
-                            <TableCell className="text-sm">{record.LIBRE_HASTA}</TableCell>
-                            <TableCell className="font-mono text-xs max-w-[150px] truncate" title={record.CNTR}>
-                              {record.CNTR}
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant="outline">{record.N}</Badge>
-                            </TableCell>
-                            <TableCell className="font-mono text-xs">{record.MBL}</TableCell>
-                            <TableCell className="text-sm">{record.LINEA}</TableCell>
-                            <TableCell className="text-sm">{record.BUQUE}</TableCell>
-                            <TableCell className="text-sm">{record.TERMINAL}</TableCell>
-                            <TableCell>
-                              <div className="flex gap-1">
-                                {record.CR && <Badge variant="outline" className="text-xs">CR</Badge>}
-                                {record.BL && <Badge variant="outline" className="text-xs">BL</Badge>}
-                                {record.AD && <Badge variant="outline" className="text-xs">AD</Badge>}
-                                {record.AT && <Badge variant="outline" className="text-xs">AT</Badge>}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <Button
-                                variant="destructive"
-                                size="sm"
-                                onClick={() => handleDeleteRecord(record.REF)}
-                              >
-                                <Trash size={16} />
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-
-      <Dialog open={showPreviewDialog} onOpenChange={setShowPreviewDialog}>
-        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Vista Previa de Importación</DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            {validationErrors.length > 0 && (
-              <Alert>
-                <Warning size={20} />
-                <AlertDescription>
-                  <strong>Advertencias:</strong>
-                  <ul className="list-disc ml-4 mt-2 text-sm">
-                    {validationErrors.map((error, i) => (
-                      <li key={i}>{error}</li>
-                    ))}
-                  </ul>
-                </AlertDescription>
-              </Alert>
-            )}
-
-            <div className="grid grid-cols-3 gap-4">
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="text-2xl font-bold">{importPreview.length}</div>
-                  <div className="text-sm text-muted-foreground">Registros a importar</div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="text-2xl font-bold text-green-500">
-                    {importPreview.reduce((sum, r) => sum + r.containers.filter(c => c.valid).length, 0)}
-                  </div>
-                  <div className="text-sm text-muted-foreground">Contenedores válidos</div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="text-2xl font-bold text-red-500">
-                    {importPreview.reduce((sum, r) => sum + r.containers.filter(c => !c.valid).length, 0)}
-                  </div>
-                  <div className="text-sm text-muted-foreground">Contenedores inválidos</div>
-                </CardContent>
-              </Card>
-            </div>
-
-            <div className="overflow-x-auto max-h-96">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>REF</TableHead>
-                    <TableHead>Cliente</TableHead>
-                    <TableHead>ETD</TableHead>
-                    <TableHead>ETA</TableHead>
-                    <TableHead>FT</TableHead>
-                    <TableHead>Libre Hasta</TableHead>
-                    <TableHead>CNTR</TableHead>
-                    <TableHead>N°</TableHead>
-                    <TableHead>MBL</TableHead>
-                    <TableHead>Línea</TableHead>
-                    <TableHead>Buque</TableHead>
-                    <TableHead>Terminal</TableHead>
-                    <TableHead>Validación</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {importPreview.map((record, index) => (
-                    <TableRow key={index}>
-                      <TableCell className="font-mono text-xs">{record.REF}</TableCell>
-                      <TableCell>{record.CLIENTE}</TableCell>
-                      <TableCell className="text-sm">{record.ETD}</TableCell>
-                      <TableCell className="text-sm">{record.ETA}</TableCell>
-                      <TableCell className="text-sm">{record.FT}</TableCell>
-                      <TableCell className="text-sm">{record.LIBRE_HASTA}</TableCell>
-                      <TableCell className="font-mono text-xs max-w-[150px] truncate" title={record.CNTR}>
-                        {record.CNTR}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{record.N}</Badge>
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">{record.MBL}</TableCell>
-                      <TableCell className="text-sm">{record.LINEA}</TableCell>
-                      <TableCell className="text-sm">{record.BUQUE}</TableCell>
-                      <TableCell className="text-sm">{record.TERMINAL}</TableCell>
-                      <TableCell>
-                        {record.containers.length > 0 ? (
-                          record.containers.every(c => c.valid) ? (
-                            <Badge className="bg-green-500">OK</Badge>
-                          ) : (
-                            <Badge className="bg-yellow-500">Revisar</Badge>
-                          )
-                        ) : (
-                          <Badge variant="outline">Sin CNTR</Badge>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-
-            <div className="flex gap-2 justify-end">
-              <Button variant="outline" onClick={() => setShowPreviewDialog(false)}>
-                Cancelar
-              </Button>
-              <Button
-                onClick={confirmImport}
-                className="bg-accent text-accent-foreground hover:bg-accent/90"
-              >
-                <CheckCircle size={20} className="mr-2" />
-                Confirmar Importación ({importPreview.length} registros)
-              </Button>
-            </div>
-          </div>
+            )
+          })()}
         </DialogContent>
       </Dialog>
     </div>

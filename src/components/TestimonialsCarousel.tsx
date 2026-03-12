@@ -155,7 +155,7 @@ export default function TestimonialsCarousel() {
             transition={{ duration: 0.5, delay: (index % defaultTestimonials.length) * 0.1 }}
             viewport={{ once: true }}
           >
-            <Card className="h-full hover:shadow-xl transition-all duration-300 border-border/50 hover:border-accent/50 relative overflow-hidden group">
+            <Card className="h-full hover:shadow-xl hover:shadow-accent/5 transition-all duration-300 border-border/50 hover:border-accent/40 hover:-translate-y-1 relative overflow-hidden group">
               <div 
                 className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none"
                 style={{
@@ -174,7 +174,7 @@ export default function TestimonialsCarousel() {
                       }}
                     />
                   ) : (
-                    <div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center flex-shrink-0">
+                    <div className="w-12 h-12 rounded-full bg-accent/25 border border-accent/30 flex items-center justify-center flex-shrink-0">
                       <User size={24} className="text-accent" />
                     </div>
                   )}

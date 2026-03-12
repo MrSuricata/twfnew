@@ -1,0 +1,162 @@
+import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { generateOTP, storeOTP, verifyOTP } from '../lib/otpStore'
+import { signClientToken } from '../lib/jwt'
+
+// ─── Types ──────────────────────────────────────────────────────────
+interface ClientConfig {
+  email: string
+  name: string
+  company: string
+  clientePattern: string
+}
+
+// ─── Rate limiting (in-memory, per Lambda instance) ─────────────────
+const rateLimits = new Map<string, { count: number; resetAt: number }>()
+const MAX_REQUESTS_PER_HOUR = 10
+
+function isRateLimited(email: string): boolean {
+  const key = email.toLowerCase().trim()
+  const now = Date.now()
+  const entry = rateLimits.get(key)
+
+  if (!entry || now > entry.resetAt) {
+    rateLimits.set(key, { count: 1, resetAt: now + 60 * 60 * 1000 })
+    return false
+  }
+
+  if (entry.count >= MAX_REQUESTS_PER_HOUR) return true
+  entry.count++
+  return false
+}
+
+// ─── EmailJS server-side send ───────────────────────────────────────
+async function sendOTPEmail(email: string, code: string): Promise<boolean> {
+  const serviceId = process.env.EMAILJS_SERVICE_ID
+  const templateId = process.env.EMAILJS_TEMPLATE_OTP
+  const publicKey = process.env.EMAILJS_PUBLIC_KEY
+
+  if (!serviceId || !templateId || !publicKey) {
+    console.error('EmailJS env vars not configured')
+    return false
+  }
+
+  try {
+    const res = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        service_id: serviceId,
+        template_id: templateId,
+        user_id: publicKey,
+        template_params: {
+          email,
+          otp_code: code,
+          passcode: code,
+          time: '5 minutos',
+        },
+      }),
+    })
+
+    return res.ok
+  } catch (err) {
+    console.error('EmailJS send error:', err)
+    return false
+  }
+}
+
+// ─── Get clients from env var ───────────────────────────────────────
+function getClients(): ClientConfig[] {
+  const raw = process.env.CLIENTS_JSON
+  if (!raw) return []
+  try {
+    return JSON.parse(raw)
+  } catch {
+    console.error('Invalid CLIENTS_JSON env var')
+    return []
+  }
+}
+
+// ─── Handler ────────────────────────────────────────────────────────
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const allowedOrigin = process.env.ALLOWED_ORIGIN || '*'
+  res.setHeader('Access-Control-Allow-Origin', allowedOrigin)
+  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+
+  if (req.method === 'OPTIONS') return res.status(204).end()
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+
+  const { action, email, code } = req.body || {}
+
+  if (!email) return res.status(400).json({ error: 'Email required' })
+
+  const normalizedEmail = email.toLowerCase().trim()
+
+  // ── ACTION: REQUEST OTP ─────────────────────────────────────────
+  if (action === 'request') {
+    // Rate limit
+    if (isRateLimited(normalizedEmail)) {
+      return res.status(429).json({ error: 'Demasiadas solicitudes. Intentá más tarde.' })
+    }
+
+    // Validate client exists
+    const clients = getClients()
+    const client = clients.find(c => c.email.toLowerCase().trim() === normalizedEmail)
+
+    if (!client) {
+      // Don't reveal if email exists or not (timing-safe)
+      // But return success anyway so attacker can't enumerate emails
+      return res.status(200).json({ sent: true })
+    }
+
+    // Generate and store OTP
+    const otpCode = generateOTP()
+    storeOTP(normalizedEmail, otpCode)
+
+    // Send email
+    const sent = await sendOTPEmail(normalizedEmail, otpCode)
+
+    if (!sent) {
+      return res.status(500).json({ error: 'Error al enviar el código' })
+    }
+
+    return res.status(200).json({ sent: true })
+  }
+
+  // ── ACTION: VERIFY OTP ──────────────────────────────────────────
+  if (action === 'verify') {
+    if (!code) return res.status(400).json({ error: 'Code required' })
+
+    const valid = verifyOTP(normalizedEmail, code)
+
+    if (!valid) {
+      return res.status(401).json({ error: 'Código inválido o expirado' })
+    }
+
+    // Find client to include in JWT
+    const clients = getClients()
+    const client = clients.find(c => c.email.toLowerCase().trim() === normalizedEmail)
+
+    if (!client) {
+      return res.status(401).json({ error: 'Cliente no encontrado' })
+    }
+
+    // Sign JWT
+    const token = signClientToken(
+      client.email,
+      client.name,
+      client.company,
+      client.clientePattern
+    )
+
+    return res.status(200).json({
+      token,
+      role: 'client',
+      email: client.email,
+      name: client.name,
+      company: client.company,
+    })
+  }
+
+  return res.status(400).json({ error: 'Invalid action. Use "request" or "verify".' })
+}

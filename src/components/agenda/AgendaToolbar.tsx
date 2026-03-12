@@ -1,0 +1,130 @@
+import { Button } from '@/components/ui/button'
+import { CaretLeft, CaretRight, CalendarBlank } from '@phosphor-icons/react'
+import type { AgendaView } from '@/lib/agendaTypes'
+import { MONTH_NAMES } from '@/lib/agendaTypes'
+
+interface AgendaToolbarProps {
+  view: AgendaView
+  currentDate: Date
+  eventCount: number
+  alertCount: number
+  onViewChange: (view: AgendaView) => void
+  onNavigate: (direction: 'prev' | 'next' | 'today') => void
+}
+
+const VIEW_LABELS: Record<AgendaView, string> = {
+  day: 'Día',
+  week: 'Sem',
+  month: 'Mes',
+  annual: 'Año'
+}
+
+function getPeriodLabel(view: AgendaView, date: Date): string {
+  const day = date.getDate()
+  const month = MONTH_NAMES[date.getMonth()]
+  const year = date.getFullYear()
+  const monthShort = month.substring(0, 3)
+
+  switch (view) {
+    case 'day':
+      return `${day} ${monthShort} ${year}`
+    case 'week': {
+      // Find Monday of this week
+      const d = new Date(date)
+      let dow = d.getDay()
+      if (dow === 0) dow = 7
+      const monday = new Date(d)
+      monday.setDate(d.getDate() - (dow - 1))
+      const saturday = new Date(monday)
+      saturday.setDate(monday.getDate() + 5)
+      const monDay = monday.getDate()
+      const satDay = saturday.getDate()
+      const monMonth = MONTH_NAMES[monday.getMonth()].substring(0, 3)
+      const satMonth = MONTH_NAMES[saturday.getMonth()].substring(0, 3)
+      if (monday.getMonth() === saturday.getMonth()) {
+        return `${monDay}–${satDay} ${monMonth} ${year}`
+      }
+      return `${monDay} ${monMonth} – ${satDay} ${satMonth} ${year}`
+    }
+    case 'month':
+      return `${month} ${year}`
+    case 'annual':
+      return `${year}`
+  }
+}
+
+export default function AgendaToolbar({
+  view,
+  currentDate,
+  eventCount,
+  alertCount,
+  onViewChange,
+  onNavigate
+}: AgendaToolbarProps) {
+  return (
+    <div className="bg-card border border-border rounded-xl p-4 shadow-sm">
+      {/* Top row: navigation + period + view selector */}
+      <div className="flex items-center justify-between gap-4">
+        {/* Navigation buttons */}
+        <div className="flex items-center gap-1">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onNavigate('prev')}
+            className="h-8 w-8 p-0"
+          >
+            <CaretLeft size={16} weight="bold" />
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onNavigate('today')}
+            className="h-8 px-3 text-xs font-medium"
+          >
+            Hoy
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onNavigate('next')}
+            className="h-8 w-8 p-0"
+          >
+            <CaretRight size={16} weight="bold" />
+          </Button>
+        </div>
+
+        {/* Period label */}
+        <div className="flex-1 text-center">
+          <h2 className="text-lg font-semibold text-foreground">
+            {getPeriodLabel(view, currentDate)}
+          </h2>
+          <p className="text-xs text-muted-foreground">
+            {eventCount} operacion{eventCount !== 1 ? 'es' : ''}
+            {alertCount > 0 && (
+              <span className="ml-2 text-orange-600 dark:text-orange-400">
+                · {alertCount} alerta{alertCount !== 1 ? 's' : ''}
+              </span>
+            )}
+          </p>
+        </div>
+
+        {/* View selector */}
+        <div className="flex items-center bg-muted rounded-lg p-0.5">
+          {(Object.keys(VIEW_LABELS) as AgendaView[]).map(v => (
+            <button
+              key={v}
+              onClick={() => onViewChange(v)}
+              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                view === v
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {VIEW_LABELS[v]}
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}

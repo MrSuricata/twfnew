@@ -112,8 +112,8 @@ export default function CasosExito() {
             return (
               <motion.div
                 key={study.id}
-                initial={{ opacity: 0, y: 20 }}
-                whileInView={{ opacity: 1, y: 0 }}
+                initial={{ opacity: 0, scale: 0.95 }}
+                whileInView={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.5, delay: index * 0.1 }}
                 viewport={{ once: true }}
               >
@@ -170,13 +170,13 @@ export default function CasosExito() {
                     ))}
                   </div>
 
-                  <Button 
+                  <Button
                     onClick={scrollToCotizacion}
-                    variant="outline" 
+                    variant="outline"
                     className="w-full hover:bg-accent hover:text-accent-foreground transition-colors"
                     size="sm"
                   >
-                    Consultar Caso Similar
+                    Cotizar tu Carga
                     <ArrowRight size={16} className="ml-2" />
                   </Button>
                 </CardContent>
@@ -186,28 +186,19 @@ export default function CasosExito() {
           })}
         </div>
 
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.3 }}
           viewport={{ once: true }}
-          className="mt-12 text-center"
+          className="mt-10 text-center"
         >
-          <Card className="bg-gradient-to-br from-accent/10 to-primary/5 border-accent/20 max-w-2xl mx-auto">
-            <CardContent className="pt-6">
-              <h3 className="font-semibold text-lg mb-2">¿Necesitas una solución similar?</h3>
-              <p className="text-muted-foreground mb-4">
-                Cada operación es única. Contáctanos para desarrollar la mejor estrategia logística para tu negocio.
-              </p>
-              <Button 
-                onClick={scrollToCotizacion}
-                className="bg-accent text-accent-foreground hover:bg-accent/90"
-              >
-                Solicitar Cotización Personalizada
-                <ArrowRight size={20} className="ml-2" />
-              </Button>
-            </CardContent>
-          </Card>
+          <p className="text-muted-foreground text-sm">
+            Cada operación es única.{' '}
+            <button onClick={scrollToCotizacion} className="text-accent font-semibold hover:underline">
+              Solicitá tu cotización personalizada →
+            </button>
+          </p>
         </motion.div>
       </div>
 

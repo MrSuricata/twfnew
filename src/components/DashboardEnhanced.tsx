@@ -1,55 +1,53 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { 
-  Boat, 
-  SignOut, 
-  Package, 
-  ChartLine, 
-  MagnifyingGlass, 
-  Database, 
-  Star, 
+import {
+  SignOut,
+  MagnifyingGlass,
+  Database,
+  Star,
   ChatCircleText,
-  Receipt,
-  ChartBar
+  ChartBar,
+  UsersThree,
+  CalendarBlank
 } from '@phosphor-icons/react'
 
+import AgendaCalendar from './agenda/AgendaCalendar'
 import ShipmentTracking from './ShipmentTracking'
 import ExcelImport from './ExcelImport'
-import EmailConfigStatus from './EmailConfigStatus'
 import CaseStudiesEditor from './CaseStudiesEditor'
 import TestimonialsEditor from './TestimonialsEditor'
 import AnalyticsDashboard from './AnalyticsDashboard'
-import QuotesManagement from './QuotesManagement'
+import ClientManager from './ClientManager'
 import { ParsedShipment } from '@/lib/shipmentTypes'
-import { QuoteFormData } from '@/lib/quotationTypes'
+import { ClientAccount, ShipmentDocument, OperativeReport } from '@/lib/quotationTypes'
 import Breadcrumbs from './Breadcrumbs'
 
 interface DashboardEnhancedProps {
   onLogout: () => void
+  clients?: ClientAccount[]
+  shipments?: ParsedShipment[]
+  documents?: ShipmentDocument[]
+  reports?: OperativeReport[]
+  onUpdateShipments?: (shipments: ParsedShipment[]) => void
+  onUpdateClients?: (clients: ClientAccount[]) => void
+  onUpdateDocuments?: (docs: ShipmentDocument[]) => void
+  onUpdateReports?: (reports: OperativeReport[]) => void
 }
 
-export default function DashboardEnhanced({ onLogout }: DashboardEnhancedProps) {
-  const [shipmentRecords] = useState<ParsedShipment[]>([])
-  const [quotes, setQuotes] = useState<QuoteFormData[]>([])
-  const [activeTab, setActiveTab] = useState('analytics')
-
-  const handleUpdateQuote = (updatedQuote: QuoteFormData) => {
-    setQuotes(current => 
-      (current || []).map(q => q.id === updatedQuote.id ? updatedQuote : q)
-    )
-  }
+export default function DashboardEnhanced({ onLogout, clients = [], shipments = [], documents = [], reports = [], onUpdateShipments, onUpdateClients, onUpdateDocuments, onUpdateReports }: DashboardEnhancedProps) {
+  const [activeTab, setActiveTab] = useState('agenda')
 
   const getBreadcrumbs = () => {
     const breadcrumbMap: Record<string, string> = {
+      agenda: 'Agenda',
       analytics: 'Estadísticas',
-      quotes: 'Cotizaciones',
       shipments: 'Cargas',
       'excel-import': 'Importar Datos',
       'case-studies': 'Casos de Éxito',
       testimonials: 'Testimonios',
-      tracking: 'Tracking'
+      tracking: 'Tracking',
+      clients: 'Clientes'
     }
     
     return [{ label: breadcrumbMap[activeTab] || 'Dashboard' }]
@@ -60,9 +58,9 @@ export default function DashboardEnhanced({ onLogout }: DashboardEnhancedProps) 
       <nav className="bg-primary text-primary-foreground border-b border-border">
         <div className="max-w-7xl mx-auto px-4 md:px-6">
           <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-2">
-              <Boat size={32} weight="fill" />
-              <span className="text-xl font-bold">TWF Admin</span>
+            <div className="flex items-center gap-3">
+              <img src="/images/twf-logo-white.png" alt="TWF" className="h-8 w-auto" />
+              <span className="text-xl font-bold">Admin</span>
             </div>
             <Button variant="ghost" onClick={onLogout} className="text-primary-foreground hover:bg-primary-foreground/10">
               <SignOut size={20} className="mr-2" />
@@ -76,18 +74,18 @@ export default function DashboardEnhanced({ onLogout }: DashboardEnhancedProps) 
         <Breadcrumbs items={getBreadcrumbs()} />
         
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4 lg:grid-cols-7 max-w-6xl">
+          <TabsList className="grid w-full grid-cols-4 lg:grid-cols-7 max-w-5xl">
+            <TabsTrigger value="agenda">
+              <CalendarBlank size={20} className="mr-2" />
+              <span className="hidden sm:inline">Agenda</span>
+            </TabsTrigger>
             <TabsTrigger value="analytics">
               <ChartBar size={20} className="mr-2" />
               <span className="hidden sm:inline">Analíticas</span>
             </TabsTrigger>
-            <TabsTrigger value="quotes">
-              <Receipt size={20} className="mr-2" />
-              <span className="hidden sm:inline">Cotizaciones</span>
-            </TabsTrigger>
-            <TabsTrigger value="shipments">
-              <Package size={20} className="mr-2" />
-              <span className="hidden sm:inline">Cargas</span>
+            <TabsTrigger value="tracking">
+              <MagnifyingGlass size={20} className="mr-2" />
+              <span className="hidden sm:inline">Tracking</span>
             </TabsTrigger>
             <TabsTrigger value="excel-import">
               <Database size={20} className="mr-2" />
@@ -101,47 +99,40 @@ export default function DashboardEnhanced({ onLogout }: DashboardEnhancedProps) 
               <ChatCircleText size={20} className="mr-2" />
               <span className="hidden sm:inline">Testimonios</span>
             </TabsTrigger>
-            <TabsTrigger value="tracking">
-              <MagnifyingGlass size={20} className="mr-2" />
-              <span className="hidden sm:inline">Tracking</span>
+            <TabsTrigger value="clients">
+              <UsersThree size={20} className="mr-2" />
+              <span className="hidden sm:inline">Clientes</span>
             </TabsTrigger>
           </TabsList>
 
+          <TabsContent value="agenda">
+            <AgendaCalendar shipments={shipments || []} />
+          </TabsContent>
+
           <TabsContent value="analytics">
-            <AnalyticsDashboard 
-              shipments={shipmentRecords || []} 
-              quotes={quotes || []}
-            />
+            <AnalyticsDashboard shipments={shipments || []} />
           </TabsContent>
 
-          <TabsContent value="quotes">
-            <QuotesManagement 
-              quotes={quotes || []} 
-              onUpdateQuote={handleUpdateQuote}
+          <TabsContent value="tracking">
+            <ShipmentTracking
+              shipmentRecords={shipments}
+              reports={reports}
+              onUpdateReports={(updated) => {
+                if (onUpdateReports) onUpdateReports(updated)
+              }}
             />
-          </TabsContent>
-
-          <TabsContent value="shipments">
-            <Card>
-              <CardContent className="pt-6">
-                <div className="text-center py-12">
-                  <Package size={48} className="mx-auto mb-4 text-muted-foreground" />
-                  <h3 className="text-lg font-semibold mb-2">Gestión de Cargas</h3>
-                  <p className="text-muted-foreground mb-4">
-                    Usa la pestaña "Importar" para cargar datos de Excel/Google Sheets
-                  </p>
-                  <Button onClick={() => setActiveTab('excel-import')}>
-                    <Database size={20} className="mr-2" />
-                    Ir a Importar Datos
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
           </TabsContent>
 
           <TabsContent value="excel-import">
-            <EmailConfigStatus />
-            <ExcelImport />
+            <ExcelImport
+              shipmentRecords={shipments}
+              onImportComplete={(records) => {
+                if (onUpdateShipments) onUpdateShipments(records)
+              }}
+              onRecordsUpdate={(records) => {
+                if (onUpdateShipments) onUpdateShipments(records)
+              }}
+            />
           </TabsContent>
 
           <TabsContent value="case-studies">
@@ -152,8 +143,14 @@ export default function DashboardEnhanced({ onLogout }: DashboardEnhancedProps) 
             <TestimonialsEditor />
           </TabsContent>
 
-          <TabsContent value="tracking">
-            <ShipmentTracking />
+          <TabsContent value="clients">
+            <ClientManager
+              clients={clients}
+              onUpdateClients={(updated) => {
+                if (onUpdateClients) onUpdateClients(updated)
+              }}
+              shipments={shipments}
+            />
           </TabsContent>
         </Tabs>
       </div>

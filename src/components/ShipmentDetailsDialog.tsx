@@ -14,7 +14,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { 
+import {
   Package,
   CalendarBlank,
   Boat,
@@ -23,23 +23,35 @@ import {
   CheckCircle,
   X as XIcon,
   FloppyDisk,
-  Info
+  Info,
+  Truck,
+  Warehouse,
+  Cube,
+  FileText,
+  DownloadSimple
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
-import { ParsedShipment } from '@/lib/shipmentTypes'
+import { ParsedShipment, getShipmentStatus } from '@/lib/shipmentTypes'
+import { ShipmentDocument, OperativeReport } from '@/lib/quotationTypes'
 
 interface ShipmentDetailsDialogProps {
   shipment: ParsedShipment | null
   open: boolean
   onOpenChange: (open: boolean) => void
   onSave: (updatedShipment: ParsedShipment) => void
+  clientView?: boolean
+  documents?: ShipmentDocument[]
+  reports?: OperativeReport[]
 }
 
-export default function ShipmentDetailsDialog({ 
-  shipment, 
-  open, 
+export default function ShipmentDetailsDialog({
+  shipment,
+  open,
   onOpenChange,
-  onSave 
+  onSave,
+  clientView = false,
+  documents = [],
+  reports = []
 }: ShipmentDetailsDialogProps) {
   const [editedShipment, setEditedShipment] = useState<ParsedShipment | null>(null)
 
@@ -107,7 +119,7 @@ export default function ShipmentDetailsDialog({
               </DialogTitle>
               <p className="text-sm text-muted-foreground mt-2">
                 REF: <span className="font-mono font-semibold text-foreground text-base">{editedShipment.REF}</span>
-                {editedShipment.CLIENTE && (
+                {!clientView && editedShipment.CLIENTE && (
                   <span className="ml-4">
                     Cliente: <span className="font-semibold text-foreground">{editedShipment.CLIENTE}</span>
                   </span>
@@ -120,25 +132,539 @@ export default function ShipmentDetailsDialog({
           </div>
         </DialogHeader>
 
-        <Tabs defaultValue="general" className="w-full">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="general">
-              <Info size={18} className="mr-2" />
-              General
-            </TabsTrigger>
-            <TabsTrigger value="logistics">
-              <Boat size={18} className="mr-2" />
-              Logística
-            </TabsTrigger>
-            <TabsTrigger value="costs">
-              <CurrencyDollar size={18} className="mr-2" />
-              Costos
-            </TabsTrigger>
-            <TabsTrigger value="status">
-              <CheckCircle size={18} className="mr-2" />
-              Estado
-            </TabsTrigger>
+        <Tabs defaultValue={clientView ? "tracking" : "general"} className="w-full mt-4">
+          <TabsList className={`grid w-full ${clientView ? 'grid-cols-4' : 'grid-cols-4'}`}>
+            {clientView ? (
+              <>
+                <TabsTrigger value="tracking">
+                  <Package size={18} className="mr-2" />
+                  <span className="hidden sm:inline">Tracking</span>
+                </TabsTrigger>
+                <TabsTrigger value="operativa">
+                  <Truck size={18} className="mr-2" />
+                  <span className="hidden sm:inline">Operativa</span>
+                </TabsTrigger>
+                <TabsTrigger value="logistics">
+                  <Boat size={18} className="mr-2" />
+                  <span className="hidden sm:inline">Logística</span>
+                </TabsTrigger>
+                <TabsTrigger value="reports" className="relative">
+                  <FileText size={18} className="mr-2" />
+                  <span className="hidden sm:inline">Informes</span>
+                  {(() => {
+                    const count = reports.filter(r => r.shipmentRef === editedShipment.REF).length
+                    if (count === 0) return null
+                    return (
+                      <span className="ml-1 text-[10px] font-bold rounded-full min-w-[16px] h-[16px] flex items-center justify-center bg-accent text-accent-foreground">
+                        {count}
+                      </span>
+                    )
+                  })()}
+                </TabsTrigger>
+              </>
+            ) : (
+              <>
+                <TabsTrigger value="general">
+                  <Info size={18} className="mr-2" />
+                  General
+                </TabsTrigger>
+                <TabsTrigger value="operativa">
+                  <Truck size={18} className="mr-2" />
+                  Operativa
+                </TabsTrigger>
+                <TabsTrigger value="costs">
+                  <CurrencyDollar size={18} className="mr-2" />
+                  Costos
+                </TabsTrigger>
+                <TabsTrigger value="status">
+                  <CheckCircle size={18} className="mr-2" />
+                  Estado
+                </TabsTrigger>
+              </>
+            )}
           </TabsList>
+
+          {clientView && (
+            <>
+            <TabsContent value="tracking" className="space-y-4 mt-4">
+              {/* ── Visual Status Timeline ── */}
+              {(() => {
+                const status = getShipmentStatus(editedShipment)
+                const ops = editedShipment.operativas || []
+
+                // Cross-reference ALL containers for the most accurate dates
+                const salidaDates = ops.filter(o => o.SALIDA).map(o => o.SALIDA)
+                const fiscDates = ops.filter(o => o.ETA_FISC).map(o => o.ETA_FISC)
+                const devDates = ops.filter(o => o.DEV).map(o => o.DEV)
+                const fiscales = [...new Set(ops.filter(o => o.FISCAL).map(o => o.FISCAL))]
+
+                const hasSalida = salidaDates.length > 0
+                const hasFisc = fiscDates.length > 0
+                const hasDev = devDates.length > 0
+
+                // Build sublabels showing date ranges when containers differ
+                const salidaSublabel = hasSalida
+                  ? (salidaDates.length === 1 ? salidaDates[0] : `${salidaDates.length}/${ops.length} CNTR — ${salidaDates[salidaDates.length - 1]}`)
+                  : 'Pendiente'
+                const fiscSublabel = hasFisc
+                  ? `${fiscDates[fiscDates.length - 1]}${fiscales.length > 0 ? ` • ${fiscales.join(', ')}` : ''}`
+                  : 'Pendiente'
+                const devSublabel = hasDev
+                  ? devDates[devDates.length - 1]
+                  : (status.code === 'devuelto' ? 'Completado' : 'Pendiente')
+
+                const milestones = [
+                  {
+                    label: 'En Tránsito',
+                    sublabel: editedShipment.ETD ? `Salió ${editedShipment.ETD}` : 'Esperando embarque',
+                    reached: true,
+                    icon: <Boat size={18} />
+                  },
+                  {
+                    label: 'En Puerto',
+                    sublabel: editedShipment.ETA ? `Llegó ${editedShipment.ETA}` : 'Pendiente',
+                    reached: ['en_puerto', 'salio_montevideo', 'en_frontera', 'llego_fiscal', 'devuelto'].includes(status.code),
+                    icon: <Package size={18} />
+                  },
+                  {
+                    label: 'Salió de MVD',
+                    sublabel: salidaSublabel,
+                    reached: ['salio_montevideo', 'en_frontera', 'llego_fiscal', 'devuelto'].includes(status.code),
+                    icon: <Truck size={18} />
+                  },
+                  {
+                    label: 'En Fiscal',
+                    sublabel: fiscSublabel,
+                    reached: ['llego_fiscal', 'devuelto'].includes(status.code),
+                    icon: <Warehouse size={18} />
+                  },
+                  {
+                    label: 'Devuelto',
+                    sublabel: devSublabel,
+                    reached: status.code === 'devuelto',
+                    icon: <CheckCircle size={18} />
+                  }
+                ]
+
+                return (
+                  <div className="bg-muted/30 rounded-xl p-5">
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="text-sm font-semibold">Estado del Envío</h4>
+                      <Badge className={
+                        status.color === 'green' ? 'bg-green-500' :
+                        status.color === 'yellow' ? 'bg-yellow-500 text-black' :
+                        status.color === 'gray' ? 'bg-gray-500' :
+                        'bg-blue-500'
+                      }>{status.label}</Badge>
+                    </div>
+
+                    {/* Progress bar */}
+                    <div className="w-full bg-muted rounded-full h-2 mb-6">
+                      <div
+                        className={`h-2 rounded-full transition-all duration-700 ${
+                          status.color === 'green' ? 'bg-green-500' :
+                          status.color === 'yellow' ? 'bg-yellow-500' :
+                          status.color === 'gray' ? 'bg-gray-400' :
+                          'bg-blue-500'
+                        }`}
+                        style={{ width: `${status.progress}%` }}
+                      />
+                    </div>
+
+                    {/* Milestone timeline */}
+                    <div className="relative">
+                      {milestones.map((m, idx) => (
+                        <div key={idx} className="flex items-start gap-3 mb-4 last:mb-0">
+                          {/* Icon circle */}
+                          <div className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
+                            m.reached
+                              ? 'bg-accent text-accent-foreground'
+                              : 'bg-muted text-muted-foreground'
+                          }`}>
+                            {m.icon}
+                          </div>
+                          {/* Connector line */}
+                          {idx < milestones.length - 1 && (
+                            <div className={`absolute w-0.5 h-6 ml-[15px] mt-8 ${
+                              milestones[idx + 1].reached ? 'bg-accent' : 'bg-muted'
+                            }`} style={{ top: `${idx * 52}px` }} />
+                          )}
+                          {/* Text */}
+                          <div className="flex-1 pt-1">
+                            <div className={`text-sm font-medium ${m.reached ? 'text-foreground' : 'text-muted-foreground'}`}>
+                              {m.label}
+                            </div>
+                            <div className="text-xs text-muted-foreground">{m.sublabel}</div>
+                          </div>
+                          {/* Check */}
+                          {m.reached && (
+                            <CheckCircle size={18} weight="fill" className="text-green-500 shrink-0 mt-1" />
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })()}
+
+              {/* Shipment details grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <Label className="text-muted-foreground text-xs">Referencia</Label>
+                  <div className="font-mono font-semibold text-lg">{editedShipment.REF}</div>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-muted-foreground text-xs">Contenedores</Label>
+                  <div className="font-mono text-sm">{editedShipment.CNTR || '-'}</div>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-muted-foreground text-xs">ETD (Salida)</Label>
+                  <div className="font-medium">{editedShipment.ETD || '-'}</div>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-muted-foreground text-xs">ETA (Llegada)</Label>
+                  <div className="font-medium">{editedShipment.ETA || '-'}</div>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-muted-foreground text-xs">Buque</Label>
+                  <div className="font-medium">{editedShipment.BUQUE || '-'}</div>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-muted-foreground text-xs">Línea Naviera</Label>
+                  <div className="font-medium">{editedShipment.LINEA || '-'}</div>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-muted-foreground text-xs">Terminal</Label>
+                  <div className="font-medium">{editedShipment.TERMINAL || '-'}</div>
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-muted-foreground text-xs">Cantidad</Label>
+                  <div className="font-medium">{editedShipment.N} contenedor(es)</div>
+                </div>
+              </div>
+
+              {/* Libre hasta warning */}
+              {editedShipment.LIBRE_HASTA && (() => {
+                const days = getDaysUntilFree(editedShipment.LIBRE_HASTA)
+                if (days > 5) return null
+                return (
+                  <div className={`rounded-lg p-4 border-l-4 ${
+                    days < 0 ? 'bg-red-50 dark:bg-red-950/20 border-l-red-500' :
+                    days <= 2 ? 'bg-orange-50 dark:bg-orange-950/20 border-l-orange-500' :
+                    'bg-yellow-50 dark:bg-yellow-950/20 border-l-yellow-500'
+                  }`}>
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      <Info size={16} className={days < 0 ? 'text-red-500' : days <= 2 ? 'text-orange-500' : 'text-yellow-600'} />
+                      {days < 0
+                        ? `Días libres vencidos hace ${Math.abs(days)} día${Math.abs(days) === 1 ? '' : 's'}`
+                        : days === 0
+                        ? 'Los días libres vencen HOY'
+                        : `Los días libres vencen en ${days} día${days === 1 ? '' : 's'}`
+                      }
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">Libre hasta: {editedShipment.LIBRE_HASTA}</div>
+                  </div>
+                )
+              })()}
+            </TabsContent>
+
+            <TabsContent value="operativa" className="space-y-4 mt-4">
+              {editedShipment.operativas && editedShipment.operativas.length > 0 ? (
+                <>
+                  {/* Summary cards */}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div className="bg-accent/10 rounded-lg p-3 text-center">
+                      <div className="text-xl font-bold text-accent">
+                        {editedShipment.operativas.reduce((sum, o) => sum + o.PKGS, 0).toLocaleString()}
+                      </div>
+                      <div className="text-xs text-muted-foreground">Bultos</div>
+                    </div>
+                    <div className="bg-muted rounded-lg p-3 text-center">
+                      <div className="text-xl font-bold">
+                        {editedShipment.operativas.reduce((sum, o) => sum + o.KG, 0).toLocaleString()} kg
+                      </div>
+                      <div className="text-xs text-muted-foreground">Peso Total</div>
+                    </div>
+                    <div className="bg-muted rounded-lg p-3 text-center">
+                      <div className="text-xl font-bold">
+                        {editedShipment.operativas.reduce((sum, o) => sum + o.M3, 0).toFixed(1)} m³
+                      </div>
+                      <div className="text-xs text-muted-foreground">Volumen</div>
+                    </div>
+                    <div className="bg-muted rounded-lg p-3 text-center">
+                      <div className="text-xl font-bold">{editedShipment.operativas.length}</div>
+                      <div className="text-xs text-muted-foreground">Contenedores</div>
+                    </div>
+                  </div>
+
+                  {/* Dates timeline — aggregated across all containers */}
+                  {(() => {
+                    const allOps = editedShipment.operativas!
+                    const salidas = allOps.filter(o => o.SALIDA).map(o => o.SALIDA)
+                    const etaFiscs = allOps.filter(o => o.ETA_FISC).map(o => o.ETA_FISC)
+                    const libres = allOps.filter(o => o.LIBRE).map(o => o.LIBRE)
+                    const fiscales = [...new Set(allOps.filter(o => o.FISCAL).map(o => o.FISCAL))]
+
+                    return (
+                      <div className="bg-muted/50 rounded-lg p-4">
+                        <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                          <CalendarBlank size={16} className="text-accent" />
+                          Fechas de Operativa
+                        </h4>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          <div className="space-y-1">
+                            <Label className="text-muted-foreground text-xs">Salida MVD</Label>
+                            <div className="font-medium">
+                              {salidas.length === 0 ? '-' :
+                               salidas.length === 1 ? salidas[0] :
+                               `${salidas[0]} (${salidas.length}/${allOps.length})`}
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-muted-foreground text-xs">Llegada Fiscal</Label>
+                            <div className="font-medium">
+                              {etaFiscs.length === 0 ? '-' :
+                               etaFiscs.length === 1 ? etaFiscs[0] :
+                               `${etaFiscs[0]} (${etaFiscs.length}/${allOps.length})`}
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-muted-foreground text-xs">Libre Hasta</Label>
+                            <div className="font-medium">{libres[0] || '-'}</div>
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-muted-foreground text-xs">Depósito Fiscal</Label>
+                            <div className="font-medium">{fiscales.join(', ') || '-'}</div>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })()}
+
+                  {/* Container-level details */}
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-semibold flex items-center gap-2">
+                      <Cube size={16} className="text-accent" />
+                      Detalle por Contenedor
+                    </h4>
+                    {editedShipment.operativas.map((op, idx) => (
+                      <div key={idx} className="border rounded-lg p-4 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-semibold">{op.CNTR_OP || `Contenedor ${idx + 1}`}</span>
+                            {op.TIPO && (
+                              <Badge variant="secondary" className="text-xs">{op.TIPO}</Badge>
+                            )}
+                          </div>
+                          {op.OPERATIVA && (
+                            <Badge className={
+                              op.OPERATIVA === 'TRASIEGO' ? 'bg-blue-500' :
+                              op.OPERATIVA === 'DEVUELTO' ? 'bg-orange-500' :
+                              'bg-green-600'
+                            }>
+                              {op.OPERATIVA}
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-2 text-sm">
+                          {op.DESCRIPCION && (
+                            <div className="col-span-2 md:col-span-3">
+                              <span className="text-muted-foreground">Mercadería:</span>
+                              <span className="ml-2 font-medium">{op.DESCRIPCION}</span>
+                            </div>
+                          )}
+                          <div>
+                            <span className="text-muted-foreground">Bultos:</span>
+                            <span className="ml-2 font-medium">{op.PKGS.toLocaleString()}</span>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Peso:</span>
+                            <span className="ml-2 font-medium">{op.KG.toLocaleString()} kg</span>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Volumen:</span>
+                            <span className="ml-2 font-medium">{op.M3} m³</span>
+                          </div>
+                          {op.TRANSPORTE && (
+                            <div>
+                              <span className="text-muted-foreground">Transporte:</span>
+                              <span className="ml-2 font-medium">{op.TRANSPORTE}</span>
+                            </div>
+                          )}
+                          {op.DEPOSITO && (
+                            <div>
+                              <span className="text-muted-foreground">Depósito:</span>
+                              <span className="ml-2 font-medium">{op.DEPOSITO}</span>
+                            </div>
+                          )}
+                          {op.WOOD === 'SI' && (
+                            <div>
+                              <Badge variant="secondary" className="text-xs">🪵 WOOD</Badge>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className="text-center py-12 text-muted-foreground">
+                  <Warehouse size={48} className="mx-auto mb-4" />
+                  <p>No hay datos operativos disponibles para esta carga</p>
+                </div>
+              )}
+            </TabsContent>
+
+            {/* ── Client Logistics Tab ── */}
+            <TabsContent value="logistics" className="space-y-4 mt-4">
+              {/* Libre / Free Time info */}
+              <div className="bg-muted/30 rounded-xl p-5">
+                <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                  <CalendarBlank size={16} className="text-accent" />
+                  Días Libres
+                </h4>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  <div className="space-y-1">
+                    <Label className="text-muted-foreground text-xs">Free Time</Label>
+                    <div className="font-medium">{editedShipment.FT || 0} días</div>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-muted-foreground text-xs">Libre Hasta</Label>
+                    <div className="font-medium">{editedShipment.LIBRE_HASTA || '-'}</div>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-muted-foreground text-xs">Estado</Label>
+                    <div>{getUrgencyBadge(daysUntilFree)}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Shipping info */}
+              <div className="bg-muted/30 rounded-xl p-5">
+                <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                  <Boat size={16} className="text-accent" />
+                  Información de Embarque
+                </h4>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                  <div className="space-y-1">
+                    <Label className="text-muted-foreground text-xs">Línea Naviera</Label>
+                    <div className="font-medium">{editedShipment.LINEA || '-'}</div>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-muted-foreground text-xs">Buque</Label>
+                    <div className="font-medium">{editedShipment.BUQUE || '-'}</div>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-muted-foreground text-xs">Terminal</Label>
+                    <div className="font-medium">{editedShipment.TERMINAL || '-'}</div>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-muted-foreground text-xs">MBL</Label>
+                    <div className="font-mono text-sm">{editedShipment.MBL || '-'}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Documents section */}
+              {(() => {
+                const shipmentDocs = documents.filter(d => d.shipmentRef === editedShipment.REF)
+                return (
+                  <div className="bg-muted/30 rounded-xl p-5">
+                    <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                      <FloppyDisk size={16} className="text-accent" />
+                      Documentos ({shipmentDocs.length})
+                    </h4>
+                    {shipmentDocs.length === 0 ? (
+                      <p className="text-sm text-muted-foreground">No hay documentos subidos para esta carga</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {shipmentDocs.map(doc => (
+                          <div key={doc.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50">
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-medium truncate">{doc.name}</div>
+                              <div className="text-xs text-muted-foreground">
+                                {new Date(doc.uploadedAt).toLocaleDateString('es-UY')} • {doc.uploadedBy || 'Cliente'}
+                              </div>
+                            </div>
+                            {doc.data && (
+                              <a
+                                href={doc.data}
+                                download={doc.name}
+                                className="text-xs text-accent hover:underline ml-2 shrink-0"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                Descargar
+                              </a>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
+            </TabsContent>
+
+            {/* ── Client Reports Tab ── */}
+            <TabsContent value="reports" className="space-y-4 mt-4">
+              {(() => {
+                const shipmentReports = reports.filter(r => r.shipmentRef === editedShipment.REF)
+
+                if (shipmentReports.length === 0) {
+                  return (
+                    <div className="text-center py-12 text-muted-foreground">
+                      <FileText size={48} className="mx-auto mb-4" />
+                      <h4 className="text-lg font-semibold mb-2">Sin informes operativos</h4>
+                      <p className="text-sm">Aún no se han publicado informes para esta carga</p>
+                    </div>
+                  )
+                }
+
+                return (
+                  <div className="space-y-3">
+                    <h4 className="text-sm font-semibold flex items-center gap-2 mb-4">
+                      <FileText size={16} className="text-accent" />
+                      Informes Operativos ({shipmentReports.length})
+                    </h4>
+                    {shipmentReports
+                      .sort((a, b) => b.createdAt - a.createdAt)
+                      .map(report => (
+                        <div key={report.id} className="border rounded-xl p-4 hover:bg-muted/30 transition-colors">
+                          <div className="flex items-start gap-3">
+                            <div className="bg-red-100 dark:bg-red-900/30 p-2.5 rounded-lg shrink-0 mt-0.5">
+                              <FileText size={24} className="text-red-600 dark:text-red-400" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="font-semibold">{report.title}</div>
+                              <div className="text-xs text-muted-foreground mt-1">
+                                {report.fileName} • Publicado el {new Date(report.createdAt).toLocaleDateString('es-UY', { day: '2-digit', month: 'long', year: 'numeric' })}
+                              </div>
+                              {report.content && (
+                                <p className="text-sm text-muted-foreground mt-2 bg-muted/50 rounded-lg p-3">
+                                  {report.content}
+                                </p>
+                              )}
+                              {report.fileData && (
+                                <a
+                                  href={report.fileData}
+                                  download={report.fileName}
+                                  className="inline-flex items-center gap-2 mt-3 px-4 py-2 bg-accent text-accent-foreground rounded-lg text-sm font-medium hover:bg-accent/90 transition-colors"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <DownloadSimple size={16} />
+                                  Descargar Informe
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                )
+              })()}
+            </TabsContent>
+            </>
+          )}
 
           <TabsContent value="general" className="space-y-4 mt-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -265,45 +791,110 @@ export default function ShipmentDetailsDialog({
             </div>
           </TabsContent>
 
-          <TabsContent value="logistics" className="space-y-4 mt-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="linea">
-                  <Boat size={16} className="inline mr-1" />
-                  Línea Naviera
-                </Label>
-                <Input
-                  id="linea"
-                  value={editedShipment.LINEA}
-                  onChange={(e) => updateField('LINEA', e.target.value)}
-                />
+          {/* Admin Operativa tab — shows editable logistics + operativas data */}
+          {!clientView && (
+            <TabsContent value="operativa" className="space-y-4 mt-4">
+              {/* Editable logistics fields */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="linea">
+                    <Boat size={16} className="inline mr-1" />
+                    Línea Naviera
+                  </Label>
+                  <Input
+                    id="linea"
+                    value={editedShipment.LINEA}
+                    onChange={(e) => updateField('LINEA', e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="buque">
+                    <Boat size={16} className="inline mr-1" />
+                    Buque
+                  </Label>
+                  <Input
+                    id="buque"
+                    value={editedShipment.BUQUE}
+                    onChange={(e) => updateField('BUQUE', e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="terminal">
+                    <MapPin size={16} className="inline mr-1" />
+                    Terminal
+                  </Label>
+                  <Input
+                    id="terminal"
+                    value={editedShipment.TERMINAL}
+                    onChange={(e) => updateField('TERMINAL', e.target.value)}
+                  />
+                </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="buque">
-                  <Boat size={16} className="inline mr-1" />
-                  Buque
-                </Label>
-                <Input
-                  id="buque"
-                  value={editedShipment.BUQUE}
-                  onChange={(e) => updateField('BUQUE', e.target.value)}
-                />
-              </div>
+              {/* Operativas data from sheet */}
+              {editedShipment.operativas && editedShipment.operativas.length > 0 ? (
+                <>
+                  <div className="border-t pt-4">
+                    <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                      <Warehouse size={16} className="text-accent" />
+                      Datos Operativos ({editedShipment.operativas.length} registros)
+                    </h4>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                      <div className="bg-accent/10 rounded-lg p-3 text-center">
+                        <div className="text-lg font-bold text-accent">
+                          {editedShipment.operativas.reduce((sum, o) => sum + o.PKGS, 0).toLocaleString()}
+                        </div>
+                        <div className="text-xs text-muted-foreground">Bultos</div>
+                      </div>
+                      <div className="bg-muted rounded-lg p-3 text-center">
+                        <div className="text-lg font-bold">
+                          {editedShipment.operativas.reduce((sum, o) => sum + o.KG, 0).toLocaleString()} kg
+                        </div>
+                        <div className="text-xs text-muted-foreground">Peso</div>
+                      </div>
+                      <div className="bg-muted rounded-lg p-3 text-center">
+                        <div className="text-lg font-bold">
+                          {editedShipment.operativas.reduce((sum, o) => sum + o.M3, 0).toFixed(1)} m³
+                        </div>
+                        <div className="text-xs text-muted-foreground">Volumen</div>
+                      </div>
+                      <div className="bg-muted rounded-lg p-3 text-center">
+                        <div className="text-lg font-bold">
+                          {editedShipment.operativas[0]?.OPERATIVA || '-'}
+                        </div>
+                        <div className="text-xs text-muted-foreground">Tipo Op.</div>
+                      </div>
+                    </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="terminal">
-                  <MapPin size={16} className="inline mr-1" />
-                  Terminal
-                </Label>
-                <Input
-                  id="terminal"
-                  value={editedShipment.TERMINAL}
-                  onChange={(e) => updateField('TERMINAL', e.target.value)}
-                />
-              </div>
-            </div>
-          </TabsContent>
+                    {editedShipment.operativas.map((op, idx) => (
+                      <div key={idx} className="border rounded-lg p-3 mb-2">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="font-mono font-semibold text-sm">{op.CNTR_OP || `#${idx + 1}`}</span>
+                          <div className="flex gap-2">
+                            {op.TIPO && <Badge variant="secondary" className="text-xs">{op.TIPO}</Badge>}
+                            {op.OPERATIVA && <Badge className="text-xs bg-accent">{op.OPERATIVA}</Badge>}
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
+                          <div><span className="text-muted-foreground">Salida:</span> <span className="font-medium">{op.SALIDA || '-'}</span></div>
+                          <div><span className="text-muted-foreground">Fiscal:</span> <span className="font-medium">{op.FISCAL || '-'}</span></div>
+                          <div><span className="text-muted-foreground">Transporte:</span> <span className="font-medium">{op.TRANSPORTE || '-'}</span></div>
+                          <div><span className="text-muted-foreground">Depósito:</span> <span className="font-medium">{op.DEPOSITO || '-'}</span></div>
+                          {op.DESCRIPCION && (
+                            <div className="col-span-2 md:col-span-4"><span className="text-muted-foreground">Desc:</span> <span className="font-medium">{op.DESCRIPCION}</span></div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className="border-t pt-4 text-center text-muted-foreground text-sm py-6">
+                  Sin datos operativos para esta carga
+                </div>
+              )}
+            </TabsContent>
+          )}
 
           <TabsContent value="costs" className="space-y-4 mt-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -522,12 +1113,14 @@ export default function ShipmentDetailsDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancelar
+            {clientView ? 'Cerrar' : 'Cancelar'}
           </Button>
-          <Button onClick={handleSave} className="bg-accent text-accent-foreground hover:bg-accent/90">
-            <FloppyDisk size={20} className="mr-2" />
-            Guardar Cambios
-          </Button>
+          {!clientView && (
+            <Button onClick={handleSave} className="bg-accent text-accent-foreground hover:bg-accent/90">
+              <FloppyDisk size={20} className="mr-2" />
+              Guardar Cambios
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

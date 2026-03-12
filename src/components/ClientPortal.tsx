@@ -1,46 +1,84 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { 
-  SignOut, 
-  Package, 
-  FileText, 
-  ClockCounterClockwise, 
-  UploadSimple,
-  DownloadSimple,
-  Eye
+import {
+  SignOut,
+  Package,
+  FileText,
+  ClockCounterClockwise,
+  Eye,
+  Truck,
+  Cube,
+  Bell,
+  BellRinging,
+  Warning,
+  CheckCircle,
+  Info,
+  X as XIcon,
+  MapPin,
+  Warehouse,
+  CalendarBlank,
+  Timer,
+  Anchor,
+  ArrowRight
 } from '@phosphor-icons/react'
-import { ParsedShipment } from '@/lib/shipmentTypes'
-import { ClientAccount, ShipmentDocument } from '@/lib/quotationTypes'
+import { ParsedShipment, getShipmentStatus, generateShipmentAlerts, isShipmentCompleted, ShipmentAlert } from '@/lib/shipmentTypes'
+import { ClientAccount, OperativeReport } from '@/lib/quotationTypes'
 import { toast } from 'sonner'
+import { authFetch } from '@/lib/authClient'
 import ShipmentDetailsDialog from './ShipmentDetailsDialog'
 
 interface ClientPortalProps {
   onLogout: () => void
   clientEmail: string
-  shipmentRecords?: ParsedShipment[]
+  shipments?: ParsedShipment[]
   clients?: ClientAccount[]
-  documents?: ShipmentDocument[]
-  onDocumentsUpdate?: (docs: ShipmentDocument[]) => void
+  reports?: OperativeReport[]
 }
 
-export default function ClientPortal({ onLogout, clientEmail, shipmentRecords = [], clients = [], documents = [] as ShipmentDocument[], onDocumentsUpdate }: ClientPortalProps) {
-  const [localDocuments, setLocalDocuments] = useState<ShipmentDocument[]>(documents)
-  
+export default function ClientPortal({ onLogout, clientEmail, shipments = [], clients = [], reports = [] }: ClientPortalProps) {
   const [activeTab, setActiveTab] = useState('active')
   const [selectedShipment, setSelectedShipment] = useState<ParsedShipment | null>(null)
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false)
-  const [uploadingDoc, setUploadingDoc] = useState(false)
+  const [showNotifications, setShowNotifications] = useState(false)
+  const [serverShipments, setServerShipments] = useState<ParsedShipment[]>([])
+  const [isLoadingData, setIsLoadingData] = useState(true)
+  const [dismissedAlerts, setDismissedAlerts] = useState<string[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('twf-dismissed-alerts') || '[]')
+    } catch { return [] }
+  })
+
+  // Fetch client-specific data from server
+  useEffect(() => {
+    const fetchClientData = async () => {
+      try {
+        const res = await authFetch('/api/sheets/client-data')
+        if (res.ok) {
+          const data = await res.json()
+          setServerShipments(data.shipments || [])
+        }
+      } catch (err) {
+        console.warn('Failed to fetch client data from server:', err)
+      } finally {
+        setIsLoadingData(false)
+      }
+    }
+    fetchClientData()
+  }, [clientEmail])
 
   const currentClient = clients?.find(c => c.email === clientEmail)
-  
-  const clientShipments = shipmentRecords?.filter(s => 
-    currentClient?.assignedShipments.includes(s.REF)
-  ) || []
+
+  // Use server data if available, fallback to props
+  const clientShipments = serverShipments.length > 0
+    ? serverShipments
+    : (shipments?.filter(s =>
+        currentClient?.clientePattern && s.CLIENTE.toUpperCase().includes(currentClient.clientePattern.toUpperCase())
+      ) || [])
 
   const getDaysUntilFree = (libreHasta: string): number => {
     if (!libreHasta) return 999
@@ -54,13 +92,67 @@ export default function ClientPortal({ onLogout, clientEmail, shipmentRecords = 
     }
   }
 
+  // Improved: A shipment is active unless it's completed (all containers devueltos/SALIDA)
+  // OR if libre expired more than 30 days ago AND no operativas data
   const isActiveShipment = (shipment: ParsedShipment): boolean => {
+    // If all containers have SALIDA → completed (user's logic)
+    if (isShipmentCompleted(shipment)) return false
+    // Fallback for shipments without operativas: use libre date
     const daysUntilFree = getDaysUntilFree(shipment.LIBRE_HASTA)
     return daysUntilFree >= -30
   }
 
   const activeShipments = clientShipments.filter(isActiveShipment)
   const historyShipments = clientShipments.filter(s => !isActiveShipment(s))
+
+  // ── Alerts System ──
+  const clientReports = useMemo(() => {
+    const clientRefs = new Set(clientShipments.map(s => s.REF))
+    return reports.filter(r => clientRefs.has(r.shipmentRef))
+  }, [reports, clientShipments])
+
+  const allAlerts = useMemo(() => generateShipmentAlerts(activeShipments, clientReports), [activeShipments, clientReports])
+  const visibleAlerts = allAlerts.filter(a => !dismissedAlerts.includes(a.id))
+  const criticalCount = visibleAlerts.filter(a => a.severity === 'critical' || a.severity === 'warning').length
+
+  const dismissAlert = (alertId: string) => {
+    const updated = [...dismissedAlerts, alertId]
+    setDismissedAlerts(updated)
+    localStorage.setItem('twf-dismissed-alerts', JSON.stringify(updated))
+  }
+
+  const getAlertIcon = (severity: string) => {
+    switch (severity) {
+      case 'critical': return <Warning size={20} weight="fill" className="text-red-500 shrink-0" />
+      case 'warning': return <Warning size={20} weight="fill" className="text-orange-500 shrink-0" />
+      case 'info': return <Info size={20} weight="fill" className="text-blue-500 shrink-0" />
+      case 'success': return <CheckCircle size={20} weight="fill" className="text-green-500 shrink-0" />
+      default: return <Info size={20} className="shrink-0" />
+    }
+  }
+
+  const getAlertBorderColor = (severity: string) => {
+    switch (severity) {
+      case 'critical': return 'border-l-red-500 bg-red-50 dark:bg-red-950/20'
+      case 'warning': return 'border-l-orange-500 bg-orange-50 dark:bg-orange-950/20'
+      case 'info': return 'border-l-blue-500 bg-blue-50 dark:bg-blue-950/20'
+      case 'success': return 'border-l-green-500 bg-green-50 dark:bg-green-950/20'
+      default: return 'border-l-gray-500'
+    }
+  }
+
+  const getStatusBadge = (shipment: ParsedShipment) => {
+    const status = getShipmentStatus(shipment)
+    const colorMap: Record<string, string> = {
+      blue: 'bg-blue-500',
+      yellow: 'bg-yellow-500 text-black',
+      green: 'bg-green-500',
+      gray: 'bg-gray-500',
+      red: 'bg-red-500',
+      orange: 'bg-orange-500'
+    }
+    return <Badge className={colorMap[status.color] || 'bg-gray-500'}>{status.label}</Badge>
+  }
 
   const getUrgencyBadge = (days: number) => {
     if (days < 0) {
@@ -78,87 +170,142 @@ export default function ClientPortal({ onLogout, clientEmail, shipmentRecords = 
     setDetailsDialogOpen(true)
   }
 
-  const handleFileUpload = async (shipmentRef: string, event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error('El archivo no debe superar los 10MB')
-      return
-    }
-
-    setUploadingDoc(true)
-
-    try {
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        const base64 = e.target?.result as string
-        
-        const newDoc: ShipmentDocument = {
-          id: `${Date.now()}`,
-          shipmentRef,
-          name: file.name,
-          type: file.type,
-          uploadedAt: Date.now(),
-          uploadedBy: clientEmail,
-          data: base64
-        }
-
-        setDocuments(current => [...(current || []), newDoc])
-        toast.success('Documento subido exitosamente')
-        setUploadingDoc(false)
-      }
-
-      reader.onerror = () => {
-        toast.error('Error al leer el archivo')
-        setUploadingDoc(false)
-      }
-
-      reader.readAsDataURL(file)
-    } catch (error) {
-      toast.error('Error al subir el documento')
-      setUploadingDoc(false)
-    }
-  }
-
-  const handleDownloadDocument = (doc: ShipmentDocument) => {
-    if (!doc.data) {
-      toast.error('Documento no disponible')
-      return
-    }
-
-    const link = document.createElement('a')
-    link.href = doc.data
-    link.download = doc.name
-    link.click()
-    toast.success('Descargando documento...')
-  }
-
-  const getDocumentsForShipment = (ref: string) => {
-    return documents?.filter(d => d.shipmentRef === ref) || []
-  }
-
   return (
     <div className="min-h-screen bg-background">
       <nav className="bg-primary text-primary-foreground border-b border-border">
         <div className="max-w-7xl mx-auto px-4 md:px-6">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-2">
-              <Package size={32} weight="fill" />
+              <img src="/images/twf-logo-white.png" alt="TWF" className="h-8 w-auto" />
               <div>
                 <div className="text-xl font-bold">Portal de Cliente</div>
                 <div className="text-xs opacity-80">{currentClient?.company || currentClient?.name}</div>
               </div>
             </div>
-            <Button variant="ghost" onClick={onLogout} className="text-primary-foreground hover:bg-primary-foreground/10">
-              <SignOut size={20} className="mr-2" />
-              Cerrar Sesión
-            </Button>
+            <div className="flex items-center gap-2">
+              {/* Notification Bell */}
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowNotifications(!showNotifications)}
+                className="text-primary-foreground hover:bg-primary-foreground/10 relative"
+              >
+                {criticalCount > 0 ? (
+                  <BellRinging size={22} weight="fill" className="animate-pulse" />
+                ) : (
+                  <Bell size={22} />
+                )}
+                {visibleAlerts.length > 0 && (
+                  <span className={`absolute -top-1 -right-1 text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center ${
+                    criticalCount > 0 ? 'bg-red-500 text-white' : 'bg-blue-500 text-white'
+                  }`}>
+                    {visibleAlerts.length}
+                  </span>
+                )}
+              </Button>
+
+              <Button variant="ghost" onClick={onLogout} className="text-primary-foreground hover:bg-primary-foreground/10">
+                <SignOut size={20} className="mr-2" />
+                Cerrar Sesión
+              </Button>
+            </div>
           </div>
         </div>
       </nav>
 
+      {/* ── Notifications Panel (dropdown overlay) ── */}
+      {showNotifications && (
+        <div className="fixed inset-0 z-50" onClick={() => setShowNotifications(false)}>
+          <div
+            className="absolute right-4 top-16 w-full max-w-md bg-background border rounded-xl shadow-2xl overflow-hidden animate-in slide-in-from-top-2 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between px-4 py-3 bg-muted/50 border-b">
+              <h3 className="font-semibold text-sm flex items-center gap-2">
+                <Bell size={16} />
+                Notificaciones
+                {visibleAlerts.length > 0 && (
+                  <Badge variant="secondary" className="text-xs">{visibleAlerts.length}</Badge>
+                )}
+              </h3>
+              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setShowNotifications(false)}>
+                <XIcon size={16} />
+              </Button>
+            </div>
+
+            <div className="max-h-[60vh] overflow-y-auto">
+              {visibleAlerts.length === 0 ? (
+                <div className="py-12 text-center text-muted-foreground">
+                  <CheckCircle size={40} className="mx-auto mb-3 text-green-500" />
+                  <p className="text-sm font-medium">Todo en orden</p>
+                  <p className="text-xs mt-1">No hay alertas pendientes</p>
+                </div>
+              ) : (
+                <div className="divide-y">
+                  {visibleAlerts.map((alert) => (
+                    <div
+                      key={alert.id}
+                      className={`flex items-start gap-3 px-4 py-3 border-l-4 hover:bg-muted/30 transition-colors cursor-pointer ${getAlertBorderColor(alert.severity)}`}
+                      onClick={() => {
+                        const shipment = clientShipments.find(s => s.REF === alert.shipmentRef)
+                        if (shipment) {
+                          handleViewDetails(shipment)
+                          setShowNotifications(false)
+                        }
+                      }}
+                    >
+                      {getAlertIcon(alert.severity)}
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium">{alert.title}</div>
+                        <div className="text-xs text-muted-foreground mt-0.5">{alert.message}</div>
+                        {alert.date && (
+                          <div className="text-[10px] text-muted-foreground mt-1 font-mono">{alert.date}</div>
+                        )}
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-6 w-6 shrink-0 opacity-50 hover:opacity-100"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          dismissAlert(alert.id)
+                        }}
+                      >
+                        <XIcon size={14} />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-8">
+        {/* ── Critical Alerts Banner (always visible if critical alerts exist) ── */}
+        {visibleAlerts.filter(a => a.severity === 'critical').length > 0 && (
+          <div className="mb-6 space-y-2">
+            {visibleAlerts.filter(a => a.severity === 'critical').map(alert => (
+              <div key={alert.id} className="flex items-center gap-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 rounded-lg px-4 py-3">
+                <Warning size={20} weight="fill" className="text-red-500 shrink-0" />
+                <div className="flex-1 text-sm">
+                  <span className="font-semibold text-red-700 dark:text-red-400">{alert.title}:</span>
+                  <span className="ml-1 text-red-600 dark:text-red-300">{alert.message}</span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/50"
+                  onClick={() => dismissAlert(alert.id)}
+                >
+                  <XIcon size={16} />
+                </Button>
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2">Mis Cargas</h1>
           <p className="text-muted-foreground">
@@ -166,7 +313,7 @@ export default function ClientPortal({ onLogout, clientEmail, shipmentRecords = 
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <Card>
             <CardContent className="pt-6">
               <div className="text-3xl font-bold text-accent">{activeShipments.length}</div>
@@ -178,13 +325,23 @@ export default function ClientPortal({ onLogout, clientEmail, shipmentRecords = 
               <div className="text-3xl font-bold text-accent">
                 {activeShipments.reduce((sum, s) => sum + s.N, 0)}
               </div>
-              <div className="text-sm text-muted-foreground">Contenedores en Tránsito</div>
+              <div className="text-sm text-muted-foreground">Contenedores</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="pt-6">
+              <div className={`text-3xl font-bold ${criticalCount > 0 ? 'text-red-500' : 'text-green-500'}`}>
+                {criticalCount > 0 ? criticalCount : '✓'}
+              </div>
+              <div className="text-sm text-muted-foreground">
+                {criticalCount > 0 ? 'Alertas Activas' : 'Sin Alertas'}
+              </div>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-6">
               <div className="text-3xl font-bold text-accent">{historyShipments.length}</div>
-              <div className="text-sm text-muted-foreground">Historial</div>
+              <div className="text-sm text-muted-foreground">Completadas</div>
             </CardContent>
           </Card>
         </div>
@@ -193,11 +350,18 @@ export default function ClientPortal({ onLogout, clientEmail, shipmentRecords = 
           <TabsList className="grid w-full grid-cols-3 max-w-2xl">
             <TabsTrigger value="active">
               <Package size={20} className="mr-2" />
-              Cargas Activas
+              Activas
             </TabsTrigger>
-            <TabsTrigger value="documents">
-              <FileText size={20} className="mr-2" />
-              Documentos
+            <TabsTrigger value="alerts" className="relative">
+              <Bell size={20} className="mr-2" />
+              Alertas
+              {visibleAlerts.length > 0 && (
+                <span className={`ml-1 text-[10px] font-bold rounded-full min-w-[16px] h-[16px] flex items-center justify-center ${
+                  criticalCount > 0 ? 'bg-red-500 text-white' : 'bg-blue-500 text-white'
+                }`}>
+                  {visibleAlerts.length}
+                </span>
+              )}
             </TabsTrigger>
             <TabsTrigger value="history">
               <ClockCounterClockwise size={20} className="mr-2" />
@@ -218,118 +382,313 @@ export default function ClientPortal({ onLogout, clientEmail, shipmentRecords = 
               </Card>
             ) : (
               activeShipments.map((shipment) => {
-                const days = getDaysUntilFree(shipment.LIBRE_HASTA)
-                const shipmentDocs = getDocumentsForShipment(shipment.REF)
-                
-                return (
-                  <Card key={shipment.REF} className="hover:shadow-lg transition-shadow">
-                    <CardContent className="pt-6">
-                      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2">
-                            <h3 className="text-xl font-bold">{shipment.REF}</h3>
-                            {getUrgencyBadge(days)}
-                          </div>
-                          <div className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm">
-                            <div>
-                              <span className="text-muted-foreground">ETA:</span>
-                              <span className="ml-2 font-medium">{shipment.ETA || '-'}</span>
-                            </div>
-                            <div>
-                              <span className="text-muted-foreground">Libre hasta:</span>
-                              <span className="ml-2 font-medium">{shipment.LIBRE_HASTA || '-'}</span>
-                            </div>
-                            <div>
-                              <span className="text-muted-foreground">Terminal:</span>
-                              <span className="ml-2 font-medium">{shipment.TERMINAL || '-'}</span>
-                            </div>
-                            <div>
-                              <span className="text-muted-foreground">Contenedores:</span>
-                              <span className="ml-2 font-medium">{shipment.N}</span>
-                            </div>
-                            <div>
-                              <span className="text-muted-foreground">Buque:</span>
-                              <span className="ml-2 font-medium">{shipment.BUQUE || '-'}</span>
-                            </div>
-                            <div>
-                              <span className="text-muted-foreground">Documentos:</span>
-                              <span className="ml-2 font-medium">{shipmentDocs.length}</span>
-                            </div>
-                          </div>
+                  const ops = shipment.operativas || []
+                  const firstOp = ops[0]
+                  const totalKg = ops.reduce((sum, o) => sum + o.KG, 0)
+                  const totalM3 = ops.reduce((sum, o) => sum + o.M3, 0)
+                  const desc = firstOp?.DESCRIPCION || ''
+                  const status = getShipmentStatus(shipment)
+                  const daysLibre = getDaysUntilFree(shipment.LIBRE_HASTA)
+
+                  // Build container list: from operativas or fallback to main CNTR
+                  const containerList: { number: string; salida: string; etaFisc: string; tipo: string }[] = []
+                  if (ops.length > 0) {
+                    for (const op of ops) {
+                      containerList.push({
+                        number: op.CNTR_OP || '-',
+                        salida: op.SALIDA || '',
+                        etaFisc: op.ETA_FISC || '',
+                        tipo: op.TIPO || ''
+                      })
+                    }
+                  } else if (shipment.containers.length > 0) {
+                    for (const c of shipment.containers) {
+                      containerList.push({ number: c.number, salida: '', etaFisc: '', tipo: '' })
+                    }
+                  }
+
+                  return (
+                  <Card key={shipment.REF} className="hover:shadow-lg transition-shadow overflow-hidden">
+                    {/* ── Header with status color strip ── */}
+                    <div className={`h-1.5 ${
+                      status.color === 'green' ? 'bg-green-500' :
+                      status.color === 'yellow' ? 'bg-yellow-500' :
+                      status.color === 'red' ? 'bg-red-500' :
+                      status.color === 'gray' ? 'bg-gray-400' :
+                      'bg-blue-500'
+                    }`} />
+
+                    <CardContent className="pt-5 pb-4">
+                      {/* ── Row 1: REF + Badges + Actions ── */}
+                      <div className="flex items-start justify-between gap-3 mb-3">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="text-xl font-bold tracking-tight">{shipment.REF}</h3>
+                          <Badge className="bg-accent text-accent-foreground text-xs">{shipment.N} CNTR</Badge>
+                          {getStatusBadge(shipment)}
                         </div>
-                        <div className="flex flex-col gap-2">
-                          <Button 
-                            onClick={() => handleViewDetails(shipment)}
-                            className="gap-2"
-                          >
-                            <Eye size={18} />
-                            Ver Detalle
+                        <div className="flex gap-2 shrink-0">
+                          <Button size="sm" onClick={() => handleViewDetails(shipment)} className="gap-1.5">
+                            <Eye size={16} />
+                            <span className="hidden sm:inline">Detalle</span>
                           </Button>
-                          <label htmlFor={`upload-${shipment.REF}`}>
-                            <Button 
-                              variant="outline" 
-                              className="gap-2 w-full"
-                              disabled={uploadingDoc}
-                              asChild
-                            >
-                              <span>
-                                <UploadSimple size={18} />
-                                Subir Documento
-                              </span>
-                            </Button>
-                            <input
-                              id={`upload-${shipment.REF}`}
-                              type="file"
-                              className="hidden"
-                              onChange={(e) => handleFileUpload(shipment.REF, e)}
-                              accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
-                            />
-                          </label>
                         </div>
+                      </div>
+
+                      {/* ── Row 2: Progress bar ── */}
+                      <div className="mb-4">
+                        <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
+                          <span>{status.label}</span>
+                          <span>{status.progress}%</span>
+                        </div>
+                        <div className="w-full bg-muted rounded-full h-1.5">
+                          <div
+                            className={`h-1.5 rounded-full transition-all duration-500 ${
+                              status.color === 'green' ? 'bg-green-500' :
+                              status.color === 'yellow' ? 'bg-yellow-500' :
+                              status.color === 'gray' ? 'bg-gray-400' :
+                              'bg-blue-500'
+                            }`}
+                            style={{ width: `${status.progress}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* ── Row 3: Key info cards (Libre Hasta + Salida) ── */}
+                      <div className="grid grid-cols-2 gap-3 mb-4">
+                        {/* Libre Hasta */}
+                        <div className={`rounded-lg border p-3 ${
+                          !shipment.LIBRE_HASTA ? 'bg-muted/30' :
+                          daysLibre < 0 ? 'bg-red-50 border-red-200 dark:bg-red-950/20 dark:border-red-900' :
+                          daysLibre <= 3 ? 'bg-orange-50 border-orange-200 dark:bg-orange-950/20 dark:border-orange-900' :
+                          'bg-green-50 border-green-200 dark:bg-green-950/20 dark:border-green-900'
+                        }`}>
+                          <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
+                            <Timer size={14} />
+                            <span className="font-medium">Libre Hasta</span>
+                          </div>
+                          {shipment.LIBRE_HASTA ? (
+                            <>
+                              <div className="text-sm font-bold">{shipment.LIBRE_HASTA}</div>
+                              <div className={`text-xs font-semibold mt-0.5 ${
+                                daysLibre < 0 ? 'text-red-600 dark:text-red-400' :
+                                daysLibre <= 3 ? 'text-orange-600 dark:text-orange-400' :
+                                'text-green-600 dark:text-green-400'
+                              }`}>
+                                {daysLibre < 0 ? `Vencido hace ${Math.abs(daysLibre)} día${Math.abs(daysLibre) === 1 ? '' : 's'}` :
+                                 daysLibre === 0 ? 'Vence HOY' :
+                                 `${daysLibre} día${daysLibre === 1 ? '' : 's'} restante${daysLibre === 1 ? '' : 's'}`}
+                              </div>
+                            </>
+                          ) : (
+                            <div className="text-sm text-muted-foreground italic">Sin información</div>
+                          )}
+                        </div>
+
+                        {/* Salida prevista */}
+                        {(() => {
+                          const hasSalida = ops.some(o => o.SALIDA && o.SALIDA.trim() !== '')
+                          const salidaDate = ops.find(o => o.SALIDA)?.SALIDA
+                          return (
+                            <div className={`rounded-lg border p-3 ${
+                              hasSalida ? 'bg-blue-50 border-blue-200 dark:bg-blue-950/20 dark:border-blue-900' : 'bg-muted/30'
+                            }`}>
+                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
+                                <Truck size={14} />
+                                <span className="font-medium">Salida Montevideo</span>
+                              </div>
+                              {hasSalida ? (
+                                <div className="text-sm font-bold text-blue-700 dark:text-blue-300">{salidaDate}</div>
+                              ) : (
+                                <div className="text-sm font-semibold text-orange-600 dark:text-orange-400">A CONFIRMAR</div>
+                              )}
+                              {firstOp?.FISCAL && (
+                                <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
+                                  <ArrowRight size={10} />
+                                  {firstOp.FISCAL}
+                                </div>
+                              )}
+                            </div>
+                          )
+                        })()}
+                      </div>
+
+                      {/* ── Row 4: Description ── */}
+                      {desc && (
+                        <div className="text-sm text-muted-foreground mb-3 flex items-center gap-2">
+                          <Cube size={16} className="shrink-0 text-accent" />
+                          <span className="font-medium text-foreground">{desc}</span>
+                          {totalKg > 0 && <span className="text-xs">• {totalKg.toLocaleString()} kg</span>}
+                          {totalM3 > 0 && <span className="text-xs">• {totalM3.toFixed(1)} m³</span>}
+                        </div>
+                      )}
+
+                      {/* ── Row 5: Container list (if multiple or has ops) ── */}
+                      {containerList.length > 0 && (
+                        <div className="mb-3">
+                          <div className="text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-wide">Contenedores</div>
+                          <div className="rounded-lg border divide-y text-sm overflow-hidden">
+                            {containerList.map((c, idx) => (
+                              <div key={idx} className="flex items-center justify-between px-3 py-2 bg-muted/20 hover:bg-muted/40 transition-colors">
+                                <div className="flex items-center gap-2">
+                                  <span className={`w-2 h-2 rounded-full shrink-0 ${c.salida ? 'bg-green-500' : 'bg-orange-400'}`} />
+                                  <span className="font-mono text-xs font-medium">{c.number}</span>
+                                  {c.tipo && <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{c.tipo}</span>}
+                                </div>
+                                <div className="text-xs">
+                                  {c.salida ? (
+                                    <span className="text-green-700 dark:text-green-400 font-medium">Salida: {c.salida}</span>
+                                  ) : (
+                                    <span className="text-orange-600 dark:text-orange-400 font-medium">Salida: A CONFIRMAR</span>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* ── Row 6: Shipping details (compact) ── */}
+                      <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground border-t pt-3">
+                        {shipment.BUQUE && (
+                          <span><Anchor size={12} className="inline mr-1" />{shipment.BUQUE}</span>
+                        )}
+                        {shipment.LINEA && (
+                          <span>Línea: <span className="font-medium text-foreground">{shipment.LINEA}</span></span>
+                        )}
+                        {shipment.TERMINAL && (
+                          <span>Terminal: <span className="font-medium text-foreground">{shipment.TERMINAL}</span></span>
+                        )}
+                        {shipment.ETA && (
+                          <span>ETA: <span className="font-medium text-foreground">{shipment.ETA}</span></span>
+                        )}
                       </div>
                     </CardContent>
                   </Card>
-                )
-              })
+                  )
+                })
             )}
           </TabsContent>
 
-          <TabsContent value="documents" className="space-y-4 mt-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Documentos</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {!documents || documents.length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground">
-                    <FileText size={48} className="mx-auto mb-4" />
-                    <p>No hay documentos subidos aún</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {documents.map((doc) => (
-                      <div key={doc.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50">
-                        <div className="flex-1">
-                          <div className="font-medium">{doc.name}</div>
-                          <div className="text-sm text-muted-foreground">
-                            REF: {doc.shipmentRef} • {new Date(doc.uploadedAt).toLocaleDateString('es-UY')}
+          {/* ── Alerts Tab ── */}
+          <TabsContent value="alerts" className="space-y-4 mt-6">
+            {allAlerts.length === 0 ? (
+              <Card>
+                <CardContent className="pt-12 pb-12 text-center">
+                  <CheckCircle size={48} className="mx-auto mb-4 text-green-500" />
+                  <h3 className="text-lg font-semibold mb-2">Todo en orden</h3>
+                  <p className="text-muted-foreground">
+                    No hay alertas ni notificaciones pendientes
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <>
+                {/* Libre expiration alerts */}
+                {(() => {
+                  const libreAlerts = allAlerts.filter(a => a.type.startsWith('libre_'))
+                  if (libreAlerts.length === 0) return null
+                  return (
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base flex items-center gap-2">
+                          <Warning size={20} className="text-orange-500" />
+                          Vencimiento de Días Libres
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-2">
+                        {libreAlerts.map(alert => (
+                          <div
+                            key={alert.id}
+                            className={`flex items-center gap-3 px-4 py-3 rounded-lg border-l-4 cursor-pointer hover:bg-muted/30 transition-colors ${getAlertBorderColor(alert.severity)}`}
+                            onClick={() => {
+                              const s = clientShipments.find(sh => sh.REF === alert.shipmentRef)
+                              if (s) handleViewDetails(s)
+                            }}
+                          >
+                            {getAlertIcon(alert.severity)}
+                            <div className="flex-1">
+                              <div className="text-sm font-medium">{alert.title}</div>
+                              <div className="text-xs text-muted-foreground">{alert.message}</div>
+                            </div>
+                            <Badge variant="outline" className="font-mono text-xs">{alert.shipmentRef}</Badge>
                           </div>
-                        </div>
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => handleDownloadDocument(doc)}
-                          className="gap-2"
-                        >
-                          <DownloadSimple size={18} />
-                          Descargar
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                        ))}
+                      </CardContent>
+                    </Card>
+                  )
+                })()}
+
+                {/* Status milestone alerts */}
+                {(() => {
+                  const statusAlerts = allAlerts.filter(a => a.type.startsWith('status_'))
+                  if (statusAlerts.length === 0) return null
+                  return (
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base flex items-center gap-2">
+                          <Truck size={20} className="text-blue-500" />
+                          Actualizaciones de Estado
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-2">
+                        {statusAlerts.map(alert => (
+                          <div
+                            key={alert.id}
+                            className={`flex items-center gap-3 px-4 py-3 rounded-lg border-l-4 cursor-pointer hover:bg-muted/30 transition-colors ${getAlertBorderColor(alert.severity)}`}
+                            onClick={() => {
+                              const s = clientShipments.find(sh => sh.REF === alert.shipmentRef)
+                              if (s) handleViewDetails(s)
+                            }}
+                          >
+                            {getAlertIcon(alert.severity)}
+                            <div className="flex-1">
+                              <div className="text-sm font-medium">{alert.title}</div>
+                              <div className="text-xs text-muted-foreground">{alert.message}</div>
+                            </div>
+                            <Badge variant="outline" className="font-mono text-xs">{alert.shipmentRef}</Badge>
+                          </div>
+                        ))}
+                      </CardContent>
+                    </Card>
+                  )
+                })()}
+
+                {/* Operative report alerts */}
+                {(() => {
+                  const reportAlerts = allAlerts.filter(a => a.type === 'report_ready')
+                  if (reportAlerts.length === 0) return null
+                  return (
+                    <Card>
+                      <CardHeader className="pb-3">
+                        <CardTitle className="text-base flex items-center gap-2">
+                          <FileText size={20} className="text-accent" />
+                          Informes Operativos Disponibles
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-2">
+                        {reportAlerts.map(alert => (
+                          <div
+                            key={alert.id}
+                            className={`flex items-center gap-3 px-4 py-3 rounded-lg border-l-4 cursor-pointer hover:bg-muted/30 transition-colors ${getAlertBorderColor(alert.severity)}`}
+                            onClick={() => {
+                              const s = clientShipments.find(sh => sh.REF === alert.shipmentRef)
+                              if (s) handleViewDetails(s)
+                            }}
+                          >
+                            {getAlertIcon(alert.severity)}
+                            <div className="flex-1">
+                              <div className="text-sm font-medium">{alert.title}</div>
+                              <div className="text-xs text-muted-foreground">{alert.message}</div>
+                            </div>
+                            <Badge variant="outline" className="font-mono text-xs">{alert.shipmentRef}</Badge>
+                          </div>
+                        ))}
+                      </CardContent>
+                    </Card>
+                  )
+                })()}
+              </>
+            )}
           </TabsContent>
 
           <TabsContent value="history" className="space-y-4 mt-6">
@@ -344,41 +703,58 @@ export default function ClientPortal({ onLogout, clientEmail, shipmentRecords = 
                 </CardContent>
               </Card>
             ) : (
-              historyShipments.map((shipment) => (
-                <Card key={shipment.REF}>
-                  <CardContent className="pt-6">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <h3 className="text-lg font-bold mb-2">{shipment.REF}</h3>
-                        <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-sm">
-                          <div>
-                            <span className="text-muted-foreground">ETA:</span>
-                            <span className="ml-2">{shipment.ETA || '-'}</span>
+              historyShipments.map((shipment) => {
+                const ops = shipment.operativas || []
+                const firstOp = ops[0]
+                return (
+                  <Card key={shipment.REF} className="opacity-80 hover:opacity-100 transition-opacity">
+                    <CardContent className="pt-6">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-3 mb-2 flex-wrap">
+                            <h3 className="text-lg font-bold">{shipment.REF}</h3>
+                            <Badge variant="secondary">{shipment.N} CNTR</Badge>
+                            {isShipmentCompleted(shipment) && (
+                              <Badge className="bg-gray-500">
+                                <CheckCircle size={14} className="mr-1" />
+                                Completada
+                              </Badge>
+                            )}
                           </div>
-                          <div>
-                            <span className="text-muted-foreground">Terminal:</span>
-                            <span className="ml-2">{shipment.TERMINAL || '-'}</span>
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">Contenedores:</span>
-                            <span className="ml-2">{shipment.N}</span>
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">Completado</span>
+                          <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-1 text-sm">
+                            <div>
+                              <span className="text-muted-foreground">ETD:</span>
+                              <span className="ml-2">{shipment.ETD || '-'}</span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">ETA:</span>
+                              <span className="ml-2">{shipment.ETA || '-'}</span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground">Buque:</span>
+                              <span className="ml-2">{shipment.BUQUE || '-'}</span>
+                            </div>
+                            {firstOp?.DESCRIPCION && (
+                              <div className="col-span-2 md:col-span-3">
+                                <span className="text-muted-foreground">Carga:</span>
+                                <span className="ml-2">{firstOp.DESCRIPCION}</span>
+                              </div>
+                            )}
                           </div>
                         </div>
+                        <Button
+                          onClick={() => handleViewDetails(shipment)}
+                          variant="outline"
+                          size="sm"
+                        >
+                          Ver Detalle
+                        </Button>
                       </div>
-                      <Button 
-                        onClick={() => handleViewDetails(shipment)}
-                        variant="outline"
-                        size="sm"
-                      >
-                        Ver Detalle
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))
+                    </CardContent>
+                  </Card>
+                )
+              })
+
             )}
           </TabsContent>
         </Tabs>
@@ -390,6 +766,8 @@ export default function ClientPortal({ onLogout, clientEmail, shipmentRecords = 
           open={detailsDialogOpen}
           onOpenChange={setDetailsDialogOpen}
           onSave={() => {}}
+          clientView
+          reports={clientReports}
         />
       )}
     </div>

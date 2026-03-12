@@ -18,7 +18,7 @@ import { toast } from 'sonner'
 import ShipmentTracking from './ShipmentTracking'
 import ExcelImport from './ExcelImport'
 import ShipmentDetailsDialog from './ShipmentDetailsDialog'
-import EmailConfigStatus from './EmailConfigStatus'
+// EmailConfigStatus removed — email config is now server-side
 import CaseStudiesEditor from './CaseStudiesEditor'
 import TestimonialsEditor from './TestimonialsEditor'
 import { ParsedShipment } from '@/lib/shipmentTypes'
@@ -461,7 +461,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
           <TabsContent value="stats">
             <div className="space-y-6">
-              <EmailConfigStatus />
+              {/* Email config is now managed server-side */}
               
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <Card>

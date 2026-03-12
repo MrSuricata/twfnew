@@ -149,24 +149,24 @@ export const translations: Record<Language, Translations> = {
       faq: 'FAQ',
       contact: 'Contacto',
       admin: 'Admin',
-      quote: 'Solicitar Cotización',
+      quote: 'Cotizar',
       clientPortal: 'Portal Cliente'
     },
     hero: {
       title: 'Transit World Forwarding - Soluciones Logísticas Globales a Tu Medida',
-      subtitle: 'Transit World Forwarding – Tu socio estratégico en comercio internacional',
-      quoteButton: 'Solicitar Cotización',
+      subtitle: 'Flete marítimo, terrestre y aéreo desde Uruguay al mundo con tracking en tiempo real',
+      quoteButton: 'Cotizá tu Carga Gratis',
       contactButton: 'Contactar Ahora',
       speed: 'Rapidez',
       speedDesc: 'Operaciones ágiles y tiempos optimizados',
       transparency: 'Transparencia',
-      transparencyDesc: 'Comunicación clara en cada etapa',
+      transparencyDesc: 'Seguimiento en tiempo real de cada carga',
       efficiency: 'Eficiencia',
-      efficiencyDesc: 'Soluciones inteligentes y efectivas'
+      efficiencyDesc: 'Rutas optimizadas al mejor costo'
     },
     services: {
       title: 'Nuestros Servicios de Logística Internacional',
-      subtitle: 'Soluciones integrales de transporte internacional para conectar tu negocio con el mundo',
+      subtitle: 'Flete marítimo, terrestre y aéreo con seguimiento 24/7 y atención personalizada',
       maritime: 'Flete Marítimo Internacional',
       maritimeDesc: 'FCL y LCL desde y hacia todo el mundo',
       land: 'Flete Terrestre Internacional',
@@ -182,7 +182,7 @@ export const translations: Record<Language, Translations> = {
     },
     tracking: {
       title: 'Tracking de Contenedores en Tiempo Real',
-      subtitle: 'Ingrese el número de contenedor o referencia para conocer el estado de su carga en tiempo real',
+      subtitle: 'Ingrese el número de contenedor o referencia para rastrear su envío desde origen hasta destino',
       placeholder: 'Número de contenedor o REF',
       search: 'Buscar',
       noResults: 'No se encontraron resultados',
@@ -193,8 +193,8 @@ export const translations: Record<Language, Translations> = {
       expired: 'Vencido'
     },
     quote: {
-      title: 'Solicitar Cotización de Flete Internacional',
-      subtitle: 'Completa el formulario y te responderemos a la brevedad con la mejor solución para tu carga',
+      title: 'Cotizá tu Flete Internacional Gratis',
+      subtitle: 'Completá el formulario y recibí tu cotización en menos de 24 horas',
       name: 'Nombre / Empresa',
       email: 'Email',
       phone: 'WhatsApp / Teléfono',
@@ -285,24 +285,24 @@ export const translations: Record<Language, Translations> = {
       faq: 'FAQ',
       contact: 'Contact',
       admin: 'Admin',
-      quote: 'Request Quote',
+      quote: 'Quote',
       clientPortal: 'Client Portal'
     },
     hero: {
       title: 'Transit World Forwarding - Global Logistics Solutions Tailored to You',
-      subtitle: 'Transit World Forwarding – Your strategic partner in international trade',
-      quoteButton: 'Request Quote',
+      subtitle: 'Ocean, land, and air freight from Uruguay worldwide with real-time tracking',
+      quoteButton: 'Get a Free Quote',
       contactButton: 'Contact Now',
       speed: 'Speed',
       speedDesc: 'Agile operations and optimized times',
       transparency: 'Transparency',
-      transparencyDesc: 'Clear communication at every stage',
+      transparencyDesc: 'Real-time tracking for every shipment',
       efficiency: 'Efficiency',
-      efficiencyDesc: 'Smart and effective solutions'
+      efficiencyDesc: 'Optimized routes at the best cost'
     },
     services: {
       title: 'Our International Logistics Services',
-      subtitle: 'Comprehensive international transport solutions to connect your business with the world',
+      subtitle: 'Ocean, land, and air freight with 24/7 tracking and personalized support',
       maritime: 'International Maritime Freight',
       maritimeDesc: 'FCL and LCL worldwide',
       land: 'International Land Freight',
@@ -318,7 +318,7 @@ export const translations: Record<Language, Translations> = {
     },
     tracking: {
       title: 'Real-Time Container Tracking',
-      subtitle: 'Enter container number or reference to know your cargo status in real time',
+      subtitle: 'Enter container number or reference to track your shipment from origin to destination',
       placeholder: 'Container number or REF',
       search: 'Search',
       noResults: 'No results found',
@@ -329,8 +329,8 @@ export const translations: Record<Language, Translations> = {
       expired: 'Expired'
     },
     quote: {
-      title: 'Request International Freight Quote',
-      subtitle: 'Complete the form and we will respond shortly with the best solution for your cargo',
+      title: 'Get Your Free International Freight Quote',
+      subtitle: 'Fill out the form and receive your quote within 24 hours',
       name: 'Name / Company',
       email: 'Email',
       phone: 'WhatsApp / Phone',
@@ -421,24 +421,24 @@ export const translations: Record<Language, Translations> = {
       faq: 'FAQ',
       contact: 'Contato',
       admin: 'Admin',
-      quote: 'Solicitar Cotação',
+      quote: 'Cotação',
       clientPortal: 'Portal do Cliente'
     },
     hero: {
       title: 'Transit World Forwarding - Soluções Logísticas Globais Personalizadas',
-      subtitle: 'Transit World Forwarding – Seu parceiro estratégico em comércio internacional',
-      quoteButton: 'Solicitar Cotação',
+      subtitle: 'Frete marítimo, terrestre e aéreo do Uruguai ao mundo com rastreamento em tempo real',
+      quoteButton: 'Cotar sua Carga Grátis',
       contactButton: 'Contatar Agora',
       speed: 'Rapidez',
       speedDesc: 'Operações ágeis e tempos otimizados',
       transparency: 'Transparência',
-      transparencyDesc: 'Comunicação clara em cada etapa',
+      transparencyDesc: 'Rastreamento em tempo real de cada carga',
       efficiency: 'Eficiência',
-      efficiencyDesc: 'Soluções inteligentes e eficazes'
+      efficiencyDesc: 'Rotas otimizadas ao melhor custo'
     },
     services: {
       title: 'Nossos Serviços de Logística Internacional',
-      subtitle: 'Soluções integrais de transporte internacional para conectar seu negócio com o mundo',
+      subtitle: 'Frete marítimo, terrestre e aéreo com rastreamento 24/7 e atendimento personalizado',
       maritime: 'Frete Marítimo Internacional',
       maritimeDesc: 'FCL e LCL para todo o mundo',
       land: 'Frete Terrestre Internacional',
@@ -454,7 +454,7 @@ export const translations: Record<Language, Translations> = {
     },
     tracking: {
       title: 'Rastreamento de Contêineres em Tempo Real',
-      subtitle: 'Digite o número do contêiner ou referência para conhecer o status de sua carga em tempo real',
+      subtitle: 'Digite o número do contêiner ou referência para rastrear seu envio da origem ao destino',
       placeholder: 'Número do contêiner ou REF',
       search: 'Buscar',
       noResults: 'Nenhum resultado encontrado',
@@ -465,8 +465,8 @@ export const translations: Record<Language, Translations> = {
       expired: 'Vencido'
     },
     quote: {
-      title: 'Solicitar Cotação de Frete Internacional',
-      subtitle: 'Preencha o formulário e responderemos em breve com a melhor solução para sua carga',
+      title: 'Solicite sua Cotação de Frete Grátis',
+      subtitle: 'Preencha o formulário e receba sua cotação em menos de 24 horas',
       name: 'Nome / Empresa',
       email: 'Email',
       phone: 'WhatsApp / Telefone',
