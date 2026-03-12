@@ -6,7 +6,7 @@ import { ParsedShipment } from '@/lib/shipmentTypes'
 import { getDemoShipments } from '@/lib/demoShipments'
 import { filterShipments } from '@/lib/sheetsSync'
 import { verifySession, clearAuth, authFetch } from '@/lib/authClient'
-import { loadAdminData, saveQuotes, saveDocuments, saveReports, saveClients } from '@/lib/dataClient'
+import { loadAdminData, saveQuotes, saveDocuments, saveReports, saveReportWithFile, deleteReport, saveClients } from '@/lib/dataClient'
 
 import Login from './components/Login'
 import ClientLogin from './components/ClientLogin'

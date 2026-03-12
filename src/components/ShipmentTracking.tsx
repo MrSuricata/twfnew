@@ -34,8 +34,16 @@ import {
   CaretRight,
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import { ParsedShipment, getShipmentStatus } from '@/lib/shipmentTypes'
 import { OperativeReport } from '@/lib/quotationTypes'
+import { saveReportWithFile, deleteReport as deleteReportFromDB } from '@/lib/dataClient'
 import ShipmentDetailsDialog from './ShipmentDetailsDialog'
 
 interface ShipmentTrackingProps {
@@ -58,13 +66,18 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
   // ── Report upload state ──
   const [reportDialogOpen, setReportDialogOpen] = useState(false)
   const [reportTargetRef, setReportTargetRef] = useState('')
+  const [reportTargetShipment, setReportTargetShipment] = useState<ParsedShipment | null>(null)
+  const [reportContainer, setReportContainer] = useState('')
   const [reportTitle, setReportTitle] = useState('')
   const [reportContent, setReportContent] = useState('')
   const [reportFile, setReportFile] = useState<File | null>(null)
   const [uploadingReport, setUploadingReport] = useState(false)
 
   const openReportDialog = (ref: string) => {
+    const shipment = shipmentRecords.find(s => s.REF === ref) || null
     setReportTargetRef(ref)
+    setReportTargetShipment(shipment)
+    setReportContainer('')
     setReportTitle('')
     setReportContent('')
     setReportFile(null)
@@ -74,8 +87,8 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
   const handleReportFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    if (file.size > 15 * 1024 * 1024) {
-      toast.error('El archivo no debe superar los 15MB')
+    if (file.size > 3 * 1024 * 1024) {
+      toast.error('El archivo no debe superar los 3MB')
       return
     }
     setReportFile(file)
@@ -87,7 +100,7 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
       return
     }
     if (!reportFile) {
-      toast.error('Seleccione un archivo PDF para el informe')
+      toast.error('Seleccione un archivo para el informe')
       return
     }
 
@@ -95,12 +108,13 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
 
     try {
       const reader = new FileReader()
-      reader.onload = (e) => {
+      reader.onload = async (e) => {
         const base64 = e.target?.result as string
 
         const newReport: OperativeReport = {
           id: `rpt-${Date.now()}`,
           shipmentRef: reportTargetRef,
+          containerNumber: reportContainer || undefined,
           title: reportTitle.trim(),
           content: reportContent.trim(),
           fileName: reportFile!.name,
@@ -110,10 +124,23 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
           createdBy: 'admin'
         }
 
+        // Update local state immediately
         const updated = [...reports, newReport]
         if (onUpdateReports) onUpdateReports(updated)
 
-        toast.success(`Informe operativo agregado a ${reportTargetRef}`)
+        // Save individually to Supabase (with file data)
+        try {
+          await saveReportWithFile(newReport)
+        } catch (err) {
+          console.warn('[DB] Failed to save report file:', err)
+          toast.warning('Informe guardado localmente. Sincronización pendiente.')
+        }
+
+        toast.success(
+          reportContainer
+            ? `Informe agregado a ${reportTargetRef} (${reportContainer})`
+            : `Informe operativo agregado a ${reportTargetRef}`
+        )
         setReportDialogOpen(false)
         setUploadingReport(false)
       }
@@ -130,9 +157,15 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
     }
   }
 
-  const handleDeleteReport = (reportId: string) => {
+  const handleDeleteReport = async (reportId: string) => {
     const updated = reports.filter(r => r.id !== reportId)
     if (onUpdateReports) onUpdateReports(updated)
+    // Also delete from Supabase
+    try {
+      await deleteReportFromDB(reportId)
+    } catch (err) {
+      console.warn('[DB] Failed to delete report:', err)
+    }
     toast.success('Informe eliminado')
   }
 
@@ -486,6 +519,32 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
           </DialogHeader>
 
           <div className="space-y-4 py-2">
+            {/* Container selector (if shipment has multiple containers) */}
+            {reportTargetShipment && reportTargetShipment.containers.length > 0 && (
+              <div className="space-y-2">
+                <Label>Contenedor (opcional)</Label>
+                <Select value={reportContainer || '__all__'} onValueChange={(v) => setReportContainer(v === '__all__' ? '' : v)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todos — informe general" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__all__">Todos — informe general</SelectItem>
+                    {reportTargetShipment.containers
+                      .filter(c => c.valid)
+                      .map(c => (
+                        <SelectItem key={c.number} value={c.number}>
+                          {c.number}
+                        </SelectItem>
+                      ))
+                    }
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Seleccioná un contenedor específico o dejá vacío para un informe general
+                </p>
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="report-title">Título del Informe *</Label>
               <Input
@@ -508,7 +567,7 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
             </div>
 
             <div className="space-y-2">
-              <Label>Archivo PDF *</Label>
+              <Label>Archivo *</Label>
               <div className="border-2 border-dashed rounded-lg p-6 text-center hover:border-accent/50 transition-colors">
                 {reportFile ? (
                   <div className="flex items-center justify-center gap-3">
@@ -532,7 +591,7 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
                   <label htmlFor="report-file" className="cursor-pointer">
                     <UploadSimple size={32} className="mx-auto mb-2 text-muted-foreground" />
                     <p className="text-sm font-medium">Seleccionar archivo</p>
-                    <p className="text-xs text-muted-foreground mt-1">PDF, DOC, DOCX, XLS, XLSX — hasta 15MB</p>
+                    <p className="text-xs text-muted-foreground mt-1">PDF, DOC, DOCX, XLS, XLSX — hasta 3MB</p>
                   </label>
                 )}
                 <input

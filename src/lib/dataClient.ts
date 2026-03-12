@@ -75,6 +75,7 @@ export async function saveDocuments(documents: ShipmentDocument[]): Promise<void
 
 // ── Reports ──
 
+/** Fetch all reports (metadata only — no fileData). */
 export async function fetchReports(): Promise<OperativeReport[]> {
   const res = await authFetch('/api/data/reports')
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -82,11 +83,46 @@ export async function fetchReports(): Promise<OperativeReport[]> {
   return data.reports || []
 }
 
+/** Bulk metadata sync — strips fileData to keep request small. */
 export async function saveReports(reports: OperativeReport[]): Promise<void> {
+  // Strip fileData to avoid Vercel 4.5MB body limit
+  const metadata = reports.map(({ fileData, ...rest }) => rest)
   const res = await authFetch('/api/data/reports', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(reports),
+    body: JSON.stringify(metadata),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
+}
+
+/** Upload a single report WITH file data (individual save). */
+export async function saveReportWithFile(report: OperativeReport): Promise<void> {
+  const res = await authFetch('/api/data/reports?mode=file', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(report),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
+}
+
+/** Download file data for a single report (on-demand). */
+export async function fetchReportFile(reportId: string): Promise<string | null> {
+  const res = await authFetch(`/api/data/reports?id=${encodeURIComponent(reportId)}`)
+  if (!res.ok) return null
+  const data = await res.json()
+  return data.report?.fileData || null
+}
+
+/** Delete a single report from DB. */
+export async function deleteReport(reportId: string): Promise<void> {
+  const res = await authFetch(`/api/data/reports?id=${encodeURIComponent(reportId)}`, {
+    method: 'DELETE',
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))

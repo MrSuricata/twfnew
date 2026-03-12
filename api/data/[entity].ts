@@ -140,10 +140,39 @@ async function handleDocuments(req: VercelRequest, res: VercelResponse, db: any)
 }
 
 // ── Reports ─────────────────────────────────────────────────────────
+// GET  /api/data/reports           → list all (metadata only, no file_data)
+// GET  /api/data/reports?id=xxx    → single report WITH file_data (for download)
+// POST /api/data/reports           → bulk metadata sync (no file_data)
+// POST /api/data/reports?mode=file → single report WITH file_data (for upload)
+// DELETE /api/data/reports?id=xxx  → delete single report
 
 async function handleReports(req: VercelRequest, res: VercelResponse, db: any) {
   if (req.method === 'GET') {
-    let query = db.from('reports').select('*').order('created_at_ts', { ascending: false })
+    // Single report with file data (for download)
+    const reportId = req.query.id as string
+    if (reportId) {
+      const { data, error } = await db.from('reports').select('*').eq('id', reportId).single()
+      if (error) throw error
+      if (!data) return res.status(404).json({ error: 'Report not found' })
+      return res.status(200).json({
+        report: {
+          id: data.id,
+          shipmentRef: data.shipment_ref,
+          containerNumber: data.container_number || '',
+          title: data.title,
+          content: data.content,
+          fileName: data.file_name,
+          fileType: data.file_type,
+          fileData: data.file_data,
+          createdAt: data.created_at_ts,
+          createdBy: data.created_by,
+        }
+      })
+    }
+
+    // Bulk list — metadata only (NO file_data → fast & small)
+    const columns = 'id, shipment_ref, container_number, title, content, file_name, file_type, created_at_ts, created_by'
+    let query = db.from('reports').select(columns).order('created_at_ts', { ascending: false })
     const shipmentRef = req.query.shipmentRef as string
     if (shipmentRef) query = query.eq('shipment_ref', shipmentRef)
     const { data, error } = await query
@@ -151,11 +180,11 @@ async function handleReports(req: VercelRequest, res: VercelResponse, db: any) {
     const reports = (data || []).map((r: any) => ({
       id: r.id,
       shipmentRef: r.shipment_ref,
+      containerNumber: r.container_number || '',
       title: r.title,
       content: r.content,
       fileName: r.file_name,
       fileType: r.file_type,
-      fileData: r.file_data,
       createdAt: r.created_at_ts,
       createdBy: r.created_by,
     }))
@@ -163,20 +192,45 @@ async function handleReports(req: VercelRequest, res: VercelResponse, db: any) {
   }
 
   if (req.method === 'POST') {
+    const mode = req.query.mode as string
+
+    // Single report WITH file (individual upload)
+    if (mode === 'file') {
+      const r = req.body
+      if (!r || !r.id) return res.status(400).json({ error: 'Report object with id required' })
+      const row = {
+        id: r.id,
+        shipment_ref: r.shipmentRef || r.shipment_ref,
+        container_number: r.containerNumber || r.container_number || '',
+        title: r.title,
+        content: r.content || '',
+        file_name: r.fileName || r.file_name || '',
+        file_type: r.fileType || r.file_type || '',
+        file_data: r.fileData || r.file_data || '',
+        created_at_ts: r.createdAt || r.created_at_ts || Date.now(),
+        created_by: r.createdBy || r.created_by || '',
+      }
+      const { error } = await db.from('reports').upsert(row, { onConflict: 'id' })
+      if (error) throw error
+      return res.status(200).json({ saved: true })
+    }
+
+    // Bulk metadata sync (NO file_data)
     const body = req.body
     const items = Array.isArray(body) ? body : [body]
     const rows = items.map((r: any) => ({
       id: r.id,
       shipment_ref: r.shipmentRef || r.shipment_ref,
+      container_number: r.containerNumber || r.container_number || '',
       title: r.title,
       content: r.content || '',
       file_name: r.fileName || r.file_name || '',
       file_type: r.fileType || r.file_type || '',
-      file_data: r.fileData || r.file_data || '',
+      // file_data omitted — bulk sync doesn't touch files
       created_at_ts: r.createdAt || r.created_at_ts || Date.now(),
       created_by: r.createdBy || r.created_by || '',
     }))
-    const { error } = await db.from('reports').upsert(rows, { onConflict: 'id' })
+    const { error } = await db.from('reports').upsert(rows, { onConflict: 'id', ignoreDuplicates: false })
     if (error) throw error
     return res.status(200).json({ saved: true, count: rows.length })
   }

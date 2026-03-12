@@ -33,6 +33,7 @@ import {
 import { toast } from 'sonner'
 import { ParsedShipment, getShipmentStatus } from '@/lib/shipmentTypes'
 import { ShipmentDocument, OperativeReport } from '@/lib/quotationTypes'
+import { fetchReportFile } from '@/lib/dataClient'
 
 interface ShipmentDetailsDialogProps {
   shipment: ParsedShipment | null
@@ -620,6 +621,32 @@ export default function ShipmentDetailsDialog({
                   )
                 }
 
+                const handleDownload = async (report: OperativeReport) => {
+                  // If fileData is in memory (current session), download directly
+                  if (report.fileData) {
+                    const link = document.createElement('a')
+                    link.href = report.fileData
+                    link.download = report.fileName
+                    link.click()
+                    return
+                  }
+                  // Fetch from Supabase on demand
+                  toast.info('Descargando archivo...')
+                  try {
+                    const fileData = await fetchReportFile(report.id)
+                    if (fileData) {
+                      const link = document.createElement('a')
+                      link.href = fileData
+                      link.download = report.fileName
+                      link.click()
+                    } else {
+                      toast.error('Archivo no disponible en el servidor')
+                    }
+                  } catch {
+                    toast.error('Error al descargar el archivo')
+                  }
+                }
+
                 return (
                   <div className="space-y-3">
                     <h4 className="text-sm font-semibold flex items-center gap-2 mb-4">
@@ -635,7 +662,14 @@ export default function ShipmentDetailsDialog({
                               <FileText size={24} className="text-red-600 dark:text-red-400" />
                             </div>
                             <div className="flex-1 min-w-0">
-                              <div className="font-semibold">{report.title}</div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-semibold">{report.title}</span>
+                                {report.containerNumber && (
+                                  <Badge variant="outline" className="text-xs font-mono">
+                                    {report.containerNumber}
+                                  </Badge>
+                                )}
+                              </div>
                               <div className="text-xs text-muted-foreground mt-1">
                                 {report.fileName} • Publicado el {new Date(report.createdAt).toLocaleDateString('es-UY', { day: '2-digit', month: 'long', year: 'numeric' })}
                               </div>
@@ -644,17 +678,13 @@ export default function ShipmentDetailsDialog({
                                   {report.content}
                                 </p>
                               )}
-                              {report.fileData && (
-                                <a
-                                  href={report.fileData}
-                                  download={report.fileName}
-                                  className="inline-flex items-center gap-2 mt-3 px-4 py-2 bg-accent text-accent-foreground rounded-lg text-sm font-medium hover:bg-accent/90 transition-colors"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <DownloadSimple size={16} />
-                                  Descargar Informe
-                                </a>
-                              )}
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleDownload(report) }}
+                                className="inline-flex items-center gap-2 mt-3 px-4 py-2 bg-accent text-accent-foreground rounded-lg text-sm font-medium hover:bg-accent/90 transition-colors"
+                              >
+                                <DownloadSimple size={16} />
+                                Descargar Informe
+                              </button>
                             </div>
                           </div>
                         </div>

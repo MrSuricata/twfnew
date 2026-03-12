@@ -46,11 +46,12 @@ export interface ShipmentDocument {
 export interface OperativeReport {
   id: string
   shipmentRef: string
+  containerNumber?: string  // optional: specific container (e.g. "MSCU1234567")
   title: string
   content: string          // optional text description/notes
   fileName: string         // original file name (e.g. "informe-A7039.pdf")
   fileType: string         // mime type (e.g. "application/pdf")
-  fileData?: string        // base64 data URL for the file
+  fileData?: string        // base64 data URL for the file (only in memory/localStorage, NOT bulk-synced)
   createdAt: number
   createdBy: string
 }

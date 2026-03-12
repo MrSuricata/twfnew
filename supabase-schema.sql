@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS documents (
 CREATE TABLE IF NOT EXISTS reports (
   id TEXT PRIMARY KEY,
   shipment_ref TEXT NOT NULL,
+  container_number TEXT DEFAULT '',
   title TEXT NOT NULL,
   content TEXT DEFAULT '',
   file_name TEXT NOT NULL DEFAULT '',
