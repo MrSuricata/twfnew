@@ -581,6 +581,7 @@ function PublicSite({
                   </Card>
                 </motion.div>
               ))}
+            </motion.div>
 
             {/* Team photo */}
             <motion.div
@@ -598,7 +599,6 @@ function PublicSite({
               <div className="bg-white/10 backdrop-blur-sm px-6 py-4 text-center">
                 <p className="text-white/80 text-sm">Nuestro equipo en terreno — supervisión directa de operativas en depósito fiscal</p>
               </div>
-            </motion.div>
             </motion.div>
           </div>
         </div>
