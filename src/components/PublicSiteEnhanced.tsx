@@ -116,6 +116,9 @@ export default function PublicSite({
   const [activeSection, setActiveSection] = useState('inicio')
   const [showScrollTop, setShowScrollTop] = useState(false)
   const [lightboxImg, setLightboxImg] = useState<{ src: string; label: string } | null>(null)
+  const logoRef = useRef<HTMLButtonElement>(null)
+  const navContainerRef = useRef<HTMLDivElement>(null)
+  const [logoTranslateX, setLogoTranslateX] = useState(0)
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -138,6 +141,25 @@ export default function PublicSite({
     }
     window.addEventListener('scroll', handleScroll, { passive: true })
     return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
+
+  // Calculate logo center offset for smooth slide animation
+  useEffect(() => {
+    const calculateOffset = () => {
+      const logo = logoRef.current
+      const container = navContainerRef.current
+      if (!logo || !container) return
+
+      const containerRect = container.getBoundingClientRect()
+      const logoRect = logo.getBoundingClientRect()
+      const containerCenter = containerRect.left + containerRect.width / 2
+      const logoCenter = logoRect.left + logoRect.width / 2
+      setLogoTranslateX(containerCenter - logoCenter)
+    }
+
+    calculateOffset()
+    window.addEventListener('resize', calculateOffset)
+    return () => window.removeEventListener('resize', calculateOffset)
   }, [])
 
   // Active section detection via IntersectionObserver
@@ -321,29 +343,40 @@ export default function PublicSite({
       <nav className={`fixed top-0 left-0 right-0 z-50 backdrop-blur-sm border-b transition-all duration-300 ${
         scrolled ? 'bg-background/98 border-border shadow-md' : 'bg-background/80 border-transparent'
       }`}>
-        <div className="max-w-7xl mx-auto px-4 md:px-6 relative">
+        <div ref={navContainerRef} className="max-w-7xl mx-auto px-4 md:px-6">
           <div className="flex items-center justify-between h-16">
-            {/* Logo — slides to center when scrolled */}
+            {/* Logo — smoothly slides to center when scrolled */}
             <button
+              ref={logoRef}
               onClick={scrollToTop}
-              className={`flex items-center gap-2 transition-all duration-500 ease-in-out cursor-pointer z-10 ${
-                scrolled
-                  ? 'absolute left-1/2 -translate-x-1/2'
-                  : 'relative'
-              }`}
+              className="flex items-center gap-2 cursor-pointer z-10"
+              style={{
+                transform: scrolled ? `translateX(${logoTranslateX}px)` : 'translateX(0)',
+                transition: 'transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94)'
+              }}
               aria-label="Volver al inicio"
             >
               <img src="/images/twf-icon-dark.png" alt="TWF" className="h-11 w-auto" />
               <img
                 src="/images/twf-text-dark-new.png"
                 alt="Transit World Forwarding"
-                className={`h-8 hidden sm:block transition-all duration-500 ${
-                  scrolled ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100'
-                }`}
+                className="h-8 hidden sm:block"
+                style={{
+                  opacity: scrolled ? 0 : 1,
+                  maxWidth: scrolled ? 0 : '200px',
+                  overflow: 'hidden',
+                  transition: 'opacity 0.4s ease, max-width 0.4s ease'
+                }}
               />
-              <span className={`text-xl font-bold text-primary sm:hidden transition-all duration-500 ${
-                scrolled ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100'
-              }`}>TWF</span>
+              <span
+                className="text-xl font-bold text-primary sm:hidden"
+                style={{
+                  opacity: scrolled ? 0 : 1,
+                  maxWidth: scrolled ? 0 : '60px',
+                  overflow: 'hidden',
+                  transition: 'opacity 0.4s ease, max-width 0.4s ease'
+                }}
+              >TWF</span>
             </button>
 
             <div className={`hidden lg:flex items-center gap-6 transition-all duration-500 ${
