@@ -170,9 +170,8 @@ async function handleReports(req: VercelRequest, res: VercelResponse, db: any) {
       })
     }
 
-    // Bulk list — metadata only (NO file_data → fast & small)
-    const columns = 'id, shipment_ref, container_number, title, content, file_name, file_type, created_at_ts, created_by'
-    let query = db.from('reports').select(columns).order('created_at_ts', { ascending: false })
+    // Bulk list — fetch all then strip file_data in response (robust even if schema changes)
+    let query = db.from('reports').select('*').order('created_at_ts', { ascending: false })
     const shipmentRef = req.query.shipmentRef as string
     if (shipmentRef) query = query.eq('shipment_ref', shipmentRef)
     const { data, error } = await query
@@ -185,6 +184,7 @@ async function handleReports(req: VercelRequest, res: VercelResponse, db: any) {
       content: r.content,
       fileName: r.file_name,
       fileType: r.file_type,
+      // file_data intentionally excluded from bulk response
       createdAt: r.created_at_ts,
       createdBy: r.created_by,
     }))
@@ -194,23 +194,39 @@ async function handleReports(req: VercelRequest, res: VercelResponse, db: any) {
   if (req.method === 'POST') {
     const mode = req.query.mode as string
 
-    // Single report WITH file (individual upload)
-    if (mode === 'file') {
-      const r = req.body
-      if (!r || !r.id) return res.status(400).json({ error: 'Report object with id required' })
-      const row = {
+    // Build row helper — optionally includes container_number if available
+    const buildRow = (r: any, includeFile: boolean) => {
+      const row: Record<string, unknown> = {
         id: r.id,
         shipment_ref: r.shipmentRef || r.shipment_ref,
-        container_number: r.containerNumber || r.container_number || '',
         title: r.title,
         content: r.content || '',
         file_name: r.fileName || r.file_name || '',
         file_type: r.fileType || r.file_type || '',
-        file_data: r.fileData || r.file_data || '',
         created_at_ts: r.createdAt || r.created_at_ts || Date.now(),
         created_by: r.createdBy || r.created_by || '',
       }
-      const { error } = await db.from('reports').upsert(row, { onConflict: 'id' })
+      // container_number — include but tolerate if column doesn't exist yet
+      const cn = r.containerNumber || r.container_number || ''
+      if (cn) row.container_number = cn
+      if (includeFile) row.file_data = r.fileData || r.file_data || ''
+      return row
+    }
+
+    // Single report WITH file (individual upload)
+    if (mode === 'file') {
+      const r = req.body
+      if (!r || !r.id) return res.status(400).json({ error: 'Report object with id required' })
+      const row = buildRow(r, true)
+      // Always include container_number for individual saves
+      row.container_number = r.containerNumber || r.container_number || ''
+      let { error } = await db.from('reports').upsert(row, { onConflict: 'id' })
+      // Retry without container_number if column doesn't exist
+      if (error && error.message?.includes('container_number')) {
+        delete row.container_number
+        const retry = await db.from('reports').upsert(row, { onConflict: 'id' })
+        error = retry.error
+      }
       if (error) throw error
       return res.status(200).json({ saved: true })
     }
@@ -218,19 +234,14 @@ async function handleReports(req: VercelRequest, res: VercelResponse, db: any) {
     // Bulk metadata sync (NO file_data)
     const body = req.body
     const items = Array.isArray(body) ? body : [body]
-    const rows = items.map((r: any) => ({
-      id: r.id,
-      shipment_ref: r.shipmentRef || r.shipment_ref,
-      container_number: r.containerNumber || r.container_number || '',
-      title: r.title,
-      content: r.content || '',
-      file_name: r.fileName || r.file_name || '',
-      file_type: r.fileType || r.file_type || '',
-      // file_data omitted — bulk sync doesn't touch files
-      created_at_ts: r.createdAt || r.created_at_ts || Date.now(),
-      created_by: r.createdBy || r.created_by || '',
-    }))
-    const { error } = await db.from('reports').upsert(rows, { onConflict: 'id', ignoreDuplicates: false })
+    const rows = items.map((r: any) => buildRow(r, false))
+    let { error } = await db.from('reports').upsert(rows, { onConflict: 'id', ignoreDuplicates: false })
+    // Retry without container_number if column doesn't exist
+    if (error && error.message?.includes('container_number')) {
+      const cleanRows = rows.map(r => { const { container_number, ...rest } = r as any; return rest })
+      const retry = await db.from('reports').upsert(cleanRows, { onConflict: 'id', ignoreDuplicates: false })
+      error = retry.error
+    }
     if (error) throw error
     return res.status(200).json({ saved: true, count: rows.length })
   }
