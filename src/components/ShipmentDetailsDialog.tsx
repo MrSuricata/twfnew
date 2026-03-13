@@ -199,20 +199,18 @@ export default function ShipmentDetailsDialog({
                 const hasFisc = fiscDates.length > 0
                 const hasDev = devDates.length > 0
 
-                // Helpers to check date relative to today
+                // Helpers to check date relative to today (parse as local to avoid timezone shift)
+                const parseLocal = (s: string) => {
+                  const parts = s.split('-')
+                  if (parts.length === 3) return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]))
+                  const d = new Date(s); d.setHours(0,0,0,0); return d
+                }
+                const todayMidnight = (() => { const t = new Date(); t.setHours(0,0,0,0); return t })()
                 const isToday = (dateStr: string) => {
-                  try {
-                    const d = new Date(dateStr); d.setHours(0,0,0,0)
-                    const t = new Date(); t.setHours(0,0,0,0)
-                    return d.getTime() === t.getTime()
-                  } catch { return false }
+                  try { return parseLocal(dateStr).getTime() === todayMidnight.getTime() } catch { return false }
                 }
                 const isPast = (dateStr: string) => {
-                  try {
-                    const d = new Date(dateStr); d.setHours(0,0,0,0)
-                    const t = new Date(); t.setHours(0,0,0,0)
-                    return d.getTime() < t.getTime()
-                  } catch { return false }
+                  try { return parseLocal(dateStr).getTime() < todayMidnight.getTime() } catch { return false }
                 }
 
                 // Build sublabels — distinguish past / today / future
@@ -249,7 +247,7 @@ export default function ShipmentDetailsDialog({
                     icon: <Package size={18} />
                   },
                   {
-                    label: 'Salió de MVD',
+                    label: hasSalida && salidaDates.some(d => isToday(d)) ? 'Sale de MVD' : 'Salió de MVD',
                     sublabel: salidaSublabel,
                     reached: ['salio_montevideo', 'en_frontera', 'llego_fiscal', 'devuelto'].includes(status.code),
                     icon: <Truck size={18} />
@@ -391,163 +389,172 @@ export default function ShipmentDetailsDialog({
             </TabsContent>
 
             {/* ── Client Logística Tab (merged Operativa + Logística) ── */}
-            <TabsContent value="logistics" className="space-y-4 mt-4">
+            <TabsContent value="logistics" className="space-y-5 mt-4">
               {editedShipment.operativas && editedShipment.operativas.length > 0 ? (
                 <>
-                  {/* Summary cards */}
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    <div className="bg-accent/10 rounded-lg p-3 text-center">
-                      <div className="text-xl font-bold text-accent">
-                        {editedShipment.operativas.reduce((sum, o) => sum + o.PKGS, 0).toLocaleString()}
-                      </div>
-                      <div className="text-xs text-muted-foreground">Bultos</div>
-                    </div>
-                    <div className="bg-muted rounded-lg p-3 text-center">
-                      <div className="text-xl font-bold">
-                        {editedShipment.operativas.reduce((sum, o) => sum + o.KG, 0).toLocaleString()} kg
-                      </div>
-                      <div className="text-xs text-muted-foreground">Peso Total</div>
-                    </div>
-                    <div className="bg-muted rounded-lg p-3 text-center">
-                      <div className="text-xl font-bold">
-                        {editedShipment.operativas.reduce((sum, o) => sum + o.M3, 0).toFixed(1)} m³
-                      </div>
-                      <div className="text-xs text-muted-foreground">Volumen</div>
-                    </div>
-                    <div className="bg-muted rounded-lg p-3 text-center">
-                      <div className="text-xl font-bold">{editedShipment.operativas.length}</div>
-                      <div className="text-xs text-muted-foreground">Contenedores</div>
-                    </div>
-                  </div>
+                  {/* ── Fechas de Operativa + Embarque unified card ── */}
+                  <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+                    {/* Dates row */}
+                    {(() => {
+                      const allOps = editedShipment.operativas!
+                      const salidas = allOps.filter(o => o.SALIDA).map(o => o.SALIDA)
+                      const etaFiscs = allOps.filter(o => o.ETA_FISC).map(o => o.ETA_FISC)
+                      const fiscales = [...new Set(allOps.filter(o => o.FISCAL).map(o => o.FISCAL))]
 
-                  {/* Dates timeline — aggregated across all containers */}
-                  {(() => {
-                    const allOps = editedShipment.operativas!
-                    const salidas = allOps.filter(o => o.SALIDA).map(o => o.SALIDA)
-                    const etaFiscs = allOps.filter(o => o.ETA_FISC).map(o => o.ETA_FISC)
-                    const fiscales = [...new Set(allOps.filter(o => o.FISCAL).map(o => o.FISCAL))]
+                      const dateItems = [
+                        {
+                          label: 'Salida MVD',
+                          value: salidas.length === 0 ? '-' : salidas.length === 1 ? salidas[0] : `${salidas[0]} (${salidas.length}/${allOps.length})`,
+                          accent: true
+                        },
+                        {
+                          label: 'Llegada Fiscal',
+                          value: etaFiscs.length === 0 ? '-' : etaFiscs.length === 1 ? etaFiscs[0] : `${etaFiscs[0]} (${etaFiscs.length}/${allOps.length})`,
+                          accent: false
+                        },
+                        {
+                          label: 'Libre Hasta',
+                          value: editedShipment.LIBRE_HASTA || '-',
+                          accent: false
+                        },
+                        {
+                          label: 'Depósito Fiscal',
+                          value: fiscales.join(', ') || '-',
+                          accent: false
+                        },
+                      ]
 
-                    return (
-                      <div className="bg-muted/50 rounded-lg p-4">
-                        <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
-                          <CalendarBlank size={16} className="text-accent" />
-                          Fechas de Operativa
-                        </h4>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                          <div className="space-y-1">
-                            <Label className="text-muted-foreground text-xs">Salida MVD</Label>
-                            <div className="font-medium">
-                              {salidas.length === 0 ? '-' :
-                               salidas.length === 1 ? salidas[0] :
-                               `${salidas[0]} (${salidas.length}/${allOps.length})`}
-                            </div>
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-muted-foreground text-xs">Llegada Fiscal</Label>
-                            <div className="font-medium">
-                              {etaFiscs.length === 0 ? '-' :
-                               etaFiscs.length === 1 ? etaFiscs[0] :
-                               `${etaFiscs[0]} (${etaFiscs.length}/${allOps.length})`}
-                            </div>
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-muted-foreground text-xs">Libre Hasta</Label>
-                            <div className="font-medium">{editedShipment.LIBRE_HASTA || '-'}</div>
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-muted-foreground text-xs">Depósito Fiscal</Label>
-                            <div className="font-medium">{fiscales.join(', ') || '-'}</div>
+                      return (
+                        <div className="p-4 pb-3">
+                          <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-2">
+                            <CalendarBlank size={14} />
+                            Fechas de Operativa
+                          </h4>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            {dateItems.map((item, i) => (
+                              <div key={i} className={`rounded-lg px-3 py-2.5 ${item.accent ? 'bg-accent/10 border border-accent/20' : 'bg-muted/50'}`}>
+                                <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-0.5">{item.label}</div>
+                                <div className={`text-sm font-semibold ${item.accent ? 'text-accent' : ''} truncate`}>{item.value}</div>
+                              </div>
+                            ))}
                           </div>
                         </div>
-                      </div>
-                    )
-                  })()}
+                      )
+                    })()}
 
-                  {/* Shipping info (from old Logística tab) */}
-                  <div className="bg-muted/30 rounded-xl p-5">
-                    <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
-                      <Boat size={16} className="text-accent" />
-                      Información de Embarque
-                    </h4>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                      <div className="space-y-1">
-                        <Label className="text-muted-foreground text-xs">Línea Naviera</Label>
-                        <div className="font-medium">{editedShipment.LINEA || '-'}</div>
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-muted-foreground text-xs">Buque</Label>
-                        <div className="font-medium">{editedShipment.BUQUE || '-'}</div>
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-muted-foreground text-xs">Terminal</Label>
-                        <div className="font-medium">{editedShipment.TERMINAL || '-'}</div>
-                      </div>
-                      <div className="space-y-1">
-                        <Label className="text-muted-foreground text-xs">MBL</Label>
-                        <div className="font-mono text-sm">{editedShipment.MBL || '-'}</div>
+                    {/* Divider */}
+                    <div className="border-t mx-4" />
+
+                    {/* Shipping info row */}
+                    <div className="p-4 pt-3">
+                      <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-2">
+                        <Boat size={14} />
+                        Embarque
+                      </h4>
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-2">
+                        {[
+                          { label: 'Línea', value: editedShipment.LINEA },
+                          { label: 'Buque', value: editedShipment.BUQUE },
+                          { label: 'Terminal', value: editedShipment.TERMINAL },
+                          { label: 'MBL', value: editedShipment.MBL, mono: true },
+                        ].map((item, i) => (
+                          <div key={i} className="flex flex-col">
+                            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{item.label}</span>
+                            <span className={`text-sm font-medium truncate ${item.mono ? 'font-mono text-xs' : ''}`}>{item.value || '-'}</span>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   </div>
 
-                  {/* Container-level details */}
+                  {/* ── Summary stats bar ── */}
+                  <div className="grid grid-cols-4 gap-2">
+                    {[
+                      { value: editedShipment.operativas.length, unit: '', label: 'CNTR' },
+                      { value: editedShipment.operativas.reduce((s, o) => s + o.PKGS, 0).toLocaleString(), unit: '', label: 'Bultos' },
+                      { value: editedShipment.operativas.reduce((s, o) => s + o.KG, 0).toLocaleString(), unit: 'kg', label: 'Peso' },
+                      { value: editedShipment.operativas.reduce((s, o) => s + o.M3, 0).toFixed(1), unit: 'm³', label: 'Volumen' },
+                    ].map((stat, i) => (
+                      <div key={i} className="text-center py-2.5 rounded-lg bg-muted/40">
+                        <div className="text-base font-bold leading-tight">
+                          {stat.value}<span className="text-xs font-normal text-muted-foreground ml-0.5">{stat.unit}</span>
+                        </div>
+                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{stat.label}</div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* ── Container details ── */}
                   <div className="space-y-3">
-                    <h4 className="text-sm font-semibold flex items-center gap-2">
-                      <Cube size={16} className="text-accent" />
+                    <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                      <Cube size={14} />
                       Detalle por Contenedor
                     </h4>
                     {editedShipment.operativas.map((op, idx) => (
-                      <div key={idx} className="border rounded-lg p-4 space-y-3">
-                        <div className="flex items-center justify-between">
+                      <div key={idx} className="rounded-xl border bg-card shadow-sm overflow-hidden">
+                        {/* Container header */}
+                        <div className="flex items-center justify-between px-4 py-2.5 bg-muted/30 border-b">
                           <div className="flex items-center gap-2">
-                            <span className="font-mono font-semibold">{op.CNTR_OP || `Contenedor ${idx + 1}`}</span>
+                            <span className="font-mono font-bold text-sm">{op.CNTR_OP || `Contenedor ${idx + 1}`}</span>
                             {op.TIPO && (
-                              <Badge variant="secondary" className="text-xs">{op.TIPO}</Badge>
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 font-medium">{op.TIPO}</Badge>
                             )}
                           </div>
                           {op.OPERATIVA && (
-                            <Badge className={
+                            <Badge className={`text-[10px] px-2 py-0 h-5 ${
                               op.OPERATIVA === 'TRASIEGO' ? 'bg-blue-500' :
                               op.OPERATIVA === 'DEVUELTO' ? 'bg-orange-500' :
                               'bg-green-600'
-                            }>
+                            }`}>
                               {op.OPERATIVA}
                             </Badge>
                           )}
                         </div>
-                        <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-2 text-sm">
+
+                        {/* Container body */}
+                        <div className="px-4 py-3 space-y-2.5">
+                          {/* Mercadería */}
                           {op.DESCRIPCION && (
-                            <div className="col-span-2 md:col-span-3">
-                              <span className="text-muted-foreground">Mercadería:</span>
-                              <span className="ml-2 font-medium">{op.DESCRIPCION}</span>
+                            <div className="text-sm">
+                              <span className="text-muted-foreground text-xs">Mercadería</span>
+                              <div className="font-medium">{op.DESCRIPCION}</div>
                             </div>
                           )}
-                          <div>
-                            <span className="text-muted-foreground">Bultos:</span>
-                            <span className="ml-2 font-medium">{op.PKGS.toLocaleString()}</span>
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">Peso:</span>
-                            <span className="ml-2 font-medium">{op.KG.toLocaleString()} kg</span>
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground">Volumen:</span>
-                            <span className="ml-2 font-medium">{op.M3} m³</span>
-                          </div>
-                          {op.TRANSPORTE && (
-                            <div>
-                              <span className="text-muted-foreground">Transporte:</span>
-                              <span className="ml-2 font-medium">{op.TRANSPORTE}</span>
+
+                          {/* Stats row */}
+                          <div className="grid grid-cols-3 gap-2">
+                            <div className="bg-muted/40 rounded-md px-2.5 py-1.5 text-center">
+                              <div className="text-xs text-muted-foreground">Bultos</div>
+                              <div className="text-sm font-semibold">{op.PKGS.toLocaleString()}</div>
                             </div>
-                          )}
-                          {op.DEPOSITO && (
-                            <div>
-                              <span className="text-muted-foreground">Depósito:</span>
-                              <span className="ml-2 font-medium">{op.DEPOSITO}</span>
+                            <div className="bg-muted/40 rounded-md px-2.5 py-1.5 text-center">
+                              <div className="text-xs text-muted-foreground">Peso</div>
+                              <div className="text-sm font-semibold">{op.KG.toLocaleString()}<span className="text-xs font-normal ml-0.5">kg</span></div>
                             </div>
-                          )}
-                          {op.WOOD === 'SI' && (
-                            <div>
-                              <Badge variant="secondary" className="text-xs">🪵 WOOD</Badge>
+                            <div className="bg-muted/40 rounded-md px-2.5 py-1.5 text-center">
+                              <div className="text-xs text-muted-foreground">Volumen</div>
+                              <div className="text-sm font-semibold">{op.M3}<span className="text-xs font-normal ml-0.5">m³</span></div>
+                            </div>
+                          </div>
+
+                          {/* Extra info row */}
+                          {(op.TRANSPORTE || op.DEPOSITO || op.WOOD === 'SI') && (
+                            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs pt-1 border-t">
+                              {op.TRANSPORTE && (
+                                <div>
+                                  <span className="text-muted-foreground">Transporte:</span>
+                                  <span className="ml-1 font-medium">{op.TRANSPORTE}</span>
+                                </div>
+                              )}
+                              {op.DEPOSITO && (
+                                <div>
+                                  <span className="text-muted-foreground">Depósito:</span>
+                                  <span className="ml-1 font-medium">{op.DEPOSITO}</span>
+                                </div>
+                              )}
+                              {op.WOOD === 'SI' && (
+                                <Badge variant="secondary" className="text-[10px] h-4 px-1.5">🪵 WOOD</Badge>
+                              )}
                             </div>
                           )}
                         </div>

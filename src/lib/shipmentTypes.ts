@@ -100,62 +100,69 @@ export interface ShipmentAlert {
 }
 
 /**
+ * Parse a date string (YYYY-MM-DD) as a LOCAL date to avoid timezone shift.
+ * new Date("2026-03-13") → UTC midnight → in UTC-3 becomes March 12 21:00!
+ * This function parses it as local midnight instead.
+ */
+function parseLocalDate(s: string): Date | null {
+  if (!s || s.trim() === '') return null
+  const parts = s.split('-')
+  if (parts.length === 3) {
+    const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]))
+    if (!isNaN(d.getTime())) return d
+  }
+  // Fallback for other formats
+  const d = new Date(s)
+  if (isNaN(d.getTime())) return null
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+
+/** Get today at midnight local time */
+function todayLocal(): Date {
+  const t = new Date()
+  t.setHours(0, 0, 0, 0)
+  return t
+}
+
+/**
  * Check if the ship has arrived (ETA has passed).
  * If ETA is in the future, the cargo is still at sea — operativas data should be ignored.
  */
 function hasShipArrived(shipment: ParsedShipment): boolean {
   if (!shipment.ETA) return true // No ETA → assume arrived (can't know)
-  try {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const eta = new Date(shipment.ETA)
-    if (isNaN(eta.getTime())) return true // Bad date → assume arrived
-    eta.setHours(0, 0, 0, 0)
-    return eta.getTime() <= today.getTime()
-  } catch {
-    return true
-  }
+  const eta = parseLocalDate(shipment.ETA)
+  if (!eta) return true // Bad date → assume arrived
+  return eta.getTime() <= todayLocal().getTime()
 }
 
 /**
  * Validate that a string is a real date (not just non-empty text).
- * parseDate can return the original string if it can't parse it,
- * so we need to verify the result is actually a usable date.
  */
 function isValidDate(s: string): boolean {
-  if (!s || s.trim() === '') return false
-  const d = new Date(s)
-  return !isNaN(d.getTime())
+  return parseLocalDate(s) !== null
 }
 
 /**
  * Check if a date string represents a date that is strictly in the past (before today).
- * Used to confirm a milestone has fully occurred (not just scheduled for today).
  */
 function isDatePast(s: string): boolean {
-  if (!isValidDate(s)) return false
-  const d = new Date(s)
-  d.setHours(0, 0, 0, 0)
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  return d.getTime() < today.getTime()
+  const d = parseLocalDate(s)
+  if (!d) return false
+  return d.getTime() < todayLocal().getTime()
 }
 
 /**
  * Check if a date string represents today's date.
  */
 function isDateToday(s: string): boolean {
-  if (!isValidDate(s)) return false
-  const d = new Date(s)
-  d.setHours(0, 0, 0, 0)
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  return d.getTime() === today.getTime()
+  const d = parseLocalDate(s)
+  if (!d) return false
+  return d.getTime() === todayLocal().getTime()
 }
 
 /**
  * Check if a date string represents a date that is today or in the past.
- * Used to avoid marking future dates as "completed" milestones.
  */
 function isDateReached(s: string): boolean {
   return isDatePast(s) || isDateToday(s)
@@ -221,14 +228,8 @@ export function getShipmentStatus(shipment: ParsedShipment): ShipmentStatus {
   }
 
   // No operativas - check main shipment dates
-  if (shipment.ETA) {
-    try {
-      const today = new Date()
-      const eta = new Date(shipment.ETA)
-      if (!isNaN(eta.getTime()) && eta <= today) {
-        return { code: 'en_puerto', label: 'En Puerto', color: 'yellow', progress: 25 }
-      }
-    } catch { /* ignore */ }
+  if (shipment.ETA && isDateReached(shipment.ETA)) {
+    return { code: 'en_puerto', label: 'En Puerto', color: 'yellow', progress: 25 }
   }
 
   return { code: 'en_transito', label: 'En Tránsito Marítimo', color: 'blue', progress: 10 }
@@ -256,14 +257,9 @@ export function isShipmentCompleted(shipment: ParsedShipment): boolean {
 
   // Check if ALL SALIDA dates are older than 2 weeks
   return ops.every(o => {
-    try {
-      const salidaDate = new Date(o.SALIDA)
-      if (isNaN(salidaDate.getTime())) return false
-      salidaDate.setHours(0, 0, 0, 0)
-      return (today.getTime() - salidaDate.getTime()) > TWO_WEEKS_MS
-    } catch {
-      return false
-    }
+    const salidaDate = parseLocalDate(o.SALIDA)
+    if (!salidaDate) return false
+    return (today.getTime() - salidaDate.getTime()) > TWO_WEEKS_MS
   })
 }
 
@@ -299,9 +295,8 @@ export function generateShipmentAlerts(shipments: ParsedShipment[], reports?: { 
     // ── Libre expiration alerts ──
     if (s.LIBRE_HASTA) {
       try {
-        const libreDate = new Date(s.LIBRE_HASTA)
-        if (!isNaN(libreDate.getTime())) {
-          libreDate.setHours(0, 0, 0, 0)
+        const libreDate = parseLocalDate(s.LIBRE_HASTA)
+        if (libreDate) {
           const daysUntil = Math.floor((libreDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
 
           if (daysUntil < 0) {
@@ -360,23 +355,30 @@ export function generateShipmentAlerts(shipments: ParsedShipment[], reports?: { 
           date: ops.find(o => !!o.DEV)?.DEV || ''
         })
       } else if (hasEtaFisc) {
+        const fiscalName = ops[0]?.FISCAL || 'depósito fiscal'
+        const etaFiscToday = ops.some(o => isDateToday(o.ETA_FISC))
         alerts.push({
           id: `status-fiscal-${s.REF}`,
           shipmentRef: s.REF,
           type: 'status_fiscal',
           severity: 'success',
-          title: `Llegó a depósito fiscal`,
-          message: `${s.REF}: su carga llegó a ${ops[0]?.FISCAL || 'depósito fiscal'}`,
+          title: etaFiscToday ? `Llegando a fiscal hoy` : `En depósito fiscal`,
+          message: etaFiscToday
+            ? `${s.REF}: su carga llega hoy a ${fiscalName}`
+            : `${s.REF}: su carga está en ${fiscalName}`,
           date: ops.find(o => !!o.ETA_FISC)?.ETA_FISC || ''
         })
       } else if (hasSalida) {
+        const salidaToday = ops.some(o => isDateToday(o.SALIDA))
         alerts.push({
           id: `status-salio-${s.REF}`,
           shipmentRef: s.REF,
           type: 'status_salio',
           severity: 'success',
-          title: `Carga en camino`,
-          message: `${s.REF}: su carga salió de Montevideo rumbo a frontera`,
+          title: salidaToday ? `Carga Hoy` : `En Frontera`,
+          message: salidaToday
+            ? `${s.REF}: su carga sale hoy de Montevideo`
+            : `${s.REF}: su carga está en frontera`,
           date: ops.find(o => !!o.SALIDA)?.SALIDA || ''
         })
       }
@@ -417,16 +419,13 @@ export function parseContainers(cntrString: string): Container[] {
 
 export function calculateLibreHasta(eta: string, ft: number): string {
   if (!eta || !ft) return ''
-  
-  try {
-    const etaDate = new Date(eta)
-    if (isNaN(etaDate.getTime())) return ''
-    
-    etaDate.setDate(etaDate.getDate() + ft)
-    return etaDate.toISOString().split('T')[0]
-  } catch {
-    return ''
-  }
+  const etaDate = parseLocalDate(eta)
+  if (!etaDate) return ''
+  etaDate.setDate(etaDate.getDate() + ft)
+  const y = etaDate.getFullYear()
+  const m = String(etaDate.getMonth() + 1).padStart(2, '0')
+  const d = String(etaDate.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
 }
 
 export function processShipmentRecord(record: Partial<ShipmentRecord>): ParsedShipment {
