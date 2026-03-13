@@ -1,11 +1,12 @@
+import { useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Check, ArrowRight, Package, Boat, Truck } from '@phosphor-icons/react'
-import { motion } from 'framer-motion'
+import { Check, ArrowRight, Package, Boat, Truck, CraneTower, X, Images, MagnifyingGlass } from '@phosphor-icons/react'
+import { motion, AnimatePresence } from 'framer-motion'
 
 export interface CaseStudy {
   id: string
-  iconType: 'Boat' | 'Package' | 'Truck'
+  iconType: 'Boat' | 'Package' | 'Truck' | 'CraneTower'
   type: string
   title: string
   description: string
@@ -16,6 +17,7 @@ export interface CaseStudy {
     value: string
   }[]
   image: string
+  gallery?: { src: string; label: string }[]
 }
 
 const defaultCaseStudies: CaseStudy[] = [
@@ -35,19 +37,25 @@ const defaultCaseStudies: CaseStudy[] = [
     image: '/images/ops-warehouse.jpg'
   },
   {
-    id: 'case-2',
-    iconType: 'Package',
-    type: 'Operativa Portuaria — Grúa',
-    title: 'Descarga y Supervisión en Puerto',
-    description: 'Coordinación de descarga con grúa portuaria, supervisión directa de operativa en terminal y gestión de liberación aduanera para retiro express.',
-    origin: 'Terminal Portuaria',
-    destination: 'Zona Franca, MVD',
+    id: 'case-lancioni',
+    iconType: 'CraneTower',
+    type: 'Carga Proyecto — Maquinaria Pesada',
+    title: 'Operativa Lancioni A7533: Descarga de Maquinaria Agrícola',
+    description: 'Coordinación integral de descarga de maquinaria agrícola pesada (Kuhn) con grúa Sennebogen 840. Operativa compleja que requirió planificación especial de izaje, supervisión directa y transporte con cama baja.',
+    origin: 'Puerto de Montevideo',
+    destination: 'Interior del País',
     results: [
-      { label: 'Supervisión', value: 'Directa en sitio' },
-      { label: 'Liberación', value: 'Express 24hs' },
-      { label: 'Carga íntegra', value: '100%' }
+      { label: 'Tipo de carga', value: 'Maquinaria 12+ ton' },
+      { label: 'Grúa utilizada', value: 'Sennebogen 840' },
+      { label: 'Descarga', value: 'Sin incidentes' },
+      { label: 'Supervisión', value: 'Directa TWF' }
     ],
-    image: '/images/ops-crane-port.jpg'
+    image: '/images/a7533-1.jpg',
+    gallery: [
+      { src: '/images/a7533-1.jpg', label: 'Izaje con grúa Sennebogen 840' },
+      { src: '/images/a7533-2.jpg', label: 'Maquinaria Kuhn en descarga' },
+      { src: '/images/a7533-8.jpg', label: 'Maquinaria sobre base de madera' }
+    ]
   },
   {
     id: 'case-3',
@@ -66,7 +74,7 @@ const defaultCaseStudies: CaseStudy[] = [
   }
 ]
 
-const getIconComponent = (iconType: 'Boat' | 'Package' | 'Truck') => {
+const getIconComponent = (iconType: 'Boat' | 'Package' | 'Truck' | 'CraneTower') => {
   switch (iconType) {
     case 'Boat':
       return Boat
@@ -74,6 +82,8 @@ const getIconComponent = (iconType: 'Boat' | 'Package' | 'Truck') => {
       return Package
     case 'Truck':
       return Truck
+    case 'CraneTower':
+      return CraneTower
     default:
       return Package
   }
@@ -81,6 +91,9 @@ const getIconComponent = (iconType: 'Boat' | 'Package' | 'Truck') => {
 
 export default function CasosExito() {
   const caseStudies = defaultCaseStudies
+  const [lightboxImg, setLightboxImg] = useState<{ src: string; label: string } | null>(null)
+  const [expandedGallery, setExpandedGallery] = useState<string | null>(null)
+
   const scrollToCotizacion = () => {
     const element = document.getElementById('cotizacion')
     if (element) {
@@ -91,9 +104,9 @@ export default function CasosExito() {
   return (
     <section id="casos-exito" className="py-16 md:py-24 bg-background relative overflow-hidden">
       <div className="absolute inset-0 bg-gradient-to-b from-accent/5 to-transparent -z-10" />
-      
+
       <div className="max-w-7xl mx-auto px-4 md:px-6">
-        <motion.div 
+        <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
@@ -109,6 +122,9 @@ export default function CasosExito() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
           {(caseStudies || []).map((study, index) => {
             const IconComponent = getIconComponent(study.iconType)
+            const hasGallery = study.gallery && study.gallery.length > 0
+            const isGalleryOpen = expandedGallery === study.id
+
             return (
               <motion.div
                 key={study.id}
@@ -119,21 +135,67 @@ export default function CasosExito() {
               >
                 <Card className="h-full hover:shadow-xl transition-all duration-300 group overflow-hidden">
                   <div className="relative h-48 overflow-hidden">
-                    <img 
-                      src={study.image} 
+                    <img
+                      src={study.image}
                       alt={`Caso de éxito: ${study.title}`}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 cursor-pointer"
                       loading="lazy"
+                      onClick={() => setLightboxImg({ src: study.image, label: study.title })}
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                    <div className="absolute bottom-4 left-4 right-4">
-                      <div className="flex items-center gap-2 text-white mb-2">
+                    <div className="absolute bottom-4 left-4 right-4 flex items-end justify-between">
+                      <div className="flex items-center gap-2 text-white">
                         <IconComponent size={24} weight="duotone" />
                         <span className="text-sm font-semibold">{study.type}</span>
                       </div>
+                      {hasGallery && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setExpandedGallery(isGalleryOpen ? null : study.id)
+                          }}
+                          className="flex items-center gap-1.5 text-white/90 hover:text-white bg-black/30 hover:bg-black/50 px-2.5 py-1.5 rounded-full text-xs font-medium transition-all backdrop-blur-sm"
+                        >
+                          <Images size={16} weight="bold" />
+                          {study.gallery!.length} fotos
+                        </button>
+                      )}
                     </div>
                   </div>
-                
+
+                  {/* Photo Gallery */}
+                  <AnimatePresence>
+                    {hasGallery && isGalleryOpen && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        transition={{ duration: 0.3 }}
+                        className="overflow-hidden"
+                      >
+                        <div className="grid grid-cols-3 gap-1.5 p-3 bg-muted/30">
+                          {study.gallery!.map((photo, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => setLightboxImg(photo)}
+                              className="relative aspect-square rounded-lg overflow-hidden group/thumb hover:ring-2 ring-accent transition-all"
+                            >
+                              <img
+                                src={photo.src}
+                                alt={photo.label}
+                                className="w-full h-full object-cover group-hover/thumb:scale-110 transition-transform duration-300"
+                                loading="lazy"
+                              />
+                              <div className="absolute inset-0 bg-black/0 group-hover/thumb:bg-black/20 transition-colors flex items-center justify-center">
+                                <MagnifyingGlass size={20} weight="bold" className="text-white opacity-0 group-hover/thumb:opacity-100 transition-opacity drop-shadow-lg" />
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
                 <CardContent className="pt-6">
                   <h3 className="text-xl font-semibold mb-3 text-foreground line-clamp-2">{study.title}</h3>
                   <p className="text-muted-foreground mb-4 text-sm leading-relaxed line-clamp-3">
@@ -201,6 +263,40 @@ export default function CasosExito() {
           </p>
         </motion.div>
       </div>
+
+      {/* Lightbox */}
+      <AnimatePresence>
+        {lightboxImg && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 cursor-pointer"
+            onClick={() => setLightboxImg(null)}
+          >
+            <button
+              onClick={() => setLightboxImg(null)}
+              className="absolute top-4 right-4 text-white/80 hover:text-white p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors z-[101]"
+            >
+              <X size={28} weight="bold" />
+            </button>
+            <motion.img
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.8, opacity: 0 }}
+              src={lightboxImg.src}
+              alt={lightboxImg.label}
+              className="max-w-full max-h-[85vh] rounded-xl shadow-2xl object-contain cursor-default"
+              onClick={(e) => e.stopPropagation()}
+            />
+            <div className="absolute bottom-6 left-0 right-0 text-center">
+              <span className="text-white/90 text-lg font-medium bg-black/40 px-4 py-2 rounded-full">
+                {lightboxImg.label}
+              </span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <script type="application/ld+json">
         {JSON.stringify({

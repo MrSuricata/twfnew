@@ -321,15 +321,34 @@ export default function PublicSite({
       <nav className={`fixed top-0 left-0 right-0 z-50 backdrop-blur-sm border-b transition-all duration-300 ${
         scrolled ? 'bg-background/98 border-border shadow-md' : 'bg-background/80 border-transparent'
       }`}>
-        <div className="max-w-7xl mx-auto px-4 md:px-6">
+        <div className="max-w-7xl mx-auto px-4 md:px-6 relative">
           <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-2">
-              <img src="/images/twf-icon-dark.png" alt="TWF" className="h-11 w-11" />
-              <img src="/images/twf-text-dark-new.png" alt="Transit World Forwarding" className="h-8 hidden sm:block" />
-              <span className="text-xl font-bold text-primary sm:hidden">TWF</span>
-            </div>
+            {/* Logo — slides to center when scrolled */}
+            <button
+              onClick={scrollToTop}
+              className={`flex items-center gap-2 transition-all duration-500 ease-in-out cursor-pointer z-10 ${
+                scrolled
+                  ? 'absolute left-1/2 -translate-x-1/2'
+                  : 'relative'
+              }`}
+              aria-label="Volver al inicio"
+            >
+              <img src="/images/twf-icon-dark.png" alt="TWF" className="h-11 w-auto" />
+              <img
+                src="/images/twf-text-dark-new.png"
+                alt="Transit World Forwarding"
+                className={`h-8 hidden sm:block transition-all duration-500 ${
+                  scrolled ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100'
+                }`}
+              />
+              <span className={`text-xl font-bold text-primary sm:hidden transition-all duration-500 ${
+                scrolled ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100'
+              }`}>TWF</span>
+            </button>
 
-            <div className="hidden lg:flex items-center gap-6">
+            <div className={`hidden lg:flex items-center gap-6 transition-all duration-500 ${
+              scrolled ? 'opacity-0 pointer-events-none' : 'opacity-100'
+            }`}>
               {([
                 ['inicio', t.nav.home],
                 ['servicios', t.nav.services],
@@ -360,15 +379,17 @@ export default function PublicSite({
               ))}
             </div>
 
-            <div className="hidden lg:flex items-center gap-3">
-              <LanguageSelector 
-                currentLanguage={language} 
+            <div className={`hidden lg:flex items-center gap-3 transition-all duration-500 ${
+              scrolled ? 'opacity-0 pointer-events-none' : 'opacity-100'
+            }`}>
+              <LanguageSelector
+                currentLanguage={language}
                 onLanguageChange={onLanguageChange}
               />
-              <Button 
-                variant="ghost" 
+              <Button
+                variant="ghost"
                 size="sm"
-                onClick={onClientPortalClick} 
+                onClick={onClientPortalClick}
                 className="text-foreground/60 hover:text-foreground gap-2"
               >
                 <User size={18} />
@@ -1153,7 +1174,7 @@ export default function PublicSite({
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
             <div>
               <div className="flex items-center gap-2 mb-4">
-                <img src="/images/twf-icon-white.png" alt="TWF" className="h-10 w-10" />
+                <img src="/images/twf-icon-white.png" alt="TWF" className="h-10 w-auto" />
                 <img src="/images/twf-text-white-new.png" alt="Transit World Forwarding" className="h-7 w-auto" />
               </div>
               <p className="text-sm text-primary-foreground/70 mb-4">
