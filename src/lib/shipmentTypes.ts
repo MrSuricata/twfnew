@@ -129,6 +129,19 @@ function isValidDate(s: string): boolean {
 }
 
 /**
+ * Check if a date string represents a date that is today or in the past.
+ * Used to avoid marking future dates as "completed" milestones.
+ */
+function isDateReached(s: string): boolean {
+  if (!isValidDate(s)) return false
+  const d = new Date(s)
+  d.setHours(0, 0, 0, 0)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return d.getTime() <= today.getTime()
+}
+
+/**
  * Derive shipment status from Operativas dates.
  * Logic: SALIDA = container left Montevideo. If all containers have SALIDA,
  * we consider the shipment effectively in its next phase.
@@ -146,32 +159,39 @@ export function getShipmentStatus(shipment: ParsedShipment): ShipmentStatus {
 
   // Check if all containers have DEV date or OPERATIVA === 'DEVUELTO'
   // Must also have valid SALIDA — can't be devuelto if it never left
+  // Use isDateReached to avoid marking future dates as completed
   const allDevueltos = ops.length > 0 && ops.every(o =>
-    isValidDate(o.SALIDA) && (isValidDate(o.DEV) || o.OPERATIVA?.toUpperCase() === 'DEVUELTO')
+    isDateReached(o.SALIDA) && (isDateReached(o.DEV) || o.OPERATIVA?.toUpperCase() === 'DEVUELTO')
   )
   if (allDevueltos) {
     return { code: 'devuelto', label: 'Contenedor Devuelto', color: 'gray', progress: 100, date: ops.find(o => isValidDate(o.DEV))?.DEV }
   }
 
   // Check if all containers have ETA_FISC (must also have SALIDA)
-  const allFiscal = ops.length > 0 && ops.every(o => isValidDate(o.SALIDA) && isValidDate(o.ETA_FISC))
+  // Only count as "arrived at fiscal" if the date has actually passed
+  const allFiscal = ops.length > 0 && ops.every(o => isDateReached(o.SALIDA) && isDateReached(o.ETA_FISC))
   if (allFiscal) {
     return { code: 'llego_fiscal', label: 'En Depósito Fiscal', color: 'green', progress: 80, date: ops.find(o => isValidDate(o.ETA_FISC))?.ETA_FISC }
   }
 
-  // Check if all containers have SALIDA
-  const allSalieron = ops.length > 0 && ops.every(o => isValidDate(o.SALIDA))
+  // Check if all containers have SALIDA (that has actually happened)
+  const allSalieron = ops.length > 0 && ops.every(o => isDateReached(o.SALIDA))
   if (allSalieron) {
-    // Some arrived at fiscal, some still in transit
-    const someFiscal = ops.some(o => isValidDate(o.ETA_FISC))
+    // Some arrived at fiscal (date reached), some still in transit
+    const someFiscal = ops.some(o => isDateReached(o.ETA_FISC))
     if (someFiscal) {
       return { code: 'en_frontera', label: 'En Frontera', color: 'blue', progress: 65 }
+    }
+    // If ETA_FISC exists but is future, show "en camino a fiscal"
+    const hasFutureFisc = ops.some(o => isValidDate(o.ETA_FISC) && !isDateReached(o.ETA_FISC))
+    if (hasFutureFisc) {
+      return { code: 'salio_montevideo', label: 'En Camino a Fiscal', color: 'blue', progress: 55, date: ops.find(o => isValidDate(o.ETA_FISC))?.ETA_FISC }
     }
     return { code: 'salio_montevideo', label: 'Salió de Montevideo', color: 'blue', progress: 50, date: ops.find(o => isValidDate(o.SALIDA))?.SALIDA }
   }
 
   // Some containers left, some still in port
-  const someSalieron = ops.some(o => isValidDate(o.SALIDA))
+  const someSalieron = ops.some(o => isDateReached(o.SALIDA))
   if (someSalieron) {
     return { code: 'salio_montevideo', label: 'Saliendo de Montevideo', color: 'blue', progress: 40 }
   }
@@ -306,9 +326,9 @@ export function generateShipmentAlerts(shipments: ParsedShipment[], reports?: { 
     const ops = s.operativas || []
     const shipArrived = hasShipArrived(s)
     if (ops.length > 0 && shipArrived) {
-      const hasSalida = ops.some(o => isValidDate(o.SALIDA))
-      const hasEtaFisc = ops.some(o => isValidDate(o.ETA_FISC))
-      const hasDev = ops.some(o => (isValidDate(o.DEV) || o.OPERATIVA?.toUpperCase() === 'DEVUELTO') && isValidDate(o.SALIDA))
+      const hasSalida = ops.some(o => isDateReached(o.SALIDA))
+      const hasEtaFisc = ops.some(o => isDateReached(o.ETA_FISC))
+      const hasDev = ops.some(o => (isDateReached(o.DEV) || o.OPERATIVA?.toUpperCase() === 'DEVUELTO') && isDateReached(o.SALIDA))
 
       if (hasDev) {
         alerts.push({

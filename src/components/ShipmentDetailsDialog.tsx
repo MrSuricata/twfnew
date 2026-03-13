@@ -134,19 +134,15 @@ export default function ShipmentDetailsDialog({
         </DialogHeader>
 
         <Tabs defaultValue={clientView ? "tracking" : "general"} className="w-full mt-4">
-          <TabsList className={`grid w-full ${clientView ? 'grid-cols-4' : 'grid-cols-4'}`}>
+          <TabsList className={`grid w-full ${clientView ? 'grid-cols-3' : 'grid-cols-4'}`}>
             {clientView ? (
               <>
                 <TabsTrigger value="tracking">
                   <Package size={18} className="mr-2" />
                   <span className="hidden sm:inline">Tracking</span>
                 </TabsTrigger>
-                <TabsTrigger value="operativa">
-                  <Truck size={18} className="mr-2" />
-                  <span className="hidden sm:inline">Operativa</span>
-                </TabsTrigger>
                 <TabsTrigger value="logistics">
-                  <Boat size={18} className="mr-2" />
+                  <Truck size={18} className="mr-2" />
                   <span className="hidden sm:inline">Logística</span>
                 </TabsTrigger>
                 <TabsTrigger value="reports" className="relative">
@@ -203,12 +199,26 @@ export default function ShipmentDetailsDialog({
                 const hasFisc = fiscDates.length > 0
                 const hasDev = devDates.length > 0
 
-                // Build sublabels showing date ranges when containers differ
+                // Helper to check if a date is in the past or today
+                const isPastOrToday = (dateStr: string) => {
+                  try {
+                    const d = new Date(dateStr); d.setHours(0,0,0,0)
+                    const t = new Date(); t.setHours(0,0,0,0)
+                    return d.getTime() <= t.getTime()
+                  } catch { return false }
+                }
+
+                // Build sublabels — show "Estimado" for future dates
                 const salidaSublabel = hasSalida
                   ? (salidaDates.length === 1 ? salidaDates[0] : `${salidaDates.length}/${ops.length} CNTR — ${salidaDates[salidaDates.length - 1]}`)
                   : 'Pendiente'
                 const fiscSublabel = hasFisc
-                  ? `${fiscDates[fiscDates.length - 1]}${fiscales.length > 0 ? ` • ${fiscales.join(', ')}` : ''}`
+                  ? (() => {
+                      const date = fiscDates[fiscDates.length - 1]
+                      const prefix = isPastOrToday(date) ? '' : 'Estimado: '
+                      const fiscal = fiscales.length > 0 ? ` • ${fiscales.join(', ')}` : ''
+                      return `${prefix}${date}${fiscal}`
+                    })()
                   : 'Pendiente'
                 const devSublabel = hasDev
                   ? devDates[devDates.length - 1]
@@ -369,7 +379,8 @@ export default function ShipmentDetailsDialog({
               })()}
             </TabsContent>
 
-            <TabsContent value="operativa" className="space-y-4 mt-4">
+            {/* ── Client Logística Tab (merged Operativa + Logística) ── */}
+            <TabsContent value="logistics" className="space-y-4 mt-4">
               {editedShipment.operativas && editedShipment.operativas.length > 0 ? (
                 <>
                   {/* Summary cards */}
@@ -403,7 +414,6 @@ export default function ShipmentDetailsDialog({
                     const allOps = editedShipment.operativas!
                     const salidas = allOps.filter(o => o.SALIDA).map(o => o.SALIDA)
                     const etaFiscs = allOps.filter(o => o.ETA_FISC).map(o => o.ETA_FISC)
-                    const libres = allOps.filter(o => o.LIBRE).map(o => o.LIBRE)
                     const fiscales = [...new Set(allOps.filter(o => o.FISCAL).map(o => o.FISCAL))]
 
                     return (
@@ -431,7 +441,7 @@ export default function ShipmentDetailsDialog({
                           </div>
                           <div className="space-y-1">
                             <Label className="text-muted-foreground text-xs">Libre Hasta</Label>
-                            <div className="font-medium">{libres[0] || '-'}</div>
+                            <div className="font-medium">{editedShipment.LIBRE_HASTA || '-'}</div>
                           </div>
                           <div className="space-y-1">
                             <Label className="text-muted-foreground text-xs">Depósito Fiscal</Label>
@@ -441,6 +451,32 @@ export default function ShipmentDetailsDialog({
                       </div>
                     )
                   })()}
+
+                  {/* Shipping info (from old Logística tab) */}
+                  <div className="bg-muted/30 rounded-xl p-5">
+                    <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                      <Boat size={16} className="text-accent" />
+                      Información de Embarque
+                    </h4>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <div className="space-y-1">
+                        <Label className="text-muted-foreground text-xs">Línea Naviera</Label>
+                        <div className="font-medium">{editedShipment.LINEA || '-'}</div>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-muted-foreground text-xs">Buque</Label>
+                        <div className="font-medium">{editedShipment.BUQUE || '-'}</div>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-muted-foreground text-xs">Terminal</Label>
+                        <div className="font-medium">{editedShipment.TERMINAL || '-'}</div>
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-muted-foreground text-xs">MBL</Label>
+                        <div className="font-mono text-sm">{editedShipment.MBL || '-'}</div>
+                      </div>
+                    </div>
+                  </div>
 
                   {/* Container-level details */}
                   <div className="space-y-3">
@@ -514,96 +550,6 @@ export default function ShipmentDetailsDialog({
                   <p>No hay datos operativos disponibles para esta carga</p>
                 </div>
               )}
-            </TabsContent>
-
-            {/* ── Client Logistics Tab ── */}
-            <TabsContent value="logistics" className="space-y-4 mt-4">
-              {/* Libre / Free Time info */}
-              <div className="bg-muted/30 rounded-xl p-5">
-                <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
-                  <CalendarBlank size={16} className="text-accent" />
-                  Días Libres
-                </h4>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  <div className="space-y-1">
-                    <Label className="text-muted-foreground text-xs">Free Time</Label>
-                    <div className="font-medium">{editedShipment.FT || 0} días</div>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-muted-foreground text-xs">Libre Hasta</Label>
-                    <div className="font-medium">{editedShipment.LIBRE_HASTA || '-'}</div>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-muted-foreground text-xs">Estado</Label>
-                    <div>{getUrgencyBadge(daysUntilFree)}</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Shipping info */}
-              <div className="bg-muted/30 rounded-xl p-5">
-                <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
-                  <Boat size={16} className="text-accent" />
-                  Información de Embarque
-                </h4>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                  <div className="space-y-1">
-                    <Label className="text-muted-foreground text-xs">Línea Naviera</Label>
-                    <div className="font-medium">{editedShipment.LINEA || '-'}</div>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-muted-foreground text-xs">Buque</Label>
-                    <div className="font-medium">{editedShipment.BUQUE || '-'}</div>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-muted-foreground text-xs">Terminal</Label>
-                    <div className="font-medium">{editedShipment.TERMINAL || '-'}</div>
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-muted-foreground text-xs">MBL</Label>
-                    <div className="font-mono text-sm">{editedShipment.MBL || '-'}</div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Documents section */}
-              {(() => {
-                const shipmentDocs = documents.filter(d => d.shipmentRef === editedShipment.REF)
-                return (
-                  <div className="bg-muted/30 rounded-xl p-5">
-                    <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
-                      <FloppyDisk size={16} className="text-accent" />
-                      Documentos ({shipmentDocs.length})
-                    </h4>
-                    {shipmentDocs.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">No hay documentos subidos para esta carga</p>
-                    ) : (
-                      <div className="space-y-2">
-                        {shipmentDocs.map(doc => (
-                          <div key={doc.id} className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50">
-                            <div className="flex-1 min-w-0">
-                              <div className="text-sm font-medium truncate">{doc.name}</div>
-                              <div className="text-xs text-muted-foreground">
-                                {new Date(doc.uploadedAt).toLocaleDateString('es-UY')} • {doc.uploadedBy || 'Cliente'}
-                              </div>
-                            </div>
-                            {doc.data && (
-                              <a
-                                href={doc.data}
-                                download={doc.name}
-                                className="text-xs text-accent hover:underline ml-2 shrink-0"
-                                onClick={(e) => e.stopPropagation()}
-                              >
-                                Descargar
-                              </a>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )
-              })()}
             </TabsContent>
 
             {/* ── Client Reports Tab ── */}
