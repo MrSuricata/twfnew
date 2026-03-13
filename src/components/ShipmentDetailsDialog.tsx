@@ -833,53 +833,57 @@ export default function ShipmentDetailsDialog({
                       <Warehouse size={16} className="text-accent" />
                       Datos Operativos ({editedShipment.operativas.length} registros)
                     </h4>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                      <div className="bg-accent/10 rounded-lg p-3 text-center">
-                        <div className="text-lg font-bold text-accent">
-                          {editedShipment.operativas.reduce((sum, o) => sum + o.PKGS, 0).toLocaleString()}
+                    {/* Summary stats */}
+                    <div className="grid grid-cols-5 gap-2 mb-4">
+                      {[
+                        { value: editedShipment.operativas.length, unit: '', label: 'CNTR' },
+                        { value: editedShipment.operativas.reduce((s, o) => s + o.PKGS, 0).toLocaleString(), unit: '', label: 'Bultos' },
+                        { value: editedShipment.operativas.reduce((s, o) => s + o.KG, 0).toLocaleString(), unit: 'kg', label: 'Peso' },
+                        { value: editedShipment.operativas.reduce((s, o) => s + o.M3, 0).toFixed(1), unit: 'm³', label: 'Vol.' },
+                        { value: editedShipment.operativas[0]?.OPERATIVA || '-', unit: '', label: 'Tipo Op.' },
+                      ].map((stat, i) => (
+                        <div key={i} className={`text-center py-2 rounded-lg ${i === 0 ? 'bg-accent/10' : 'bg-muted/50'}`}>
+                          <div className={`text-sm font-bold leading-tight ${i === 0 ? 'text-accent' : ''} truncate px-1`}>
+                            {stat.value}<span className="text-[10px] font-normal ml-0.5">{stat.unit}</span>
+                          </div>
+                          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{stat.label}</div>
                         </div>
-                        <div className="text-xs text-muted-foreground">Bultos</div>
-                      </div>
-                      <div className="bg-muted rounded-lg p-3 text-center">
-                        <div className="text-lg font-bold">
-                          {editedShipment.operativas.reduce((sum, o) => sum + o.KG, 0).toLocaleString()} kg
-                        </div>
-                        <div className="text-xs text-muted-foreground">Peso</div>
-                      </div>
-                      <div className="bg-muted rounded-lg p-3 text-center">
-                        <div className="text-lg font-bold">
-                          {editedShipment.operativas.reduce((sum, o) => sum + o.M3, 0).toFixed(1)} m³
-                        </div>
-                        <div className="text-xs text-muted-foreground">Volumen</div>
-                      </div>
-                      <div className="bg-muted rounded-lg p-3 text-center">
-                        <div className="text-lg font-bold">
-                          {editedShipment.operativas[0]?.OPERATIVA || '-'}
-                        </div>
-                        <div className="text-xs text-muted-foreground">Tipo Op.</div>
-                      </div>
+                      ))}
                     </div>
 
-                    {editedShipment.operativas.map((op, idx) => (
-                      <div key={idx} className="border rounded-lg p-3 mb-2">
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="font-mono font-semibold text-sm">{op.CNTR_OP || `#${idx + 1}`}</span>
-                          <div className="flex gap-2">
-                            {op.TIPO && <Badge variant="secondary" className="text-xs">{op.TIPO}</Badge>}
-                            {op.OPERATIVA && <Badge className="text-xs bg-accent">{op.OPERATIVA}</Badge>}
+                    {/* Container cards */}
+                    <div className="space-y-2">
+                      {editedShipment.operativas.map((op, idx) => (
+                        <div key={idx} className="rounded-lg border overflow-hidden">
+                          {/* Header row */}
+                          <div className="flex items-center gap-2 px-3 py-2 bg-muted/30 border-b">
+                            <span className="font-mono font-bold text-xs">{op.CNTR_OP || `#${idx + 1}`}</span>
+                            {op.TIPO && <Badge variant="outline" className="text-[10px] h-4 px-1.5">{op.TIPO}</Badge>}
+                            {op.OPERATIVA && (
+                              <Badge className={`text-[10px] h-4 px-1.5 ml-auto ${
+                                op.OPERATIVA === 'TRASIEGO' ? 'bg-blue-500' :
+                                op.OPERATIVA === 'DEVUELTO' ? 'bg-orange-500' :
+                                'bg-green-600'
+                              }`}>{op.OPERATIVA}</Badge>
+                            )}
+                          </div>
+                          {/* Body */}
+                          <div className="px-3 py-2">
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-1.5 text-xs">
+                              <div><span className="text-muted-foreground">Salida:</span> <span className="font-medium">{op.SALIDA || '-'}</span></div>
+                              <div><span className="text-muted-foreground">ETA Fisc:</span> <span className="font-medium">{op.ETA_FISC || '-'}</span></div>
+                              <div><span className="text-muted-foreground">Fiscal:</span> <span className="font-medium">{op.FISCAL || '-'}</span></div>
+                              <div><span className="text-muted-foreground">Depósito:</span> <span className="font-medium">{op.DEPOSITO || '-'}</span></div>
+                              <div><span className="text-muted-foreground">Transporte:</span> <span className="font-medium">{op.TRANSPORTE || '-'}</span></div>
+                              <div><span className="text-muted-foreground">Horario:</span> <span className="font-medium">{op.HORARIO || '-'}</span></div>
+                              {op.DESCRIPCION && (
+                                <div className="col-span-2"><span className="text-muted-foreground">Merc:</span> <span className="font-medium">{op.DESCRIPCION}</span></div>
+                              )}
+                            </div>
                           </div>
                         </div>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs">
-                          <div><span className="text-muted-foreground">Salida:</span> <span className="font-medium">{op.SALIDA || '-'}</span></div>
-                          <div><span className="text-muted-foreground">Fiscal:</span> <span className="font-medium">{op.FISCAL || '-'}</span></div>
-                          <div><span className="text-muted-foreground">Transporte:</span> <span className="font-medium">{op.TRANSPORTE || '-'}</span></div>
-                          <div><span className="text-muted-foreground">Depósito:</span> <span className="font-medium">{op.DEPOSITO || '-'}</span></div>
-                          {op.DESCRIPCION && (
-                            <div className="col-span-2 md:col-span-4"><span className="text-muted-foreground">Desc:</span> <span className="font-medium">{op.DESCRIPCION}</span></div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
                 </>
               ) : (
