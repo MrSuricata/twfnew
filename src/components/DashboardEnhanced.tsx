@@ -9,7 +9,8 @@ import {
   ChatCircleText,
   ChartBar,
   UsersThree,
-  CalendarBlank
+  CalendarBlank,
+  Package
 } from '@phosphor-icons/react'
 
 import AgendaCalendar from './agenda/AgendaCalendar'
@@ -84,8 +85,8 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
               <span className="hidden sm:inline">Analíticas</span>
             </TabsTrigger>
             <TabsTrigger value="tracking">
-              <MagnifyingGlass size={20} className="mr-2" />
-              <span className="hidden sm:inline">Tracking</span>
+              <Package size={20} className="mr-2" />
+              <span className="hidden sm:inline">Cargas</span>
             </TabsTrigger>
             <TabsTrigger value="excel-import">
               <Database size={20} className="mr-2" />

@@ -87,3 +87,70 @@
 html {
   scroll-behavior: smooth;
 }
+
+/* ── Animated hero particles ── */
+@keyframes float-up {
+  0% { transform: translateY(0) translateX(0) scale(1); opacity: 0; }
+  10% { opacity: 0.6; }
+  90% { opacity: 0.6; }
+  100% { transform: translateY(-100vh) translateX(40px) scale(0.3); opacity: 0; }
+}
+@keyframes float-up-alt {
+  0% { transform: translateY(0) translateX(0) scale(0.8); opacity: 0; }
+  10% { opacity: 0.4; }
+  90% { opacity: 0.4; }
+  100% { transform: translateY(-100vh) translateX(-30px) scale(0.2); opacity: 0; }
+}
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.3; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.15); }
+}
+@keyframes slide-in-left {
+  from { transform: translateX(-60px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+.hero-particle {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.15);
+  pointer-events: none;
+}
+.hero-particle:nth-child(1) { width: 6px; height: 6px; left: 10%; bottom: -10%; animation: float-up 8s linear infinite; }
+.hero-particle:nth-child(2) { width: 4px; height: 4px; left: 25%; bottom: -10%; animation: float-up-alt 11s linear 2s infinite; }
+.hero-particle:nth-child(3) { width: 8px; height: 8px; left: 45%; bottom: -10%; animation: float-up 13s linear 1s infinite; }
+.hero-particle:nth-child(4) { width: 3px; height: 3px; left: 60%; bottom: -10%; animation: float-up-alt 9s linear 3s infinite; }
+.hero-particle:nth-child(5) { width: 5px; height: 5px; left: 75%; bottom: -10%; animation: float-up 10s linear 0.5s infinite; }
+.hero-particle:nth-child(6) { width: 7px; height: 7px; left: 90%; bottom: -10%; animation: float-up-alt 12s linear 4s infinite; }
+.hero-particle:nth-child(7) { width: 4px; height: 4px; left: 35%; bottom: -10%; animation: float-up 14s linear 6s infinite; }
+.hero-particle:nth-child(8) { width: 6px; height: 6px; left: 55%; bottom: -10%; animation: float-up-alt 10s linear 1.5s infinite; }
+
+/* ── Section parallax backgrounds ── */
+.section-bg-cover {
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+}
+@media (max-width: 768px) {
+  .section-bg-cover { background-attachment: scroll; }
+}
+
+/* ── Smooth reveal on scroll ── */
+.reveal-on-scroll {
+  opacity: 0;
+  transform: translateY(30px);
+  transition: opacity 0.7s ease-out, transform 0.7s ease-out;
+}
+.reveal-on-scroll.revealed {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* ── Operations gallery ── */
+.ops-gallery-img {
+  transition: transform 0.5s ease, filter 0.5s ease;
+}
+.ops-gallery-img:hover {
+  transform: scale(1.05);
+  filter: brightness(1.1);
+}

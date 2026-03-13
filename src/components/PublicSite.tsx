@@ -228,9 +228,10 @@ function PublicSite({
       <nav className="fixed top-0 left-0 right-0 z-50 bg-background/95 backdrop-blur-sm border-b border-border">
         <div className="max-w-7xl mx-auto px-4 md:px-6">
           <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-2">
-              <Boat size={32} weight="fill" className="text-primary" />
-              <span className="text-xl font-bold text-primary">TWF</span>
+            <div className="flex items-center gap-3">
+              <img src="/images/twf-icon-dark.png" alt="TWF" className="h-9 w-9" />
+              <img src="/images/twf-text-dark-new.png" alt="Transit World Forwarding" className="h-7 hidden sm:block" />
+              <span className="text-xl font-bold text-primary sm:hidden">TWF</span>
             </div>
 
             <div className="hidden md:flex items-center gap-8">
@@ -246,8 +247,8 @@ function PublicSite({
               <button onClick={() => scrollToSection('nosotros')} className="text-sm font-semibold text-foreground hover:text-accent transition-colors">
                 Nosotros
               </button>
-              <button onClick={() => scrollToSection('cobertura')} className="text-sm font-semibold text-foreground hover:text-accent transition-colors">
-                Cobertura
+              <button onClick={() => scrollToSection('casos')} className="text-sm font-semibold text-foreground hover:text-accent transition-colors">
+                Casos Reales
               </button>
               <button onClick={() => scrollToSection('faq')} className="text-sm font-semibold text-foreground hover:text-accent transition-colors">
                 FAQ
@@ -283,8 +284,8 @@ function PublicSite({
                   <button onClick={() => scrollToSection('nosotros')} className="text-left text-lg font-semibold text-foreground hover:text-accent transition-colors">
                     Nosotros
                   </button>
-                  <button onClick={() => scrollToSection('cobertura')} className="text-left text-lg font-semibold text-foreground hover:text-accent transition-colors">
-                    Cobertura
+                  <button onClick={() => scrollToSection('casos')} className="text-left text-lg font-semibold text-foreground hover:text-accent transition-colors">
+                    Casos Reales
                   </button>
                   <button onClick={() => scrollToSection('faq')} className="text-left text-lg font-semibold text-foreground hover:text-accent transition-colors">
                     FAQ
@@ -302,78 +303,111 @@ function PublicSite({
         </div>
       </nav>
 
-      <section id="inicio" className="relative pt-24 pb-16 md:pt-32 md:pb-24 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary via-primary/95 to-secondary -z-10" />
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSAxMCAwIEwgMCAwIDAgMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS1vcGFjaXR5PSIwLjA1IiBzdHJva2Utd2lkdGg9IjEiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JpZCkiLz48L3N2Zz4=')] opacity-40 -z-10" />
-        
-        <div className="max-w-7xl mx-auto px-4 md:px-6">
+      <section id="inicio" className="relative pt-24 pb-16 md:pt-32 md:pb-24 overflow-hidden min-h-[85vh] flex items-center">
+        {/* Real background image */}
+        <div className="absolute inset-0 -z-20">
+          <img src="/images/hero-bg.jpg" alt="" className="w-full h-full object-cover" />
+        </div>
+        {/* Dark overlay for readability */}
+        <div className="absolute inset-0 bg-gradient-to-b from-primary/80 via-primary/70 to-primary/90 -z-10" />
+        {/* Animated floating particles */}
+        <div className="absolute inset-0 overflow-hidden -z-5">
+          <div className="hero-particle" />
+          <div className="hero-particle" />
+          <div className="hero-particle" />
+          <div className="hero-particle" />
+          <div className="hero-particle" />
+          <div className="hero-particle" />
+          <div className="hero-particle" />
+          <div className="hero-particle" />
+        </div>
+
+        <div className="max-w-7xl mx-auto px-4 md:px-6 w-full">
           <div className="text-center text-white">
-            <motion.h1 
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6 }}
-              className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6 tracking-tight text-slate-50"
+            {/* Logo mark in hero */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.5 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.8, type: 'spring' }}
+              className="mb-6"
             >
-              Soluciones Logísticas Globales a Tu Medida
+              <img src="/images/twf-icon-white.png" alt="" className="h-16 md:h-20 mx-auto mb-2 drop-shadow-2xl" />
+            </motion.div>
+
+            <motion.h1
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.7, delay: 0.2 }}
+              className="text-4xl md:text-5xl lg:text-6xl font-bold mb-4 tracking-tight text-slate-50 drop-shadow-lg"
+            >
+              Soluciones Logísticas Globales
             </motion.h1>
-            <motion.p 
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.2 }}
-              className="text-lg md:text-xl mb-8 max-w-3xl mx-auto text-slate-100"
-            >
-              Transit World Forwarding – Tu socio estratégico en comercio internacional
-            </motion.p>
-            
-            <motion.div 
+            <motion.p
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.4 }}
+              className="text-lg md:text-xl mb-2 max-w-3xl mx-auto text-slate-200"
+            >
+              Transit World Forwarding
+            </motion.p>
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.6, delay: 0.6 }}
+              className="text-sm md:text-base mb-10 text-white/60 italic tracking-widest uppercase"
+            >
+              Let's Go Up
+            </motion.p>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.7 }}
               className="flex flex-col sm:flex-row gap-4 justify-center mb-16"
             >
-              <Button 
-                size="lg" 
-                onClick={() => scrollToSection('cotizacion')} 
-                className="bg-accent text-accent-foreground hover:bg-accent/90 hover:scale-105 transition-transform"
+              <Button
+                size="lg"
+                onClick={() => scrollToSection('cotizacion')}
+                className="bg-accent text-accent-foreground hover:bg-accent/90 hover:scale-105 transition-all shadow-xl shadow-accent/20"
               >
                 Solicitar Cotización
                 <ArrowRight size={20} className="ml-2" />
               </Button>
-              <Button 
-                size="lg" 
-                variant="outline" 
+              <Button
+                size="lg"
+                variant="outline"
                 onClick={() => scrollToSection('contacto')}
-                className="bg-white text-primary border-white hover:bg-white/90"
+                className="bg-white/10 text-white border-white/30 hover:bg-white/20 backdrop-blur-sm"
               >
                 Contactar Ahora
               </Button>
             </motion.div>
 
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.8, delay: 0.6 }}
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.8, delay: 0.9 }}
               className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto"
             >
-              <Card className="bg-white/10 backdrop-blur-sm border-white/20">
+              <Card className="bg-white/10 backdrop-blur-md border-white/10 hover:bg-white/15 transition-colors">
                 <CardContent className="pt-6 text-center">
                   <Lightning size={40} weight="fill" className="mx-auto mb-3 text-accent" />
                   <h3 className="font-semibold text-lg mb-2">Rapidez</h3>
-                  <p className="text-sm text-white/80">Operaciones ágiles y tiempos optimizados</p>
+                  <p className="text-sm text-white/70">Operaciones ágiles y tiempos optimizados</p>
                 </CardContent>
               </Card>
-              <Card className="bg-white/10 backdrop-blur-sm border-white/20">
+              <Card className="bg-white/10 backdrop-blur-md border-white/10 hover:bg-white/15 transition-colors">
                 <CardContent className="pt-6 text-center">
                   <Eye size={40} weight="fill" className="mx-auto mb-3 text-accent" />
                   <h3 className="font-semibold text-lg mb-2">Transparencia</h3>
-                  <p className="text-sm text-white/80">Comunicación clara en cada etapa</p>
+                  <p className="text-sm text-white/70">Comunicación clara en cada etapa</p>
                 </CardContent>
               </Card>
-              <Card className="bg-white/10 backdrop-blur-sm border-white/20">
+              <Card className="bg-white/10 backdrop-blur-md border-white/10 hover:bg-white/15 transition-colors">
                 <CardContent className="pt-6 text-center">
                   <Gauge size={40} weight="fill" className="mx-auto mb-3 text-accent" />
                   <h3 className="font-semibold text-lg mb-2">Eficiencia</h3>
-                  <p className="text-sm text-white/80">Soluciones inteligentes y efectivas</p>
+                  <p className="text-sm text-white/70">Soluciones inteligentes y efectivas</p>
                 </CardContent>
               </Card>
             </motion.div>
@@ -455,100 +489,169 @@ function PublicSite({
         </div>
       </section>
 
-      <section id="nosotros" className="py-16 md:py-24 bg-background">
+      {/* ── Nosotros ── with port background */}
+      <section id="nosotros" className="relative py-16 md:py-24 overflow-hidden">
+        <div className="absolute inset-0 -z-20">
+          <img src="/images/section-port.jpg" alt="" className="w-full h-full object-cover" />
+        </div>
+        <div className="absolute inset-0 bg-primary/85 -z-10" />
         <div className="max-w-7xl mx-auto px-4 md:px-6">
-          <div className="max-w-4xl mx-auto text-center">
-            <motion.h2 
+          <div className="max-w-4xl mx-auto text-center text-white">
+            <motion.h2
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6 }}
               viewport={{ once: true, margin: "-100px" }}
-              className="text-3xl md:text-4xl font-bold mb-6 text-foreground"
+              className="text-3xl md:text-4xl font-bold mb-6"
             >
               Sobre Nosotros
             </motion.h2>
-            <motion.p 
+            <motion.p
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.1 }}
               viewport={{ once: true, margin: "-100px" }}
-              className="text-lg text-muted-foreground mb-6 leading-relaxed"
+              className="text-lg text-white/80 mb-6 leading-relaxed"
             >
-              En <span className="font-semibold text-foreground">Transit World Forwarding</span> combinamos experiencia local con visión global para brindar soluciones logísticas eficientes y transparentes.
+              En <span className="font-semibold text-white">Transit World Forwarding</span> combinamos experiencia local con visión global para brindar soluciones logísticas eficientes y transparentes.
             </motion.p>
-            <motion.p 
+            <motion.p
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.2 }}
               viewport={{ once: true, margin: "-100px" }}
-              className="text-lg text-muted-foreground mb-8 leading-relaxed"
+              className="text-lg text-white/80 mb-8 leading-relaxed"
             >
-              Somos una empresa dinámica con atención cercana, foco regional y alcance internacional. 
+              Somos una empresa dinámica con atención cercana, foco regional y alcance internacional.
               Contamos con equipos operativos en Uruguay y Argentina, y una red de agentes internacionales confiables que nos permiten ofrecer soluciones integrales de transporte marítimo, terrestre y aéreo.
             </motion.p>
-            
-            <motion.div 
+
+            <motion.div
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.3 }}
               viewport={{ once: true, margin: "-100px" }}
-              className="grid grid-cols-1 md:grid-cols-4 gap-6 mt-12"
+              className="grid grid-cols-2 md:grid-cols-4 gap-6 mt-12"
             >
-              <div className="text-center">
-                <div className="text-3xl font-bold text-accent mb-2">+10</div>
-                <div className="text-sm text-muted-foreground">Años de Experiencia</div>
-              </div>
-              <div className="text-center">
-                <div className="text-3xl font-bold text-accent mb-2">2</div>
-                <div className="text-sm text-muted-foreground">Oficinas Operativas</div>
-              </div>
-              <div className="text-center">
-                <div className="text-3xl font-bold text-accent mb-2">+50</div>
-                <div className="text-sm text-muted-foreground">Destinos Conectados</div>
-              </div>
-              <div className="text-center">
-                <div className="text-3xl font-bold text-accent mb-2">24/7</div>
-                <div className="text-sm text-muted-foreground">Atención Continua</div>
-              </div>
+              {[
+                { num: '+10', label: 'Años de Experiencia' },
+                { num: '2', label: 'Oficinas Operativas' },
+                { num: '+50', label: 'Destinos Conectados' },
+                { num: '24/7', label: 'Atención Continua' },
+              ].map((stat, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, scale: 0.8 }}
+                  whileInView={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.5, delay: 0.3 + i * 0.1 }}
+                  viewport={{ once: true }}
+                  className="text-center"
+                >
+                  <div className="text-3xl md:text-4xl font-bold text-accent mb-2">{stat.num}</div>
+                  <div className="text-sm text-white/70">{stat.label}</div>
+                </motion.div>
+              ))}
             </motion.div>
 
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.4 }}
+              transition={{ duration: 0.6, delay: 0.5 }}
               viewport={{ once: true, margin: "-100px" }}
               className="grid grid-cols-1 md:grid-cols-4 gap-6 mt-12 text-left"
             >
-              <Card>
-                <CardContent className="pt-6">
-                  <h4 className="font-semibold mb-2 text-foreground">Compromiso</h4>
-                  <p className="text-sm text-muted-foreground">Dedicación total con cada cliente y operación</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-6">
-                  <h4 className="font-semibold mb-2 text-foreground">Eficiencia</h4>
-                  <p className="text-sm text-muted-foreground">Procesos optimizados y resultados medibles</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-6">
-                  <h4 className="font-semibold mb-2 text-foreground">Comunicación</h4>
-                  <p className="text-sm text-muted-foreground">Información clara y constante</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-6">
-                  <h4 className="font-semibold mb-2 text-foreground">Soluciones</h4>
-                  <p className="text-sm text-muted-foreground">Estrategias inteligentes y personalizadas</p>
-                </CardContent>
-              </Card>
+              {[
+                { title: 'Compromiso', desc: 'Dedicación total con cada cliente y operación' },
+                { title: 'Eficiencia', desc: 'Procesos optimizados y resultados medibles' },
+                { title: 'Comunicación', desc: 'Información clara y constante' },
+                { title: 'Soluciones', desc: 'Estrategias inteligentes y personalizadas' },
+              ].map((val, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: 0.5 + i * 0.1 }}
+                  viewport={{ once: true }}
+                >
+                  <Card className="bg-white/10 backdrop-blur-sm border-white/10 h-full">
+                    <CardContent className="pt-6">
+                      <h4 className="font-semibold mb-2 text-white">{val.title}</h4>
+                      <p className="text-sm text-white/70">{val.desc}</p>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              ))}
+
+            {/* Team photo */}
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.7, delay: 0.6 }}
+              viewport={{ once: true }}
+              className="mt-12 rounded-2xl overflow-hidden shadow-2xl"
+            >
+              <img
+                src="/images/team-containers.jpg"
+                alt="Equipo TWF en depósito de contenedores"
+                className="w-full h-48 md:h-72 object-cover object-center"
+              />
+              <div className="bg-white/10 backdrop-blur-sm px-6 py-4 text-center">
+                <p className="text-white/80 text-sm">Nuestro equipo en terreno — supervisión directa de operativas en depósito fiscal</p>
+              </div>
+            </motion.div>
             </motion.div>
           </div>
         </div>
       </section>
 
-      <section id="cobertura" className="py-16 md:py-24 bg-card">
+      {/* ── Operaciones Reales — gallery with real photos ── */}
+      <section className="py-16 md:py-20 bg-background">
+        <div className="max-w-7xl mx-auto px-4 md:px-6">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+            viewport={{ once: true, margin: "-100px" }}
+            className="text-center mb-10"
+          >
+            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-foreground">Nuestras Operativas</h2>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+              Imágenes reales de nuestras operaciones logísticas en puertos, depósitos y rutas internacionales
+            </p>
+          </motion.div>
+
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            {[
+              { src: '/images/team-owner.jpg', label: 'Supervisión en depósito de contenedores' },
+              { src: '/images/ops-loading.jpg', label: 'Descarga de contenedor a camión' },
+              { src: '/images/ops-warehouse.jpg', label: 'Depósito fiscal — Mercadería consolidada' },
+              { src: '/images/team-yard-wide.jpg', label: 'Equipo TWF en terminal de contenedores' },
+              { src: '/images/ops-supervising.jpg', label: 'Supervisión de carga en camión' },
+              { src: '/images/ops-container-yard.jpg', label: 'Operativa en patio de contenedores Maersk' },
+            ].map((photo, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, scale: 0.9 }}
+                whileInView={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.5, delay: i * 0.08 }}
+                viewport={{ once: true }}
+                className="relative group overflow-hidden rounded-xl aspect-[4/3]"
+              >
+                <img
+                  src={photo.src}
+                  alt={photo.label}
+                  className="w-full h-full object-cover ops-gallery-img"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-4">
+                  <span className="text-white text-sm font-medium">{photo.label}</span>
+                </div>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="cobertura" className="relative py-16 md:py-24 bg-card overflow-hidden">
         <div className="max-w-7xl mx-auto px-4 md:px-6">
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
@@ -670,6 +773,88 @@ function PublicSite({
               ))}
             </div>
           </motion.div>
+        </div>
+      </section>
+
+      {/* ── Casos Reales ── */}
+      <section id="casos" className="relative py-16 md:py-24 overflow-hidden">
+        <div className="absolute inset-0 -z-20">
+          <img src="/images/section-truck.jpg" alt="" className="w-full h-full object-cover" />
+        </div>
+        <div className="absolute inset-0 bg-primary/90 -z-10" />
+        <div className="max-w-7xl mx-auto px-4 md:px-6">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+            viewport={{ once: true, margin: "-100px" }}
+            className="text-center mb-12"
+          >
+            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-white">Casos Reales</h2>
+            <p className="text-lg text-white/70 max-w-2xl mx-auto">
+              Operaciones reales que gestionamos para nuestros clientes
+            </p>
+          </motion.div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            {[
+              {
+                img: '/images/ops-loading.jpg',
+                title: 'Importación Maquinaria Agrícola',
+                origin: 'Shanghai, China',
+                dest: 'Montevideo, Uruguay',
+                mode: 'Marítimo FCL',
+                containers: '2x 40HC',
+                desc: 'Coordinación completa de embarque de maquinaria pesada con embalaje especial, despacho aduanero y entrega en planta del cliente.',
+              },
+              {
+                img: '/images/ops-container-yard.jpg',
+                title: 'Consolidado Multi-Cliente',
+                origin: 'Ningbo, China',
+                dest: 'Buenos Aires, Argentina',
+                mode: 'Marítimo LCL',
+                containers: '1x 40HC consolidado',
+                desc: 'Gestión de carga consolidada para múltiples importadores. Coordinación de documentación, desconsolidación y distribución final.',
+              },
+              {
+                img: '/images/ops-supervising.jpg',
+                title: 'Proyecto Logístico Industrial',
+                origin: 'Hamburgo, Alemania',
+                dest: 'Córdoba, Argentina',
+                mode: 'Marítimo + Terrestre',
+                containers: '3x 20ST',
+                desc: 'Operación puerta a puerta de insumos industriales con tránsito por puerto de Montevideo y transporte terrestre cross-border.',
+              },
+            ].map((caso, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, y: 30 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: i * 0.15 }}
+                viewport={{ once: true }}
+              >
+                <Card className="bg-white/10 backdrop-blur-sm border-white/10 overflow-hidden h-full">
+                  <div className="aspect-[16/10] overflow-hidden">
+                    <img src={caso.img} alt={caso.title} className="w-full h-full object-cover hover:scale-105 transition-transform duration-500" />
+                  </div>
+                  <CardContent className="pt-5 text-white">
+                    <h3 className="font-bold text-lg mb-3">{caso.title}</h3>
+                    <div className="space-y-1 mb-4 text-sm">
+                      <div className="flex items-center gap-2 text-white/70">
+                        <MapPin size={14} className="text-accent" weight="fill" />
+                        <span>{caso.origin} → {caso.dest}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-white/70">
+                        <Boat size={14} className="text-accent" weight="fill" />
+                        <span>{caso.mode} — {caso.containers}</span>
+                      </div>
+                    </div>
+                    <p className="text-sm text-white/60 leading-relaxed">{caso.desc}</p>
+                  </CardContent>
+                </Card>
+              </motion.div>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -1076,13 +1261,14 @@ function PublicSite({
         <div className="max-w-7xl mx-auto px-4 md:px-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
             <div>
-              <div className="flex items-center gap-2 mb-4">
-                <Boat size={32} weight="fill" />
-                <span className="text-xl font-bold">TWF</span>
+              <div className="flex items-center gap-3 mb-4">
+                <img src="/images/twf-icon-white.png" alt="TWF" className="h-9 w-9" />
+                <img src="/images/twf-text-white-new.png" alt="Transit World Forwarding" className="h-6" />
               </div>
               <p className="text-sm text-primary-foreground/80">
                 Soluciones logísticas globales con atención local
               </p>
+              <p className="text-xs text-primary-foreground/50 mt-1 italic tracking-wider">Let's Go Up</p>
             </div>
 
             <div>

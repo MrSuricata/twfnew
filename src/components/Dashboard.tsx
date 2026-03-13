@@ -160,8 +160,8 @@ export default function Dashboard({ onLogout }: DashboardProps) {
               Testimonios
             </TabsTrigger>
             <TabsTrigger value="tracking">
-              <MagnifyingGlass size={20} className="mr-2" />
-              Tracking
+              <Package size={20} className="mr-2" />
+              Cargas
             </TabsTrigger>
             <TabsTrigger value="stats">
               <ChartLine size={20} className="mr-2" />

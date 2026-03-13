@@ -351,20 +351,34 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
 
   return (
     <div className="space-y-4">
-      {/* ── Quick Stats Row ── */}
+      {/* ── Quick Stats Row (clickable filters) ── */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
         {[
-          { label: 'Total', value: stats.total, color: 'text-foreground', bg: 'bg-muted/50' },
-          { label: 'Vencidos', value: stats.vencidos, color: 'text-red-600', bg: stats.vencidos > 0 ? 'bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900' : 'bg-muted/50' },
-          { label: 'Urgentes', value: stats.urgentes, color: 'text-orange-600', bg: stats.urgentes > 0 ? 'bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-900' : 'bg-muted/50' },
-          { label: 'En Tránsito', value: stats.enTransito, color: 'text-blue-600', bg: 'bg-muted/50' },
-          { label: 'En Fiscal', value: stats.enFiscal, color: 'text-green-600', bg: 'bg-muted/50' },
-        ].map((s, i) => (
-          <div key={i} className={`rounded-lg px-3 py-2 ${s.bg}`}>
-            <div className={`text-lg font-bold leading-tight ${s.color}`}>{s.value}</div>
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{s.label}</div>
-          </div>
-        ))}
+          { label: 'Total', value: stats.total, color: 'text-foreground', bg: 'bg-muted/50', filterAction: () => { setStatusFilter('all'); setLibreFilter('all'); setSearchText(''); setCurrentPage(1) } },
+          { label: 'Vencidos', value: stats.vencidos, color: 'text-red-600', bg: stats.vencidos > 0 ? 'bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900' : 'bg-muted/50', filterAction: () => { setStatusFilter('all'); setLibreFilter('vencido'); setSearchText(''); setCurrentPage(1) } },
+          { label: 'Urgentes', value: stats.urgentes, color: 'text-orange-600', bg: stats.urgentes > 0 ? 'bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-900' : 'bg-muted/50', filterAction: () => { setStatusFilter('all'); setLibreFilter('urgente'); setSearchText(''); setCurrentPage(1) } },
+          { label: 'En Tránsito', value: stats.enTransito, color: 'text-blue-600', bg: 'bg-muted/50', filterAction: () => { setLibreFilter('all'); setStatusFilter('en_transito'); setSearchText(''); setCurrentPage(1) } },
+          { label: 'En Fiscal', value: stats.enFiscal, color: 'text-green-600', bg: 'bg-muted/50', filterAction: () => { setLibreFilter('all'); setStatusFilter('llego_fiscal'); setSearchText(''); setCurrentPage(1) } },
+        ].map((s, i) => {
+          // Determine if this card's filter is currently active
+          const isActive = (
+            (s.label === 'Total' && statusFilter === 'all' && libreFilter === 'all' && !searchText) ||
+            (s.label === 'Vencidos' && libreFilter === 'vencido') ||
+            (s.label === 'Urgentes' && libreFilter === 'urgente') ||
+            (s.label === 'En Tránsito' && statusFilter === 'en_transito') ||
+            (s.label === 'En Fiscal' && statusFilter === 'llego_fiscal')
+          )
+          return (
+            <button
+              key={i}
+              onClick={s.filterAction}
+              className={`rounded-lg px-3 py-2 text-left transition-all hover:scale-[1.03] hover:shadow-md cursor-pointer ${s.bg} ${isActive ? 'ring-2 ring-accent ring-offset-1 shadow-sm' : ''}`}
+            >
+              <div className={`text-lg font-bold leading-tight ${s.color}`}>{s.value}</div>
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{s.label}</div>
+            </button>
+          )
+        })}
       </div>
 
       {/* ── Filters + Search Bar ── */}
