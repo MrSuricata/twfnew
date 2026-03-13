@@ -875,7 +875,6 @@ export default function ShipmentDetailsDialog({
                               <div><span className="text-muted-foreground">Fiscal:</span> <span className="font-medium">{op.FISCAL || '-'}</span></div>
                               <div><span className="text-muted-foreground">Depósito:</span> <span className="font-medium">{op.DEPOSITO || '-'}</span></div>
                               <div><span className="text-muted-foreground">Transporte:</span> <span className="font-medium">{op.TRANSPORTE || '-'}</span></div>
-                              <div><span className="text-muted-foreground">Horario:</span> <span className="font-medium">{op.HORARIO || '-'}</span></div>
                               {op.DESCRIPCION && (
                                 <div className="col-span-2"><span className="text-muted-foreground">Merc:</span> <span className="font-medium">{op.DESCRIPCION}</span></div>
                               )}
