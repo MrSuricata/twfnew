@@ -321,8 +321,10 @@ export default function PublicSite({
       }`}>
         <div className="max-w-7xl mx-auto px-4 md:px-6">
           <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-2">
-              <img src="/images/twf-logo.png" alt="Transit World Forwarding" className="h-10 w-auto" />
+            <div className="flex items-center gap-3">
+              <img src="/images/twf-icon-dark.png" alt="TWF" className="h-9 w-9" />
+              <img src="/images/twf-text-dark-new.png" alt="Transit World Forwarding" className="h-7 hidden sm:block" />
+              <span className="text-xl font-bold text-primary sm:hidden">TWF</span>
             </div>
 
             <div className="hidden lg:flex items-center gap-6">
@@ -422,82 +424,98 @@ export default function PublicSite({
         </div>
       </nav>
 
-      <section id="inicio" className="relative pt-24 pb-16 md:pt-32 md:pb-24 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/80 via-primary/70 to-secondary/80 pointer-events-none" />
-        <div className="absolute inset-0 opacity-40 pointer-events-none">
-          <img
-            src="https://images.unsplash.com/photo-1566576721346-d4a3b4eaeb55?w=1600&auto=format&fit=crop"
-            alt="Buque de carga con contenedores navegando en ruta internacional"
-            className="w-full h-full object-cover"
-            loading="eager"
-          />
+      <section id="inicio" className="relative pt-24 pb-16 md:pt-32 md:pb-24 overflow-hidden min-h-[85vh] flex items-center">
+        <div className="absolute inset-0 -z-20">
+          <img src="/images/hero-bg.jpg" alt="" className="w-full h-full object-cover" loading="eager" />
         </div>
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSAxMCAwIEwgMCAwIDAgMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS1vcGFjaXR5PSIwLjA1IiBzdHJva2Utd2lkdGg9IjEiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JpZCkiLz48L3N2Zz4=')] opacity-40 pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-b from-primary/80 via-primary/70 to-primary/90 -z-10" />
+        <div className="absolute inset-0 overflow-hidden -z-5">
+          {[...Array(8)].map((_, i) => (
+            <div key={i} className="hero-particle" />
+          ))}
+        </div>
 
         <div className="max-w-7xl mx-auto px-4 md:px-6 relative z-10">
           <div className="text-center text-white">
-            <motion.h1 
+            <motion.div
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              transition={{ type: 'spring', stiffness: 100, delay: 0.2 }}
+              className="mb-6"
+            >
+              <img src="/images/twf-icon-white.png" alt="" className="h-16 md:h-20 mx-auto mb-2 drop-shadow-2xl" />
+            </motion.div>
+
+            <motion.h1
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6 }}
+              transition={{ duration: 0.6, delay: 0.3 }}
               className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6 tracking-tight drop-shadow-lg text-white"
             >
               {t.hero.title}
             </motion.h1>
-            <motion.p 
+            <motion.p
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.2 }}
-              className="text-lg md:text-xl mb-8 max-w-3xl mx-auto drop-shadow-md text-white/90"
+              transition={{ duration: 0.6, delay: 0.5 }}
+              className="text-lg md:text-xl mb-2 max-w-3xl mx-auto drop-shadow-md text-white/90"
             >
               {t.hero.subtitle}
             </motion.p>
-            
-            <motion.div 
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ duration: 0.8, delay: 0.7 }}
+              className="text-accent font-semibold text-lg md:text-xl italic mb-8"
+            >
+              Let's Go Up
+            </motion.p>
+
+            <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.4 }}
+              transition={{ duration: 0.6, delay: 0.8 }}
               className="flex flex-col sm:flex-row gap-4 justify-center mb-16"
             >
-              <Button 
-                size="lg" 
-                onClick={() => scrollToSection('cotizacion')} 
+              <Button
+                size="lg"
+                onClick={() => scrollToSection('cotizacion')}
                 className="bg-accent text-accent-foreground hover:bg-accent/90 hover:scale-105 transition-transform"
               >
                 {t.hero.quoteButton}
                 <ArrowRight size={20} className="ml-2" />
               </Button>
-              <Button 
-                size="lg" 
-                variant="outline" 
+              <Button
+                size="lg"
+                variant="outline"
                 onClick={() => scrollToSection('contacto')}
-                className="bg-white text-primary border-white hover:bg-white/90"
+                className="bg-white/10 text-white border-white/30 hover:bg-white/20"
               >
                 {t.hero.contactButton}
               </Button>
             </motion.div>
 
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              transition={{ duration: 0.8, delay: 0.6 }}
+              transition={{ duration: 0.8, delay: 1.0 }}
               className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-4xl mx-auto"
             >
-              <Card className="bg-white/20 backdrop-blur-sm border-white/30">
+              <Card className="bg-white/10 backdrop-blur-sm border-white/20">
                 <CardContent className="pt-6 text-center">
                   <Lightning size={40} weight="fill" className="mx-auto mb-3 text-accent" />
                   <h3 className="font-semibold text-lg mb-2">{t.hero.speed}</h3>
                   <p className="text-sm text-white/80">{t.hero.speedDesc}</p>
                 </CardContent>
               </Card>
-              <Card className="bg-white/20 backdrop-blur-sm border-white/30">
+              <Card className="bg-white/10 backdrop-blur-sm border-white/20">
                 <CardContent className="pt-6 text-center">
                   <Eye size={40} weight="fill" className="mx-auto mb-3 text-accent" />
                   <h3 className="font-semibold text-lg mb-2">{t.hero.transparency}</h3>
                   <p className="text-sm text-white/80">{t.hero.transparencyDesc}</p>
                 </CardContent>
               </Card>
-              <Card className="bg-white/20 backdrop-blur-sm border-white/30">
+              <Card className="bg-white/10 backdrop-blur-sm border-white/20">
                 <CardContent className="pt-6 text-center">
                   <Gauge size={40} weight="fill" className="mx-auto mb-3 text-accent" />
                   <h3 className="font-semibold text-lg mb-2">{t.hero.efficiency}</h3>
@@ -610,63 +628,164 @@ export default function PublicSite({
         <div className="absolute inset-0 bg-primary -z-10" />
       </div>
 
-      <section id="nosotros" className="py-16 md:py-24 bg-background">
-        <div className="max-w-7xl mx-auto px-4 md:px-6">
+      <section id="nosotros" className="relative py-16 md:py-24 overflow-hidden">
+        <div className="absolute inset-0 -z-20">
+          <img src="/images/section-port.jpg" alt="" className="w-full h-full object-cover" loading="lazy" />
+        </div>
+        <div className="absolute inset-0 bg-primary/85 -z-10" />
+        <div className="max-w-7xl mx-auto px-4 md:px-6 relative z-10">
           <div className="max-w-4xl mx-auto text-center">
-            <motion.h2 
+            <motion.h2
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6 }}
               viewport={{ once: true, margin: "-100px" }}
-              className="text-3xl md:text-4xl font-bold mb-6 text-foreground"
+              className="text-3xl md:text-4xl font-bold mb-6 text-white"
             >
               Transit World Forwarding - {t.nav.about}
             </motion.h2>
-            <motion.p 
+            <motion.p
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.1 }}
               viewport={{ once: true, margin: "-100px" }}
-              className="text-lg text-muted-foreground mb-6 leading-relaxed"
+              className="text-lg text-white/80 mb-6 leading-relaxed"
             >
-              Con más de 15 años en comercio exterior, <span className="font-semibold text-foreground">Transit World Forwarding</span> conecta tu negocio con más de 250 destinos en los 5 continentes.
+              Con más de 15 años en comercio exterior, <span className="font-semibold text-white">Transit World Forwarding</span> conecta tu negocio con más de 250 destinos en los 5 continentes.
             </motion.p>
-            <motion.p 
+            <motion.p
               initial={{ opacity: 0, y: 20 }}
               whileInView={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.2 }}
               viewport={{ once: true, margin: "-100px" }}
-              className="text-lg text-muted-foreground mb-8 leading-relaxed"
+              className="text-lg text-white/80 mb-8 leading-relaxed"
             >
               Operamos desde Uruguay y Argentina con una red de agentes de confianza en los principales puertos del mundo. Cada cliente tiene un ejecutivo asignado que coordina su carga de punta a punta.
             </motion.p>
-            
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mt-12">
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.3 }}
+              viewport={{ once: true, margin: "-100px" }}
+              className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mt-12"
+            >
               {[
-                { icon: CalendarBlank, numValue: 15, prefix: '+', suffix: '', label: 'Años de Experiencia', delay: 0.2 },
-                { icon: MapPin, numValue: 3, prefix: '', suffix: '', label: 'Oficinas Operativas', delay: 0.3 },
-                { icon: Globe, numValue: 250, prefix: '+', suffix: '', label: 'Destinos Conectados', delay: 0.4 },
-                { icon: Headset, numValue: 0, prefix: '', suffix: '24/7', label: 'Atención Continua', delay: 0.5 }
+                { num: '+15', label: 'Años de Experiencia' },
+                { num: '3', label: 'Oficinas Operativas' },
+                { num: '+250', label: 'Destinos Conectados' },
+                { num: '24/7', label: 'Atención Continua' }
               ].map((stat, idx) => (
                 <motion.div
                   key={idx}
-                  initial={{ opacity: 0, y: 30 }}
+                  initial={{ opacity: 0, y: 20 }}
                   whileInView={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.5, delay: stat.delay }}
+                  transition={{ duration: 0.4, delay: 0.3 + idx * 0.1 }}
+                  viewport={{ once: true }}
+                  className="bg-white/10 backdrop-blur-sm rounded-xl p-4"
+                >
+                  <div className="text-3xl md:text-4xl font-bold text-accent mb-2">{stat.num}</div>
+                  <div className="text-sm text-white/70">{stat.label}</div>
+                </motion.div>
+              ))}
+            </motion.div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.5 }}
+              viewport={{ once: true, margin: "-100px" }}
+              className="grid grid-cols-1 md:grid-cols-4 gap-6 mt-12 text-left"
+            >
+              {[
+                { title: 'Compromiso', desc: 'Dedicación total con cada cliente y operación' },
+                { title: 'Eficiencia', desc: 'Procesos optimizados y resultados medibles' },
+                { title: 'Comunicación', desc: 'Información clara y constante' },
+                { title: 'Soluciones', desc: 'Estrategias inteligentes y personalizadas' },
+              ].map((val, i) => (
+                <motion.div
+                  key={i}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: 0.5 + i * 0.1 }}
                   viewport={{ once: true }}
                 >
-                  <Card className="bg-accent/5 border-accent/10 hover:bg-accent/10 hover:shadow-lg transition-all duration-300 group">
-                    <CardContent className="pt-6 text-center">
-                      <stat.icon size={32} weight="duotone" className="text-accent mx-auto mb-3 group-hover:scale-110 transition-transform" />
-                      <div className="text-3xl font-bold text-accent mb-1">
-                        {stat.suffix ? stat.suffix : <AnimatedCounter target={stat.numValue} prefix={stat.prefix} />}
-                      </div>
-                      <div className="text-sm text-muted-foreground">{stat.label}</div>
+                  <Card className="bg-white/10 backdrop-blur-sm border-white/10 h-full">
+                    <CardContent className="pt-6">
+                      <h4 className="font-semibold mb-2 text-white">{val.title}</h4>
+                      <p className="text-sm text-white/70">{val.desc}</p>
                     </CardContent>
                   </Card>
                 </motion.div>
               ))}
-            </div>
+            </motion.div>
+
+            {/* Team photo */}
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.7, delay: 0.6 }}
+              viewport={{ once: true }}
+              className="mt-12 rounded-2xl overflow-hidden shadow-2xl"
+            >
+              <img
+                src="/images/team-containers.jpg"
+                alt="Equipo TWF en depósito de contenedores"
+                className="w-full h-48 md:h-72 object-cover object-center"
+                loading="lazy"
+              />
+              <div className="bg-white/10 backdrop-blur-sm px-6 py-4 text-center">
+                <p className="text-white/80 text-sm">Nuestro equipo en terreno — supervisión directa de operativas en depósito fiscal</p>
+              </div>
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
+      {/* ── Operaciones Reales — gallery ── */}
+      <section className="py-16 md:py-20 bg-background">
+        <div className="max-w-7xl mx-auto px-4 md:px-6">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+            viewport={{ once: true, margin: "-100px" }}
+            className="text-center mb-10"
+          >
+            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-foreground">Nuestras Operativas</h2>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+              Imágenes reales de nuestras operaciones logísticas en puertos, depósitos y rutas internacionales
+            </p>
+          </motion.div>
+
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            {[
+              { src: '/images/ops-loading.jpg', label: 'Carga de contenedores' },
+              { src: '/images/ops-crane-port.jpg', label: 'Operativa portuaria' },
+              { src: '/images/ops-container-yard.jpg', label: 'Depósito de contenedores' },
+              { src: '/images/ops-warehouse.jpg', label: 'Desconsolidado en depósito' },
+              { src: '/images/ops-supervising.jpg', label: 'Supervisión en terreno' },
+              { src: '/images/ops-forklift.jpg', label: 'Manejo de mercadería' },
+            ].map((photo, idx) => (
+              <motion.div
+                key={idx}
+                initial={{ opacity: 0, scale: 0.95 }}
+                whileInView={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.4, delay: idx * 0.08 }}
+                viewport={{ once: true }}
+                className="relative rounded-xl overflow-hidden group cursor-default"
+              >
+                <img
+                  src={photo.src}
+                  alt={photo.label}
+                  className="w-full h-40 md:h-56 object-cover ops-gallery-img"
+                  loading="lazy"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-end p-4">
+                  <span className="text-white text-sm font-medium">{photo.label}</span>
+                </div>
+              </motion.div>
+            ))}
           </div>
         </div>
       </section>
@@ -908,9 +1027,9 @@ export default function PublicSite({
 
       <section id="contacto" className="py-16 md:py-24 bg-card relative overflow-hidden">
         <div className="absolute inset-0 opacity-10">
-          <img 
-            src="https://images.unsplash.com/photo-1600880292203-757bb62b4baf?w=1600&auto=format&fit=crop" 
-            alt="Equipo profesional de logística coordinando operaciones en oficina moderna"
+          <img
+            src="/images/team-yard-wide.jpg"
+            alt="Equipo TWF en operativa"
             className="w-full h-full object-cover"
             loading="lazy"
           />
@@ -1031,7 +1150,8 @@ export default function PublicSite({
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
             <div>
               <div className="flex items-center gap-2 mb-4">
-                <img src="/images/twf-text-white.png" alt="TWF" className="h-6 w-auto" />
+                <img src="/images/twf-icon-white.png" alt="TWF" className="h-8 w-8" />
+                <img src="/images/twf-text-white-new.png" alt="Transit World Forwarding" className="h-5 w-auto" />
               </div>
               <p className="text-sm text-primary-foreground/70 mb-4">
                 {t.footerNav.slogan2}

@@ -22,47 +22,47 @@ const defaultCaseStudies: CaseStudy[] = [
   {
     id: 'case-1',
     iconType: 'Boat',
-    type: 'FCL - Importación desde Asia',
-    title: 'Importación de Maquinaria Industrial desde China',
-    description: 'Coordinación integral de 2 contenedores 40\' HC con maquinaria pesada desde Shanghai a Montevideo, incluyendo gestión aduanera completa y entrega en planta del cliente.',
-    origin: 'Shanghai, China',
-    destination: 'Montevideo, Uruguay',
+    type: 'FCL — Desconsolidado en Depósito',
+    title: 'Recepción y Desconsolidado de Contenedores',
+    description: 'Operativa completa de recepción de contenedores en depósito fiscal, desconsolidado de mercadería paletizada y coordinación de entregas al importador final.',
+    origin: 'Puerto de Montevideo',
+    destination: 'Depósito Fiscal, MVD',
     results: [
-      { label: 'Tiempo de tránsito', value: '35 días' },
-      { label: 'Coordinación aduanera', value: '100% sin demoras' },
-      { label: 'Satisfacción del cliente', value: 'Excelente' }
+      { label: 'Contenedores procesados', value: '3 x 40\' HC' },
+      { label: 'Desconsolidado', value: 'Mismo día' },
+      { label: 'Entrega final', value: '< 48 horas' }
     ],
-    image: 'https://images.unsplash.com/photo-1494412574643-ff11b0a5c1c3?w=800&auto=format&fit=crop'
+    image: '/images/ops-warehouse.jpg'
   },
   {
     id: 'case-2',
     iconType: 'Package',
-    type: 'LCL - Consolidado Europa',
-    title: 'Consolidado de Repuestos desde Italia',
-    description: 'Servicio LCL optimizado para importador de autopartes. Carga consolidada desde Génova con desconsolidado en depósito fiscal y entrega directa al cliente en 48hs post-arribo.',
-    origin: 'Génova, Italia',
-    destination: 'Buenos Aires, Argentina',
+    type: 'Operativa Portuaria — Grúa',
+    title: 'Descarga y Supervisión en Puerto',
+    description: 'Coordinación de descarga con grúa portuaria, supervisión directa de operativa en terminal y gestión de liberación aduanera para retiro express.',
+    origin: 'Terminal Portuaria',
+    destination: 'Zona Franca, MVD',
     results: [
-      { label: 'Ahorro vs FCL', value: '45%' },
-      { label: 'Frecuencia', value: 'Quincenal' },
-      { label: 'Entregas a tiempo', value: '98%' }
+      { label: 'Supervisión', value: 'Directa en sitio' },
+      { label: 'Liberación', value: 'Express 24hs' },
+      { label: 'Carga íntegra', value: '100%' }
     ],
-    image: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=800&auto=format&fit=crop'
+    image: '/images/ops-crane-port.jpg'
   },
   {
     id: 'case-3',
     iconType: 'Truck',
-    type: 'Trasiego & Operativa Local',
-    title: 'Operativa de Trasiego en Terminal Montecon',
-    description: 'Coordinación de trasiego de contenedor con mercadería perecedera, gestión express de liberaciones portuarias y entrega directa en menos de 24 horas desde descarga del buque.',
-    origin: 'Puerto de Montevideo',
-    destination: 'Canelones, Uruguay',
+    type: 'Transporte Terrestre — Carga Completa',
+    title: 'Carga y Despacho de Camión Completo',
+    description: 'Supervisión de carga de camión completo en depósito, control de estiba y documentación para transporte terrestre regional con entrega puerta a puerta.',
+    origin: 'Depósito TWF',
+    destination: 'Interior / Región',
     results: [
-      { label: 'Tiempo total', value: '< 24 horas' },
-      { label: 'Gestión documental', value: 'Express' },
-      { label: 'Producto preservado', value: '100%' }
+      { label: 'Carga supervisada', value: 'Completa' },
+      { label: 'Documentación', value: 'En regla' },
+      { label: 'Tiempo total', value: '< 24 horas' }
     ],
-    image: 'https://images.unsplash.com/photo-1578575437130-527eed3abbec?w=800&auto=format&fit=crop'
+    image: '/images/ops-truck-loaded.jpg'
   }
 ]
 
@@ -100,9 +100,9 @@ export default function CasosExito() {
           viewport={{ once: true, margin: "-100px" }}
           className="text-center mb-12"
         >
-          <h2 className="text-3xl md:text-4xl font-bold mb-4 text-foreground">Casos de Éxito</h2>
+          <h2 className="text-3xl md:text-4xl font-bold mb-4 text-foreground">Casos Reales</h2>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-            Operativas reales que demuestran nuestro compromiso con soluciones logísticas eficientes y personalizadas
+            Operativas reales coordinadas por nuestro equipo en puertos, depósitos y rutas internacionales
           </p>
         </motion.div>
 
