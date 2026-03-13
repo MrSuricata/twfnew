@@ -30,7 +30,8 @@ import {
   Globe,
   Headset,
   CalendarBlank,
-  CaretUp
+  CaretUp,
+  X
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import { motion } from 'framer-motion'
@@ -114,6 +115,7 @@ export default function PublicSite({
   const [scrolled, setScrolled] = useState(false)
   const [activeSection, setActiveSection] = useState('inicio')
   const [showScrollTop, setShowScrollTop] = useState(false)
+  const [lightboxImg, setLightboxImg] = useState<{ src: string; label: string } | null>(null)
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -321,9 +323,9 @@ export default function PublicSite({
       }`}>
         <div className="max-w-7xl mx-auto px-4 md:px-6">
           <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-3">
-              <img src="/images/twf-icon-dark.png" alt="TWF" className="h-9 w-9" />
-              <img src="/images/twf-text-dark-new.png" alt="Transit World Forwarding" className="h-7 hidden sm:block" />
+            <div className="flex items-center gap-2">
+              <img src="/images/twf-icon-dark.png" alt="TWF" className="h-11 w-11" />
+              <img src="/images/twf-text-dark-new.png" alt="Transit World Forwarding" className="h-8 hidden sm:block" />
               <span className="text-xl font-bold text-primary sm:hidden">TWF</span>
             </div>
 
@@ -425,11 +427,11 @@ export default function PublicSite({
       </nav>
 
       <section id="inicio" className="relative pt-24 pb-16 md:pt-32 md:pb-24 overflow-hidden min-h-[85vh] flex items-center">
-        <div className="absolute inset-0 -z-20">
+        <div className="absolute inset-0 z-0">
           <img src="/images/hero-bg.jpg" alt="" className="w-full h-full object-cover" loading="eager" />
         </div>
-        <div className="absolute inset-0 bg-gradient-to-b from-primary/80 via-primary/70 to-primary/90 -z-10" />
-        <div className="absolute inset-0 overflow-hidden -z-5">
+        <div className="absolute inset-0 bg-gradient-to-b from-primary/80 via-primary/70 to-primary/90 z-[1]" />
+        <div className="absolute inset-0 overflow-hidden z-[2]">
           {[...Array(8)].map((_, i) => (
             <div key={i} className="hero-particle" />
           ))}
@@ -443,7 +445,7 @@ export default function PublicSite({
               transition={{ type: 'spring', stiffness: 100, delay: 0.2 }}
               className="mb-6"
             >
-              <img src="/images/twf-icon-white.png" alt="" className="h-16 md:h-20 mx-auto mb-2 drop-shadow-2xl" />
+              <img src="/images/twf-icon-white.png" alt="" className="h-20 md:h-28 mx-auto mb-2 drop-shadow-2xl" />
             </motion.div>
 
             <motion.h1
@@ -629,10 +631,10 @@ export default function PublicSite({
       </div>
 
       <section id="nosotros" className="relative py-16 md:py-24 overflow-hidden">
-        <div className="absolute inset-0 -z-20">
+        <div className="absolute inset-0 z-0">
           <img src="/images/section-port.jpg" alt="" className="w-full h-full object-cover" loading="lazy" />
         </div>
-        <div className="absolute inset-0 bg-primary/85 -z-10" />
+        <div className="absolute inset-0 bg-primary/85 z-[1]" />
         <div className="max-w-7xl mx-auto px-4 md:px-6 relative z-10">
           <div className="max-w-4xl mx-auto text-center">
             <motion.h2
@@ -773,7 +775,8 @@ export default function PublicSite({
                 whileInView={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.4, delay: idx * 0.08 }}
                 viewport={{ once: true }}
-                className="relative rounded-xl overflow-hidden group cursor-default"
+                className="relative rounded-xl overflow-hidden group cursor-pointer"
+                onClick={() => setLightboxImg(photo)}
               >
                 <img
                   src={photo.src}
@@ -1025,8 +1028,8 @@ export default function PublicSite({
         </div>
       </section>
 
-      <section id="contacto" className="py-16 md:py-24 bg-card relative overflow-hidden">
-        <div className="absolute inset-0 opacity-10">
+      <section id="contacto" className="py-16 md:py-24 relative overflow-hidden">
+        <div className="absolute inset-0 z-0 opacity-15">
           <img
             src="/images/team-yard-wide.jpg"
             alt="Equipo TWF en operativa"
@@ -1034,7 +1037,7 @@ export default function PublicSite({
             loading="lazy"
           />
         </div>
-        <div className="absolute inset-0 bg-gradient-to-br from-card via-card/90 to-primary/5 -z-10" />
+        <div className="absolute inset-0 bg-gradient-to-br from-card via-card/95 to-primary/5 z-[1]" />
         
         <div className="max-w-7xl mx-auto px-4 md:px-6 relative z-10">
           <motion.div 
@@ -1150,8 +1153,8 @@ export default function PublicSite({
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
             <div>
               <div className="flex items-center gap-2 mb-4">
-                <img src="/images/twf-icon-white.png" alt="TWF" className="h-8 w-8" />
-                <img src="/images/twf-text-white-new.png" alt="Transit World Forwarding" className="h-5 w-auto" />
+                <img src="/images/twf-icon-white.png" alt="TWF" className="h-10 w-10" />
+                <img src="/images/twf-text-white-new.png" alt="Transit World Forwarding" className="h-7 w-auto" />
               </div>
               <p className="text-sm text-primary-foreground/70 mb-4">
                 {t.footerNav.slogan2}
@@ -1226,6 +1229,37 @@ export default function PublicSite({
       >
         <CaretUp size={24} weight="bold" />
       </motion.button>
+
+      {/* ── Photo Lightbox ── */}
+      {lightboxImg && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4 cursor-pointer"
+          onClick={() => setLightboxImg(null)}
+        >
+          <button
+            onClick={() => setLightboxImg(null)}
+            className="absolute top-4 right-4 text-white/80 hover:text-white p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors z-[101]"
+            aria-label="Cerrar"
+          >
+            <X size={28} weight="bold" />
+          </button>
+          <motion.img
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ duration: 0.3 }}
+            src={lightboxImg.src}
+            alt={lightboxImg.label}
+            className="max-w-full max-h-[85vh] rounded-xl shadow-2xl object-contain cursor-default"
+            onClick={(e) => e.stopPropagation()}
+          />
+          <div className="absolute bottom-6 left-0 right-0 text-center">
+            <span className="text-white/90 text-lg font-medium bg-black/40 px-4 py-2 rounded-full">{lightboxImg.label}</span>
+          </div>
+        </motion.div>
+      )}
     </div>
   )
 }
