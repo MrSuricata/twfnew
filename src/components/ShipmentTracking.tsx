@@ -87,8 +87,10 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
   const handleReportFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    if (file.size > 3 * 1024 * 1024) {
-      toast.error('El archivo no debe superar los 3MB')
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('El archivo no debe superar los 5MB', { duration: 5000 })
+      // Reset the input so user can try again
+      e.target.value = ''
       return
     }
     setReportFile(file)
@@ -591,7 +593,7 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
                   <label htmlFor="report-file" className="cursor-pointer">
                     <UploadSimple size={32} className="mx-auto mb-2 text-muted-foreground" />
                     <p className="text-sm font-medium">Seleccionar archivo</p>
-                    <p className="text-xs text-muted-foreground mt-1">PDF, DOC, DOCX, XLS, XLSX — hasta 3MB</p>
+                    <p className="text-xs text-muted-foreground mt-1">PDF, DOC, DOCX, XLS, XLSX — hasta 5MB</p>
                   </label>
                 )}
                 <input
