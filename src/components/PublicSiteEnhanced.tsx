@@ -116,7 +116,7 @@ export default function PublicSite({
   const [activeSection, setActiveSection] = useState('inicio')
   const [showScrollTop, setShowScrollTop] = useState(false)
   const [lightboxImg, setLightboxImg] = useState<{ src: string; label: string } | null>(null)
-  const logoRef = useRef<HTMLButtonElement>(null)
+  const logoIconRef = useRef<HTMLImageElement>(null)
   const navContainerRef = useRef<HTMLDivElement>(null)
   const [logoTranslateX, setLogoTranslateX] = useState(0)
   const [formData, setFormData] = useState({
@@ -144,17 +144,18 @@ export default function PublicSite({
   }, [])
 
   // Calculate logo center offset for smooth slide animation
+  // Uses the icon element (not the full button with text) so it centers perfectly
   useEffect(() => {
     const calculateOffset = () => {
-      const logo = logoRef.current
+      const icon = logoIconRef.current
       const container = navContainerRef.current
-      if (!logo || !container) return
+      if (!icon || !container) return
 
       const containerRect = container.getBoundingClientRect()
-      const logoRect = logo.getBoundingClientRect()
+      const iconRect = icon.getBoundingClientRect()
       const containerCenter = containerRect.left + containerRect.width / 2
-      const logoCenter = logoRect.left + logoRect.width / 2
-      setLogoTranslateX(containerCenter - logoCenter)
+      const iconCenter = iconRect.left + iconRect.width / 2
+      setLogoTranslateX(containerCenter - iconCenter)
     }
 
     calculateOffset()
@@ -347,7 +348,6 @@ export default function PublicSite({
           <div className="flex items-center justify-between h-16">
             {/* Logo — smoothly slides to center when scrolled */}
             <button
-              ref={logoRef}
               onClick={scrollToTop}
               className="flex items-center gap-2 cursor-pointer z-10"
               style={{
@@ -356,7 +356,7 @@ export default function PublicSite({
               }}
               aria-label="Volver al inicio"
             >
-              <img src="/images/twf-icon-dark.png" alt="TWF" className="h-11 w-auto" />
+              <img ref={logoIconRef} src="/images/twf-icon-dark.png" alt="TWF" className="h-11 w-auto" />
               <img
                 src="/images/twf-text-dark-new.png"
                 alt="Transit World Forwarding"
