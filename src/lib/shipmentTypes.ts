@@ -129,16 +129,36 @@ function isValidDate(s: string): boolean {
 }
 
 /**
- * Check if a date string represents a date that is today or in the past.
- * Used to avoid marking future dates as "completed" milestones.
+ * Check if a date string represents a date that is strictly in the past (before today).
+ * Used to confirm a milestone has fully occurred (not just scheduled for today).
  */
-function isDateReached(s: string): boolean {
+function isDatePast(s: string): boolean {
   if (!isValidDate(s)) return false
   const d = new Date(s)
   d.setHours(0, 0, 0, 0)
   const today = new Date()
   today.setHours(0, 0, 0, 0)
-  return d.getTime() <= today.getTime()
+  return d.getTime() < today.getTime()
+}
+
+/**
+ * Check if a date string represents today's date.
+ */
+function isDateToday(s: string): boolean {
+  if (!isValidDate(s)) return false
+  const d = new Date(s)
+  d.setHours(0, 0, 0, 0)
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  return d.getTime() === today.getTime()
+}
+
+/**
+ * Check if a date string represents a date that is today or in the past.
+ * Used to avoid marking future dates as "completed" milestones.
+ */
+function isDateReached(s: string): boolean {
+  return isDatePast(s) || isDateToday(s)
 }
 
 /**
@@ -167,32 +187,31 @@ export function getShipmentStatus(shipment: ParsedShipment): ShipmentStatus {
     return { code: 'devuelto', label: 'Contenedor Devuelto', color: 'gray', progress: 100, date: ops.find(o => isValidDate(o.DEV))?.DEV }
   }
 
-  // Check if all containers have ETA_FISC (must also have SALIDA)
-  // Only count as "arrived at fiscal" if the date has actually passed
+  // Check if all containers arrived at fiscal (ETA_FISC today or past)
   const allFiscal = ops.length > 0 && ops.every(o => isDateReached(o.SALIDA) && isDateReached(o.ETA_FISC))
   if (allFiscal) {
     return { code: 'llego_fiscal', label: 'En Depósito Fiscal', color: 'green', progress: 80, date: ops.find(o => isValidDate(o.ETA_FISC))?.ETA_FISC }
   }
 
-  // Check if all containers have SALIDA (that has actually happened)
+  // Check if all containers have SALIDA (today or past)
   const allSalieron = ops.length > 0 && ops.every(o => isDateReached(o.SALIDA))
   if (allSalieron) {
-    // Some arrived at fiscal (date reached), some still in transit
-    const someFiscal = ops.some(o => isDateReached(o.ETA_FISC))
-    if (someFiscal) {
-      return { code: 'en_frontera', label: 'En Frontera', color: 'blue', progress: 65 }
+    // SALIDA is today → "Carga Hoy" (truck loading/leaving today)
+    const allSalidaToday = ops.every(o => isDateToday(o.SALIDA))
+    if (allSalidaToday) {
+      return { code: 'salio_montevideo', label: 'Carga Hoy', color: 'blue', progress: 45, date: ops.find(o => isValidDate(o.SALIDA))?.SALIDA }
     }
-    // If ETA_FISC exists but is future, show "en camino a fiscal"
-    const hasFutureFisc = ops.some(o => isValidDate(o.ETA_FISC) && !isDateReached(o.ETA_FISC))
-    if (hasFutureFisc) {
-      return { code: 'salio_montevideo', label: 'En Camino a Fiscal', color: 'blue', progress: 55, date: ops.find(o => isValidDate(o.ETA_FISC))?.ETA_FISC }
-    }
-    return { code: 'salio_montevideo', label: 'Salió de Montevideo', color: 'blue', progress: 50, date: ops.find(o => isValidDate(o.SALIDA))?.SALIDA }
+    // SALIDA past → in transit to fiscal = "En Frontera"
+    return { code: 'en_frontera', label: 'En Frontera', color: 'blue', progress: 60, date: ops.find(o => isValidDate(o.SALIDA))?.SALIDA }
   }
 
   // Some containers left, some still in port
   const someSalieron = ops.some(o => isDateReached(o.SALIDA))
   if (someSalieron) {
+    const someSalidaToday = ops.some(o => isDateToday(o.SALIDA))
+    if (someSalidaToday) {
+      return { code: 'salio_montevideo', label: 'Carga Hoy', color: 'blue', progress: 40 }
+    }
     return { code: 'salio_montevideo', label: 'Saliendo de Montevideo', color: 'blue', progress: 40 }
   }
 

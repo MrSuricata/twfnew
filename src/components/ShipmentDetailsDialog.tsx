@@ -199,27 +199,38 @@ export default function ShipmentDetailsDialog({
                 const hasFisc = fiscDates.length > 0
                 const hasDev = devDates.length > 0
 
-                // Helper to check if a date is in the past or today
-                const isPastOrToday = (dateStr: string) => {
+                // Helpers to check date relative to today
+                const isToday = (dateStr: string) => {
                   try {
                     const d = new Date(dateStr); d.setHours(0,0,0,0)
                     const t = new Date(); t.setHours(0,0,0,0)
-                    return d.getTime() <= t.getTime()
+                    return d.getTime() === t.getTime()
+                  } catch { return false }
+                }
+                const isPast = (dateStr: string) => {
+                  try {
+                    const d = new Date(dateStr); d.setHours(0,0,0,0)
+                    const t = new Date(); t.setHours(0,0,0,0)
+                    return d.getTime() < t.getTime()
                   } catch { return false }
                 }
 
-                // Build sublabels — show "Estimado" for future dates
-                const salidaSublabel = hasSalida
-                  ? (salidaDates.length === 1 ? salidaDates[0] : `${salidaDates.length}/${ops.length} CNTR — ${salidaDates[salidaDates.length - 1]}`)
-                  : 'Pendiente'
-                const fiscSublabel = hasFisc
-                  ? (() => {
-                      const date = fiscDates[fiscDates.length - 1]
-                      const prefix = isPastOrToday(date) ? '' : 'Estimado: '
-                      const fiscal = fiscales.length > 0 ? ` • ${fiscales.join(', ')}` : ''
-                      return `${prefix}${date}${fiscal}`
-                    })()
-                  : 'Pendiente'
+                // Build sublabels — distinguish past / today / future
+                const salidaSublabel = (() => {
+                  if (!hasSalida) return 'Pendiente'
+                  const date = salidaDates.length === 1 ? salidaDates[0] : salidaDates[salidaDates.length - 1]
+                  if (isToday(date)) return `Hoy — operativa en curso`
+                  if (salidaDates.length > 1) return `${salidaDates.length}/${ops.length} CNTR — ${date}`
+                  return date
+                })()
+                const fiscSublabel = (() => {
+                  if (!hasFisc) return 'Pendiente'
+                  const date = fiscDates[fiscDates.length - 1]
+                  const fiscal = fiscales.length > 0 ? ` • ${fiscales.join(', ')}` : ''
+                  if (isToday(date)) return `Hoy — llegando a fiscal${fiscal}`
+                  if (isPast(date)) return `${date}${fiscal}`
+                  return `Estimado: ${date}${fiscal}`
+                })()
                 const devSublabel = hasDev
                   ? devDates[devDates.length - 1]
                   : (status.code === 'devuelto' ? 'Completado' : 'Pendiente')
