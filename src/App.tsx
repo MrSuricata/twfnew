@@ -237,9 +237,10 @@ function App() {
     saveToStorage('twf-reports', updated)
     // Save to Supabase in background
     if (isAdminLoggedIn) {
-      saveReports(updated).catch(err =>
+      saveReports(updated).catch(err => {
         console.warn('[DB] Failed to save reports:', err)
-      )
+        toast.warning('Error al sincronizar informes con la base de datos', { duration: 5000 })
+      })
     }
   }
 

@@ -203,12 +203,16 @@ export function getShipmentStatus(shipment: ParsedShipment): ShipmentStatus {
   // Check if all containers have SALIDA (today or past)
   const allSalieron = ops.length > 0 && ops.every(o => isDateReached(o.SALIDA))
   if (allSalieron) {
-    // SALIDA is today → "Carga Hoy" (truck loading/leaving today)
-    const allSalidaToday = ops.every(o => isDateToday(o.SALIDA))
-    if (allSalidaToday) {
-      return { code: 'salio_montevideo', label: 'Carga Hoy', color: 'blue', progress: 45, date: ops.find(o => isValidDate(o.SALIDA))?.SALIDA }
+    // Any container leaving today → "Carga Hoy" (active departure takes priority)
+    const someToday = ops.some(o => isDateToday(o.SALIDA))
+    if (someToday) {
+      const todayCount = ops.filter(o => isDateToday(o.SALIDA)).length
+      const label = ops.length > 1 && todayCount < ops.length
+        ? `Carga Hoy (${todayCount}/${ops.length})`
+        : 'Carga Hoy'
+      return { code: 'salio_montevideo', label, color: 'blue', progress: 45, date: ops.find(o => isDateToday(o.SALIDA))?.SALIDA }
     }
-    // SALIDA past → in transit to fiscal = "En Frontera"
+    // All SALIDA in the past → in transit to fiscal = "En Frontera"
     return { code: 'en_frontera', label: 'En Frontera', color: 'blue', progress: 60, date: ops.find(o => isValidDate(o.SALIDA))?.SALIDA }
   }
 
@@ -219,7 +223,7 @@ export function getShipmentStatus(shipment: ParsedShipment): ShipmentStatus {
     if (someSalidaToday) {
       return { code: 'salio_montevideo', label: 'Carga Hoy', color: 'blue', progress: 40 }
     }
-    return { code: 'salio_montevideo', label: 'Saliendo de Montevideo', color: 'blue', progress: 40 }
+    return { code: 'salio_montevideo', label: 'Parcialmente en Frontera', color: 'blue', progress: 40 }
   }
 
   // Has operativas but no SALIDA → in port/terminal
@@ -369,18 +373,30 @@ export function generateShipmentAlerts(shipments: ParsedShipment[], reports?: { 
           date: ops.find(o => !!o.ETA_FISC)?.ETA_FISC || ''
         })
       } else if (hasSalida) {
-        const salidaToday = ops.some(o => isDateToday(o.SALIDA))
-        alerts.push({
-          id: `status-salio-${s.REF}`,
-          shipmentRef: s.REF,
-          type: 'status_salio',
-          severity: 'success',
-          title: salidaToday ? `Carga Hoy` : `En Frontera`,
-          message: salidaToday
-            ? `${s.REF}: su carga sale hoy de Montevideo`
-            : `${s.REF}: su carga está en frontera`,
-          date: ops.find(o => !!o.SALIDA)?.SALIDA || ''
-        })
+        const todayOps = ops.filter(o => isDateToday(o.SALIDA))
+        const pastOps = ops.filter(o => isDatePast(o.SALIDA))
+        if (todayOps.length > 0) {
+          const extra = pastOps.length > 0 ? ` (${pastOps.length} ya en frontera)` : ''
+          alerts.push({
+            id: `status-salio-${s.REF}`,
+            shipmentRef: s.REF,
+            type: 'status_salio',
+            severity: 'success',
+            title: `Carga Hoy`,
+            message: `${s.REF}: ${todayOps.length} contenedor${todayOps.length > 1 ? 'es' : ''} sale hoy${extra}`,
+            date: todayOps[0]?.SALIDA || ''
+          })
+        } else {
+          alerts.push({
+            id: `status-salio-${s.REF}`,
+            shipmentRef: s.REF,
+            type: 'status_salio',
+            severity: 'success',
+            title: `En Frontera`,
+            message: `${s.REF}: su carga está en frontera`,
+            date: ops.find(o => !!o.SALIDA)?.SALIDA || ''
+          })
+        }
       }
     }
   }

@@ -86,13 +86,33 @@ export default function ShipmentDetailsDialog({
   const getDaysUntilFree = (libreHasta: string): number => {
     if (!libreHasta) return 999
     try {
-      const freeDate = new Date(libreHasta)
+      const parts = libreHasta.split('-')
+      const freeDate = parts.length === 3
+        ? new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]))
+        : new Date(libreHasta)
       const today = new Date()
+      today.setHours(0, 0, 0, 0)
+      freeDate.setHours(0, 0, 0, 0)
       const diff = Math.floor((freeDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
       return diff
     } catch {
       return 999
     }
+  }
+
+  // Shared date helpers — parse as local to avoid timezone shift
+  const parseLocal = (s: string) => {
+    if (!s) return new Date(NaN)
+    const parts = s.split('-')
+    if (parts.length === 3) return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]))
+    const d = new Date(s); d.setHours(0, 0, 0, 0); return d
+  }
+  const todayMidnight = (() => { const t = new Date(); t.setHours(0, 0, 0, 0); return t })()
+  const isToday = (dateStr: string) => {
+    try { return parseLocal(dateStr).getTime() === todayMidnight.getTime() } catch { return false }
+  }
+  const isPast = (dateStr: string) => {
+    try { return parseLocal(dateStr).getTime() < todayMidnight.getTime() } catch { return false }
   }
 
   const getUrgencyBadge = (days: number) => {
@@ -199,50 +219,49 @@ export default function ShipmentDetailsDialog({
                 const hasFisc = fiscDates.length > 0
                 const hasDev = devDates.length > 0
 
-                // Helpers to check date relative to today (parse as local to avoid timezone shift)
-                const parseLocal = (s: string) => {
-                  const parts = s.split('-')
-                  if (parts.length === 3) return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]))
-                  const d = new Date(s); d.setHours(0,0,0,0); return d
-                }
-                const todayMidnight = (() => { const t = new Date(); t.setHours(0,0,0,0); return t })()
-                const isToday = (dateStr: string) => {
-                  try { return parseLocal(dateStr).getTime() === todayMidnight.getTime() } catch { return false }
-                }
-                const isPast = (dateStr: string) => {
-                  try { return parseLocal(dateStr).getTime() < todayMidnight.getTime() } catch { return false }
+                // Short date formatter: "2026-03-13" → "13/03"
+                const fmtD = (d: string) => {
+                  const parts = d.split('-')
+                  return parts.length === 3 ? `${parts[2]}/${parts[1]}` : d
                 }
 
-                // Build sublabels — distinguish past / today / future
+                // Build sublabels — per-container when mixed dates
                 const salidaSublabel = (() => {
                   if (!hasSalida) return 'Pendiente'
-                  const date = salidaDates.length === 1 ? salidaDates[0] : salidaDates[salidaDates.length - 1]
-                  if (isToday(date)) return `Hoy — operativa en curso`
-                  if (salidaDates.length > 1) return `${salidaDates.length}/${ops.length} CNTR — ${date}`
-                  return date
+                  const todayOps = ops.filter(o => o.SALIDA && isToday(o.SALIDA))
+                  const pastOps = ops.filter(o => o.SALIDA && isPast(o.SALIDA))
+                  // Mixed: some today, some in the past
+                  if (todayOps.length > 0 && pastOps.length > 0) {
+                    return `${todayOps.length} sale hoy, ${pastOps.length} en frontera`
+                  }
+                  if (todayOps.length === ops.length) return 'Hoy — operativa en curso'
+                  if (todayOps.length > 0) return `${todayOps.length}/${ops.length} sale hoy`
+                  // All past
+                  if (salidaDates.length > 1) return `${salidaDates.length}/${ops.length} CNTR — ${fmtD(salidaDates[0])}`
+                  return fmtD(salidaDates[0])
                 })()
                 const fiscSublabel = (() => {
                   if (!hasFisc) return 'Pendiente'
                   const date = fiscDates[fiscDates.length - 1]
                   const fiscal = fiscales.length > 0 ? ` • ${fiscales.join(', ')}` : ''
                   if (isToday(date)) return `Hoy — llegando a fiscal${fiscal}`
-                  if (isPast(date)) return `${date}${fiscal}`
-                  return `Estimado: ${date}${fiscal}`
+                  if (isPast(date)) return `${fmtD(date)}${fiscal}`
+                  return `Estimado: ${fmtD(date)}${fiscal}`
                 })()
                 const devSublabel = hasDev
-                  ? devDates[devDates.length - 1]
+                  ? fmtD(devDates[devDates.length - 1])
                   : (status.code === 'devuelto' ? 'Completado' : 'Pendiente')
 
                 const milestones = [
                   {
                     label: 'En Tránsito',
-                    sublabel: editedShipment.ETD ? `Salió ${editedShipment.ETD}` : 'Esperando embarque',
+                    sublabel: editedShipment.ETD ? `Salió ${fmtD(editedShipment.ETD)}` : 'Esperando embarque',
                     reached: true,
                     icon: <Boat size={18} />
                   },
                   {
                     label: 'En Puerto',
-                    sublabel: editedShipment.ETA ? `Llegó ${editedShipment.ETA}` : 'Pendiente',
+                    sublabel: editedShipment.ETA ? `Llegó ${fmtD(editedShipment.ETA)}` : 'Pendiente',
                     reached: ['en_puerto', 'salio_montevideo', 'en_frontera', 'llego_fiscal', 'devuelto'].includes(status.code),
                     icon: <Package size={18} />
                   },
@@ -391,177 +410,209 @@ export default function ShipmentDetailsDialog({
             {/* ── Client Logística Tab (merged Operativa + Logística) ── */}
             <TabsContent value="logistics" className="space-y-5 mt-4">
               {editedShipment.operativas && editedShipment.operativas.length > 0 ? (
-                <>
-                  {/* ── Fechas de Operativa + Embarque unified card ── */}
-                  <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
-                    {/* Dates row */}
-                    {(() => {
-                      const allOps = editedShipment.operativas!
-                      const salidas = allOps.filter(o => o.SALIDA).map(o => o.SALIDA)
-                      const etaFiscs = allOps.filter(o => o.ETA_FISC).map(o => o.ETA_FISC)
-                      const fiscales = [...new Set(allOps.filter(o => o.FISCAL).map(o => o.FISCAL))]
+                (() => {
+                  const allOps = editedShipment.operativas!
+                  const fiscales = [...new Set(allOps.filter(o => o.FISCAL).map(o => o.FISCAL))]
+                  // Date formatter: "2026-03-13" → "13/03"
+                  const fmtDate = (d: string) => {
+                    if (!d) return '-'
+                    const parts = d.split('-')
+                    if (parts.length === 3) return `${parts[2]}/${parts[1]}`
+                    return d
+                  }
+                  // Per-container status
+                  const getContainerStatus = (op: typeof allOps[0]) => {
+                    if (op.DEV && (isPast(op.DEV) || isToday(op.DEV))) return { text: 'Devuelto', bg: 'bg-gray-100 dark:bg-gray-800', color: 'text-gray-600 dark:text-gray-400', dot: 'bg-gray-400' }
+                    if (op.ETA_FISC && (isPast(op.ETA_FISC) || isToday(op.ETA_FISC))) return { text: 'En Fiscal', bg: 'bg-green-50 dark:bg-green-950/30', color: 'text-green-700 dark:text-green-400', dot: 'bg-green-500' }
+                    if (op.SALIDA && isToday(op.SALIDA)) return { text: 'Sale Hoy', bg: 'bg-blue-50 dark:bg-blue-950/30', color: 'text-blue-700 dark:text-blue-400', dot: 'bg-blue-500' }
+                    if (op.SALIDA && isPast(op.SALIDA)) return { text: 'En Frontera', bg: 'bg-orange-50 dark:bg-orange-950/30', color: 'text-orange-700 dark:text-orange-400', dot: 'bg-orange-500' }
+                    return { text: 'En Terminal', bg: 'bg-yellow-50 dark:bg-yellow-950/30', color: 'text-yellow-700 dark:text-yellow-500', dot: 'bg-yellow-500' }
+                  }
 
-                      const dateItems = [
-                        {
-                          label: 'Salida MVD',
-                          value: salidas.length === 0 ? '-' : salidas.length === 1 ? salidas[0] : `${salidas[0]} (${salidas.length}/${allOps.length})`,
-                          accent: true
-                        },
-                        {
-                          label: 'Llegada Fiscal',
-                          value: etaFiscs.length === 0 ? '-' : etaFiscs.length === 1 ? etaFiscs[0] : `${etaFiscs[0]} (${etaFiscs.length}/${allOps.length})`,
-                          accent: false
-                        },
-                        {
-                          label: 'Libre Hasta',
-                          value: editedShipment.LIBRE_HASTA || '-',
-                          accent: false
-                        },
-                        {
-                          label: 'Depósito Fiscal',
-                          value: fiscales.join(', ') || '-',
-                          accent: false
-                        },
-                      ]
-
-                      return (
-                        <div className="p-4 pb-3">
+                  return (
+                    <>
+                      {/* ── Shared shipment info card ── */}
+                      <div className="rounded-xl border bg-card shadow-sm overflow-hidden">
+                        <div className="p-4">
                           <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-2">
-                            <CalendarBlank size={14} />
-                            Fechas de Operativa
+                            <Boat size={14} />
+                            Información de Embarque
                           </h4>
-                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                            {dateItems.map((item, i) => (
-                              <div key={i} className={`rounded-lg px-3 py-2.5 ${item.accent ? 'bg-accent/10 border border-accent/20' : 'bg-muted/50'}`}>
-                                <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-0.5">{item.label}</div>
-                                <div className={`text-sm font-semibold ${item.accent ? 'text-accent' : ''} truncate`}>{item.value}</div>
-                              </div>
-                            ))}
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                            <div className="rounded-lg px-3 py-2 bg-muted/50">
+                              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">ETA Puerto</div>
+                              <div className="text-sm font-semibold">{fmtDate(editedShipment.ETA)}</div>
+                            </div>
+                            <div className={`rounded-lg px-3 py-2 ${
+                              editedShipment.LIBRE_HASTA && getDaysUntilFree(editedShipment.LIBRE_HASTA) <= 2
+                                ? 'bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800'
+                                : 'bg-muted/50'
+                            }`}>
+                              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Libre Hasta</div>
+                              <div className="text-sm font-semibold">{fmtDate(editedShipment.LIBRE_HASTA)}</div>
+                            </div>
+                            <div className="rounded-lg px-3 py-2 bg-muted/50">
+                              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Buque</div>
+                              <div className="text-sm font-semibold truncate">{editedShipment.BUQUE || '-'}</div>
+                            </div>
+                            <div className="rounded-lg px-3 py-2 bg-muted/50">
+                              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Terminal</div>
+                              <div className="text-sm font-semibold truncate">{editedShipment.TERMINAL || '-'}</div>
+                            </div>
                           </div>
-                        </div>
-                      )
-                    })()}
-
-                    {/* Divider */}
-                    <div className="border-t mx-4" />
-
-                    {/* Shipping info row */}
-                    <div className="p-4 pt-3">
-                      <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-2">
-                        <Boat size={14} />
-                        Embarque
-                      </h4>
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-2">
-                        {[
-                          { label: 'Línea', value: editedShipment.LINEA },
-                          { label: 'Buque', value: editedShipment.BUQUE },
-                          { label: 'Terminal', value: editedShipment.TERMINAL },
-                          { label: 'MBL', value: editedShipment.MBL, mono: true },
-                        ].map((item, i) => (
-                          <div key={i} className="flex flex-col">
-                            <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{item.label}</span>
-                            <span className={`text-sm font-medium truncate ${item.mono ? 'font-mono text-xs' : ''}`}>{item.value || '-'}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* ── Summary stats bar ── */}
-                  <div className="grid grid-cols-4 gap-2">
-                    {[
-                      { value: editedShipment.operativas.length, unit: '', label: 'CNTR' },
-                      { value: editedShipment.operativas.reduce((s, o) => s + o.PKGS, 0).toLocaleString(), unit: '', label: 'Bultos' },
-                      { value: editedShipment.operativas.reduce((s, o) => s + o.KG, 0).toLocaleString(), unit: 'kg', label: 'Peso' },
-                      { value: editedShipment.operativas.reduce((s, o) => s + o.M3, 0).toFixed(1), unit: 'm³', label: 'Volumen' },
-                    ].map((stat, i) => (
-                      <div key={i} className="text-center py-2.5 rounded-lg bg-muted/40">
-                        <div className="text-base font-bold leading-tight">
-                          {stat.value}<span className="text-xs font-normal text-muted-foreground ml-0.5">{stat.unit}</span>
-                        </div>
-                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{stat.label}</div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* ── Container details ── */}
-                  <div className="space-y-3">
-                    <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                      <Cube size={14} />
-                      Detalle por Contenedor
-                    </h4>
-                    {editedShipment.operativas.map((op, idx) => (
-                      <div key={idx} className="rounded-xl border bg-card shadow-sm overflow-hidden">
-                        {/* Container header */}
-                        <div className="flex items-center justify-between px-4 py-2.5 bg-muted/30 border-b">
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono font-bold text-sm">{op.CNTR_OP || `Contenedor ${idx + 1}`}</span>
-                            {op.TIPO && (
-                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 font-medium">{op.TIPO}</Badge>
+                          <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs">
+                            <div><span className="text-muted-foreground">Línea:</span> <span className="font-medium">{editedShipment.LINEA || '-'}</span></div>
+                            <div><span className="text-muted-foreground">MBL:</span> <span className="font-mono font-medium">{editedShipment.MBL || '-'}</span></div>
+                            {fiscales.length > 0 && (
+                              <div><span className="text-muted-foreground">Fiscal:</span> <span className="font-medium">{fiscales.join(', ')}</span></div>
                             )}
                           </div>
-                          {op.OPERATIVA && (
-                            <Badge className={`text-[10px] px-2 py-0 h-5 ${
-                              op.OPERATIVA === 'TRASIEGO' ? 'bg-blue-500' :
-                              op.OPERATIVA === 'DEVUELTO' ? 'bg-orange-500' :
-                              'bg-green-600'
-                            }`}>
-                              {op.OPERATIVA}
-                            </Badge>
-                          )}
-                        </div>
-
-                        {/* Container body */}
-                        <div className="px-4 py-3 space-y-2.5">
-                          {/* Mercadería */}
-                          {op.DESCRIPCION && (
-                            <div className="text-sm">
-                              <span className="text-muted-foreground text-xs">Mercadería</span>
-                              <div className="font-medium">{op.DESCRIPCION}</div>
-                            </div>
-                          )}
-
-                          {/* Stats row */}
-                          <div className="grid grid-cols-3 gap-2">
-                            <div className="bg-muted/40 rounded-md px-2.5 py-1.5 text-center">
-                              <div className="text-xs text-muted-foreground">Bultos</div>
-                              <div className="text-sm font-semibold">{op.PKGS.toLocaleString()}</div>
-                            </div>
-                            <div className="bg-muted/40 rounded-md px-2.5 py-1.5 text-center">
-                              <div className="text-xs text-muted-foreground">Peso</div>
-                              <div className="text-sm font-semibold">{op.KG.toLocaleString()}<span className="text-xs font-normal ml-0.5">kg</span></div>
-                            </div>
-                            <div className="bg-muted/40 rounded-md px-2.5 py-1.5 text-center">
-                              <div className="text-xs text-muted-foreground">Volumen</div>
-                              <div className="text-sm font-semibold">{op.M3}<span className="text-xs font-normal ml-0.5">m³</span></div>
-                            </div>
-                          </div>
-
-                          {/* Extra info row */}
-                          {(op.TRANSPORTE || op.DEPOSITO || op.WOOD === 'SI') && (
-                            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs pt-1 border-t">
-                              {op.TRANSPORTE && (
-                                <div>
-                                  <span className="text-muted-foreground">Transporte:</span>
-                                  <span className="ml-1 font-medium">{op.TRANSPORTE}</span>
-                                </div>
-                              )}
-                              {op.DEPOSITO && (
-                                <div>
-                                  <span className="text-muted-foreground">Depósito:</span>
-                                  <span className="ml-1 font-medium">{op.DEPOSITO}</span>
-                                </div>
-                              )}
-                              {op.WOOD === 'SI' && (
-                                <Badge variant="secondary" className="text-[10px] h-4 px-1.5">🪵 WOOD</Badge>
-                              )}
-                            </div>
-                          )}
                         </div>
                       </div>
-                    ))}
-                  </div>
-                </>
+
+                      {/* ── Container cards with per-container dates ── */}
+                      <div className="space-y-3">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
+                            <Cube size={14} />
+                            Contenedores ({allOps.length})
+                          </h4>
+                          <div className="text-[10px] text-muted-foreground">
+                            {allOps.reduce((s, o) => s + o.PKGS, 0).toLocaleString()} bultos • {allOps.reduce((s, o) => s + o.KG, 0).toLocaleString()} kg • {allOps.reduce((s, o) => s + o.M3, 0).toFixed(1)} m³
+                          </div>
+                        </div>
+
+                        {allOps.map((op, idx) => {
+                          const cStatus = getContainerStatus(op)
+                          return (
+                            <div key={idx} className="rounded-xl border bg-card shadow-sm overflow-hidden">
+                              {/* Container header */}
+                              <div className="flex items-center justify-between px-4 py-2.5 bg-muted/30 border-b">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-mono font-bold text-sm">{op.CNTR_OP || `Contenedor ${idx + 1}`}</span>
+                                  {op.TIPO && (
+                                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 font-medium">{op.TIPO}</Badge>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  {op.OPERATIVA && (
+                                    <Badge className={`text-[10px] px-2 py-0 h-5 ${
+                                      op.OPERATIVA === 'TRASIEGO' ? 'bg-blue-500' :
+                                      op.OPERATIVA === 'DEVUELTO' ? 'bg-orange-500' :
+                                      'bg-green-600'
+                                    }`}>
+                                      {op.OPERATIVA}
+                                    </Badge>
+                                  )}
+                                  <div className={`flex items-center gap-1.5 text-[11px] font-semibold px-2 py-0.5 rounded-full ${cStatus.bg} ${cStatus.color}`}>
+                                    <div className={`w-1.5 h-1.5 rounded-full ${cStatus.dot}`} />
+                                    {cStatus.text}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Per-container dates row */}
+                              <div className="grid grid-cols-2 gap-2 px-4 pt-3 pb-2">
+                                <div className={`rounded-lg px-3 py-2 ${
+                                  op.SALIDA && isToday(op.SALIDA)
+                                    ? 'bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800'
+                                    : op.SALIDA && isPast(op.SALIDA)
+                                    ? 'bg-green-50/50 dark:bg-green-950/20'
+                                    : 'bg-muted/40'
+                                }`}>
+                                  <div className="flex items-center gap-1.5 mb-0.5">
+                                    <Truck size={12} className="text-muted-foreground" />
+                                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Salida MVD</span>
+                                  </div>
+                                  <div className="text-sm font-bold">
+                                    {op.SALIDA ? fmtDate(op.SALIDA) : 'Pendiente'}
+                                  </div>
+                                  {op.SALIDA && isToday(op.SALIDA) && (
+                                    <div className="text-[10px] text-blue-600 dark:text-blue-400 font-medium">Sale hoy</div>
+                                  )}
+                                  {op.SALIDA && isPast(op.SALIDA) && (
+                                    <div className="text-[10px] text-green-600 dark:text-green-400 font-medium">En camino</div>
+                                  )}
+                                </div>
+                                <div className={`rounded-lg px-3 py-2 ${
+                                  op.ETA_FISC && isToday(op.ETA_FISC)
+                                    ? 'bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800'
+                                    : op.ETA_FISC && isPast(op.ETA_FISC)
+                                    ? 'bg-green-50/50 dark:bg-green-950/20'
+                                    : 'bg-muted/40'
+                                }`}>
+                                  <div className="flex items-center gap-1.5 mb-0.5">
+                                    <Warehouse size={12} className="text-muted-foreground" />
+                                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Llegada Fiscal</span>
+                                  </div>
+                                  <div className="text-sm font-bold">
+                                    {op.ETA_FISC ? fmtDate(op.ETA_FISC) : 'Pendiente'}
+                                  </div>
+                                  {op.ETA_FISC && isToday(op.ETA_FISC) && (
+                                    <div className="text-[10px] text-green-600 dark:text-green-400 font-medium">Llega hoy</div>
+                                  )}
+                                  {op.ETA_FISC && isPast(op.ETA_FISC) && op.FISCAL && (
+                                    <div className="text-[10px] text-green-600 dark:text-green-400 font-medium">{op.FISCAL}</div>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Container body */}
+                              <div className="px-4 pb-3 space-y-2">
+                                {/* Mercadería */}
+                                {op.DESCRIPCION && (
+                                  <div className="text-xs">
+                                    <span className="text-muted-foreground">Mercadería:</span>
+                                    <span className="ml-1 font-medium">{op.DESCRIPCION}</span>
+                                  </div>
+                                )}
+
+                                {/* Compact stats row */}
+                                <div className="flex items-center gap-3 text-xs">
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-muted-foreground">Bultos:</span>
+                                    <span className="font-semibold">{op.PKGS.toLocaleString()}</span>
+                                  </div>
+                                  <div className="w-px h-3 bg-border" />
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-muted-foreground">Peso:</span>
+                                    <span className="font-semibold">{op.KG.toLocaleString()} kg</span>
+                                  </div>
+                                  <div className="w-px h-3 bg-border" />
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-muted-foreground">Vol:</span>
+                                    <span className="font-semibold">{op.M3} m³</span>
+                                  </div>
+                                </div>
+
+                                {/* Extra info */}
+                                {(op.TRANSPORTE || op.DEPOSITO || op.WOOD === 'SI') && (
+                                  <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs pt-1 border-t">
+                                    {op.TRANSPORTE && (
+                                      <div>
+                                        <span className="text-muted-foreground">Transporte:</span>
+                                        <span className="ml-1 font-medium">{op.TRANSPORTE}</span>
+                                      </div>
+                                    )}
+                                    {op.DEPOSITO && (
+                                      <div>
+                                        <span className="text-muted-foreground">Depósito:</span>
+                                        <span className="ml-1 font-medium">{op.DEPOSITO}</span>
+                                      </div>
+                                    )}
+                                    {op.WOOD === 'SI' && (
+                                      <Badge variant="secondary" className="text-[10px] h-4 px-1.5">🪵 WOOD</Badge>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </>
+                  )
+                })()
               ) : (
                 <div className="text-center py-12 text-muted-foreground">
                   <Warehouse size={48} className="mx-auto mb-4" />

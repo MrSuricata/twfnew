@@ -112,8 +112,8 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
   const handleReportFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('El archivo no debe superar los 5MB', { duration: 5000 })
+    if (file.size > 3 * 1024 * 1024) {
+      toast.error('El archivo no debe superar los 3MB', { duration: 5000 })
       e.target.value = ''
       return
     }
@@ -155,9 +155,10 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
 
         try {
           await saveReportWithFile(newReport)
+          toast.success('Informe guardado en base de datos')
         } catch (err) {
           console.warn('[DB] Failed to save report file:', err)
-          toast.warning('Informe guardado localmente. Sincronización pendiente.')
+          toast.warning('Informe guardado localmente pero NO se subió a la base de datos. El archivo puede ser demasiado grande.', { duration: 8000 })
         }
 
         toast.success(
