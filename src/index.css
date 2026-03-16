@@ -115,15 +115,12 @@ html {
   border-radius: 50%;
   background: rgba(255,255,255,0.15);
   pointer-events: none;
+  will-change: transform, opacity;
 }
-.hero-particle:nth-child(1) { width: 6px; height: 6px; left: 10%; bottom: -10%; animation: float-up 8s linear infinite; }
-.hero-particle:nth-child(2) { width: 4px; height: 4px; left: 25%; bottom: -10%; animation: float-up-alt 11s linear 2s infinite; }
-.hero-particle:nth-child(3) { width: 8px; height: 8px; left: 45%; bottom: -10%; animation: float-up 13s linear 1s infinite; }
-.hero-particle:nth-child(4) { width: 3px; height: 3px; left: 60%; bottom: -10%; animation: float-up-alt 9s linear 3s infinite; }
-.hero-particle:nth-child(5) { width: 5px; height: 5px; left: 75%; bottom: -10%; animation: float-up 10s linear 0.5s infinite; }
-.hero-particle:nth-child(6) { width: 7px; height: 7px; left: 90%; bottom: -10%; animation: float-up-alt 12s linear 4s infinite; }
-.hero-particle:nth-child(7) { width: 4px; height: 4px; left: 35%; bottom: -10%; animation: float-up 14s linear 6s infinite; }
-.hero-particle:nth-child(8) { width: 6px; height: 6px; left: 55%; bottom: -10%; animation: float-up-alt 10s linear 1.5s infinite; }
+.hero-particle:nth-child(1) { width: 6px; height: 6px; left: 15%; bottom: -10%; animation: float-up 10s linear infinite; }
+.hero-particle:nth-child(2) { width: 4px; height: 4px; left: 40%; bottom: -10%; animation: float-up-alt 12s linear 2s infinite; }
+.hero-particle:nth-child(3) { width: 7px; height: 7px; left: 65%; bottom: -10%; animation: float-up 14s linear 1s infinite; }
+.hero-particle:nth-child(4) { width: 5px; height: 5px; left: 85%; bottom: -10%; animation: float-up-alt 11s linear 3s infinite; }
 
 /* ── Section parallax backgrounds ── */
 .section-bg-cover {

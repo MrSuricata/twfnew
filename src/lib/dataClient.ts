@@ -111,12 +111,21 @@ export async function saveReportWithFile(report: OperativeReport): Promise<void>
   }
 }
 
-/** Download file data for a single report (on-demand). */
+/** Download file data for a single report (on-demand). Works for both admin and client tokens. */
 export async function fetchReportFile(reportId: string): Promise<string | null> {
-  const res = await authFetch(`/api/data/reports?id=${encodeURIComponent(reportId)}`)
+  // Try client endpoint first (works for both roles), fall back to admin
+  const res = await authFetch(`/api/client/reports?id=${encodeURIComponent(reportId)}`)
   if (!res.ok) return null
   const data = await res.json()
   return data.report?.fileData || null
+}
+
+/** Fetch reports accessible to the current client (filtered by their shipments server-side). */
+export async function fetchClientReports(): Promise<OperativeReport[]> {
+  const res = await authFetch('/api/client/reports')
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const data = await res.json()
+  return data.reports || []
 }
 
 /** Delete a single report from DB. */

@@ -349,34 +349,29 @@ export default function PublicSite({
             {/* Logo — smoothly slides to center when scrolled */}
             <button
               onClick={scrollToTop}
-              className="flex items-center gap-2 cursor-pointer z-10"
+              className="flex items-center gap-2 cursor-pointer z-10 will-change-transform"
               style={{
                 transform: scrolled ? `translateX(${logoTranslateX}px)` : 'translateX(0)',
-                transition: 'transform 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94)'
+                transition: 'transform 0.5s ease-out'
               }}
               aria-label="Volver al inicio"
             >
               <img ref={logoIconRef} src="/images/twf-icon-dark.png" alt="TWF" className="h-11 w-auto" />
-              <img
-                src="/images/twf-text-dark-new.png"
-                alt="Transit World Forwarding"
-                className="h-8 hidden sm:block"
+              <div
+                className="overflow-hidden will-change-[max-width,opacity]"
                 style={{
                   opacity: scrolled ? 0 : 1,
                   maxWidth: scrolled ? 0 : '200px',
-                  overflow: 'hidden',
-                  transition: 'opacity 0.4s ease, max-width 0.4s ease'
+                  transition: 'opacity 0.3s ease, max-width 0.3s ease'
                 }}
-              />
-              <span
-                className="text-xl font-bold text-primary sm:hidden"
-                style={{
-                  opacity: scrolled ? 0 : 1,
-                  maxWidth: scrolled ? 0 : '60px',
-                  overflow: 'hidden',
-                  transition: 'opacity 0.4s ease, max-width 0.4s ease'
-                }}
-              >TWF</span>
+              >
+                <img
+                  src="/images/twf-text-dark-new.png"
+                  alt="Transit World Forwarding"
+                  className="h-8 hidden sm:block"
+                />
+                <span className="text-xl font-bold text-primary sm:hidden whitespace-nowrap">TWF</span>
+              </div>
             </button>
 
             <div className={`hidden lg:flex items-center gap-6 transition-all duration-500 ${
@@ -486,7 +481,7 @@ export default function PublicSite({
         </div>
         <div className="absolute inset-0 bg-gradient-to-b from-primary/80 via-primary/70 to-primary/90 z-[1]" />
         <div className="absolute inset-0 overflow-hidden z-[2]">
-          {[...Array(8)].map((_, i) => (
+          {[...Array(4)].map((_, i) => (
             <div key={i} className="hero-particle" />
           ))}
         </div>
@@ -494,12 +489,14 @@ export default function PublicSite({
         <div className="max-w-7xl mx-auto px-4 md:px-6 relative z-10">
           <div className="text-center text-white">
             <motion.div
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ type: 'spring', stiffness: 100, delay: 0.2 }}
-              className="mb-6"
+              initial={{ scaleX: 0, opacity: 0 }}
+              animate={{ scaleX: 1, opacity: 1 }}
+              transition={{ duration: 0.6, delay: 0.2 }}
+              className="mb-8 flex items-center justify-center gap-4"
             >
-              <img src="/images/twf-icon-white.png" alt="" className="h-20 md:h-28 mx-auto mb-2 drop-shadow-2xl" />
+              <div className="h-px w-12 md:w-20 bg-white/40" />
+              <span className="text-white/60 text-sm md:text-base font-medium uppercase tracking-[0.3em]">Logística Global</span>
+              <div className="h-px w-12 md:w-20 bg-white/40" />
             </motion.div>
 
             <motion.h1

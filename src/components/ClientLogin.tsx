@@ -139,10 +139,10 @@ export default function ClientLogin({ onLogin, onBack }: ClientLoginProps) {
             <CardTitle className="text-2xl">Portal de Cliente</CardTitle>
             <p className="text-muted-foreground">
               {step === 'email'
-                ? 'Ingresa tu email para recibir un codigo de acceso'
+                ? 'Ingresá tu email corporativo. Si tu correo está autorizado, recibirás un código único de 6 dígitos para acceder.'
                 : (
                   <>
-                    Ingresa el codigo de 6 digitos enviado a{' '}
+                    Ingresá el código de 6 dígitos enviado a{' '}
                     <span className="font-medium text-foreground">{email}</span>
                   </>
                 )
@@ -178,14 +178,14 @@ export default function ClientLogin({ onLogin, onBack }: ClientLoginProps) {
                   ) : (
                     <>
                       <EnvelopeSimple size={20} className="mr-2" />
-                      Enviar Codigo de Acceso
+                      Enviar Código de Acceso
                     </>
                   )}
                 </Button>
 
                 <div className="mt-6 p-4 bg-muted rounded-lg text-sm text-muted-foreground">
-                  <p className="font-medium mb-2">No tienes una cuenta?</p>
-                  <p>Contacta a Transit World Forwarding para obtener acceso al portal de cliente.</p>
+                  <p className="font-medium mb-2">¿No tenés acceso?</p>
+                  <p>Contactá a Transit World Forwarding para solicitar acceso al portal de cliente.</p>
                 </div>
               </form>
             ) : (
@@ -231,7 +231,7 @@ export default function ClientLogin({ onLogin, onBack }: ClientLoginProps) {
                 {/* Resend section */}
                 <div className="text-center space-y-2">
                   <p className="text-sm text-muted-foreground">
-                    No recibiste el codigo?
+                    ¿No recibiste el código?
                   </p>
                   {countdown > 0 ? (
                     <p className="text-sm text-muted-foreground">
@@ -246,7 +246,7 @@ export default function ClientLogin({ onLogin, onBack }: ClientLoginProps) {
                       className="text-accent hover:text-accent/80"
                     >
                       <ArrowCounterClockwise size={16} className="mr-1" />
-                      Reenviar codigo
+                      Reenviar código
                     </Button>
                   )}
                 </div>

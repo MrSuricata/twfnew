@@ -40,6 +40,7 @@ import { ParsedShipment, getShipmentStatus, generateShipmentAlerts, isShipmentCo
 import { ClientAccount, OperativeReport } from '@/lib/quotationTypes'
 import { toast } from 'sonner'
 import { authFetch } from '@/lib/authClient'
+import { fetchClientReports } from '@/lib/dataClient'
 import ShipmentDetailsDialog from './ShipmentDetailsDialog'
 
 interface ClientPortalProps {
@@ -56,6 +57,7 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false)
   const [showNotifications, setShowNotifications] = useState(false)
   const [serverShipments, setServerShipments] = useState<ParsedShipment[]>([])
+  const [serverReports, setServerReports] = useState<OperativeReport[]>([])
   const [isLoadingData, setIsLoadingData] = useState(true)
 
   // ── Filter states ──
@@ -70,15 +72,25 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
       return JSON.parse(localStorage.getItem('twf-dismissed-alerts') || '[]')
     } catch { return [] }
   })
+  const [seenAlerts, setSeenAlerts] = useState<string[]>(() => {
+    try {
+      return JSON.parse(sessionStorage.getItem('twf-seen-alerts') || '[]')
+    } catch { return [] }
+  })
 
-  // Fetch client-specific data from server
+  // Fetch client-specific data from server (shipments + reports)
   useEffect(() => {
     const fetchClientData = async () => {
       try {
-        const res = await authFetch('/api/sheets/client-data')
-        if (res.ok) {
-          const data = await res.json()
-          setServerShipments(data.shipments || [])
+        const [shipmentsRes, reportsData] = await Promise.allSettled([
+          authFetch('/api/sheets/client-data').then(r => r.ok ? r.json() : null),
+          fetchClientReports().catch(() => []),
+        ])
+        if (shipmentsRes.status === 'fulfilled' && shipmentsRes.value) {
+          setServerShipments(shipmentsRes.value.shipments || [])
+        }
+        if (reportsData.status === 'fulfilled' && reportsData.value) {
+          setServerReports(reportsData.value)
         }
       } catch (err) {
         console.warn('Failed to fetch client data from server:', err)
@@ -186,14 +198,25 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
   }
 
   // ── Alerts System ──
+  // Use server reports if available (fetched from DB), fall back to props (localStorage)
+  const effectiveReports = serverReports.length > 0 ? serverReports : reports
   const clientReports = useMemo(() => {
     const clientRefs = new Set(clientShipments.map(s => s.REF))
-    return reports.filter(r => clientRefs.has(r.shipmentRef))
-  }, [reports, clientShipments])
+    return effectiveReports.filter(r => clientRefs.has(r.shipmentRef))
+  }, [effectiveReports, clientShipments])
 
   const allAlerts = useMemo(() => generateShipmentAlerts(activeShipments, clientReports), [activeShipments, clientReports])
   const visibleAlerts = allAlerts.filter(a => !dismissedAlerts.includes(a.id))
+  const unseenAlerts = visibleAlerts.filter(a => !seenAlerts.includes(a.id))
   const criticalCount = visibleAlerts.filter(a => a.severity === 'critical' || a.severity === 'warning').length
+  const badgeCount = unseenAlerts.length
+
+  const markAllAsSeen = () => {
+    const allIds = visibleAlerts.map(a => a.id)
+    const updated = [...new Set([...seenAlerts, ...allIds])]
+    setSeenAlerts(updated)
+    sessionStorage.setItem('twf-seen-alerts', JSON.stringify(updated))
+  }
 
   const dismissAlert = (alertId: string) => {
     const updated = [...dismissedAlerts, alertId]
@@ -267,19 +290,23 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => setShowNotifications(!showNotifications)}
+                onClick={() => {
+                  const willOpen = !showNotifications
+                  setShowNotifications(willOpen)
+                  if (willOpen) markAllAsSeen()
+                }}
                 className="text-primary-foreground hover:bg-primary-foreground/10 relative"
               >
-                {criticalCount > 0 ? (
+                {criticalCount > 0 && badgeCount > 0 ? (
                   <BellRinging size={22} weight="fill" className="animate-pulse" />
                 ) : (
                   <Bell size={22} />
                 )}
-                {visibleAlerts.length > 0 && (
+                {badgeCount > 0 && (
                   <span className={`absolute -top-1 -right-1 text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center ${
                     criticalCount > 0 ? 'bg-red-500 text-white' : 'bg-blue-500 text-white'
                   }`}>
-                    {visibleAlerts.length}
+                    {badgeCount}
                   </span>
                 )}
               </Button>
@@ -500,7 +527,7 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
                             <SelectItem value="__all__">Todos los estados</SelectItem>
                             <SelectItem value="en_transito">🚢 En Tránsito Marítimo</SelectItem>
                             <SelectItem value="en_puerto">⚓ En Terminal / Puerto</SelectItem>
-                            <SelectItem value="salio_montevideo">🚛 Salió de Montevideo</SelectItem>
+                            <SelectItem value="salio_montevideo">🚛 Salida MVD / Carga Hoy</SelectItem>
                             <SelectItem value="en_frontera">🛃 En Frontera</SelectItem>
                             <SelectItem value="llego_fiscal">📦 En Depósito Fiscal</SelectItem>
                             <SelectItem value="devuelto">✅ Contenedor Devuelto</SelectItem>
@@ -545,8 +572,8 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
                   {filterStatus !== '__all__' && (
                     <Badge variant="secondary" className="text-xs gap-1">
                       {filterStatus === 'en_transito' ? '🚢 En Tránsito' :
-                       filterStatus === 'en_puerto' ? '⚓ En Puerto' :
-                       filterStatus === 'salio_montevideo' ? '🚛 Salió MVD' :
+                       filterStatus === 'en_puerto' ? '⚓ Terminal/Puerto' :
+                       filterStatus === 'salio_montevideo' ? '🚛 Salida MVD' :
                        filterStatus === 'en_frontera' ? '🛃 Frontera' :
                        filterStatus === 'llego_fiscal' ? '📦 Fiscal' :
                        filterStatus === 'devuelto' ? '✅ Devuelto' : filterStatus}

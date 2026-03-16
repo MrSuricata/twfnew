@@ -131,7 +131,7 @@ export default function ShipmentDetailsDialog({
   return (
     <Dialog open={open} onOpenChange={handleOpen}>
       <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+        <DialogHeader className="pr-10">
           <div className="flex items-start justify-between flex-wrap gap-4">
             <div className="flex-1">
               <DialogTitle className="text-2xl flex items-center gap-2">
