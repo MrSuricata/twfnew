@@ -649,7 +649,7 @@ export default function PublicSite({
             initial={{ opacity: 0, scale: 0.95 }}
             whileInView={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.6 }}
-            viewport={{ once: true, margin: "-100px" }}
+            viewport={{ once: true, margin: "0px" }}
             className="text-center mb-12"
           >
             <div className="flex items-center justify-center gap-3 mb-4">
@@ -665,7 +665,7 @@ export default function PublicSite({
             initial={{ opacity: 0, scale: 0.95 }}
             whileInView={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.6, delay: 0.1 }}
-            viewport={{ once: true, margin: "-100px" }}
+            viewport={{ once: true, margin: "0px" }}
           >
             <PublicTracking shipments={shipments} />
           </motion.div>

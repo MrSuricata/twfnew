@@ -131,16 +131,16 @@ export default function PublicTracking({ shipments: localShipments = [] }: Publi
           <form onSubmit={handleSearch} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="search">Número de Contenedor, MBL o Referencia</Label>
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <Input
                   id="search"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Ej: TCNU6972495, A7039"
-                  className="flex-1"
+                  className="flex-1 h-11 text-base"
                   disabled={isSearching}
                 />
-                <Button type="submit" disabled={isSearching} className="bg-accent text-accent-foreground hover:bg-accent/90">
+                <Button type="submit" disabled={isSearching} className="bg-accent text-accent-foreground hover:bg-accent/90 h-11 w-full sm:w-auto">
                   {isSearching ? (
                     <CircleNotch size={20} className="mr-2 animate-spin" />
                   ) : (
