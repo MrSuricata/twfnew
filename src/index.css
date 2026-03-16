@@ -6,6 +6,26 @@
   body {
     font-family: 'Inter', sans-serif;
   }
+
+  /* Safe area insets for mobile devices with notches/dynamic islands */
+  html {
+    --sat: env(safe-area-inset-top, 0px);
+    --sab: env(safe-area-inset-bottom, 0px);
+    --sal: env(safe-area-inset-left, 0px);
+    --sar: env(safe-area-inset-right, 0px);
+  }
+
+  /* Apply safe area padding on native apps */
+  body.capacitor-native {
+    padding-top: var(--sat);
+    padding-bottom: var(--sab);
+    padding-left: var(--sal);
+    padding-right: var(--sar);
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
+  }
 }
 
 :root {
