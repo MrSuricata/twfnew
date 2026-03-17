@@ -44,9 +44,15 @@ export default function ClientManager({ clients, onUpdateClients, shipments = []
   const [form, setForm] = useState<ClientForm>(EMPTY_FORM)
   const [formError, setFormError] = useState<string | null>(null)
 
+  const matchesPattern = (cliente: string, pattern: string) => {
+    if (!cliente || !pattern) return false
+    const clienteUpper = cliente.toUpperCase()
+    return pattern.toUpperCase().split(',').map(p => p.trim()).filter(Boolean).some(p => clienteUpper.includes(p))
+  }
+
   const getMatchCount = (pattern: string) => {
     if (!pattern) return 0
-    return shipments.filter(s => s.CLIENTE.toUpperCase().includes(pattern.toUpperCase())).length
+    return shipments.filter(s => matchesPattern(s.CLIENTE, pattern)).length
   }
 
   const openNew = () => {
@@ -229,11 +235,11 @@ export default function ClientManager({ clients, onUpdateClients, shipments = []
                 id="client-pattern"
                 value={form.clientePattern}
                 onChange={e => setForm({ ...form, clientePattern: e.target.value })}
-                placeholder="PERETTI"
+                placeholder="PERETTI o PERETTI,ACME,MARTINEZ"
                 className="font-mono"
               />
               <p className="text-xs text-muted-foreground">
-                El cliente verá todas las cargas donde el nombre del cliente contenga este texto.
+                Usá comas para múltiples razones sociales. Ej: <span className="font-mono">CHIAPERO,MARTINEZ</span>
                 {form.clientePattern && (
                   <span className="ml-1 font-medium text-accent">
                     ({getMatchCount(form.clientePattern)} cargas coinciden ahora)

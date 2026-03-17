@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { authenticateRequest, type ClientPayload } from '../_lib/jwt.js'
-import { performServerSync, stripFinancialFields } from '../_lib/csvParser.js'
+import { performServerSync, stripFinancialFields, matchesClientePattern } from '../_lib/csvParser.js'
 import { getSupabase } from '../_lib/supabase.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -20,7 +20,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const clientPayload = payload as ClientPayload
-  const pattern = clientPayload.clientePattern.toUpperCase()
+  const pattern = clientPayload.clientePattern
 
   // Strategy: try Google Sheets live first, fallback to Supabase cache
   let allShipments: any[] | null = null
@@ -76,7 +76,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // Filter to only this client's shipments
   const clientShipments = allShipments.filter((s: any) =>
-    s.CLIENTE?.toUpperCase().includes(pattern)
+    matchesClientePattern(s.CLIENTE, pattern)
   )
 
   // Strip financial fields

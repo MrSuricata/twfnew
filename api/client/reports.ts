@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { authenticateRequest, type ClientPayload } from '../_lib/jwt.js'
 import { handleCors } from '../_lib/cors.js'
 import { getSupabase } from '../_lib/supabase.js'
-import { performServerSync } from '../_lib/csvParser.js'
+import { performServerSync, matchesClientePattern } from '../_lib/csvParser.js'
 
 // ─── Client Reports API ─────────────────────────────────────────────
 // GET  /api/client/reports              → list reports for client's shipments (metadata only)
@@ -17,7 +17,7 @@ async function getClientShipmentRefs(db: any, pattern: string): Promise<Set<stri
     if (cache?.data && cache.data.length > 0) {
       const refs = new Set<string>(
         cache.data
-          .filter((s: any) => s.CLIENTE?.toUpperCase().includes(pattern))
+          .filter((s: any) => matchesClientePattern(s.CLIENTE, pattern))
           .map((s: any) => s.REF)
       )
       if (refs.size > 0) return refs
@@ -41,7 +41,7 @@ async function getClientShipmentRefs(db: any, pattern: string): Promise<Set<stri
 
       return new Set<string>(
         allShipments
-          .filter((s: any) => s.CLIENTE?.toUpperCase().includes(pattern))
+          .filter((s: any) => matchesClientePattern(s.CLIENTE, pattern))
           .map((s: any) => s.REF)
       )
     } catch (sheetsErr) {

@@ -457,6 +457,17 @@ export async function performServerSync(sheetsUrl: string): Promise<ParsedShipme
   return processed
 }
 
+/**
+ * Check if a CLIENTE field matches a pattern string.
+ * Supports multiple patterns separated by comma: "CHIAPERO,MARTINEZ,ACME"
+ */
+export function matchesClientePattern(cliente: string, pattern: string): boolean {
+  if (!cliente || !pattern) return false
+  const clienteUpper = cliente.toUpperCase()
+  const patterns = pattern.toUpperCase().split(',').map(p => p.trim()).filter(Boolean)
+  return patterns.some(p => clienteUpper.includes(p))
+}
+
 /** Strip sensitive financial fields for client portal */
 export function stripFinancialFields(shipments: ParsedShipment[]): ParsedShipment[] {
   return shipments.map(s => ({

@@ -103,11 +103,18 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
 
   const currentClient = clients?.find(c => c.email === clientEmail)
 
+  // Multi-pattern matching helper (supports "PATTERN1,PATTERN2")
+  const matchesPattern = (cliente: string, pattern: string) => {
+    if (!cliente || !pattern) return false
+    const clienteUpper = cliente.toUpperCase()
+    return pattern.toUpperCase().split(',').map(p => p.trim()).filter(Boolean).some(p => clienteUpper.includes(p))
+  }
+
   // Use server data if available, fallback to props
   const clientShipments = serverShipments.length > 0
     ? serverShipments
     : (shipments?.filter(s =>
-        currentClient?.clientePattern && s.CLIENTE.toUpperCase().includes(currentClient.clientePattern.toUpperCase())
+        currentClient?.clientePattern && matchesPattern(s.CLIENTE, currentClient.clientePattern)
       ) || [])
 
   const getDaysUntilFree = (libreHasta: string): number => {
