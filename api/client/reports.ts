@@ -2,11 +2,55 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { authenticateRequest, type ClientPayload } from '../_lib/jwt.js'
 import { handleCors } from '../_lib/cors.js'
 import { getSupabase } from '../_lib/supabase.js'
+import { performServerSync } from '../_lib/csvParser.js'
 
 // ─── Client Reports API ─────────────────────────────────────────────
 // GET  /api/client/reports              → list reports for client's shipments (metadata only)
 // GET  /api/client/reports?id=xxx       → single report WITH file_data (for download)
 // ─────────────────────────────────────────────────────────────────────
+
+/** Get all shipment REFs for a client, trying Supabase cache first, then Google Sheets live */
+async function getClientShipmentRefs(db: any, pattern: string): Promise<Set<string>> {
+  // Try 1: Supabase cache
+  try {
+    const { data: cache } = await db.from('shipments_cache').select('data').eq('id', 1).single()
+    if (cache?.data && cache.data.length > 0) {
+      const refs = new Set<string>(
+        cache.data
+          .filter((s: any) => s.CLIENTE?.toUpperCase().includes(pattern))
+          .map((s: any) => s.REF)
+      )
+      if (refs.size > 0) return refs
+    }
+  } catch (err) {
+    console.warn('[client/reports] Supabase cache read failed:', err)
+  }
+
+  // Try 2: Live Google Sheets (if cache is empty or doesn't have client's data)
+  const sheetsUrl = process.env.GOOGLE_SHEETS_CSV_URL
+  if (sheetsUrl) {
+    try {
+      const allShipments = await performServerSync(sheetsUrl)
+
+      // Also update the cache for next time
+      try {
+        await db
+          .from('shipments_cache')
+          .upsert({ id: 1, data: allShipments, synced_at: new Date().toISOString() }, { onConflict: 'id' })
+      } catch {}
+
+      return new Set<string>(
+        allShipments
+          .filter((s: any) => s.CLIENTE?.toUpperCase().includes(pattern))
+          .map((s: any) => s.REF)
+      )
+    } catch (sheetsErr) {
+      console.warn('[client/reports] Google Sheets fallback failed:', sheetsErr)
+    }
+  }
+
+  return new Set()
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handleCors(req, res)) return
@@ -32,14 +76,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (payload.role === 'client') {
         const clientPayload = payload as ClientPayload
         const pattern = clientPayload.clientePattern.toUpperCase()
-        // Check that the shipment belongs to this client via shipments_cache
-        const { data: cache } = await db.from('shipments_cache').select('data').eq('id', 1).single()
-        const shipments = cache?.data || []
-        const clientRefs = new Set(
-          shipments
-            .filter((s: any) => s.CLIENTE?.toUpperCase().includes(pattern))
-            .map((s: any) => s.REF)
-        )
+        const clientRefs = await getClientShipmentRefs(db, pattern)
         if (!clientRefs.has(data.shipment_ref)) {
           return res.status(403).json({ error: 'Access denied' })
         }
@@ -67,13 +104,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (payload.role === 'client') {
       const clientPayload = payload as ClientPayload
       const pattern = clientPayload.clientePattern.toUpperCase()
-      const { data: cache } = await db.from('shipments_cache').select('data').eq('id', 1).single()
-      const shipments = cache?.data || []
-      shipmentRefs = new Set(
-        shipments
-          .filter((s: any) => s.CLIENTE?.toUpperCase().includes(pattern))
-          .map((s: any) => s.REF)
-      )
+      shipmentRefs = await getClientShipmentRefs(db, pattern)
     }
 
     const { data, error } = await db
