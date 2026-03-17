@@ -591,7 +591,7 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="gap-1 text-xs h-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                              className="gap-1 text-xs h-7"
                               onClick={(e) => {
                                 e.stopPropagation()
                                 openReportDialog(record.REF)
