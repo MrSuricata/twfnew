@@ -363,7 +363,7 @@ function App() {
 
   return (
     <>
-      <Toaster position="top-right" />
+      <Toaster position="top-right" toastOptions={{ style: { zIndex: 99999 } }} style={{ zIndex: 99999 }} />
       <PublicSiteEnhanced
         language={language || 'es'}
         onLanguageChange={handleLanguageChange}

@@ -42,6 +42,7 @@ export default function ClientManager({ clients, onUpdateClients, shipments = []
   const [showDialog, setShowDialog] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<ClientForm>(EMPTY_FORM)
+  const [formError, setFormError] = useState<string | null>(null)
 
   const getMatchCount = (pattern: string) => {
     if (!pattern) return 0
@@ -50,6 +51,7 @@ export default function ClientManager({ clients, onUpdateClients, shipments = []
 
   const openNew = () => {
     setForm(EMPTY_FORM)
+    setFormError(null)
     setEditingId(null)
     setShowDialog(true)
   }
@@ -66,14 +68,16 @@ export default function ClientManager({ clients, onUpdateClients, shipments = []
   }
 
   const handleSave = () => {
+    setFormError(null)
+
     if (!form.email || !form.name || !form.clientePattern) {
-      toast.error('Email, nombre y patrón son obligatorios')
+      setFormError('Email, nombre y patrón son obligatorios')
       return
     }
 
     const emailExists = clients.some(c => c.email.toLowerCase() === form.email.toLowerCase() && c.id !== editingId)
     if (emailExists) {
-      toast.error('Ya existe un cliente con ese email')
+      setFormError(`Ya existe un cliente con el email "${form.email}"`)
       return
     }
 
@@ -237,6 +241,12 @@ export default function ClientManager({ clients, onUpdateClients, shipments = []
                 )}
               </p>
             </div>
+
+            {formError && (
+              <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+                {formError}
+              </div>
+            )}
 
             <div className="flex gap-2 pt-2">
               <Button variant="outline" className="flex-1" onClick={() => setShowDialog(false)}>
