@@ -11,24 +11,8 @@ interface ClientConfig {
   clientePattern: string
 }
 
-// ─── Rate limiting (in-memory, per Lambda instance) ─────────────────
-const rateLimits = new Map<string, { count: number; resetAt: number }>()
-const MAX_REQUESTS_PER_HOUR = 10
-
-function isRateLimited(email: string): boolean {
-  const key = email.toLowerCase().trim()
-  const now = Date.now()
-  const entry = rateLimits.get(key)
-
-  if (!entry || now > entry.resetAt) {
-    rateLimits.set(key, { count: 1, resetAt: now + 60 * 60 * 1000 })
-    return false
-  }
-
-  if (entry.count >= MAX_REQUESTS_PER_HOUR) return true
-  entry.count++
-  return false
-}
+// ─── Rate limiting (Supabase-backed, survives across Lambda instances) ──
+import { checkRateLimit } from '../_lib/rateLimiter.js'
 
 // ─── EmailJS server-side send ───────────────────────────────────────
 async function sendOTPEmail(email: string, code: string): Promise<boolean> {
@@ -53,7 +37,7 @@ async function sendOTPEmail(email: string, code: string): Promise<boolean> {
         to_email: email,
         otp_code: code,
         passcode: code,
-        time: '5 minutos',
+        time: '10 minutos',
       },
     }
 
@@ -123,7 +107,7 @@ async function getClients(): Promise<ClientConfig[]> {
 
 // ─── Handler ────────────────────────────────────────────────────────
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const allowedOrigin = process.env.ALLOWED_ORIGIN || '*'
+  const allowedOrigin = process.env.ALLOWED_ORIGIN || 'https://twf.uy'
   res.setHeader('Access-Control-Allow-Origin', allowedOrigin)
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
@@ -139,9 +123,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // ── ACTION: REQUEST OTP ─────────────────────────────────────────
   if (action === 'request') {
-    // Rate limit
-    if (isRateLimited(normalizedEmail)) {
-      return res.status(429).json({ error: 'Demasiadas solicitudes. Intentá más tarde.' })
+    // Rate limit (Supabase-backed)
+    const { limited, retryAfterMs } = await checkRateLimit(`otp:${normalizedEmail}`)
+    if (limited) {
+      const retryMin = Math.ceil((retryAfterMs || 0) / 60000)
+      return res.status(429).json({ error: `Demasiadas solicitudes. Reintentá en ${retryMin} minutos.` })
     }
 
     // Validate client exists (checks env var + Supabase)
@@ -154,9 +140,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ sent: true })
     }
 
-    // Generate and store OTP
+    // Generate and store OTP (async — Supabase backed)
     const otpCode = generateOTP()
-    storeOTP(normalizedEmail, otpCode)
+    await storeOTP(normalizedEmail, otpCode)
 
     // Send email
     const sent = await sendOTPEmail(normalizedEmail, otpCode)
@@ -172,7 +158,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (action === 'verify') {
     if (!code) return res.status(400).json({ error: 'Code required' })
 
-    const valid = verifyOTP(normalizedEmail, code)
+    const valid = await verifyOTP(normalizedEmail, code)
 
     if (!valid) {
       return res.status(401).json({ error: 'Código inválido o expirado' })

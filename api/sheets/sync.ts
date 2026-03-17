@@ -4,7 +4,7 @@ import { performServerSync } from '../_lib/csvParser.js'
 import { getSupabase } from '../_lib/supabase.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const allowedOrigin = process.env.ALLOWED_ORIGIN || '*'
+  const allowedOrigin = process.env.ALLOWED_ORIGIN || 'https://twf.uy'
   res.setHeader('Access-Control-Allow-Origin', allowedOrigin)
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')

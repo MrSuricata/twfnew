@@ -116,7 +116,8 @@ export function parseDate(dateStr: string): string {
 
 // ─── Operativas Sheet Parsing ────────────────────────────────────────
 
-const OPERATIVAS_GID = '1133111465'
+// GID loaded from server-side env only — not bundled in frontend
+const OPERATIVAS_GID = typeof process !== 'undefined' && process.env?.OPERATIVAS_GID || ''
 
 export function buildOperativasUrl(baseUrl: string): string | null {
   try {
@@ -388,7 +389,8 @@ export function buildCsvUrl(sheetsUrl: string): string {
 const EXCLUDED_TERMINAL_KEYWORDS = ['CHILE', 'BUENOS AIRES']
 
 // Manually excluded REFs (already resolved outside the system)
-const HARDCODED_EXCLUDED_REFS = ['A7530']
+// Excluded refs loaded from localStorage only (admin-configurable)
+const HARDCODED_EXCLUDED_REFS: string[] = []
 
 /**
  * Filter out shipments that don't belong in the Uruguay tracking system.

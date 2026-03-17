@@ -4,7 +4,7 @@ import { getSupabase } from './_lib/supabase.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS — restrict to configured origin
-  const allowedOrigin = process.env.ALLOWED_ORIGIN || '*'
+  const allowedOrigin = process.env.ALLOWED_ORIGIN || 'https://twf.uy'
   res.setHeader('Access-Control-Allow-Origin', allowedOrigin)
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
@@ -16,6 +16,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const q = (req.query.q as string || '').toLowerCase().trim()
   if (!q) {
     return res.status(400).json({ error: 'Query parameter "q" is required' })
+  }
+  // SECURITY: Require minimum 3 chars to prevent bulk enumeration
+  if (q.length < 3) {
+    return res.status(400).json({ error: 'Query must be at least 3 characters' })
   }
 
   // Strategy: try Google Sheets live first, fallback to Supabase cache
@@ -85,7 +89,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     containers: r.containers || parseContainers(r.CNTR || ''),
     calculatedN: r.calculatedN || parseContainers(r.CNTR || '').length || r.N,
     calculatedLibreHasta: r.calculatedLibreHasta || r.LIBRE_HASTA,
-    operativas: r.operativas || [],
+    // Strip client-identifying fields from operativas for public access
+    operativas: (r.operativas || []).map((o: any) => {
+      const { CLIENTE_OP, ...safeOp } = o
+      return safeOp
+    }),
   }))
 
   return res.status(200).json({ results, source })

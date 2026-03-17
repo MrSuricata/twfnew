@@ -468,10 +468,11 @@ export function matchesClientePattern(cliente: string, pattern: string): boolean
   return patterns.some(p => clienteUpper.includes(p))
 }
 
-/** Strip sensitive financial fields for client portal */
+/** Strip sensitive financial and identifying fields for non-admin views */
 export function stripFinancialFields(shipments: ParsedShipment[]): ParsedShipment[] {
   return shipments.map(s => ({
     ...s,
+    CLIENTE: '', // Don't expose client names to other clients or public
     C_TERMINAL: 0,
     C_DEV: 0,
     LOCALES: 0,

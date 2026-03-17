@@ -19,4 +19,8 @@ export default defineConfig({
       '@': resolve(projectRoot, 'src')
     }
   },
+  build: {
+    // SECURITY: Never expose source code in production
+    sourcemap: false,
+  },
 });

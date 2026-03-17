@@ -22,12 +22,21 @@ function setAuth(token: string, role: 'admin' | 'client', data?: Record<string, 
   try { sessionStorage.setItem('twf-token', token) } catch {}
 }
 
-/** Clear auth state (logout) */
+/** Clear auth state and all cached data (logout).
+ * SECURITY: removes all business data from localStorage to prevent leakage after logout. */
 export function clearAuth() {
   _token = null
   _role = null
   _userData = null
   try { sessionStorage.removeItem('twf-token') } catch {}
+  // Clear cached business data from localStorage
+  try {
+    localStorage.removeItem('twf-shipments')
+    localStorage.removeItem('twf-quotes')
+    localStorage.removeItem('twf-clients')
+    localStorage.removeItem('twf-documents')
+    localStorage.removeItem('twf-reports')
+  } catch {}
 }
 
 // ─── Admin Login ────────────────────────────────────────────────────

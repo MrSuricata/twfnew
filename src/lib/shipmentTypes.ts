@@ -169,6 +169,37 @@ function isDateReached(s: string): boolean {
 }
 
 /**
+ * Check if the day AFTER a given date has been reached (today >= date + 1 day).
+ * Used for auto-devolution of trasiegos/desconsolidaciones.
+ */
+function isDayAfterReached(s: string): boolean {
+  const d = parseLocalDate(s)
+  if (!d) return false
+  const nextDay = new Date(d.getTime() + 24 * 60 * 60 * 1000)
+  return todayLocal().getTime() >= nextDay.getTime()
+}
+
+/**
+ * Check if an operativa is a "contenedor directo" (full container delivery).
+ * Non-contenedor types: TRASIEGO, DESCONSOLIDACION, CARGA A PISO, etc.
+ */
+function isContenedorDirecto(op: OperativasRecord): boolean {
+  const tipo = (op.OPERATIVA || '').toUpperCase().trim()
+  return tipo === 'CONTENEDOR' || tipo === ''
+}
+
+/**
+ * For non-contenedor operations (trasiego, desconsolidación, carga a piso),
+ * check if it should be considered "devuelto" (day after DESCARGA or SALIDA).
+ */
+function isAutoDevuelto(op: OperativasRecord): boolean {
+  if (isContenedorDirecto(op)) return false
+  // Use DESCARGA date if available, otherwise SALIDA
+  const refDate = isValidDate(op.DESCARGA) ? op.DESCARGA : op.SALIDA
+  return isValidDate(refDate) && isDayAfterReached(refDate)
+}
+
+/**
  * Derive shipment status from Operativas dates.
  * Logic: SALIDA = container left Montevideo. If all containers have SALIDA,
  * we consider the shipment effectively in its next phase.
@@ -184,12 +215,16 @@ export function getShipmentStatus(shipment: ParsedShipment): ShipmentStatus {
     return { code: 'en_transito', label: 'En Tránsito Marítimo', color: 'blue', progress: 10 }
   }
 
-  // Check if all containers have DEV date or OPERATIVA === 'DEVUELTO'
-  // Must also have valid SALIDA — can't be devuelto if it never left
-  // Use isDateReached to avoid marking future dates as completed
-  const allDevueltos = ops.length > 0 && ops.every(o =>
-    isDateReached(o.SALIDA) && (isDateReached(o.DEV) || o.OPERATIVA?.toUpperCase() === 'DEVUELTO')
-  )
+  // Check if all containers are devueltos.
+  // - Contenedor directo: requires actual DEV date or OPERATIVA === 'DEVUELTO'
+  // - Trasiego/desconsolidación/carga a piso: auto-devuelto the day after DESCARGA (or SALIDA)
+  const allDevueltos = ops.length > 0 && ops.every(o => {
+    if (!isDateReached(o.SALIDA)) return false
+    // Non-contenedor: auto-devuelto day after descarga/salida
+    if (!isContenedorDirecto(o)) return isAutoDevuelto(o)
+    // Contenedor directo: needs actual DEV date or OPERATIVA='DEVUELTO'
+    return isDateReached(o.DEV) || o.OPERATIVA?.toUpperCase() === 'DEVUELTO'
+  })
   if (allDevueltos) {
     return { code: 'devuelto', label: 'Contenedor Devuelto', color: 'gray', progress: 100, date: ops.find(o => isValidDate(o.DEV))?.DEV }
   }
@@ -259,8 +294,14 @@ export function isShipmentCompleted(shipment: ParsedShipment): boolean {
   // All containers must have valid SALIDA date
   if (!ops.every(o => isValidDate(o.SALIDA))) return false
 
-  // Check if ALL SALIDA dates are older than 2 weeks
+  // Check each operativa based on type
   return ops.every(o => {
+    // Non-contenedor (trasiego, desconsolidación): completed day after descarga/salida
+    if (!isContenedorDirecto(o)) {
+      return isAutoDevuelto(o)
+    }
+    // Contenedor directo: completed if DEV date reached or SALIDA > 2 weeks ago
+    if (isDateReached(o.DEV) || o.OPERATIVA?.toUpperCase() === 'DEVUELTO') return true
     const salidaDate = parseLocalDate(o.SALIDA)
     if (!salidaDate) return false
     return (today.getTime() - salidaDate.getTime()) > TWO_WEEKS_MS
@@ -346,7 +387,11 @@ export function generateShipmentAlerts(shipments: ParsedShipment[], reports?: { 
     if (ops.length > 0 && shipArrived) {
       const hasSalida = ops.some(o => isDateReached(o.SALIDA))
       const hasEtaFisc = ops.some(o => isDateReached(o.ETA_FISC))
-      const hasDev = ops.some(o => (isDateReached(o.DEV) || o.OPERATIVA?.toUpperCase() === 'DEVUELTO') && isDateReached(o.SALIDA))
+      const hasDev = ops.some(o => {
+        if (!isDateReached(o.SALIDA)) return false
+        if (!isContenedorDirecto(o)) return isAutoDevuelto(o)
+        return isDateReached(o.DEV) || o.OPERATIVA?.toUpperCase() === 'DEVUELTO'
+      })
 
       if (hasDev) {
         alerts.push({

@@ -25,7 +25,7 @@ export interface QuoteFormData {
 export interface ClientAccount {
   id: string
   email: string
-  password?: string
+  // password field removed — auth is via OTP, no passwords stored
   name: string
   company: string
   createdAt: number

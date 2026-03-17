@@ -1,20 +1,11 @@
 import { createHash, randomInt } from 'crypto'
+import { getSupabase } from './supabase.js'
 
-// ─── Types ──────────────────────────────────────────────────────────────
-interface OTPEntry {
-  hash: string          // SHA-256 of the OTP code
-  expiresAt: number     // Unix timestamp (ms)
-  attempts: number      // Failed verification attempts
-}
-
-// ─── In-Memory Store ────────────────────────────────────────────────────
-// Works because request + verify use the same Lambda endpoint (api/auth/otp.ts)
-const store = new Map<string, OTPEntry>()
-
-const OTP_TTL_MS = 5 * 60 * 1000    // 5 minutes
+// ─── Config ──────────────────────────────────────────────────────────────
+const OTP_TTL_MS = 10 * 60 * 1000   // 10 minutes
 const MAX_ATTEMPTS = 5               // Max wrong tries before invalidation
 
-// ─── Helpers ────────────────────────────────────────────────────────────
+// ─── Helpers ─────────────────────────────────────────────────────────────
 function sha256(value: string): string {
   return createHash('sha256').update(value).digest('hex')
 }
@@ -24,54 +15,84 @@ export function generateOTP(): string {
   return String(randomInt(100000, 999999))
 }
 
-/** Store an OTP for a given email (hashed) */
-export function storeOTP(email: string, code: string): void {
-  cleanup() // Purge expired entries first
+/**
+ * Store an OTP for a given email (hashed) in Supabase.
+ * Uses upsert so re-requesting a code replaces the old one.
+ *
+ * Table schema (run once in Supabase SQL Editor):
+ * CREATE TABLE IF NOT EXISTS otp_codes (
+ *   email      TEXT PRIMARY KEY,
+ *   hash       TEXT        NOT NULL,
+ *   expires_at TIMESTAMPTZ NOT NULL,
+ *   attempts   INTEGER     NOT NULL DEFAULT 0
+ * );
+ */
+export async function storeOTP(email: string, code: string): Promise<void> {
   const key = email.toLowerCase().trim()
-  store.set(key, {
+  const db = getSupabase()
+
+  // Cleanup expired OTPs in background (don't await — not critical)
+  cleanupExpired().catch(() => {})
+
+  const { error } = await db.from('otp_codes').upsert({
+    email: key,
     hash: sha256(code),
-    expiresAt: Date.now() + OTP_TTL_MS,
+    expires_at: new Date(Date.now() + OTP_TTL_MS).toISOString(),
     attempts: 0,
-  })
+  }, { onConflict: 'email' })
+
+  if (error) {
+    console.error('Failed to store OTP in Supabase:', error.message)
+    throw new Error('OTP storage failed')
+  }
 }
 
-/** Verify an OTP code for a given email. Returns true if valid, false otherwise.
- *  Consumes the OTP on success (one-time use). */
-export function verifyOTP(email: string, code: string): boolean {
+/**
+ * Verify an OTP code for a given email. Returns true if valid, false otherwise.
+ * Consumes the OTP on success (one-time use).
+ * Increments attempt counter on failure for brute-force protection.
+ */
+export async function verifyOTP(email: string, code: string): Promise<boolean> {
   const key = email.toLowerCase().trim()
-  const entry = store.get(key)
+  const db = getSupabase()
 
-  if (!entry) return false
+  const { data, error } = await db
+    .from('otp_codes')
+    .select('hash, expires_at, attempts')
+    .eq('email', key)
+    .single()
+
+  if (error || !data) return false
 
   // Expired
-  if (Date.now() > entry.expiresAt) {
-    store.delete(key)
+  if (new Date(data.expires_at).getTime() < Date.now()) {
+    await db.from('otp_codes').delete().eq('email', key)
     return false
   }
 
   // Too many attempts — brute-force protection
-  if (entry.attempts >= MAX_ATTEMPTS) {
-    store.delete(key)
+  if (data.attempts >= MAX_ATTEMPTS) {
+    await db.from('otp_codes').delete().eq('email', key)
     return false
   }
 
   // Check hash
-  if (sha256(code) === entry.hash) {
-    store.delete(key) // One-time use
+  if (sha256(code) === data.hash) {
+    // Valid — consume (delete)
+    await db.from('otp_codes').delete().eq('email', key)
     return true
   }
 
   // Wrong code — increment attempts
-  entry.attempts++
+  await db.from('otp_codes')
+    .update({ attempts: data.attempts + 1 })
+    .eq('email', key)
+
   return false
 }
 
-/** Remove expired entries from the store */
-function cleanup(): void {
-  const now = Date.now()
-  for (const [key, entry] of store) {
-    if (now > entry.expiresAt) {
-      store.delete(key)
-    }
-  }
+/** Remove expired entries from the otp_codes table */
+export async function cleanupExpired(): Promise<void> {
+  const db = getSupabase()
+  await db.from('otp_codes').delete().lt('expires_at', new Date().toISOString())
 }

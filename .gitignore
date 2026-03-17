@@ -24,7 +24,10 @@ dist-ssr
 *.sln
 *.sw?
 
-.env
+# Environment files (keep .env.example as template)
+.env*
+!.env.example
+
 **/agent-eval-report*
 packages
 pids

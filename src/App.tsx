@@ -20,6 +20,10 @@ type View = 'public' | 'admin-login' | 'admin-dashboard' | 'client-login' | 'cli
 // No hardcoded client data in client bundle.
 const DEFAULT_CLIENTS: ClientAccount[] = []
 
+// ── localStorage helpers with write queue to prevent concurrent writes ──
+
+let _writeQueue: Promise<void> = Promise.resolve()
+
 function loadFromStorage<T>(key: string, fallback: T): T {
   try {
     const stored = localStorage.getItem(key)
@@ -31,11 +35,14 @@ function loadFromStorage<T>(key: string, fallback: T): T {
 }
 
 function saveToStorage(key: string, data: unknown) {
-  try {
-    localStorage.setItem(key, JSON.stringify(data))
-  } catch (e) {
-    console.error(`Error saving ${key} to localStorage:`, e)
-  }
+  // Queue writes to prevent concurrent localStorage corruption
+  _writeQueue = _writeQueue.then(() => {
+    try {
+      localStorage.setItem(key, JSON.stringify(data))
+    } catch (e) {
+      console.error(`Error saving ${key} to localStorage:`, e)
+    }
+  })
 }
 
 function getInitialView(): View {
@@ -58,14 +65,20 @@ function App() {
   const [reports, setReports] = useState<OperativeReport[]>(() => loadFromStorage('twf-reports', []))
   const [shipments, setShipments] = useState<ParsedShipment[]>(() => filterShipments(loadFromStorage('twf-shipments', [])))
 
+  // Track whether fresh data has loaded from Supabase
+  const [isDataLoading, setIsDataLoading] = useState(false)
+  const [dataFresh, setDataFresh] = useState(false)
+
   const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const dbLoadedRef = useRef(false)
+  const dbLoadingRef = useRef(false) // Guard against concurrent calls
 
   // ── Load data from Supabase when admin logs in ──
   const loadDataFromDB = useCallback(async () => {
-    if (dbLoadedRef.current) return
+    if (dbLoadedRef.current || dbLoadingRef.current) return
+    dbLoadingRef.current = true
+    setIsDataLoading(true)
     try {
-      console.log('[DB] Loading data from Supabase...')
       const data = await loadAdminData()
       dbLoadedRef.current = true
 
@@ -74,37 +87,37 @@ function App() {
         const filtered = filterShipments(data.shipments)
         setShipments(filtered)
         saveToStorage('twf-shipments', filtered)
-        console.log(`[DB] Loaded ${filtered.length} shipments (synced: ${data.syncedAt || 'never'})`)
       }
 
       if (data.quotes.length > 0 || data.quotes.length === 0) {
         setQuotes(data.quotes)
         saveToStorage('twf-quotes', data.quotes)
-        console.log(`[DB] Loaded ${data.quotes.length} quotes`)
       }
 
       if (data.documents.length > 0 || data.documents.length === 0) {
         setDocuments(data.documents)
         saveToStorage('twf-documents', data.documents)
-        console.log(`[DB] Loaded ${data.documents.length} documents`)
       }
 
       if (data.reports.length > 0 || data.reports.length === 0) {
         setReports(data.reports)
         saveToStorage('twf-reports', data.reports)
-        console.log(`[DB] Loaded ${data.reports.length} reports`)
       }
 
       if (data.clients.length > 0) {
         setClients(data.clients)
         saveToStorage('twf-clients', data.clients)
-        console.log(`[DB] Loaded ${data.clients.length} clients`)
       }
 
+      setDataFresh(true)
       toast.success('Datos sincronizados desde la base de datos')
     } catch (error) {
       console.warn('[DB] Failed to load from Supabase, using local cache:', error)
+      setDataFresh(false)
       // Non-fatal: localStorage data still available
+    } finally {
+      dbLoadingRef.current = false
+      setIsDataLoading(false)
     }
   }, [])
 
@@ -153,7 +166,6 @@ function App() {
         setShipments(synced)
         saveToStorage('twf-shipments', synced)
         // Note: sync endpoint already caches to Supabase
-        console.log(`[Auto-sync] ${synced.length} registros actualizados — ${new Date().toLocaleTimeString('es-UY')}`)
       }
     } catch (error) {
       console.warn('[Auto-sync] Error:', error)
@@ -208,7 +220,8 @@ function App() {
     setClients(updated)
     saveToStorage('twf-clients', updated)
     // Save to Supabase so clients are shared across machines + OTP works
-    if (isAdminLoggedIn) {
+    // Only write if DB data was loaded (prevents stale localStorage overwriting fresh DB)
+    if (isAdminLoggedIn && dataFresh) {
       saveClients(updated).catch(err =>
         console.warn('[DB] Failed to save clients:', err)
       )
@@ -224,8 +237,8 @@ function App() {
   const handleUpdateDocuments = (docs: ShipmentDocument[]) => {
     setDocuments(docs)
     saveToStorage('twf-documents', docs)
-    // Save to Supabase in background
-    if (isAdminLoggedIn) {
+    // Save to Supabase in background (only if fresh data was loaded)
+    if (isAdminLoggedIn && dataFresh) {
       saveDocuments(docs).catch(err =>
         console.warn('[DB] Failed to save documents:', err)
       )
@@ -235,8 +248,8 @@ function App() {
   const handleUpdateReports = (updated: OperativeReport[]) => {
     setReports(updated)
     saveToStorage('twf-reports', updated)
-    // Save to Supabase in background
-    if (isAdminLoggedIn) {
+    // Save to Supabase in background (only if fresh data was loaded)
+    if (isAdminLoggedIn && dataFresh) {
       saveReports(updated).catch(err => {
         console.warn('[DB] Failed to save reports:', err)
         toast.warning('Error al sincronizar informes con la base de datos', { duration: 5000 })
@@ -247,8 +260,8 @@ function App() {
   const handleUpdateQuotes = (updated: QuoteFormData[]) => {
     setQuotes(updated)
     saveToStorage('twf-quotes', updated)
-    // Save to Supabase in background
-    if (isAdminLoggedIn) {
+    // Save to Supabase in background (only if fresh data was loaded)
+    if (isAdminLoggedIn && dataFresh) {
       saveQuotes(updated).catch(err =>
         console.warn('[DB] Failed to save quotes:', err)
       )
@@ -289,6 +302,7 @@ function App() {
 
   const handleAdminLogin = () => {
     setIsAdminLoggedIn(true)
+    setDataFresh(false) // Reset freshness on new login
     dbLoadedRef.current = false // Reset so data loads from DB
     navigateTo('admin-dashboard')
   }
@@ -296,6 +310,7 @@ function App() {
   const handleAdminLogout = () => {
     clearAuth()
     setIsAdminLoggedIn(false)
+    setDataFresh(false)
     dbLoadedRef.current = false
     navigateTo('public')
   }
@@ -326,17 +341,48 @@ function App() {
 
   if (currentView === 'admin-dashboard' && isAdminLoggedIn) {
     return (
-      <DashboardEnhanced
-        onLogout={handleAdminLogout}
-        clients={clients}
-        shipments={shipments}
-        documents={documents}
-        reports={reports}
-        onUpdateShipments={handleUpdateShipments}
-        onUpdateClients={handleUpdateClients}
-        onUpdateDocuments={handleUpdateDocuments}
-        onUpdateReports={handleUpdateReports}
-      />
+      <>
+        {/* Sync status banner */}
+        {(isDataLoading || (!dataFresh && isAdminLoggedIn)) && (
+          <div style={{
+            position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50000,
+            display: 'flex', justifyContent: 'center', pointerEvents: 'none',
+          }}>
+            <div style={{
+              background: isDataLoading ? '#2563eb' : '#f59e0b',
+              color: 'white', padding: '6px 20px',
+              borderRadius: '0 0 8px 8px', fontSize: '13px', fontWeight: 500,
+              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+              display: 'flex', alignItems: 'center', gap: '8px',
+            }}>
+              {isDataLoading ? (
+                <>
+                  <span style={{
+                    display: 'inline-block', width: 14, height: 14,
+                    border: '2px solid rgba(255,255,255,0.3)', borderTopColor: 'white',
+                    borderRadius: '50%', animation: 'twf-spin 0.8s linear infinite',
+                  }} />
+                  Sincronizando datos...
+                </>
+              ) : (
+                <>&#9888; Usando cache local &mdash; no se pudo conectar a la base de datos</>
+              )}
+            </div>
+          </div>
+        )}
+        {isDataLoading && <style>{`@keyframes twf-spin { to { transform: rotate(360deg); } }`}</style>}
+        <DashboardEnhanced
+          onLogout={handleAdminLogout}
+          clients={clients}
+          shipments={shipments}
+          documents={documents}
+          reports={reports}
+          onUpdateShipments={handleUpdateShipments}
+          onUpdateClients={handleUpdateClients}
+          onUpdateDocuments={handleUpdateDocuments}
+          onUpdateReports={handleUpdateReports}
+        />
+      </>
     )
   }
 
@@ -369,9 +415,9 @@ function App() {
         onLanguageChange={handleLanguageChange}
         onAdminClick={() => setCurrentView('admin-login')}
         onClientPortalClick={() => setCurrentView('client-login')}
-        quotes={quotes || []}
+        quotes={[]}
         onUpdateQuotes={handleUpdateQuotes}
-        shipments={shipments}
+        shipments={[]}
       />
     </>
   )

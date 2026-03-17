@@ -1,9 +1,13 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 
-/** Set CORS headers on the response */
+/** Set CORS headers on the response.
+ * SECURITY: Never fallback to '*' — require ALLOWED_ORIGIN to be set in Vercel env vars. */
 export function setCorsHeaders(res: VercelResponse) {
-  const origin = process.env.ALLOWED_ORIGIN || '*'
-  res.setHeader('Access-Control-Allow-Origin', origin)
+  const origin = process.env.ALLOWED_ORIGIN
+  if (!origin) {
+    console.warn('[CORS] ALLOWED_ORIGIN not set — using restrictive default')
+  }
+  res.setHeader('Access-Control-Allow-Origin', origin || 'https://twf.uy')
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
 }

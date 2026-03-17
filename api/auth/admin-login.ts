@@ -1,10 +1,11 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { createHash } from 'crypto'
 import { signAdminToken } from '../_lib/jwt.js'
+import { checkRateLimit, clearRateLimit } from '../_lib/rateLimiter.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS
-  const allowedOrigin = process.env.ALLOWED_ORIGIN || '*'
+  const allowedOrigin = process.env.ALLOWED_ORIGIN || 'https://twf.uy'
   res.setHeader('Access-Control-Allow-Origin', allowedOrigin)
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
@@ -17,6 +18,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (!username || !password) {
       return res.status(400).json({ error: 'Username and password required' })
+    }
+
+    // Rate limiting by IP
+    const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()
+      || req.socket?.remoteAddress
+      || 'unknown'
+    const rateLimitKey = `admin-login:${ip}`
+
+    const { limited, retryAfterMs } = await checkRateLimit(rateLimitKey)
+    if (limited) {
+      const retryMinutes = Math.ceil((retryAfterMs || 0) / 60000)
+      res.setHeader('Retry-After', String(Math.ceil((retryAfterMs || 0) / 1000)))
+      return res.status(429).json({
+        error: `Demasiados intentos. Reintentá en ${retryMinutes} minutos.`,
+      })
     }
 
     const adminUser = process.env.ADMIN_USER
@@ -34,6 +50,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(401).json({ error: 'Invalid credentials' })
     }
 
+    // Success — clear rate limit for this IP
+    await clearRateLimit(rateLimitKey)
+
     // Generate JWT
     const token = signAdminToken(username)
 
@@ -44,6 +63,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })
   } catch (error: any) {
     console.error('Admin login error:', error?.message || error, error?.stack)
-    return res.status(500).json({ error: 'Internal server error', detail: error?.message })
+    return res.status(500).json({ error: 'Internal server error' })
   }
 }

@@ -44,7 +44,7 @@ export function signClientToken(
 
 /** Verify any JWT and return its payload */
 export function verifyToken(token: string): TokenPayload {
-  return jwt.verify(token, getSecret()) as TokenPayload
+  return jwt.verify(token, getSecret(), { algorithms: ['HS256'] }) as TokenPayload
 }
 
 /** Extract Bearer token from Authorization header */
