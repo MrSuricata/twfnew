@@ -273,6 +273,43 @@ export async function saveClients(clients: ClientAccount[]): Promise<void> {
   }
 }
 
+/**
+ * Save a client email inline from the notification checklist.
+ * Updates existing client or creates a new one with clientePattern = CLIENTE value.
+ */
+export async function saveClientEmailInline(clienteValue: string, email: string): Promise<void> {
+  try {
+    const clients = await fetchClients()
+    const clienteUpper = clienteValue.toUpperCase().trim()
+
+    // Find existing client whose pattern matches this CLIENTE
+    const existing = clients.find(c => {
+      const patterns = (c.clientePattern || '').toUpperCase().split(',').map(p => p.trim()).filter(Boolean)
+      return patterns.some(p => clienteUpper.includes(p))
+    })
+
+    if (existing) {
+      // Update email for existing client
+      existing.email = email.trim()
+      await saveClients(clients)
+    } else {
+      // Create new client
+      const newClient: ClientAccount = {
+        id: `client-${Date.now()}`,
+        email: email.trim(),
+        name: clienteValue,
+        company: clienteValue,
+        createdAt: Date.now(),
+        clientePattern: clienteValue,
+      }
+      await saveClients([...clients, newClient])
+    }
+  } catch (err) {
+    console.warn('[saveClientEmailInline] Failed:', err)
+    // Non-fatal: task email was already updated, client record is a bonus
+  }
+}
+
 // ── Settings ──
 
 export async function fetchAllSettings(): Promise<Record<string, any>> {

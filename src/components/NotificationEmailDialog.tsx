@@ -10,7 +10,8 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
-import { PaperPlaneTilt, SpinnerGap, Camera, FileText, CheckCircle, Paperclip } from '@phosphor-icons/react'
+import { PaperPlaneTilt, SpinnerGap, Camera, FileText, CheckCircle, Paperclip, Pencil } from '@phosphor-icons/react'
+import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
 import { NotificationTask, OriginPhoto, OperativeReport } from '@/lib/quotationTypes'
 import { sendNotificationEmail, fetchReportFile } from '@/lib/dataClient'
@@ -73,20 +74,25 @@ export default function NotificationEmailDialog({
   const [includeReports, setIncludeReports] = useState(true)
   const [loadingAttachments, setLoadingAttachments] = useState(false)
 
-  const to = task.clientEmail || ''
+  const [toOverride, setToOverride] = useState(task.clientEmail || '')
+  const [editingTo, setEditingTo] = useState(!task.clientEmail)
+  const to = toOverride || task.clientEmail || ''
   const subject = STEP_SUBJECTS[task.step]?.(task.shipmentRef, task.containerNumber) || ''
   const isDeparture = task.step === 'departure'
 
   // Reset body when task changes
   useEffect(() => {
     setBody(STEP_TEMPLATES[task.step]?.(task) || '')
+    setToOverride(task.clientEmail || '')
+    setEditingTo(!task.clientEmail)
     setIncludePhotos(true)
     setIncludeReports(true)
   }, [task.id])
 
   const handleSend = async () => {
-    if (!to) {
-      toast.error('No se encontró email del cliente. Verificá la configuración del cliente.')
+    const sendTo = toOverride.trim() || to
+    if (!sendTo) {
+      toast.error('Ingresá al menos un email del cliente.')
       return
     }
 
@@ -128,8 +134,9 @@ export default function NotificationEmailDialog({
         }
       }
 
+      const sendTo = toOverride.trim() || to
       await sendNotificationEmail(task.id, {
-        to,
+        to: sendTo,
         subject,
         htmlBody,
         attachments: attachments.length > 0 ? attachments : undefined,
@@ -158,9 +165,25 @@ export default function NotificationEmailDialog({
         <div className="space-y-4">
           {/* Read-only email info */}
           <div className="rounded-lg border p-3 bg-muted/30 space-y-2">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs text-muted-foreground">Para</Label>
-              <span className="text-sm font-medium">{to || <span className="text-red-400">Sin email configurado</span>}</span>
+            <div className="flex items-center justify-between gap-2">
+              <Label className="text-xs text-muted-foreground flex-shrink-0">Para</Label>
+              {editingTo ? (
+                <Input
+                  value={toOverride}
+                  onChange={(e) => setToOverride(e.target.value)}
+                  placeholder="email@cliente.com, otro@empresa.com"
+                  className="h-7 text-xs"
+                  autoFocus
+                />
+              ) : (
+                <button
+                  className="flex items-center gap-1 text-sm font-medium hover:text-blue-400 transition-colors cursor-pointer"
+                  onClick={() => setEditingTo(true)}
+                >
+                  {to}
+                  <Pencil size={10} className="opacity-40" />
+                </button>
+              )}
             </div>
             <div className="flex items-center justify-between">
               <Label className="text-xs text-muted-foreground">Asunto</Label>
@@ -259,7 +282,7 @@ export default function NotificationEmailDialog({
           </Button>
           <Button
             onClick={handleSend}
-            disabled={sending || !to}
+            disabled={sending || !(toOverride.trim() || to)}
             className="bg-accent text-accent-foreground hover:bg-accent/90 gap-2"
           >
             {sending ? (

@@ -433,6 +433,8 @@ async function handleNotificationTasks(req: VercelRequest, res: VercelResponse, 
       updates.email_sent = body.emailSent
       if (body.emailSent) updates.email_sent_at = new Date().toISOString()
     }
+    if (body.clientEmail !== undefined) updates.client_email = body.clientEmail
+    if (body.clientName !== undefined) updates.client_name = body.clientName
     if (body.status !== undefined) updates.status = body.status
     if (body.notes !== undefined) updates.notes = body.notes
     const { error } = await db.from('notification_tasks').update(updates).eq('id', id)

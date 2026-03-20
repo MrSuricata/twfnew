@@ -25,7 +25,9 @@ import {
   updateNotificationTask,
   skipNotificationTask,
   sendNotificationEmail,
+  saveClientEmailInline,
 } from '@/lib/dataClient'
+import { Pencil, FloppyDisk } from '@phosphor-icons/react'
 import NotificationEmailDialog, { STEP_SUBJECTS, STEP_TEMPLATES } from './NotificationEmailDialog'
 
 interface NotificationChecklistProps {
@@ -200,6 +202,37 @@ export default function NotificationChecklist({ shipments, originPhotos, reports
     setEmailDialogTask(null)
   }
 
+  // ── Inline email editing ──
+  const [editingEmailId, setEditingEmailId] = useState<string | null>(null)
+  const [emailDraft, setEmailDraft] = useState('')
+  const [savingEmailId, setSavingEmailId] = useState<string | null>(null)
+
+  const handleSaveEmail = async (taskId: string, cliente: string) => {
+    const trimmed = emailDraft.trim()
+    if (!trimmed) { toast.error('Ingresá al menos un email'); return }
+    // Basic validation: all comma-separated parts should look like emails
+    const emails = trimmed.split(',').map(e => e.trim()).filter(Boolean)
+    const invalid = emails.find(e => !e.includes('@') || !e.includes('.'))
+    if (invalid) { toast.error(`Email inválido: ${invalid}`); return }
+
+    setSavingEmailId(taskId)
+    try {
+      // 1. Update the task's clientEmail
+      await updateNotificationTask(taskId, { clientEmail: trimmed } as any)
+      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, clientEmail: trimmed } : t))
+
+      // 2. Also save to clients table for future auto-resolve (fire and forget)
+      saveClientEmailInline(cliente, trimmed).catch(() => {})
+
+      toast.success(`Email guardado para ${cliente}`)
+      setEditingEmailId(null)
+    } catch (err: any) {
+      toast.error(`Error: ${err.message}`)
+    } finally {
+      setSavingEmailId(null)
+    }
+  }
+
   // Quick send for border/fiscal — no dialog needed
   const [quickSending, setQuickSending] = useState<string | null>(null)
   const handleQuickSend = async (task: NotificationTask) => {
@@ -247,11 +280,53 @@ export default function NotificationChecklist({ shipments, originPhotos, reports
                 <Badge variant="outline" className="text-[10px] px-1.5 h-4">{task.containerNumber}</Badge>
               )}
             </div>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-3">
+            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
               <span className="font-medium text-foreground">{STEP_LABELS[task.step]}</span>
               <span>·</span>
               <span>{isOverdue ? `Vencida (${task.dueDate})` : task.dueDate === today ? 'Hoy' : task.dueDate}</span>
-              {task.clientEmail && <span>· {task.clientEmail}</span>}
+            </div>
+
+            {/* Inline email editing */}
+            <div className="mb-3">
+              {editingEmailId === task.id ? (
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    value={emailDraft}
+                    onChange={(e) => setEmailDraft(e.target.value)}
+                    placeholder="email@cliente.com, otro@cliente.com"
+                    className="h-7 text-xs flex-1"
+                    autoFocus
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleSaveEmail(task.id, task.cliente); if (e.key === 'Escape') setEditingEmailId(null) }}
+                  />
+                  <Button
+                    size="sm"
+                    className="h-7 px-2 text-xs gap-1 bg-green-600 hover:bg-green-700 text-white"
+                    onClick={() => handleSaveEmail(task.id, task.cliente)}
+                    disabled={savingEmailId === task.id}
+                  >
+                    {savingEmailId === task.id ? <SpinnerGap size={12} className="animate-spin" /> : <FloppyDisk size={12} />}
+                    Guardar
+                  </Button>
+                  <Button variant="ghost" size="sm" className="h-7 px-1.5" onClick={() => setEditingEmailId(null)}>✕</Button>
+                </div>
+              ) : task.clientEmail ? (
+                <button
+                  className="flex items-center gap-1.5 text-xs text-blue-400 hover:text-blue-300 transition-colors cursor-pointer"
+                  onClick={() => { setEditingEmailId(task.id); setEmailDraft(task.clientEmail) }}
+                >
+                  <EnvelopeSimple size={12} />
+                  {task.clientEmail}
+                  <Pencil size={10} className="opacity-50" />
+                </button>
+              ) : (
+                <button
+                  className="flex items-center gap-1.5 text-xs text-amber-500 hover:text-amber-400 transition-colors cursor-pointer bg-amber-500/10 px-2 py-1 rounded"
+                  onClick={() => { setEditingEmailId(task.id); setEmailDraft('') }}
+                >
+                  <Warning size={12} />
+                  Sin email — click para agregar
+                </button>
+              )}
             </div>
 
             {/* Checkboxes for departure */}
