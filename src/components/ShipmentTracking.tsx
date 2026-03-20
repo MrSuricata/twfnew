@@ -45,7 +45,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { ParsedShipment, getShipmentStatus, ShipmentStatusCode } from '@/lib/shipmentTypes'
-import { OperativeReport, OriginPhoto } from '@/lib/quotationTypes'
+import { OperativeReport, OriginPhoto, PhotoLocation } from '@/lib/quotationTypes'
 import { saveReportWithFile, deleteReport as deleteReportFromDB, saveOriginPhoto } from '@/lib/dataClient'
 import { processPhoto } from '@/lib/imageUtils'
 import ShipmentDetailsDialog from './ShipmentDetailsDialog'
@@ -109,6 +109,7 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
   const [photoTargetShipment, setPhotoTargetShipment] = useState<ParsedShipment | null>(null)
   const [photoContainer, setPhotoContainer] = useState('')
   const [photoCaption, setPhotoCaption] = useState('')
+  const [photoType, setPhotoType] = useState<PhotoLocation>('origen')
   const [photoFiles, setPhotoFiles] = useState<File[]>([])
   const [photoPreviews, setPhotoPreviews] = useState<string[]>([])
   const [uploadingPhotos, setUploadingPhotos] = useState(false)
@@ -120,6 +121,7 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
     setPhotoTargetShipment(shipment)
     setPhotoContainer('')
     setPhotoCaption('')
+    setPhotoType('origen')
     setPhotoFiles([])
     setPhotoPreviews([])
     setUploadProgress({ current: 0, total: 0 })
@@ -166,6 +168,7 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
           shipmentRef: photoTargetRef,
           containerNumber: photoContainer || undefined,
           caption: photoCaption.trim() || undefined,
+          photoType: photoType,
           fileName: file.name,
           fileType: file.type,
           fileData: full,
@@ -923,7 +926,7 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Camera size={20} className="text-accent" />
-              Fotos en Origen — {photoTargetRef}
+              Subir Fotos — {photoTargetRef}
             </DialogTitle>
           </DialogHeader>
 
@@ -947,13 +950,42 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
               </div>
             )}
 
+            {/* Photo type selector */}
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Ubicación de las fotos</Label>
+              <div className="flex gap-2">
+                <button
+                  className={`flex-1 py-2 px-3 rounded-lg text-xs font-medium border transition-all ${
+                    photoType === 'origen'
+                      ? 'bg-accent text-accent-foreground border-accent'
+                      : 'bg-muted/50 text-muted-foreground border-border hover:border-accent/50'
+                  }`}
+                  onClick={() => setPhotoType('origen')}
+                  type="button"
+                >
+                  🌎 Carga en Origen
+                </button>
+                <button
+                  className={`flex-1 py-2 px-3 rounded-lg text-xs font-medium border transition-all ${
+                    photoType === 'uruguay'
+                      ? 'bg-accent text-accent-foreground border-accent'
+                      : 'bg-muted/50 text-muted-foreground border-border hover:border-accent/50'
+                  }`}
+                  onClick={() => setPhotoType('uruguay')}
+                  type="button"
+                >
+                  🇺🇾 Carga en Uruguay
+                </button>
+              </div>
+            </div>
+
             {/* Caption */}
             <div className="space-y-1.5">
               <Label className="text-xs text-muted-foreground">Descripción (opcional)</Label>
               <Input
                 value={photoCaption}
                 onChange={(e) => setPhotoCaption(e.target.value)}
-                placeholder="Ej: Carga consolidada en origen"
+                placeholder={photoType === 'origen' ? 'Ej: Carga consolidada en origen' : 'Ej: Descarga en depósito fiscal'}
                 className="h-9"
               />
             </div>

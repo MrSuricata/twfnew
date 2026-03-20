@@ -1,0 +1,88 @@
+{
+  "name": "TWF - Enviar Notificación Cliente",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "twf-send-notification",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-1",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [260, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract attachments from webhook body and convert to n8n binary format\nconst body = $input.first().json.body || $input.first().json;\nconst attachments = body.attachments || [];\n\n// Pass through email fields\nconst output = {\n  to: body.to,\n  subject: body.subject,\n  htmlBody: body.htmlBody,\n  replyTo: body.replyTo || '',\n  hasAttachments: attachments.length > 0,\n  attachmentCount: attachments.length,\n};\n\n// Convert base64 attachments to n8n binary data\nconst binaryData = {};\nfor (let i = 0; i < attachments.length; i++) {\n  const att = attachments[i];\n  binaryData[`attachment_${i}`] = {\n    data: att.data,\n    mimeType: att.type || 'application/octet-stream',\n    fileName: att.name || `attachment_${i}`,\n  };\n}\n\nreturn [{ json: output, binary: Object.keys(binaryData).length > 0 ? binaryData : undefined }];"
+      },
+      "id": "code-1",
+      "name": "Procesar Adjuntos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "emailType": "html",
+        "message": "={{ $json.htmlBody }}",
+        "options": {
+          "attachmentsUi": {
+            "attachmentsBinary": [
+              {
+                "binaryPropertyName": "=attachment_0,attachment_1,attachment_2,attachment_3,attachment_4,attachment_5,attachment_6,attachment_7,attachment_8,attachment_9"
+              }
+            ]
+          },
+          "replyTo": "={{ $json.replyTo }}"
+        }
+      },
+      "id": "gmail-1",
+      "name": "Gmail - Enviar",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [700, 300],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, messageId: $json.id || '', threadId: $json.threadId || '' }) }}"
+      },
+      "id": "response-1",
+      "name": "Respuesta OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [920, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [{ "node": "Procesar Adjuntos", "type": "main", "index": 0 }]
+      ]
+    },
+    "Procesar Adjuntos": {
+      "main": [
+        [{ "node": "Gmail - Enviar", "type": "main", "index": 0 }]
+      ]
+    },
+    "Gmail - Enviar": {
+      "main": [
+        [{ "node": "Respuesta OK", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

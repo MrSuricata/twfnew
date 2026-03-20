@@ -43,11 +43,14 @@ export interface ShipmentDocument {
   data?: string
 }
 
+export type PhotoLocation = 'origen' | 'uruguay'
+
 export interface OriginPhoto {
   id: string                  // "photo-{timestamp}-{index}"
   shipmentRef: string         // "A7039"
   containerNumber?: string    // "MSCU1234567"
   caption?: string            // optional description
+  photoType?: PhotoLocation   // 'origen' = loaded at origin, 'uruguay' = unloaded in UY
   fileName: string            // "IMG_2034.jpg"
   fileType: string            // "image/jpeg"
   fileData?: string           // base64 full (only in upload/download, NOT bulk)

@@ -14,7 +14,7 @@ import { PaperPlaneTilt, SpinnerGap, Camera, FileText, CheckCircle, Paperclip, P
 import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
 import { NotificationTask, OriginPhoto, OperativeReport } from '@/lib/quotationTypes'
-import { sendNotificationEmail, fetchReportFile } from '@/lib/dataClient'
+import { sendNotificationEmail, fetchReportFile, updateNotificationTask, saveClientEmailInline, fetchOriginPhotoFile } from '@/lib/dataClient'
 
 interface NotificationEmailDialogProps {
   task: NotificationTask
@@ -100,36 +100,46 @@ export default function NotificationEmailDialog({
     setLoadingAttachments(isDeparture && (includePhotos || includeReports))
 
     try {
-      // Build HTML body with embedded photos
+      // Build HTML body
       let htmlBody = body.replace(/\n/g, '<br/>')
 
-      // Embed photo thumbnails in the HTML for departure
-      if (isDeparture && includePhotos && originPhotos.length > 0) {
-        htmlBody += '<br/><br/><strong>📷 Fotos de la carga en origen:</strong><br/><br/>'
-        htmlBody += '<div style="display:flex;flex-wrap:wrap;gap:8px;">'
-        for (const photo of originPhotos) {
-          if (photo.thumbnailData) {
-            htmlBody += `<img src="${photo.thumbnailData}" alt="${photo.caption || photo.fileName}" style="max-width:250px;border-radius:8px;border:1px solid #ddd;" />`
-          }
-        }
-        htmlBody += '</div>'
-      }
-
-      // Collect report attachments (download fileData on demand)
       const attachments: { name: string; type: string; data: string }[] = []
 
-      if (isDeparture && includeReports && reports.length > 0) {
+      if (isDeparture) {
         setLoadingAttachments(true)
-        for (const report of reports) {
-          const fileData = await fetchReportFile(report.id)
-          if (fileData) {
-            // fileData is a base64 data URL like "data:application/pdf;base64,..."
-            const base64 = fileData.includes(',') ? fileData.split(',')[1] : fileData
-            attachments.push({
-              name: report.fileName || `informe-${task.shipmentRef}.pdf`,
-              type: report.fileType || 'application/pdf',
-              data: base64,
-            })
+
+        // Attach photos as real files (full resolution, not just thumbnails)
+        if (includePhotos && originPhotos.length > 0) {
+          htmlBody += '<br/><br/><strong>📷 Fotos de la carga adjuntas.</strong>'
+          for (const photo of originPhotos) {
+            try {
+              const fullData = await fetchOriginPhotoFile(photo.id)
+              if (fullData) {
+                const base64 = fullData.includes(',') ? fullData.split(',')[1] : fullData
+                attachments.push({
+                  name: photo.fileName || `foto-${photo.id}.jpg`,
+                  type: photo.fileType || 'image/jpeg',
+                  data: base64,
+                })
+              }
+            } catch { /* skip failed photo downloads */ }
+          }
+        }
+
+        // Attach report PDFs
+        if (includeReports && reports.length > 0) {
+          for (const report of reports) {
+            try {
+              const fileData = await fetchReportFile(report.id)
+              if (fileData) {
+                const base64 = fileData.includes(',') ? fileData.split(',')[1] : fileData
+                attachments.push({
+                  name: report.fileName || `informe-${task.shipmentRef}.pdf`,
+                  type: report.fileType || 'application/pdf',
+                  data: base64,
+                })
+              }
+            } catch { /* skip failed report downloads */ }
           }
         }
       }
@@ -141,6 +151,12 @@ export default function NotificationEmailDialog({
         htmlBody,
         attachments: attachments.length > 0 ? attachments : undefined,
       })
+
+      // If email was overridden, save it to the task + client record for future
+      if (sendTo && sendTo !== task.clientEmail) {
+        updateNotificationTask(task.id, { clientEmail: sendTo } as any).catch(() => {})
+        if (task.cliente) saveClientEmailInline(task.cliente, sendTo).catch(() => {})
+      }
 
       toast.success('Email enviado correctamente')
       onEmailSent(task.id)

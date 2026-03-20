@@ -90,12 +90,17 @@ export default function OriginPhotoGallery({ photos, isAdmin = false, onDeletePh
               </div>
             )}
 
-            {/* Container badge */}
-            {photo.containerNumber && (
-              <div className="absolute top-1 left-1 bg-black/60 text-white text-[9px] px-1.5 py-0.5 rounded">
-                {photo.containerNumber}
+            {/* Location + container badge */}
+            <div className="absolute top-1 left-1 flex gap-1">
+              <div className={`text-white text-[9px] px-1.5 py-0.5 rounded ${photo.photoType === 'uruguay' ? 'bg-blue-600/80' : 'bg-emerald-600/80'}`}>
+                {photo.photoType === 'uruguay' ? '🇺🇾 UY' : '🌎 Origen'}
               </div>
-            )}
+              {photo.containerNumber && (
+                <div className="bg-black/60 text-white text-[9px] px-1.5 py-0.5 rounded">
+                  {photo.containerNumber}
+                </div>
+              )}
+            </div>
 
             {/* Admin delete button */}
             {isAdmin && (

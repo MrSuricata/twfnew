@@ -82,6 +82,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           shipmentRef: data.shipment_ref,
           containerNumber: data.container_number || '',
           caption: data.caption || '',
+          photoType: data.photo_type || 'origen',
           fileName: data.file_name,
           fileType: data.file_type,
           fileData: data.file_data,
@@ -103,7 +104,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const { data, error } = await db
       .from('origin_photos')
-      .select('id, shipment_ref, container_number, caption, file_name, file_type, thumbnail_data, created_at_ts, created_by')
+      .select('id, shipment_ref, container_number, caption, photo_type, file_name, file_type, thumbnail_data, created_at_ts, created_by')
       .order('created_at_ts', { ascending: false })
     if (error) throw error
 
@@ -112,6 +113,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       shipmentRef: p.shipment_ref,
       containerNumber: p.container_number || '',
       caption: p.caption || '',
+      photoType: p.photo_type || 'origen',
       fileName: p.file_name,
       fileType: p.file_type,
       thumbnailData: p.thumbnail_data,
