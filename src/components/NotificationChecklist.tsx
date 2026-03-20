@@ -132,15 +132,14 @@ export default function NotificationChecklist({ shipments, originPhotos, reports
           const daysSinceSalida = Math.floor((todayD.getTime() - salidaD.getTime()) / (1000 * 60 * 60 * 24))
           // Show if ETA_FISC reached OR salida was today+ (for testing)
           if ((etaFisc && todayD >= new Date(etaFisc)) || daysSinceSalida >= 0) {
-              items.push({
-                shipmentRef: s.REF,
-                containerNumber: cntr,
-                step: 'fiscal',
-                salidaDate: op.SALIDA,
-                cliente: s.CLIENTE || '',
-                label: 'Llegada a fiscal esperada',
-              })
-            }
+            items.push({
+              shipmentRef: s.REF,
+              containerNumber: cntr,
+              step: 'fiscal',
+              salidaDate: op.SALIDA,
+              cliente: s.CLIENTE || '',
+              label: 'Llegada a fiscal esperada',
+            })
           }
         }
       }
