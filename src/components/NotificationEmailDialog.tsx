@@ -53,34 +53,44 @@ function buildEmailHtml(greeting: string, bodyLines: string[]): string {
 </div>`
 }
 
+// Determine cargo description based on operativa type
+function cargoLabel(t: NotificationTask): string {
+  const op = (t.operativa || 'CONTENEDOR').toUpperCase()
+  const cntr = t.containerNumber ? ` <strong>${t.containerNumber}</strong>` : ''
+  if (op === 'CONTENEDOR') {
+    return `el contenedor${cntr}`
+  }
+  // Trasiego, carga a piso, desconsolidación = mercadería
+  return `la mercadería del contenedor${cntr}`
+}
+
 export const STEP_TEMPLATES: Record<string, (task: NotificationTask) => string> = {
   departure: (t) => {
-    const cntr = t.containerNumber ? ` - contenedor <strong>${t.containerNumber}</strong>` : ''
+    const cargo = cargoLabel(t)
     return buildEmailHtml(
       `Estimado/a <strong>${t.clientName || 'cliente'}</strong>,`,
       [
-        `Le informamos que su carga <strong>${t.shipmentRef}</strong>${cntr} ha salido de Montevideo el día de hoy.`,
-        t.containerNumber ? `Contenedor: <strong>${t.containerNumber}</strong>` : '',
-      ].filter(Boolean)
+        `Le informamos que ${cargo} de su carga <strong>${t.shipmentRef}</strong> ha salido de Montevideo el día de hoy.`,
+      ]
     )
   },
 
   border: (t) => {
-    const cntr = t.containerNumber ? ` - contenedor <strong>${t.containerNumber}</strong>` : ''
+    const cargo = cargoLabel(t)
     return buildEmailHtml(
       `Estimado/a <strong>${t.clientName || 'cliente'}</strong>,`,
       [
-        `Le informamos que su carga <strong>${t.shipmentRef}</strong>${cntr} ha cruzado la frontera.`,
+        `Le informamos que ${cargo} de su carga <strong>${t.shipmentRef}</strong> ha cruzado la frontera.`,
       ]
     )
   },
 
   fiscal: (t) => {
-    const cntr = t.containerNumber ? ` - contenedor <strong>${t.containerNumber}</strong>` : ''
+    const cargo = cargoLabel(t)
     return buildEmailHtml(
       `Estimado/a <strong>${t.clientName || 'cliente'}</strong>,`,
       [
-        `Le informamos que su carga <strong>${t.shipmentRef}</strong>${cntr} ha llegado al depósito fiscal.`,
+        `Le informamos que ${cargo} de su carga <strong>${t.shipmentRef}</strong> ha llegado al depósito fiscal.`,
       ]
     )
   },
@@ -96,11 +106,13 @@ export default function NotificationEmailDialog({
 }: NotificationEmailDialogProps) {
   // Plain text for editing, HTML template for actual send
   const getPlainText = (t: NotificationTask) => {
-    const cntr = t.containerNumber ? ` - contenedor ${t.containerNumber}` : ''
+    const op = (t.operativa || 'CONTENEDOR').toUpperCase()
+    const cntr = t.containerNumber ? ` ${t.containerNumber}` : ''
+    const cargo = op === 'CONTENEDOR' ? `el contenedor${cntr}` : `la mercadería del contenedor${cntr}`
     const messages: Record<string, string> = {
-      departure: `Estimado/a ${t.clientName || 'cliente'},\n\nLe informamos que su carga ${t.shipmentRef}${cntr} ha salido de Montevideo el día de hoy.${t.containerNumber ? `\n\nContenedor: ${t.containerNumber}` : ''}`,
-      border: `Estimado/a ${t.clientName || 'cliente'},\n\nLe informamos que su carga ${t.shipmentRef}${cntr} ha cruzado la frontera.`,
-      fiscal: `Estimado/a ${t.clientName || 'cliente'},\n\nLe informamos que su carga ${t.shipmentRef}${cntr} ha llegado al depósito fiscal.`,
+      departure: `Estimado/a ${t.clientName || 'cliente'},\n\nLe informamos que ${cargo} de su carga ${t.shipmentRef} ha salido de Montevideo el día de hoy.`,
+      border: `Estimado/a ${t.clientName || 'cliente'},\n\nLe informamos que ${cargo} de su carga ${t.shipmentRef} ha cruzado la frontera.`,
+      fiscal: `Estimado/a ${t.clientName || 'cliente'},\n\nLe informamos que ${cargo} de su carga ${t.shipmentRef} ha llegado al depósito fiscal.`,
     }
     return messages[t.step] || ''
   }

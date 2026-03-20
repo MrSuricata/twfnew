@@ -75,7 +75,7 @@ export default function NotificationChecklist({ shipments, originPhotos, reports
   // ── Zona A: Sugerencias de confirmación ──
   // Detecta operativas con SALIDA reciente que no tienen task creada
   const suggestions = useMemo(() => {
-    const items: { shipmentRef: string; containerNumber: string; step: NotificationStep; salidaDate: string; cliente: string; label: string }[] = []
+    const items: { shipmentRef: string; containerNumber: string; operativa: string; step: NotificationStep; salidaDate: string; cliente: string; label: string }[] = []
     const existingIds = new Set(tasks.map(t => t.id))
 
     for (const s of shipments) {
@@ -97,6 +97,7 @@ export default function NotificationChecklist({ shipments, originPhotos, reports
             items.push({
               shipmentRef: s.REF,
               containerNumber: cntr,
+              operativa: op.OPERATIVA || 'CONTENEDOR',
               step: 'departure',
               salidaDate: salida,
               cliente: s.CLIENTE || '',
@@ -115,6 +116,7 @@ export default function NotificationChecklist({ shipments, originPhotos, reports
             items.push({
               shipmentRef: s.REF,
               containerNumber: cntr,
+              operativa: op.OPERATIVA || 'CONTENEDOR',
               step: 'border',
               salidaDate: op.SALIDA,
               cliente: s.CLIENTE || '',
@@ -135,6 +137,7 @@ export default function NotificationChecklist({ shipments, originPhotos, reports
             items.push({
               shipmentRef: s.REF,
               containerNumber: cntr,
+              operativa: op.OPERATIVA || 'CONTENEDOR',
               step: 'fiscal',
               salidaDate: op.SALIDA,
               cliente: s.CLIENTE || '',
@@ -161,11 +164,11 @@ export default function NotificationChecklist({ shipments, originPhotos, reports
     : suggestions
 
   // ── Actions ──
-  const handleConfirm = async (shipmentRef: string, containerNumber: string, step: NotificationStep, salidaDate: string) => {
+  const handleConfirm = async (shipmentRef: string, containerNumber: string, step: NotificationStep, salidaDate: string, operativa: string = 'CONTENEDOR') => {
     const key = `${shipmentRef}-${containerNumber}-${step}`
     setConfirming(key)
     try {
-      const task = await confirmShipmentEvent(shipmentRef, containerNumber, step, salidaDate)
+      const task = await confirmShipmentEvent(shipmentRef, containerNumber, step, salidaDate, operativa)
       setTasks(prev => [...prev, task])
       toast.success(`${STEP_LABELS[step]} confirmada — ${shipmentRef}`)
     } catch (err: any) {
@@ -476,7 +479,7 @@ export default function NotificationChecklist({ shipments, originPhotos, reports
                       <Button
                         size="sm"
                         className="gap-1.5 text-xs"
-                        onClick={() => handleConfirm(s.shipmentRef, s.containerNumber, s.step, s.salidaDate)}
+                        onClick={() => handleConfirm(s.shipmentRef, s.containerNumber, s.step, s.salidaDate, s.operativa)}
                         disabled={isConfirming}
                       >
                         {isConfirming ? <SpinnerGap size={14} className="animate-spin" /> : <CheckCircle size={14} />}

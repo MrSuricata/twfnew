@@ -213,11 +213,11 @@ export async function updateNotificationTask(id: string, updates: Partial<Notifi
 }
 
 /** Confirm a shipment event (creates a notification task). */
-export async function confirmShipmentEvent(shipmentRef: string, containerNumber: string, step: NotificationStep, salidaDate?: string): Promise<NotificationTask> {
+export async function confirmShipmentEvent(shipmentRef: string, containerNumber: string, step: NotificationStep, salidaDate?: string, operativa?: string): Promise<NotificationTask> {
   const res = await authFetch('/api/notifications/confirm', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ shipmentRef, containerNumber, step, salidaDate }),
+    body: JSON.stringify({ shipmentRef, containerNumber, step, salidaDate, operativa }),
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))

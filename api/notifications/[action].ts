@@ -44,7 +44,7 @@ async function handleConfirm(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ error: 'Admin authentication required' })
   }
 
-  const { shipmentRef, containerNumber, step, salidaDate } = req.body || {}
+  const { shipmentRef, containerNumber, step, salidaDate, operativa } = req.body || {}
 
   if (!shipmentRef || !step || !STEP_CONFIG[step]) {
     return res.status(400).json({ error: 'shipmentRef and step (departure|border|fiscal) required' })
@@ -126,6 +126,7 @@ async function handleConfirm(req: VercelRequest, res: VercelResponse) {
       id: taskId,
       shipment_ref: shipmentRef,
       container_number: cntr,
+      operativa: operativa || 'CONTENEDOR',
       cliente,
       client_email: clientEmail,
       client_name: clientName,
@@ -150,6 +151,7 @@ async function handleConfirm(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({
       task: {
         id: task.id, shipmentRef: task.shipment_ref, containerNumber: task.container_number,
+        operativa: task.operativa || 'CONTENEDOR',
         cliente: task.cliente, clientEmail: task.client_email, clientName: task.client_name,
         step: task.step, stepNumber: task.step_number, dueDate: task.due_date,
         salidaDate: task.salida_date, photosOk: task.photos_ok, reportOk: task.report_ok,

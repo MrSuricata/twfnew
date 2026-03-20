@@ -66,6 +66,7 @@ export interface NotificationTask {
   id: string                    // "ntask-{REF}-{CNTR}-{step}"
   shipmentRef: string
   containerNumber: string
+  operativa: string             // "CONTENEDOR" | "TRASIEGO" | "CARGA A PISO" | "DESCONSOLIDACION"
   cliente: string               // "CHIAPERO LTDA" (from shipment)
   clientEmail: string           // resolved from clients table
   clientName: string
