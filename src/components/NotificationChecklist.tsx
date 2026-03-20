@@ -105,13 +105,13 @@ export default function NotificationChecklist({ shipments, originPhotos, reports
           }
         }
 
-        // Border: SALIDA was yesterday or before, no border task
+        // Border: SALIDA was today or before, departure task must exist
         const borderId = `ntask-${s.REF}-${cntr || 'all'}-border`
         if (!existingIds.has(borderId) && existingIds.has(salidaId)) {
           const salidaDate = new Date(op.SALIDA)
           const todayDate = new Date(today)
           const daysDiff = Math.floor((todayDate.getTime() - salidaDate.getTime()) / (1000 * 60 * 60 * 24))
-          if (daysDiff >= 1 && daysDiff <= 4) {
+          if (daysDiff >= 0 && daysDiff <= 4) {
             items.push({
               shipmentRef: s.REF,
               containerNumber: cntr,
@@ -123,14 +123,15 @@ export default function NotificationChecklist({ shipments, originPhotos, reports
           }
         }
 
-        // Fiscal: ETA_FISC reached or SALIDA+2 days
+        // Fiscal: ETA_FISC reached, or border task exists (allows same-day for testing)
         const fiscalId = `ntask-${s.REF}-${cntr || 'all'}-fiscal`
-        if (!existingIds.has(fiscalId) && existingIds.has(borderId)) {
+        if (!existingIds.has(fiscalId) && (existingIds.has(borderId) || existingIds.has(salidaId))) {
           const etaFisc = op.ETA_FISC
-          if (etaFisc) {
-            const etaDate = new Date(etaFisc)
-            const todayDate = new Date(today)
-            if (todayDate >= etaDate) {
+          const salidaD = new Date(op.SALIDA)
+          const todayD = new Date(today)
+          const daysSinceSalida = Math.floor((todayD.getTime() - salidaD.getTime()) / (1000 * 60 * 60 * 24))
+          // Show if ETA_FISC reached OR salida was today+ (for testing)
+          if ((etaFisc && todayD >= new Date(etaFisc)) || daysSinceSalida >= 0) {
               items.push({
                 shipmentRef: s.REF,
                 containerNumber: cntr,
