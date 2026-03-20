@@ -240,7 +240,7 @@ export default function NotificationEmailDialog({
                       {originPhotos.length} foto{originPhotos.length > 1 ? 's' : ''} en origen
                     </span>
                   </div>
-                  <Badge variant="outline" className="text-[9px]">embebidas en HTML</Badge>
+                  <Badge variant="outline" className="text-[9px]">fotos adjuntas</Badge>
                 </label>
               )}
 
