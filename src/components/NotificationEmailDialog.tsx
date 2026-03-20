@@ -116,30 +116,39 @@ export default function NotificationEmailDialog({
               const fullData = await fetchOriginPhotoFile(photo.id)
               if (fullData) {
                 const base64 = fullData.includes(',') ? fullData.split(',')[1] : fullData
+                console.log(`[email] Photo ${photo.fileName}: ${base64.length} chars`)
                 attachments.push({
                   name: photo.fileName || `foto-${photo.id}.jpg`,
                   type: photo.fileType || 'image/jpeg',
                   data: base64,
                 })
               }
-            } catch { /* skip failed photo downloads */ }
+            } catch (err) {
+              console.error(`[email] Failed to download photo ${photo.id}:`, err)
+            }
           }
         }
 
-        // Attach report PDFs
+        // Attach report PDFs FIRST (priority over photos)
         if (includeReports && reports.length > 0) {
           for (const report of reports) {
             try {
+              console.log(`[email] Downloading report: ${report.id} (${report.fileName})`)
               const fileData = await fetchReportFile(report.id)
               if (fileData) {
                 const base64 = fileData.includes(',') ? fileData.split(',')[1] : fileData
-                attachments.push({
+                console.log(`[email] Report downloaded: ${base64.length} chars base64`)
+                attachments.unshift({ // unshift = put at beginning (priority)
                   name: report.fileName || `informe-${task.shipmentRef}.pdf`,
                   type: report.fileType || 'application/pdf',
                   data: base64,
                 })
+              } else {
+                console.warn(`[email] Report ${report.id} returned null fileData`)
               }
-            } catch { /* skip failed report downloads */ }
+            } catch (err) {
+              console.error(`[email] Failed to download report ${report.id}:`, err)
+            }
           }
         }
       }
