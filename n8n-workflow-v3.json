@@ -1,0 +1,155 @@
+{
+  "name": "TWF - Enviar Notificación Cliente v3",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "twf-send-notification",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "wh-1",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 340]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Extract data from webhook and prepare for Gmail search\nconst body = $input.first().json.body || $input.first().json;\nconst attachments = body.attachments || [];\n\n// Extract REF number from subject (e.g. 'TWF - Salida XXX - Ref A7529' -> 'A7529')\nconst refMatch = body.subject?.match(/Ref\\s+(\\w+)/i);\nconst refNumber = refMatch ? refMatch[1] : '';\n\nconst output = {\n  to: body.to,\n  subject: body.subject,\n  htmlBody: body.htmlBody,\n  replyTo: body.replyTo || '',\n  threadId: body.threadId || '',\n  refNumber: refNumber,\n  hasAttachments: attachments.length > 0,\n};\n\n// Convert base64 attachments to n8n binary data\nconst binaryData = {};\nfor (let i = 0; i < attachments.length; i++) {\n  const att = attachments[i];\n  binaryData[`attachment_${i}`] = {\n    data: att.data,\n    mimeType: att.type || 'application/octet-stream',\n    fileName: att.name || `attachment_${i}`,\n  };\n}\n\nreturn [{ json: output, binary: Object.keys(binaryData).length > 0 ? binaryData : undefined }];"
+      },
+      "id": "code-1",
+      "name": "Procesar Datos",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 340]
+    },
+    {
+      "parameters": {
+        "filters": {
+          "q": "={{ $json.refNumber }}"
+        },
+        "returnAll": false,
+        "limit": 1,
+        "simple": true
+      },
+      "id": "gmail-search",
+      "name": "Buscar Thread Gmail",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [640, 340],
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Merge: original data from 'Procesar Datos' + found thread from Gmail search\nconst original = $('Procesar Datos').first().json;\nconst binaryData = $('Procesar Datos').first().binary;\n\n// Check if Gmail search found a matching email\nconst searchResult = $input.first().json;\nlet finalSubject = original.subject;\nlet threadId = original.threadId || '';\n\nif (searchResult && searchResult.threadId) {\n  threadId = searchResult.threadId;\n  // Use the ORIGINAL conversation subject so Gmail threads it correctly\n  const origSubject = (searchResult.subject || '').replace(/^(Re:\\s*)+/i, '').trim();\n  if (origSubject) {\n    finalSubject = 'Re: ' + origSubject;\n  }\n}\n\nreturn [{\n  json: {\n    to: original.to,\n    subject: finalSubject,\n    htmlBody: original.htmlBody,\n    threadId: threadId,\n    hasAttachments: original.hasAttachments,\n  },\n  binary: binaryData || undefined,\n}];"
+      },
+      "id": "code-2",
+      "name": "Preparar Envio",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [860, 340]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "" },
+          "conditions": [
+            {
+              "id": "cond-1",
+              "leftValue": "={{ $json.hasAttachments }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "if-1",
+      "name": "Tiene Adjuntos?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1080, 340]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "emailType": "html",
+        "message": "={{ $json.htmlBody }}",
+        "options": {
+          "appendAttribution": false,
+          "attachmentsUi": {
+            "attachmentsBinary": [
+              {
+                "binaryPropertyName": "={{ Object.keys($binary || {}).filter(k => k.startsWith('attachment_')).join(',') }}"
+              }
+            ]
+          }
+        }
+      },
+      "id": "gmail-con",
+      "name": "Gmail CON Adjuntos",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1320, 220]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "emailType": "html",
+        "message": "={{ $json.htmlBody }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "gmail-sin",
+      "name": "Gmail SIN Adjuntos",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1320, 460]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, messageId: $json.id || '', threadId: $json.threadId || '' }) }}"
+      },
+      "id": "resp-1",
+      "name": "Respuesta OK",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1560, 340]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{ "node": "Procesar Datos", "type": "main", "index": 0 }]]
+    },
+    "Procesar Datos": {
+      "main": [[{ "node": "Buscar Thread Gmail", "type": "main", "index": 0 }]]
+    },
+    "Buscar Thread Gmail": {
+      "main": [[{ "node": "Preparar Envio", "type": "main", "index": 0 }]]
+    },
+    "Preparar Envio": {
+      "main": [[{ "node": "Tiene Adjuntos?", "type": "main", "index": 0 }]]
+    },
+    "Tiene Adjuntos?": {
+      "main": [
+        [{ "node": "Gmail CON Adjuntos", "type": "main", "index": 0 }],
+        [{ "node": "Gmail SIN Adjuntos", "type": "main", "index": 0 }]
+      ]
+    },
+    "Gmail CON Adjuntos": {
+      "main": [[{ "node": "Respuesta OK", "type": "main", "index": 0 }]]
+    },
+    "Gmail SIN Adjuntos": {
+      "main": [[{ "node": "Respuesta OK", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
