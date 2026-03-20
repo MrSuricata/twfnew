@@ -3,12 +3,63 @@ import { authenticateRequest } from '../_lib/jwt.js'
 import { handleCors } from '../_lib/cors.js'
 import { getSupabase } from '../_lib/supabase.js'
 
-// ─── Send notification email via n8n webhook ─────────────────────────
+// ─── Send notification email ─────────────────────────────────────────
 // POST /api/notifications/send-email
 // Body: { taskId, to, subject, htmlBody, replyTo? }
 //
-// Forwards email data to n8n SMTP workflow, then marks task as completed.
+// Priority: n8n webhook (if configured) → EmailJS fallback
+// Then marks the notification task as completed.
 // ─────────────────────────────────────────────────────────────────────
+
+/** Send via n8n SMTP webhook (emails come FROM Brian's domain) */
+async function sendViaN8n(webhook: string, data: { to: string; subject: string; htmlBody: string; replyTo?: string }): Promise<boolean> {
+  const res = await fetch(webhook, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  })
+  return res.ok
+}
+
+/** Send via EmailJS (fallback — emails come from EmailJS service) */
+async function sendViaEmailJS(data: { to: string; subject: string; htmlBody: string }): Promise<boolean> {
+  const serviceId = process.env.EMAILJS_SERVICE_ID
+  const templateId = process.env.EMAILJS_TEMPLATE_NOTIFICATION || process.env.EMAILJS_TEMPLATE_QUOTE
+  const publicKey = process.env.EMAILJS_PUBLIC_KEY
+  const privateKey = process.env.EMAILJS_PRIVATE_KEY
+
+  if (!serviceId || !templateId || !publicKey) {
+    console.error('[send-email] EmailJS not configured')
+    return false
+  }
+
+  const body: Record<string, unknown> = {
+    service_id: serviceId,
+    template_id: templateId,
+    user_id: publicKey,
+    template_params: {
+      to_email: data.to,
+      email: data.to,
+      subject: data.subject,
+      message: data.htmlBody,
+      from_name: 'TWF - Transit World Forwarding',
+    },
+  }
+  if (privateKey) body.accessToken = privateKey
+
+  const res = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+
+  if (!res.ok) {
+    const errText = await res.text()
+    console.error(`[send-email] EmailJS error (${res.status}):`, errText)
+  }
+
+  return res.ok
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handleCors(req, res)) return
@@ -25,28 +76,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'taskId, to, subject, and htmlBody are required' })
   }
 
-  const n8nWebhook = process.env.N8N_SEND_EMAIL_WEBHOOK
-  if (!n8nWebhook) {
-    return res.status(500).json({ error: 'N8N_SEND_EMAIL_WEBHOOK not configured' })
-  }
-
   try {
-    // Call n8n webhook to send email
-    const n8nRes = await fetch(n8nWebhook, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        to,
-        subject,
-        htmlBody,
-        replyTo: replyTo || undefined,
-      }),
-    })
+    let sent = false
+    let method = ''
 
-    if (!n8nRes.ok) {
-      const errText = await n8nRes.text()
-      console.error('[send-email] n8n error:', n8nRes.status, errText)
-      return res.status(502).json({ error: 'Email sending failed via n8n' })
+    // Try n8n first (if configured)
+    const n8nWebhook = process.env.N8N_SEND_EMAIL_WEBHOOK
+    if (n8nWebhook) {
+      sent = await sendViaN8n(n8nWebhook, { to, subject, htmlBody, replyTo })
+      method = 'n8n'
+    }
+
+    // Fallback to EmailJS
+    if (!sent) {
+      sent = await sendViaEmailJS({ to, subject, htmlBody })
+      method = 'emailjs'
+    }
+
+    if (!sent) {
+      return res.status(502).json({ error: 'Email sending failed (both n8n and EmailJS)' })
     }
 
     // Mark task as completed
@@ -60,10 +108,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (error) {
       console.error('[send-email] DB update error:', error.message)
-      // Email was sent but DB update failed — still report success
     }
 
-    return res.status(200).json({ sent: true, taskId })
+    return res.status(200).json({ sent: true, taskId, method })
   } catch (error: any) {
     console.error('[send-email] Error:', error?.message || error)
     return res.status(500).json({ error: 'Failed to send email' })
