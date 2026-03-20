@@ -1,5 +1,5 @@
 {
-  "name": "TWF - Enviar Notificación Cliente",
+  "name": "TWF - Enviar Notificación Cliente v2",
   "nodes": [
     {
       "parameters": {
@@ -16,13 +16,34 @@
     },
     {
       "parameters": {
-        "jsCode": "// Extract attachments from webhook body and convert to n8n binary format\nconst body = $input.first().json.body || $input.first().json;\nconst attachments = body.attachments || [];\n\n// Pass through email fields (including threadId for reply chaining)\nconst output = {\n  to: body.to,\n  subject: body.subject,\n  htmlBody: body.htmlBody,\n  replyTo: body.replyTo || '',\n  threadId: body.threadId || '',\n  hasAttachments: attachments.length > 0,\n  attachmentCount: attachments.length,\n};\n\n// Convert base64 attachments to n8n binary data\nconst binaryData = {};\nfor (let i = 0; i < attachments.length; i++) {\n  const att = attachments[i];\n  binaryData[`attachment_${i}`] = {\n    data: att.data,\n    mimeType: att.type || 'application/octet-stream',\n    fileName: att.name || `attachment_${i}`,\n  };\n}\n\nreturn [{ json: output, binary: Object.keys(binaryData).length > 0 ? binaryData : undefined }];"
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\nconst attachments = body.attachments || [];\n\nconst output = {\n  to: body.to,\n  subject: body.subject,\n  htmlBody: body.htmlBody,\n  replyTo: body.replyTo || '',\n  threadId: body.threadId || '',\n  hasAttachments: attachments.length > 0,\n};\n\nconst binaryData = {};\nfor (let i = 0; i < attachments.length; i++) {\n  const att = attachments[i];\n  binaryData[`attachment_${i}`] = {\n    data: att.data,\n    mimeType: att.type || 'application/octet-stream',\n    fileName: att.name || `attachment_${i}`,\n  };\n}\n\nreturn [{ json: output, binary: Object.keys(binaryData).length > 0 ? binaryData : undefined }];"
       },
       "id": "code-1",
       "name": "Procesar Adjuntos",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [480, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "" },
+          "conditions": [
+            {
+              "id": "cond-1",
+              "leftValue": "={{ $json.hasAttachments }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      },
+      "id": "if-1",
+      "name": "Tiene Adjuntos?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [700, 300]
     },
     {
       "parameters": {
@@ -34,24 +55,34 @@
           "attachmentsUi": {
             "attachmentsBinary": [
               {
-                "binaryPropertyName": "=attachment_0,attachment_1,attachment_2,attachment_3,attachment_4,attachment_5,attachment_6,attachment_7,attachment_8,attachment_9"
+                "binaryPropertyName": "={{ Object.keys($binary || {}).filter(k => k.startsWith('attachment_')).join(',') }}"
               }
             ]
           },
-          "replyTo": "={{ $json.replyTo }}"
+          "appendAttribution": false
         }
       },
-      "id": "gmail-1",
-      "name": "Gmail - Enviar",
+      "id": "gmail-con-adjuntos",
+      "name": "Gmail CON Adjuntos",
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.1,
-      "position": [700, 300],
-      "credentials": {
-        "gmailOAuth2": {
-          "id": "REPLACE_WITH_YOUR_CREDENTIAL_ID",
-          "name": "Gmail account"
+      "position": [940, 200]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.to }}",
+        "subject": "={{ $json.subject }}",
+        "emailType": "html",
+        "message": "={{ $json.htmlBody }}",
+        "options": {
+          "appendAttribution": false
         }
-      }
+      },
+      "id": "gmail-sin-adjuntos",
+      "name": "Gmail SIN Adjuntos",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [940, 420]
     },
     {
       "parameters": {
@@ -62,7 +93,7 @@
       "name": "Respuesta OK",
       "type": "n8n-nodes-base.respondToWebhook",
       "typeVersion": 1.1,
-      "position": [920, 300]
+      "position": [1180, 300]
     }
   ],
   "connections": {
@@ -73,10 +104,21 @@
     },
     "Procesar Adjuntos": {
       "main": [
-        [{ "node": "Gmail - Enviar", "type": "main", "index": 0 }]
+        [{ "node": "Tiene Adjuntos?", "type": "main", "index": 0 }]
       ]
     },
-    "Gmail - Enviar": {
+    "Tiene Adjuntos?": {
+      "main": [
+        [{ "node": "Gmail CON Adjuntos", "type": "main", "index": 0 }],
+        [{ "node": "Gmail SIN Adjuntos", "type": "main", "index": 0 }]
+      ]
+    },
+    "Gmail CON Adjuntos": {
+      "main": [
+        [{ "node": "Respuesta OK", "type": "main", "index": 0 }]
+      ]
+    },
+    "Gmail SIN Adjuntos": {
       "main": [
         [{ "node": "Respuesta OK", "type": "main", "index": 0 }]
       ]
