@@ -56,6 +56,32 @@ export interface OriginPhoto {
   createdBy: string
 }
 
+export type NotificationStep = 'departure' | 'border' | 'fiscal'
+export type NotificationStatus = 'pending' | 'completed' | 'skipped'
+
+export interface NotificationTask {
+  id: string                    // "ntask-{REF}-{CNTR}-{step}"
+  shipmentRef: string
+  containerNumber: string
+  cliente: string               // "CHIAPERO LTDA" (from shipment)
+  clientEmail: string           // resolved from clients table
+  clientName: string
+  step: NotificationStep
+  stepNumber: number            // 0=departure, 1=border, 2=fiscal
+  dueDate: string               // YYYY-MM-DD
+  salidaDate: string
+
+  photosOk: boolean             // only relevant for departure
+  reportOk: boolean             // only relevant for departure
+  emailSent: boolean
+  emailSentAt?: string
+
+  status: NotificationStatus
+  notes: string
+  createdAt: string
+  updatedAt: string
+}
+
 export interface OperativeReport {
   id: string
   shipmentRef: string

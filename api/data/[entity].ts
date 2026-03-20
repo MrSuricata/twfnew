@@ -34,6 +34,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return handleSettings(req, res, db)
       case 'origin-photos':
         return handleOriginPhotos(req, res, db)
+      case 'notification-tasks':
+        return handleNotificationTasks(req, res, db)
       case 'shipments-cache':
         return handleShipmentsCache(req, res, db)
       default:
@@ -334,6 +336,116 @@ async function handleSettings(req: VercelRequest, res: VercelResponse, db: any) 
     }, { onConflict: 'key' })
     if (error) throw error
     return res.status(200).json({ saved: true })
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' })
+}
+
+// ── Notification Tasks ─────────────────────────────────────────────
+// GET  /api/data/notification-tasks?range=today|overdue|upcoming|all
+// PATCH /api/data/notification-tasks?id=xxx  → partial update (checkbox)
+// POST  /api/data/notification-tasks         → upsert (create from confirm)
+// DELETE /api/data/notification-tasks?id=xxx → skip/dismiss
+
+async function handleNotificationTasks(req: VercelRequest, res: VercelResponse, db: any) {
+  if (req.method === 'GET') {
+    const range = (req.query.range as string) || 'all'
+    const today = new Date().toISOString().split('T')[0]
+
+    let query = db.from('notification_tasks')
+      .select('*')
+      .order('due_date', { ascending: true })
+      .order('step_number', { ascending: true })
+
+    if (range === 'today') {
+      query = query.eq('due_date', today)
+    } else if (range === 'overdue') {
+      query = query.lt('due_date', today).eq('status', 'pending')
+    } else if (range === 'upcoming') {
+      query = query.gt('due_date', today).eq('status', 'pending')
+    } else if (range === 'pending') {
+      query = query.lte('due_date', today).eq('status', 'pending')
+    }
+    // 'all' = no extra filters
+
+    const { data, error } = await query
+    if (error) throw error
+
+    const tasks = (data || []).map((t: any) => ({
+      id: t.id,
+      shipmentRef: t.shipment_ref,
+      containerNumber: t.container_number || '',
+      cliente: t.cliente,
+      clientEmail: t.client_email || '',
+      clientName: t.client_name || '',
+      step: t.step,
+      stepNumber: t.step_number,
+      dueDate: t.due_date,
+      salidaDate: t.salida_date,
+      photosOk: t.photos_ok || false,
+      reportOk: t.report_ok || false,
+      emailSent: t.email_sent || false,
+      emailSentAt: t.email_sent_at || null,
+      status: t.status || 'pending',
+      notes: t.notes || '',
+      createdAt: t.created_at,
+      updatedAt: t.updated_at,
+    }))
+    return res.status(200).json({ tasks })
+  }
+
+  if (req.method === 'POST') {
+    const body = req.body
+    const items = Array.isArray(body) ? body : [body]
+    const rows = items.map((t: any) => ({
+      id: t.id,
+      shipment_ref: t.shipmentRef || t.shipment_ref,
+      container_number: t.containerNumber || t.container_number || '',
+      cliente: t.cliente || '',
+      client_email: t.clientEmail || t.client_email || '',
+      client_name: t.clientName || t.client_name || '',
+      step: t.step,
+      step_number: t.stepNumber ?? t.step_number ?? 0,
+      due_date: t.dueDate || t.due_date,
+      salida_date: t.salidaDate || t.salida_date || '',
+      photos_ok: t.photosOk ?? t.photos_ok ?? false,
+      report_ok: t.reportOk ?? t.report_ok ?? false,
+      email_sent: t.emailSent ?? t.email_sent ?? false,
+      email_sent_at: t.emailSentAt || t.email_sent_at || null,
+      status: t.status || 'pending',
+      notes: t.notes || '',
+      updated_at: new Date().toISOString(),
+    }))
+    const { error } = await db.from('notification_tasks').upsert(rows, { onConflict: 'id' })
+    if (error) throw error
+    return res.status(200).json({ saved: true, count: rows.length })
+  }
+
+  if (req.method === 'PATCH') {
+    const id = req.query.id as string
+    if (!id) return res.status(400).json({ error: 'id query parameter required' })
+    const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
+    const body = req.body || {}
+    // Map camelCase to snake_case for allowed fields
+    if (body.photosOk !== undefined) updates.photos_ok = body.photosOk
+    if (body.reportOk !== undefined) updates.report_ok = body.reportOk
+    if (body.emailSent !== undefined) {
+      updates.email_sent = body.emailSent
+      if (body.emailSent) updates.email_sent_at = new Date().toISOString()
+    }
+    if (body.status !== undefined) updates.status = body.status
+    if (body.notes !== undefined) updates.notes = body.notes
+    const { error } = await db.from('notification_tasks').update(updates).eq('id', id)
+    if (error) throw error
+    return res.status(200).json({ updated: true })
+  }
+
+  if (req.method === 'DELETE') {
+    const id = req.query.id as string
+    if (!id) return res.status(400).json({ error: 'id query parameter required' })
+    const { error } = await db.from('notification_tasks').delete().eq('id', id)
+    if (error) throw error
+    return res.status(200).json({ deleted: true })
   }
 
   return res.status(405).json({ error: 'Method not allowed' })

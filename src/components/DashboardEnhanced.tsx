@@ -10,9 +10,11 @@ import {
   ChartBar,
   UsersThree,
   CalendarBlank,
-  Package
+  Package,
+  BellRinging,
 } from '@phosphor-icons/react'
 
+import NotificationChecklist from './NotificationChecklist'
 import AgendaCalendar from './agenda/AgendaCalendar'
 import ShipmentTracking from './ShipmentTracking'
 import ExcelImport from './ExcelImport'
@@ -77,7 +79,11 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
         <Breadcrumbs items={getBreadcrumbs()} />
         
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4 lg:grid-cols-7 max-w-5xl">
+          <TabsList className="grid w-full grid-cols-4 lg:grid-cols-8 max-w-5xl">
+            <TabsTrigger value="notifications" className="relative">
+              <BellRinging size={20} className="mr-2" />
+              <span className="hidden sm:inline">Avisos</span>
+            </TabsTrigger>
             <TabsTrigger value="agenda">
               <CalendarBlank size={20} className="mr-2" />
               <span className="hidden sm:inline">Agenda</span>
@@ -107,6 +113,14 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
               <span className="hidden sm:inline">Clientes</span>
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="notifications">
+            <NotificationChecklist
+              shipments={shipments}
+              originPhotos={originPhotos}
+              reports={reports}
+            />
+          </TabsContent>
 
           <TabsContent value="agenda">
             <AgendaCalendar shipments={shipments || []} />

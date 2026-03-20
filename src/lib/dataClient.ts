@@ -5,7 +5,7 @@
 // ─────────────────────────────────────────────────────────────────────
 
 import { authFetch } from './authClient'
-import type { QuoteFormData, ClientAccount, ShipmentDocument, OperativeReport, OriginPhoto } from './quotationTypes'
+import type { QuoteFormData, ClientAccount, ShipmentDocument, OperativeReport, OriginPhoto, NotificationTask, NotificationStep } from './quotationTypes'
 import type { ParsedShipment } from './shipmentTypes'
 
 // ── Shipments (cached from Google Sheets sync) ──
@@ -187,6 +187,62 @@ export async function fetchClientOriginPhotos(): Promise<OriginPhoto[]> {
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const data = await res.json()
   return data.photos || []
+}
+
+// ── Notification Tasks ──
+
+/** Fetch notification tasks by range: 'today' | 'overdue' | 'pending' | 'all' */
+export async function fetchNotificationTasks(range: string = 'pending'): Promise<NotificationTask[]> {
+  const res = await authFetch(`/api/data/notification-tasks?range=${range}`)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const data = await res.json()
+  return data.tasks || []
+}
+
+/** Update a notification task field (checkbox toggle, status change). */
+export async function updateNotificationTask(id: string, updates: Partial<NotificationTask>): Promise<void> {
+  const res = await authFetch(`/api/data/notification-tasks?id=${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(updates),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
+}
+
+/** Confirm a shipment event (creates a notification task). */
+export async function confirmShipmentEvent(shipmentRef: string, containerNumber: string, step: NotificationStep, salidaDate?: string): Promise<NotificationTask> {
+  const res = await authFetch('/api/notifications/confirm', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ shipmentRef, containerNumber, step, salidaDate }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
+  const data = await res.json()
+  return data.task
+}
+
+/** Send a notification email via n8n webhook. */
+export async function sendNotificationEmail(taskId: string, emailData: { to: string; subject: string; htmlBody: string; replyTo?: string }): Promise<void> {
+  const res = await authFetch('/api/notifications/send-email', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ taskId, ...emailData }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
+}
+
+/** Skip/dismiss a notification task. */
+export async function skipNotificationTask(id: string): Promise<void> {
+  await updateNotificationTask(id, { status: 'skipped' as any })
 }
 
 // ── Clients ──
