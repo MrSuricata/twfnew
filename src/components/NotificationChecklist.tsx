@@ -14,6 +14,7 @@ import {
   ArrowRight,
   SpinnerGap,
   MagnifyingGlass,
+  PaperPlaneTilt,
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import { ParsedShipment, getShipmentStatus } from '@/lib/shipmentTypes'
@@ -23,8 +24,9 @@ import {
   confirmShipmentEvent,
   updateNotificationTask,
   skipNotificationTask,
+  sendNotificationEmail,
 } from '@/lib/dataClient'
-import NotificationEmailDialog from './NotificationEmailDialog'
+import NotificationEmailDialog, { STEP_SUBJECTS, STEP_TEMPLATES } from './NotificationEmailDialog'
 
 interface NotificationChecklistProps {
   shipments: ParsedShipment[]
@@ -198,6 +200,28 @@ export default function NotificationChecklist({ shipments, originPhotos, reports
     setEmailDialogTask(null)
   }
 
+  // Quick send for border/fiscal — no dialog needed
+  const [quickSending, setQuickSending] = useState<string | null>(null)
+  const handleQuickSend = async (task: NotificationTask) => {
+    if (!task.clientEmail) {
+      toast.error('No se encontró email del cliente')
+      return
+    }
+    setQuickSending(task.id)
+    try {
+      const subject = STEP_SUBJECTS[task.step]?.(task.shipmentRef, task.containerNumber) || ''
+      const body = STEP_TEMPLATES[task.step]?.(task) || ''
+      const htmlBody = body.replace(/\n/g, '<br/>')
+      await sendNotificationEmail(task.id, { to: task.clientEmail, subject, htmlBody })
+      handleEmailSent(task.id)
+      toast.success(`Email enviado a ${task.clientEmail}`)
+    } catch (err: any) {
+      toast.error(`Error: ${err.message}`)
+    } finally {
+      setQuickSending(null)
+    }
+  }
+
   // ── Render helpers ──
   const renderTaskCard = (task: NotificationTask, isOverdue: boolean = false) => {
     const photoCount = originPhotos.filter(p => p.shipmentRef === task.shipmentRef).length
@@ -278,14 +302,31 @@ export default function NotificationChecklist({ shipments, originPhotos, reports
           {/* Actions */}
           <div className="flex flex-col gap-1.5">
             {!task.emailSent && task.status === 'pending' && (
-              <Button
-                size="sm"
-                className="gap-1.5 text-xs bg-accent text-accent-foreground hover:bg-accent/90"
-                onClick={() => setEmailDialogTask(task)}
-              >
-                <EnvelopeSimple size={14} weight="bold" />
-                Enviar
-              </Button>
+              task.step === 'departure' ? (
+                // Departure: open dialog (has attachments to review)
+                <Button
+                  size="sm"
+                  className="gap-1.5 text-xs bg-accent text-accent-foreground hover:bg-accent/90"
+                  onClick={() => setEmailDialogTask(task)}
+                >
+                  <EnvelopeSimple size={14} weight="bold" />
+                  Enviar
+                </Button>
+              ) : (
+                // Border/Fiscal: quick send (1 click, no dialog)
+                <Button
+                  size="sm"
+                  className="gap-1.5 text-xs bg-accent text-accent-foreground hover:bg-accent/90"
+                  onClick={() => handleQuickSend(task)}
+                  disabled={quickSending === task.id}
+                >
+                  {quickSending === task.id ? (
+                    <><SpinnerGap size={14} className="animate-spin" /> Enviando...</>
+                  ) : (
+                    <><PaperPlaneTilt size={14} weight="bold" /> Enviar Rápido</>
+                  )}
+                </Button>
+              )
             )}
             {task.status === 'pending' && (
               <Button

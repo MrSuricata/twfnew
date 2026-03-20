@@ -148,13 +148,15 @@ async function handleConfirm(req: VercelRequest, res: VercelResponse) {
 
 // ── SEND EMAIL ───────────────────────────────────────────────────────
 
-async function sendViaN8n(webhook: string, data: { to: string; subject: string; htmlBody: string; replyTo?: string }): Promise<boolean> {
+async function sendViaN8n(webhook: string, data: { to: string; subject: string; htmlBody: string; replyTo?: string; attachments?: any[] }): Promise<{ ok: boolean; data?: any }> {
   const r = await fetch(webhook, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data),
   })
-  return r.ok
+  let responseData = null
+  try { responseData = await r.json() } catch {}
+  return { ok: r.ok, data: responseData }
 }
 
 async function sendViaEmailJS(data: { to: string; subject: string; htmlBody: string }): Promise<boolean> {
@@ -193,7 +195,7 @@ async function handleSendEmail(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ error: 'Admin authentication required' })
   }
 
-  const { taskId, to, subject, htmlBody, replyTo } = req.body || {}
+  const { taskId, to, subject, htmlBody, replyTo, attachments } = req.body || {}
   if (!taskId || !to || !subject || !htmlBody) {
     return res.status(400).json({ error: 'taskId, to, subject, and htmlBody are required' })
   }
@@ -201,10 +203,13 @@ async function handleSendEmail(req: VercelRequest, res: VercelResponse) {
   try {
     let sent = false
     let method = ''
+    let responseData: any = null
 
     const n8nWebhook = process.env.N8N_SEND_EMAIL_WEBHOOK
     if (n8nWebhook) {
-      sent = await sendViaN8n(n8nWebhook, { to, subject, htmlBody, replyTo })
+      const n8nResult = await sendViaN8n(n8nWebhook, { to, subject, htmlBody, replyTo, attachments })
+      sent = n8nResult.ok
+      responseData = n8nResult.data
       method = 'n8n'
     }
     if (!sent) {
@@ -215,13 +220,20 @@ async function handleSendEmail(req: VercelRequest, res: VercelResponse) {
       return res.status(502).json({ error: 'Email sending failed' })
     }
 
+    // Save thread info for future replies
     const db = getSupabase()
-    await db.from('notification_tasks').update({
+    const updateData: Record<string, unknown> = {
       email_sent: true, email_sent_at: new Date().toISOString(),
       status: 'completed', updated_at: new Date().toISOString(),
-    }).eq('id', taskId)
+      email_subject: subject,
+    }
+    // If n8n returned a threadId, save it for reply chaining
+    if (responseData?.threadId) {
+      updateData.email_thread_id = responseData.threadId
+    }
+    await db.from('notification_tasks').update(updateData).eq('id', taskId)
 
-    return res.status(200).json({ sent: true, taskId, method })
+    return res.status(200).json({ sent: true, taskId, method, threadId: responseData?.threadId })
   } catch (error: any) {
     console.error('[send-email] Error:', error?.message || error)
     return res.status(500).json({ error: 'Failed to send email' })

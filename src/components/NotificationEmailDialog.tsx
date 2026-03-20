@@ -1,8 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
+import { Badge } from '@/components/ui/badge'
 import {
   Dialog,
   DialogContent,
@@ -10,34 +10,32 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
-import { PaperPlaneTilt, SpinnerGap, Camera, FileText } from '@phosphor-icons/react'
+import { PaperPlaneTilt, SpinnerGap, Camera, FileText, CheckCircle, Paperclip } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import { NotificationTask, OriginPhoto, OperativeReport } from '@/lib/quotationTypes'
-import { sendNotificationEmail } from '@/lib/dataClient'
+import { sendNotificationEmail, fetchReportFile } from '@/lib/dataClient'
 
 interface NotificationEmailDialogProps {
   task: NotificationTask
   open: boolean
   onOpenChange: (open: boolean) => void
-  onEmailSent: (taskId: string) => void
+  onEmailSent: (taskId: string, threadId?: string) => void
   originPhotos: OriginPhoto[]
   reports: OperativeReport[]
 }
 
-const STEP_SUBJECTS: Record<string, (ref: string, cntr: string) => string> = {
+export const STEP_SUBJECTS: Record<string, (ref: string, cntr: string) => string> = {
   departure: (ref, cntr) => `TWF - Salida ${cntr || 'carga'} - Ref ${ref}`,
-  border: (ref, cntr) => `TWF - Cruce frontera ${cntr || 'carga'} - Ref ${ref}`,
-  fiscal: (ref, cntr) => `TWF - Llegada fiscal ${cntr || 'carga'} - Ref ${ref}`,
+  border: (ref, cntr) => `Re: TWF - Salida ${cntr || 'carga'} - Ref ${ref}`,
+  fiscal: (ref, cntr) => `Re: TWF - Salida ${cntr || 'carga'} - Ref ${ref}`,
 }
 
-const STEP_TEMPLATES: Record<string, (task: NotificationTask) => string> = {
+export const STEP_TEMPLATES: Record<string, (task: NotificationTask) => string> = {
   departure: (t) =>
 `Estimado/a ${t.clientName || 'cliente'},
 
 Le informamos que su carga ${t.shipmentRef}${t.containerNumber ? ` - contenedor ${t.containerNumber}` : ''} ha salido de Montevideo el día de hoy.
-
-${t.containerNumber ? `Contenedor: ${t.containerNumber}` : ''}
-
+${t.containerNumber ? `\nContenedor: ${t.containerNumber}` : ''}
 Saludos cordiales,
 Brian Ridvanovich
 Transit World Forwarding`,
@@ -69,34 +67,72 @@ export default function NotificationEmailDialog({
   originPhotos,
   reports,
 }: NotificationEmailDialogProps) {
-  const [to, setTo] = useState(task.clientEmail || '')
-  const [subject, setSubject] = useState(
-    STEP_SUBJECTS[task.step]?.(task.shipmentRef, task.containerNumber) || ''
-  )
-  const [body, setBody] = useState(
-    STEP_TEMPLATES[task.step]?.(task) || ''
-  )
+  const [body, setBody] = useState(STEP_TEMPLATES[task.step]?.(task) || '')
   const [sending, setSending] = useState(false)
+  const [includePhotos, setIncludePhotos] = useState(true)
+  const [includeReports, setIncludeReports] = useState(true)
+  const [loadingAttachments, setLoadingAttachments] = useState(false)
+
+  const to = task.clientEmail || ''
+  const subject = STEP_SUBJECTS[task.step]?.(task.shipmentRef, task.containerNumber) || ''
+  const isDeparture = task.step === 'departure'
+
+  // Reset body when task changes
+  useEffect(() => {
+    setBody(STEP_TEMPLATES[task.step]?.(task) || '')
+    setIncludePhotos(true)
+    setIncludeReports(true)
+  }, [task.id])
 
   const handleSend = async () => {
-    if (!to.trim()) {
-      toast.error('Ingresá el email del destinatario')
-      return
-    }
-    if (!subject.trim()) {
-      toast.error('Ingresá un asunto')
+    if (!to) {
+      toast.error('No se encontró email del cliente. Verificá la configuración del cliente.')
       return
     }
 
     setSending(true)
+    setLoadingAttachments(isDeparture && (includePhotos || includeReports))
+
     try {
-      // Convert plain text to simple HTML
-      const htmlBody = body.replace(/\n/g, '<br/>')
+      // Build HTML body with embedded photos
+      let htmlBody = body.replace(/\n/g, '<br/>')
+
+      // Embed photo thumbnails in the HTML for departure
+      if (isDeparture && includePhotos && originPhotos.length > 0) {
+        htmlBody += '<br/><br/><strong>📷 Fotos de la carga en origen:</strong><br/><br/>'
+        htmlBody += '<div style="display:flex;flex-wrap:wrap;gap:8px;">'
+        for (const photo of originPhotos) {
+          if (photo.thumbnailData) {
+            htmlBody += `<img src="${photo.thumbnailData}" alt="${photo.caption || photo.fileName}" style="max-width:250px;border-radius:8px;border:1px solid #ddd;" />`
+          }
+        }
+        htmlBody += '</div>'
+      }
+
+      // Collect report attachments (download fileData on demand)
+      const attachments: { name: string; type: string; data: string }[] = []
+
+      if (isDeparture && includeReports && reports.length > 0) {
+        setLoadingAttachments(true)
+        for (const report of reports) {
+          const fileData = await fetchReportFile(report.id)
+          if (fileData) {
+            // fileData is a base64 data URL like "data:application/pdf;base64,..."
+            const base64 = fileData.includes(',') ? fileData.split(',')[1] : fileData
+            attachments.push({
+              name: report.fileName || `informe-${task.shipmentRef}.pdf`,
+              type: report.fileType || 'application/pdf',
+              data: base64,
+            })
+          }
+        }
+      }
 
       await sendNotificationEmail(task.id, {
-        to: to.trim(),
-        subject: subject.trim(),
+        to,
+        subject,
         htmlBody,
+        attachments: attachments.length > 0 ? attachments : undefined,
       })
 
       toast.success('Email enviado correctamente')
@@ -105,6 +141,7 @@ export default function NotificationEmailDialog({
       toast.error(`Error al enviar: ${err.message}`)
     } finally {
       setSending(false)
+      setLoadingAttachments(false)
     }
   }
 
@@ -119,56 +156,99 @@ export default function NotificationEmailDialog({
         </DialogHeader>
 
         <div className="space-y-4">
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Para</Label>
-            <Input
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
-              placeholder="cliente@email.com"
-              className="h-9"
-            />
+          {/* Read-only email info */}
+          <div className="rounded-lg border p-3 bg-muted/30 space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs text-muted-foreground">Para</Label>
+              <span className="text-sm font-medium">{to || <span className="text-red-400">Sin email configurado</span>}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <Label className="text-xs text-muted-foreground">Asunto</Label>
+              <span className="text-xs text-muted-foreground truncate max-w-[300px]">{subject}</span>
+            </div>
           </div>
 
+          {/* Editable message */}
           <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Asunto</Label>
-            <Input
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              className="h-9"
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label className="text-xs text-muted-foreground">Mensaje</Label>
+            <Label className="text-xs text-muted-foreground">Mensaje (editable)</Label>
             <Textarea
               value={body}
               onChange={(e) => setBody(e.target.value)}
-              rows={8}
+              rows={7}
               className="text-sm"
             />
           </div>
 
-          {/* Attachments summary (departure only) */}
-          {task.step === 'departure' && (originPhotos.length > 0 || reports.length > 0) && (
-            <div className="rounded-lg border p-3 bg-muted/50">
-              <p className="text-xs font-medium mb-2 text-muted-foreground">Adjuntos disponibles</p>
-              <div className="flex gap-3 text-xs">
-                {originPhotos.length > 0 && (
-                  <span className="flex items-center gap-1 text-green-500">
-                    <Camera size={14} />
-                    {originPhotos.length} foto{originPhotos.length > 1 ? 's' : ''}
-                  </span>
-                )}
-                {reports.length > 0 && (
-                  <span className="flex items-center gap-1 text-blue-500">
-                    <FileText size={14} />
-                    {reports.length} informe{reports.length > 1 ? 's' : ''}
-                  </span>
-                )}
+          {/* Attachment toggles (departure only) */}
+          {isDeparture && (originPhotos.length > 0 || reports.length > 0) && (
+            <div className="rounded-lg border p-3 space-y-2">
+              <div className="flex items-center gap-1.5 mb-1">
+                <Paperclip size={14} className="text-muted-foreground" />
+                <span className="text-xs font-medium">Adjuntos</span>
               </div>
-              <p className="text-[10px] text-muted-foreground mt-1.5">
-                Los adjuntos se envían a través del workflow de n8n
-              </p>
+
+              {originPhotos.length > 0 && (
+                <label className="flex items-center justify-between cursor-pointer hover:bg-muted/50 rounded p-1.5 -mx-1.5">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={includePhotos}
+                      onChange={(e) => setIncludePhotos(e.target.checked)}
+                      className="rounded"
+                    />
+                    <Camera size={14} className="text-green-500" />
+                    <span className="text-xs">
+                      {originPhotos.length} foto{originPhotos.length > 1 ? 's' : ''} en origen
+                    </span>
+                  </div>
+                  <Badge variant="outline" className="text-[9px]">embebidas en HTML</Badge>
+                </label>
+              )}
+
+              {reports.length > 0 && (
+                <label className="flex items-center justify-between cursor-pointer hover:bg-muted/50 rounded p-1.5 -mx-1.5">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={includeReports}
+                      onChange={(e) => setIncludeReports(e.target.checked)}
+                      className="rounded"
+                    />
+                    <FileText size={14} className="text-blue-500" />
+                    <span className="text-xs">
+                      {reports.length} informe{reports.length > 1 ? 's' : ''} operativo{reports.length > 1 ? 's' : ''}
+                    </span>
+                  </div>
+                  <Badge variant="outline" className="text-[9px]">PDF adjunto</Badge>
+                </label>
+              )}
+
+              {/* Photo previews */}
+              {includePhotos && originPhotos.length > 0 && (
+                <div className="flex gap-1.5 mt-2 overflow-x-auto pb-1">
+                  {originPhotos.slice(0, 6).map((p) => (
+                    <img
+                      key={p.id}
+                      src={p.thumbnailData}
+                      alt={p.caption || ''}
+                      className="w-12 h-12 rounded object-cover border flex-shrink-0"
+                    />
+                  ))}
+                  {originPhotos.length > 6 && (
+                    <div className="w-12 h-12 rounded border flex items-center justify-center text-[10px] text-muted-foreground flex-shrink-0">
+                      +{originPhotos.length - 6}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Loading indicator */}
+          {loadingAttachments && (
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <SpinnerGap size={14} className="animate-spin" />
+              Descargando adjuntos...
             </div>
           )}
         </div>
@@ -179,13 +259,13 @@ export default function NotificationEmailDialog({
           </Button>
           <Button
             onClick={handleSend}
-            disabled={sending || !to.trim()}
+            disabled={sending || !to}
             className="bg-accent text-accent-foreground hover:bg-accent/90 gap-2"
           >
             {sending ? (
-              <><SpinnerGap size={18} className="animate-spin" /> Enviando...</>
+              <><SpinnerGap size={18} className="animate-spin" /> {loadingAttachments ? 'Preparando...' : 'Enviando...'}</>
             ) : (
-              <><PaperPlaneTilt size={18} /> Enviar Email</>
+              <><PaperPlaneTilt size={18} /> Enviar</>
             )}
           </Button>
         </DialogFooter>
