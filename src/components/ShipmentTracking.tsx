@@ -33,6 +33,8 @@ import {
   CaretDown,
   Funnel,
   SortAscending,
+  Camera,
+  ImageSquare,
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import {
@@ -43,14 +45,17 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { ParsedShipment, getShipmentStatus, ShipmentStatusCode } from '@/lib/shipmentTypes'
-import { OperativeReport } from '@/lib/quotationTypes'
-import { saveReportWithFile, deleteReport as deleteReportFromDB } from '@/lib/dataClient'
+import { OperativeReport, OriginPhoto } from '@/lib/quotationTypes'
+import { saveReportWithFile, deleteReport as deleteReportFromDB, saveOriginPhoto } from '@/lib/dataClient'
+import { processPhoto } from '@/lib/imageUtils'
 import ShipmentDetailsDialog from './ShipmentDetailsDialog'
 
 interface ShipmentTrackingProps {
   shipmentRecords?: ParsedShipment[]
   reports?: OperativeReport[]
+  originPhotos?: OriginPhoto[]
   onUpdateReports?: (reports: OperativeReport[]) => void
+  onUpdateOriginPhotos?: (photos: OriginPhoto[]) => void
 }
 
 const ITEMS_PER_PAGE = 25
@@ -76,7 +81,7 @@ const LIBRE_FILTERS = [
   { value: 'ok', label: '🟢 A tiempo' },
 ]
 
-export default function ShipmentTracking({ shipmentRecords = [], reports = [], onUpdateReports }: ShipmentTrackingProps) {
+export default function ShipmentTracking({ shipmentRecords = [], reports = [], originPhotos = [], onUpdateReports, onUpdateOriginPhotos }: ShipmentTrackingProps) {
   const [statusFilter, setStatusFilter] = useState('all')
   const [libreFilter, setLibreFilter] = useState('all')
   const [searchText, setSearchText] = useState('')
@@ -97,6 +102,98 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
   const [reportContent, setReportContent] = useState('')
   const [reportFile, setReportFile] = useState<File | null>(null)
   const [uploadingReport, setUploadingReport] = useState(false)
+
+  // ── Photo upload state ──
+  const [photoDialogOpen, setPhotoDialogOpen] = useState(false)
+  const [photoTargetRef, setPhotoTargetRef] = useState('')
+  const [photoTargetShipment, setPhotoTargetShipment] = useState<ParsedShipment | null>(null)
+  const [photoContainer, setPhotoContainer] = useState('')
+  const [photoCaption, setPhotoCaption] = useState('')
+  const [photoFiles, setPhotoFiles] = useState<File[]>([])
+  const [photoPreviews, setPhotoPreviews] = useState<string[]>([])
+  const [uploadingPhotos, setUploadingPhotos] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 })
+
+  const openPhotoDialog = (ref: string) => {
+    const shipment = shipmentRecords.find(s => s.REF === ref) || null
+    setPhotoTargetRef(ref)
+    setPhotoTargetShipment(shipment)
+    setPhotoContainer('')
+    setPhotoCaption('')
+    setPhotoFiles([])
+    setPhotoPreviews([])
+    setUploadProgress({ current: 0, total: 0 })
+    setPhotoDialogOpen(true)
+  }
+
+  const handlePhotoFilesSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    if (files.length === 0) return
+    if (files.length > 10) {
+      toast.error('Máximo 10 fotos por vez', { duration: 4000 })
+      e.target.value = ''
+      return
+    }
+    const oversized = files.filter(f => f.size > 10 * 1024 * 1024)
+    if (oversized.length > 0) {
+      toast.error(`${oversized.length} archivo(s) superan los 10MB`, { duration: 4000 })
+      e.target.value = ''
+      return
+    }
+    setPhotoFiles(files)
+    // Generate previews
+    const previews = files.map(f => URL.createObjectURL(f))
+    setPhotoPreviews(previews)
+  }
+
+  const handleUploadPhotos = async () => {
+    if (photoFiles.length === 0) {
+      toast.error('Seleccioná al menos una foto')
+      return
+    }
+    setUploadingPhotos(true)
+    setUploadProgress({ current: 0, total: photoFiles.length })
+
+    const newPhotos: OriginPhoto[] = []
+    try {
+      for (let i = 0; i < photoFiles.length; i++) {
+        setUploadProgress({ current: i + 1, total: photoFiles.length })
+        const file = photoFiles[i]
+        const { full, thumbnail } = await processPhoto(file)
+
+        const photo: OriginPhoto = {
+          id: `photo-${Date.now()}-${i}`,
+          shipmentRef: photoTargetRef,
+          containerNumber: photoContainer || undefined,
+          caption: photoCaption.trim() || undefined,
+          fileName: file.name,
+          fileType: file.type,
+          fileData: full,
+          thumbnailData: thumbnail,
+          createdAt: Date.now(),
+          createdBy: 'admin',
+        }
+
+        await saveOriginPhoto(photo)
+        newPhotos.push({ ...photo, fileData: undefined }) // Strip fileData for local state
+      }
+
+      // Update local state
+      const updated = [...newPhotos, ...originPhotos]
+      if (onUpdateOriginPhotos) onUpdateOriginPhotos(updated)
+
+      toast.success(`${photoFiles.length} foto${photoFiles.length > 1 ? 's' : ''} subida${photoFiles.length > 1 ? 's' : ''} correctamente`)
+      setPhotoDialogOpen(false)
+
+      // Cleanup preview URLs
+      photoPreviews.forEach(url => URL.revokeObjectURL(url))
+    } catch (err: any) {
+      console.error('Photo upload error:', err)
+      toast.error(`Error al subir fotos: ${err.message}`)
+    } finally {
+      setUploadingPhotos(false)
+    }
+  }
 
   const openReportDialog = (ref: string) => {
     const shipment = shipmentRecords.find(s => s.REF === ref) || null
@@ -588,18 +685,36 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
                             )}
                           </TableCell>
                           <TableCell className="hidden md:table-cell text-right pr-4">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="gap-1 text-xs h-7"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                openReportDialog(record.REF)
-                              }}
-                            >
-                              <PlusCircle size={14} />
-                              Informe
-                            </Button>
+                            <div className="flex gap-1 justify-end">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="gap-1 text-xs h-7"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  openPhotoDialog(record.REF)
+                                }}
+                              >
+                                <Camera size={14} />
+                                Fotos
+                                {(() => {
+                                  const cnt = originPhotos.filter(p => p.shipmentRef === record.REF).length
+                                  return cnt > 0 ? <Badge variant="secondary" className="ml-1 text-[9px] px-1 py-0 h-4">{cnt}</Badge> : null
+                                })()}
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="gap-1 text-xs h-7"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  openReportDialog(record.REF)
+                                }}
+                              >
+                                <PlusCircle size={14} />
+                                Informe
+                              </Button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       )
@@ -677,6 +792,8 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
         onSave={() => {}}
         clientView={false}
         reports={reports}
+        originPhotos={originPhotos}
+        onUpdateOriginPhotos={onUpdateOriginPhotos}
       />
 
       {/* ── Report Upload Dialog ── */}
@@ -793,6 +910,126 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
                 <>
                   <UploadSimple size={18} />
                   Subir Informe
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Photo Upload Dialog ── */}
+      <Dialog open={photoDialogOpen} onOpenChange={setPhotoDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Camera size={20} className="text-accent" />
+              Fotos en Origen — {photoTargetRef}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Container selector (optional) */}
+            {photoTargetShipment?.operativas && photoTargetShipment.operativas.length > 0 && (
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Contenedor (opcional)</Label>
+                <Select value={photoContainer} onValueChange={setPhotoContainer}>
+                  <SelectTrigger className="h-9"><SelectValue placeholder="Todos — general" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value=" ">Todos — general</SelectItem>
+                    {photoTargetShipment.operativas
+                      .filter(o => o.CNTR_OP)
+                      .map(o => (
+                        <SelectItem key={o.CNTR_OP} value={o.CNTR_OP}>{o.CNTR_OP}</SelectItem>
+                      ))
+                    }
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* Caption */}
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Descripción (opcional)</Label>
+              <Input
+                value={photoCaption}
+                onChange={(e) => setPhotoCaption(e.target.value)}
+                placeholder="Ej: Carga consolidada en origen"
+                className="h-9"
+              />
+            </div>
+
+            {/* File picker */}
+            <div className="space-y-1.5">
+              <Label className="text-xs text-muted-foreground">Fotos (máx. 10, formatos de imagen)</Label>
+              <div
+                className="border-2 border-dashed rounded-lg p-4 text-center cursor-pointer hover:border-accent/50 transition-colors"
+                onClick={() => document.getElementById('photo-file-input')?.click()}
+              >
+                <input
+                  id="photo-file-input"
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  onChange={handlePhotoFilesSelect}
+                  className="hidden"
+                />
+                {photoFiles.length === 0 ? (
+                  <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                    <ImageSquare size={32} />
+                    <p className="text-sm">Click o arrastrá fotos aquí</p>
+                    <p className="text-xs">JPG, PNG, WEBP — máx 10MB cada una</p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-accent font-medium">
+                    {photoFiles.length} foto{photoFiles.length > 1 ? 's' : ''} seleccionada{photoFiles.length > 1 ? 's' : ''}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Preview grid */}
+            {photoPreviews.length > 0 && (
+              <div className="grid grid-cols-3 gap-2">
+                {photoPreviews.map((url, i) => (
+                  <div key={i} className="aspect-square rounded-lg overflow-hidden border bg-muted">
+                    <img src={url} alt={`Preview ${i + 1}`} className="w-full h-full object-cover" />
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Upload progress */}
+            {uploadingPhotos && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span>Subiendo {uploadProgress.current} de {uploadProgress.total}...</span>
+                  <span className="text-muted-foreground">{Math.round((uploadProgress.current / uploadProgress.total) * 100)}%</span>
+                </div>
+                <div className="h-2 bg-muted rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-accent rounded-full transition-all duration-300"
+                    style={{ width: `${(uploadProgress.current / uploadProgress.total) * 100}%` }}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPhotoDialogOpen(false)} disabled={uploadingPhotos}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleUploadPhotos}
+              disabled={uploadingPhotos || photoFiles.length === 0}
+              className="bg-accent text-accent-foreground hover:bg-accent/90 gap-2"
+            >
+              {uploadingPhotos ? (
+                <>Subiendo {uploadProgress.current}/{uploadProgress.total}...</>
+              ) : (
+                <>
+                  <UploadSimple size={18} />
+                  Subir {photoFiles.length > 0 ? `${photoFiles.length} Foto${photoFiles.length > 1 ? 's' : ''}` : 'Fotos'}
                 </>
               )}
             </Button>

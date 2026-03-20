@@ -5,7 +5,7 @@
 // ─────────────────────────────────────────────────────────────────────
 
 import { authFetch } from './authClient'
-import type { QuoteFormData, ClientAccount, ShipmentDocument, OperativeReport } from './quotationTypes'
+import type { QuoteFormData, ClientAccount, ShipmentDocument, OperativeReport, OriginPhoto } from './quotationTypes'
 import type { ParsedShipment } from './shipmentTypes'
 
 // ── Shipments (cached from Google Sheets sync) ──
@@ -139,6 +139,56 @@ export async function deleteReport(reportId: string): Promise<void> {
   }
 }
 
+// ── Origin Photos ──
+
+/** Fetch all origin photos (thumbnails only, no file_data). */
+export async function fetchOriginPhotos(): Promise<OriginPhoto[]> {
+  const res = await authFetch('/api/data/origin-photos')
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const data = await res.json()
+  return data.photos || []
+}
+
+/** Upload a single origin photo (with compressed file_data + thumbnail). */
+export async function saveOriginPhoto(photo: OriginPhoto): Promise<void> {
+  const res = await authFetch('/api/data/origin-photos?mode=file', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(photo),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
+}
+
+/** Delete a single origin photo from DB. */
+export async function deleteOriginPhoto(id: string): Promise<void> {
+  const res = await authFetch(`/api/data/origin-photos?id=${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
+}
+
+/** Fetch full-size photo file_data on demand. Works for both admin and client tokens. */
+export async function fetchOriginPhotoFile(photoId: string): Promise<string | null> {
+  const res = await authFetch(`/api/client/origin-photos?id=${encodeURIComponent(photoId)}`)
+  if (!res.ok) return null
+  const data = await res.json()
+  return data.photo?.fileData || null
+}
+
+/** Fetch origin photos for the current client (filtered by their shipments). */
+export async function fetchClientOriginPhotos(): Promise<OriginPhoto[]> {
+  const res = await authFetch('/api/client/origin-photos')
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const data = await res.json()
+  return data.photos || []
+}
+
 // ── Clients ──
 
 export async function fetchClients(): Promise<ClientAccount[]> {
@@ -195,16 +245,18 @@ export interface AdminData {
   quotes: QuoteFormData[]
   documents: ShipmentDocument[]
   reports: OperativeReport[]
+  originPhotos: OriginPhoto[]
   clients: ClientAccount[]
   syncedAt: string | null
 }
 
 export async function loadAdminData(): Promise<AdminData> {
-  const [shipmentsRes, quotes, documents, reports, clients] = await Promise.all([
+  const [shipmentsRes, quotes, documents, reports, originPhotos, clients] = await Promise.all([
     fetchShipmentsFromDB(),
     fetchQuotes(),
     fetchDocuments(),
     fetchReports(),
+    fetchOriginPhotos(),
     fetchClients(),
   ])
 
@@ -213,6 +265,7 @@ export async function loadAdminData(): Promise<AdminData> {
     quotes,
     documents,
     reports,
+    originPhotos,
     clients,
     syncedAt: shipmentsRes.syncedAt,
   }

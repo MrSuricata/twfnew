@@ -32,8 +32,9 @@ import {
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import { ParsedShipment, getShipmentStatus } from '@/lib/shipmentTypes'
-import { ShipmentDocument, OperativeReport } from '@/lib/quotationTypes'
+import { ShipmentDocument, OperativeReport, OriginPhoto } from '@/lib/quotationTypes'
 import { fetchReportFile } from '@/lib/dataClient'
+import OriginPhotoGallery from './OriginPhotoGallery'
 
 interface ShipmentDetailsDialogProps {
   shipment: ParsedShipment | null
@@ -43,6 +44,8 @@ interface ShipmentDetailsDialogProps {
   clientView?: boolean
   documents?: ShipmentDocument[]
   reports?: OperativeReport[]
+  originPhotos?: OriginPhoto[]
+  onUpdateOriginPhotos?: (photos: OriginPhoto[]) => void
 }
 
 export default function ShipmentDetailsDialog({
@@ -52,7 +55,9 @@ export default function ShipmentDetailsDialog({
   onSave,
   clientView = false,
   documents = [],
-  reports = []
+  reports = [],
+  originPhotos = [],
+  onUpdateOriginPhotos,
 }: ShipmentDetailsDialogProps) {
   const [editedShipment, setEditedShipment] = useState<ParsedShipment | null>(null)
 
@@ -154,7 +159,7 @@ export default function ShipmentDetailsDialog({
         </DialogHeader>
 
         <Tabs defaultValue={clientView ? "tracking" : "general"} className="w-full mt-4">
-          <TabsList className={`grid w-full ${clientView ? 'grid-cols-3' : 'grid-cols-4'}`}>
+          <TabsList className={`grid w-full ${clientView ? 'grid-cols-4' : 'grid-cols-5'}`}>
             {clientView ? (
               <>
                 <TabsTrigger value="tracking">
@@ -178,24 +183,46 @@ export default function ShipmentDetailsDialog({
                     )
                   })()}
                 </TabsTrigger>
+                <TabsTrigger value="photos" className="relative">
+                  <Package size={18} className="mr-2" />
+                  <span className="hidden sm:inline">Fotos</span>
+                  {(() => {
+                    const cnt = originPhotos.filter(p => p.shipmentRef === editedShipment.REF).length
+                    if (cnt === 0) return null
+                    return (
+                      <span className="ml-1 text-[10px] font-bold rounded-full min-w-[16px] h-[16px] flex items-center justify-center bg-accent text-accent-foreground">
+                        {cnt}
+                      </span>
+                    )
+                  })()}
+                </TabsTrigger>
               </>
             ) : (
               <>
                 <TabsTrigger value="general">
                   <Info size={18} className="mr-2" />
-                  General
+                  <span className="hidden sm:inline">General</span>
                 </TabsTrigger>
                 <TabsTrigger value="operativa">
                   <Truck size={18} className="mr-2" />
-                  Operativa
+                  <span className="hidden sm:inline">Operativa</span>
                 </TabsTrigger>
                 <TabsTrigger value="costs">
                   <CurrencyDollar size={18} className="mr-2" />
-                  Costos
+                  <span className="hidden sm:inline">Costos</span>
                 </TabsTrigger>
                 <TabsTrigger value="status">
                   <CheckCircle size={18} className="mr-2" />
-                  Estado
+                  <span className="hidden sm:inline">Estado</span>
+                </TabsTrigger>
+                <TabsTrigger value="photos" className="relative">
+                  <Package size={18} className="mr-2" />
+                  <span className="hidden sm:inline">Fotos</span>
+                  {(() => {
+                    const cnt = originPhotos.filter(p => p.shipmentRef === editedShipment.REF).length
+                    if (cnt === 0) return null
+                    return <span className="ml-1 text-[10px] font-bold rounded-full min-w-[16px] h-[16px] flex items-center justify-center bg-accent text-accent-foreground">{cnt}</span>
+                  })()}
                 </TabsTrigger>
               </>
             )}
@@ -708,8 +735,18 @@ export default function ShipmentDetailsDialog({
                 )
               })()}
             </TabsContent>
+
+            {/* ── Photos Tab (client view) ── */}
+            <TabsContent value="photos" className="space-y-4 mt-4">
+              <OriginPhotoGallery
+                photos={originPhotos.filter(p => p.shipmentRef === editedShipment.REF)}
+                isAdmin={false}
+              />
+            </TabsContent>
             </>
           )}
+
+          {/* ── Photos Tab (admin view, added after all admin tabs) ── */}
 
           <TabsContent value="general" className="space-y-4 mt-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1157,6 +1194,21 @@ export default function ShipmentDetailsDialog({
               </div>
             </div>
           </TabsContent>
+
+          {/* ── Photos Tab (admin + client shared) ── */}
+          {!clientView && (
+            <TabsContent value="photos" className="space-y-4 mt-4">
+              <OriginPhotoGallery
+                photos={originPhotos.filter(p => p.shipmentRef === editedShipment.REF)}
+                isAdmin={true}
+                onDeletePhoto={(updated) => {
+                  // Merge: keep photos for other shipments, replace this shipment's photos
+                  const otherPhotos = originPhotos.filter(p => p.shipmentRef !== editedShipment.REF)
+                  if (onUpdateOriginPhotos) onUpdateOriginPhotos([...otherPhotos, ...updated])
+                }}
+              />
+            </TabsContent>
+          )}
         </Tabs>
 
         <DialogFooter>

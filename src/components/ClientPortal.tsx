@@ -37,10 +37,10 @@ import {
   Boat,
 } from '@phosphor-icons/react'
 import { ParsedShipment, getShipmentStatus, generateShipmentAlerts, isShipmentCompleted, ShipmentAlert } from '@/lib/shipmentTypes'
-import { ClientAccount, OperativeReport } from '@/lib/quotationTypes'
+import { ClientAccount, OperativeReport, OriginPhoto } from '@/lib/quotationTypes'
 import { toast } from 'sonner'
 import { authFetch } from '@/lib/authClient'
-import { fetchClientReports } from '@/lib/dataClient'
+import { fetchClientReports, fetchClientOriginPhotos } from '@/lib/dataClient'
 import ShipmentDetailsDialog from './ShipmentDetailsDialog'
 
 interface ClientPortalProps {
@@ -58,6 +58,7 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
   const [showNotifications, setShowNotifications] = useState(false)
   const [serverShipments, setServerShipments] = useState<ParsedShipment[]>([])
   const [serverReports, setServerReports] = useState<OperativeReport[]>([])
+  const [serverPhotos, setServerPhotos] = useState<OriginPhoto[]>([])
   const [isLoadingData, setIsLoadingData] = useState(true)
 
   // ── Filter states ──
@@ -82,15 +83,19 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
   useEffect(() => {
     const fetchClientData = async () => {
       try {
-        const [shipmentsRes, reportsData] = await Promise.allSettled([
+        const [shipmentsRes, reportsData, photosData] = await Promise.allSettled([
           authFetch('/api/sheets/client-data').then(r => r.ok ? r.json() : null),
           fetchClientReports().catch(() => []),
+          fetchClientOriginPhotos().catch(() => []),
         ])
         if (shipmentsRes.status === 'fulfilled' && shipmentsRes.value) {
           setServerShipments(shipmentsRes.value.shipments || [])
         }
         if (reportsData.status === 'fulfilled' && reportsData.value) {
           setServerReports(reportsData.value)
+        }
+        if (photosData.status === 'fulfilled' && photosData.value) {
+          setServerPhotos(photosData.value)
         }
       } catch (err) {
         console.warn('Failed to fetch client data from server:', err)
@@ -1016,6 +1021,7 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
           onSave={() => {}}
           clientView
           reports={clientReports}
+          originPhotos={serverPhotos}
         />
       )}
     </div>

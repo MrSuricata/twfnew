@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Toaster, toast } from 'sonner'
 import { Language } from '@/lib/i18n'
-import { QuoteFormData, ClientAccount, ShipmentDocument, OperativeReport } from '@/lib/quotationTypes'
+import { QuoteFormData, ClientAccount, ShipmentDocument, OperativeReport, OriginPhoto } from '@/lib/quotationTypes'
 import { ParsedShipment } from '@/lib/shipmentTypes'
 import { getDemoShipments } from '@/lib/demoShipments'
 import { filterShipments } from '@/lib/sheetsSync'
 import { verifySession, clearAuth, authFetch } from '@/lib/authClient'
-import { loadAdminData, saveQuotes, saveDocuments, saveReports, saveReportWithFile, deleteReport, saveClients } from '@/lib/dataClient'
+import { loadAdminData, saveQuotes, saveDocuments, saveReports, saveReportWithFile, deleteReport, saveClients, saveOriginPhoto, deleteOriginPhoto } from '@/lib/dataClient'
 
 import Login from './components/Login'
 import ClientLogin from './components/ClientLogin'
@@ -64,6 +64,7 @@ function App() {
   const [documents, setDocuments] = useState<ShipmentDocument[]>(() => loadFromStorage('twf-documents', []))
   const [reports, setReports] = useState<OperativeReport[]>(() => loadFromStorage('twf-reports', []))
   const [shipments, setShipments] = useState<ParsedShipment[]>(() => filterShipments(loadFromStorage('twf-shipments', [])))
+  const [originPhotos, setOriginPhotos] = useState<OriginPhoto[]>(() => loadFromStorage('twf-origin-photos', []))
 
   // Track whether fresh data has loaded from Supabase
   const [isDataLoading, setIsDataLoading] = useState(false)
@@ -107,6 +108,11 @@ function App() {
       if (data.clients.length > 0) {
         setClients(data.clients)
         saveToStorage('twf-clients', data.clients)
+      }
+
+      if (data.originPhotos.length >= 0) {
+        setOriginPhotos(data.originPhotos)
+        saveToStorage('twf-origin-photos', data.originPhotos)
       }
 
       setDataFresh(true)
@@ -257,6 +263,13 @@ function App() {
     }
   }
 
+  const handleUpdateOriginPhotos = (updated: OriginPhoto[]) => {
+    setOriginPhotos(updated)
+    saveToStorage('twf-origin-photos', updated)
+    // Note: individual photos are saved directly via saveOriginPhoto/deleteOriginPhoto
+    // This handler is for local state sync only
+  }
+
   const handleUpdateQuotes = (updated: QuoteFormData[]) => {
     setQuotes(updated)
     saveToStorage('twf-quotes', updated)
@@ -377,10 +390,12 @@ function App() {
           shipments={shipments}
           documents={documents}
           reports={reports}
+          originPhotos={originPhotos}
           onUpdateShipments={handleUpdateShipments}
           onUpdateClients={handleUpdateClients}
           onUpdateDocuments={handleUpdateDocuments}
           onUpdateReports={handleUpdateReports}
+          onUpdateOriginPhotos={handleUpdateOriginPhotos}
         />
       </>
     )

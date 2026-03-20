@@ -21,7 +21,7 @@ import TestimonialsEditor from './TestimonialsEditor'
 import AnalyticsDashboard from './AnalyticsDashboard'
 import ClientManager from './ClientManager'
 import { ParsedShipment } from '@/lib/shipmentTypes'
-import { ClientAccount, ShipmentDocument, OperativeReport } from '@/lib/quotationTypes'
+import { ClientAccount, ShipmentDocument, OperativeReport, OriginPhoto } from '@/lib/quotationTypes'
 import Breadcrumbs from './Breadcrumbs'
 
 interface DashboardEnhancedProps {
@@ -30,13 +30,15 @@ interface DashboardEnhancedProps {
   shipments?: ParsedShipment[]
   documents?: ShipmentDocument[]
   reports?: OperativeReport[]
+  originPhotos?: OriginPhoto[]
   onUpdateShipments?: (shipments: ParsedShipment[]) => void
   onUpdateClients?: (clients: ClientAccount[]) => void
   onUpdateDocuments?: (docs: ShipmentDocument[]) => void
   onUpdateReports?: (reports: OperativeReport[]) => void
+  onUpdateOriginPhotos?: (photos: OriginPhoto[]) => void
 }
 
-export default function DashboardEnhanced({ onLogout, clients = [], shipments = [], documents = [], reports = [], onUpdateShipments, onUpdateClients, onUpdateDocuments, onUpdateReports }: DashboardEnhancedProps) {
+export default function DashboardEnhanced({ onLogout, clients = [], shipments = [], documents = [], reports = [], originPhotos = [], onUpdateShipments, onUpdateClients, onUpdateDocuments, onUpdateReports, onUpdateOriginPhotos }: DashboardEnhancedProps) {
   const [activeTab, setActiveTab] = useState('agenda')
 
   const getBreadcrumbs = () => {
@@ -118,8 +120,12 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
             <ShipmentTracking
               shipmentRecords={shipments}
               reports={reports}
+              originPhotos={originPhotos}
               onUpdateReports={(updated) => {
                 if (onUpdateReports) onUpdateReports(updated)
+              }}
+              onUpdateOriginPhotos={(updated) => {
+                if (onUpdateOriginPhotos) onUpdateOriginPhotos(updated)
               }}
             />
           </TabsContent>

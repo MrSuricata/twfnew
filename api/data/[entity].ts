@@ -32,6 +32,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return handleClients(req, res, db)
       case 'settings':
         return handleSettings(req, res, db)
+      case 'origin-photos':
+        return handleOriginPhotos(req, res, db)
       case 'shipments-cache':
         return handleShipmentsCache(req, res, db)
       default:
@@ -332,6 +334,92 @@ async function handleSettings(req: VercelRequest, res: VercelResponse, db: any) 
     }, { onConflict: 'key' })
     if (error) throw error
     return res.status(200).json({ saved: true })
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' })
+}
+
+// ── Origin Photos ──────────────────────────────────────────────────
+// GET  /api/data/origin-photos              → list all (thumbnails, no file_data)
+// GET  /api/data/origin-photos?id=xxx       → single photo WITH file_data
+// POST /api/data/origin-photos?mode=file    → upload single photo
+// DELETE /api/data/origin-photos?id=xxx     → delete single photo
+
+async function handleOriginPhotos(req: VercelRequest, res: VercelResponse, db: any) {
+  if (req.method === 'GET') {
+    const photoId = req.query.id as string
+    if (photoId) {
+      const { data, error } = await db.from('origin_photos').select('*').eq('id', photoId).single()
+      if (error) throw error
+      if (!data) return res.status(404).json({ error: 'Photo not found' })
+      return res.status(200).json({
+        photo: {
+          id: data.id,
+          shipmentRef: data.shipment_ref,
+          containerNumber: data.container_number || '',
+          caption: data.caption || '',
+          fileName: data.file_name,
+          fileType: data.file_type,
+          fileData: data.file_data,
+          thumbnailData: data.thumbnail_data,
+          createdAt: data.created_at_ts,
+          createdBy: data.created_by,
+        }
+      })
+    }
+
+    // Bulk list — thumbnails included, file_data excluded
+    let query = db.from('origin_photos')
+      .select('id, shipment_ref, container_number, caption, file_name, file_type, thumbnail_data, created_at_ts, created_by')
+      .order('created_at_ts', { ascending: false })
+    const shipmentRef = req.query.shipmentRef as string
+    if (shipmentRef) query = query.eq('shipment_ref', shipmentRef)
+    const { data, error } = await query
+    if (error) throw error
+    const photos = (data || []).map((p: any) => ({
+      id: p.id,
+      shipmentRef: p.shipment_ref,
+      containerNumber: p.container_number || '',
+      caption: p.caption || '',
+      fileName: p.file_name,
+      fileType: p.file_type,
+      thumbnailData: p.thumbnail_data,
+      createdAt: p.created_at_ts,
+      createdBy: p.created_by,
+    }))
+    return res.status(200).json({ photos })
+  }
+
+  if (req.method === 'POST') {
+    const mode = req.query.mode as string
+    if (mode !== 'file') {
+      return res.status(400).json({ error: 'Use ?mode=file to upload a photo' })
+    }
+    const p = req.body
+    if (!p || !p.id) return res.status(400).json({ error: 'Photo object with id required' })
+    const row = {
+      id: p.id,
+      shipment_ref: p.shipmentRef || p.shipment_ref,
+      container_number: p.containerNumber || p.container_number || '',
+      caption: p.caption || '',
+      file_name: p.fileName || p.file_name || '',
+      file_type: p.fileType || p.file_type || '',
+      file_data: p.fileData || p.file_data || '',
+      thumbnail_data: p.thumbnailData || p.thumbnail_data || '',
+      created_at_ts: p.createdAt || p.created_at_ts || Date.now(),
+      created_by: p.createdBy || p.created_by || '',
+    }
+    const { error } = await db.from('origin_photos').upsert(row, { onConflict: 'id' })
+    if (error) throw error
+    return res.status(200).json({ saved: true })
+  }
+
+  if (req.method === 'DELETE') {
+    const id = req.query.id as string
+    if (!id) return res.status(400).json({ error: 'id query parameter required' })
+    const { error } = await db.from('origin_photos').delete().eq('id', id)
+    if (error) throw error
+    return res.status(200).json({ deleted: true })
   }
 
   return res.status(405).json({ error: 'Method not allowed' })
