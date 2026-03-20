@@ -170,7 +170,8 @@ export default function NotificationChecklist({ shipments, originPhotos, reports
     try {
       const task = await confirmShipmentEvent(shipmentRef, containerNumber, step, salidaDate, operativa)
       setTasks(prev => [...prev, task])
-      toast.success(`${STEP_LABELS[step]} confirmada — ${shipmentRef}`)
+      // Open email dialog immediately after confirming
+      setEmailDialogTask(task)
     } catch (err: any) {
       toast.error(`Error: ${err.message}`)
     } finally {

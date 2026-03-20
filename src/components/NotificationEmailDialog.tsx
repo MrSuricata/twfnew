@@ -367,7 +367,7 @@ export default function NotificationEmailDialog({
             {sending ? (
               <><SpinnerGap size={18} className="animate-spin" /> {loadingAttachments ? 'Preparando...' : 'Enviando...'}</>
             ) : (
-              <><PaperPlaneTilt size={18} /> Enviar</>
+              <><PaperPlaneTilt size={18} /> Confirmar y Enviar</>
             )}
           </Button>
         </DialogFooter>
