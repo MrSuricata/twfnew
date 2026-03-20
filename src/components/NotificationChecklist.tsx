@@ -243,8 +243,8 @@ export default function NotificationChecklist({ shipments, originPhotos, reports
     setQuickSending(task.id)
     try {
       const subject = STEP_SUBJECTS[task.step]?.(task.shipmentRef, task.containerNumber) || ''
-      const body = STEP_TEMPLATES[task.step]?.(task) || ''
-      const htmlBody = body.replace(/\n/g, '<br/>')
+      const htmlBody = STEP_TEMPLATES[task.step]?.(task) || ''
+      // STEP_TEMPLATES already returns HTML with signature
       await sendNotificationEmail(task.id, {
         to: task.clientEmail, subject, htmlBody,
         threadId: task.emailThreadId || undefined,

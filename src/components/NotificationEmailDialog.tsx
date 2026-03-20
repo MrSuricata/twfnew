@@ -31,33 +31,70 @@ export const STEP_SUBJECTS: Record<string, (ref: string, cntr: string) => string
   fiscal: (ref, cntr) => `Re: TWF - Salida ${cntr || 'carga'} - Ref ${ref}`,
 }
 
+// Logo URL hosted on the TWF Vercel deployment
+const LOGO_URL = 'https://twfnew-c7v2.vercel.app/images/twf-logo-full-new.png'
+
+const EMAIL_SIGNATURE = `
+<table cellpadding="0" cellspacing="0" border="0" style="margin-top:24px;border-top:2px solid #e8762b;padding-top:16px;">
+  <tr>
+    <td style="padding-right:16px;vertical-align:top;">
+      <img src="${LOGO_URL}" alt="TWF" width="120" style="width:120px;height:auto;" />
+    </td>
+    <td style="vertical-align:top;font-family:Arial,sans-serif;">
+      <strong style="color:#1a3a5c;font-size:14px;">BRIAN RIDVANOVICH</strong><br/>
+      <em style="color:#e8762b;font-size:12px;">General Manager</em><br/>
+      <span style="color:#555;font-size:12px;">&#9742; +598 99 511 196</span><br/>
+      <span style="color:#555;font-size:12px;">&#9993; bridvanovich@twf.uy</span><br/>
+      <span style="color:#888;font-size:11px;">Montevideo, Uruguay</span>
+    </td>
+  </tr>
+</table>`
+
+function buildEmailHtml(greeting: string, bodyLines: string[]): string {
+  return `
+<div style="font-family:Arial,sans-serif;color:#333;max-width:600px;">
+  <p style="font-size:14px;line-height:1.6;margin:0 0 12px;">
+    ${greeting}
+  </p>
+  ${bodyLines.map(l => `<p style="font-size:14px;line-height:1.6;margin:0 0 8px;">${l}</p>`).join('')}
+  <p style="font-size:14px;line-height:1.6;margin:16px 0 0;">
+    Saludos cordiales,
+  </p>
+  ${EMAIL_SIGNATURE}
+</div>`
+}
+
 export const STEP_TEMPLATES: Record<string, (task: NotificationTask) => string> = {
-  departure: (t) =>
-`Estimado/a ${t.clientName || 'cliente'},
+  departure: (t) => {
+    const cntr = t.containerNumber ? ` - contenedor <strong>${t.containerNumber}</strong>` : ''
+    return buildEmailHtml(
+      `Estimado/a <strong>${t.clientName || 'cliente'}</strong>,`,
+      [
+        `Le informamos que su carga <strong>${t.shipmentRef}</strong>${cntr} ha salido de Montevideo el día de hoy.`,
+        t.containerNumber ? `Contenedor: <strong>${t.containerNumber}</strong>` : '',
+      ].filter(Boolean)
+    )
+  },
 
-Le informamos que su carga ${t.shipmentRef}${t.containerNumber ? ` - contenedor ${t.containerNumber}` : ''} ha salido de Montevideo el día de hoy.
-${t.containerNumber ? `\nContenedor: ${t.containerNumber}` : ''}
-Saludos cordiales,
-Brian Ridvanovich
-Transit World Forwarding`,
+  border: (t) => {
+    const cntr = t.containerNumber ? ` - contenedor <strong>${t.containerNumber}</strong>` : ''
+    return buildEmailHtml(
+      `Estimado/a <strong>${t.clientName || 'cliente'}</strong>,`,
+      [
+        `Le informamos que su carga <strong>${t.shipmentRef}</strong>${cntr} ha cruzado la frontera.`,
+      ]
+    )
+  },
 
-  border: (t) =>
-`Estimado/a ${t.clientName || 'cliente'},
-
-Le informamos que su carga ${t.shipmentRef}${t.containerNumber ? ` - contenedor ${t.containerNumber}` : ''} ha cruzado la frontera.
-
-Saludos cordiales,
-Brian Ridvanovich
-Transit World Forwarding`,
-
-  fiscal: (t) =>
-`Estimado/a ${t.clientName || 'cliente'},
-
-Le informamos que su carga ${t.shipmentRef}${t.containerNumber ? ` - contenedor ${t.containerNumber}` : ''} ha llegado al depósito fiscal.
-
-Saludos cordiales,
-Brian Ridvanovich
-Transit World Forwarding`,
+  fiscal: (t) => {
+    const cntr = t.containerNumber ? ` - contenedor <strong>${t.containerNumber}</strong>` : ''
+    return buildEmailHtml(
+      `Estimado/a <strong>${t.clientName || 'cliente'}</strong>,`,
+      [
+        `Le informamos que su carga <strong>${t.shipmentRef}</strong>${cntr} ha llegado al depósito fiscal.`,
+      ]
+    )
+  },
 }
 
 export default function NotificationEmailDialog({
@@ -68,7 +105,17 @@ export default function NotificationEmailDialog({
   originPhotos,
   reports,
 }: NotificationEmailDialogProps) {
-  const [body, setBody] = useState(STEP_TEMPLATES[task.step]?.(task) || '')
+  // Plain text for editing, HTML template for actual send
+  const getPlainText = (t: NotificationTask) => {
+    const cntr = t.containerNumber ? ` - contenedor ${t.containerNumber}` : ''
+    const messages: Record<string, string> = {
+      departure: `Estimado/a ${t.clientName || 'cliente'},\n\nLe informamos que su carga ${t.shipmentRef}${cntr} ha salido de Montevideo el día de hoy.${t.containerNumber ? `\n\nContenedor: ${t.containerNumber}` : ''}`,
+      border: `Estimado/a ${t.clientName || 'cliente'},\n\nLe informamos que su carga ${t.shipmentRef}${cntr} ha cruzado la frontera.`,
+      fiscal: `Estimado/a ${t.clientName || 'cliente'},\n\nLe informamos que su carga ${t.shipmentRef}${cntr} ha llegado al depósito fiscal.`,
+    }
+    return messages[t.step] || ''
+  }
+  const [body, setBody] = useState(getPlainText(task))
   const [sending, setSending] = useState(false)
   const [includePhotos, setIncludePhotos] = useState(true)
   const [includeReports, setIncludeReports] = useState(true)
@@ -82,7 +129,7 @@ export default function NotificationEmailDialog({
 
   // Reset body when task changes
   useEffect(() => {
-    setBody(STEP_TEMPLATES[task.step]?.(task) || '')
+    setBody(getPlainText(task))
     setToOverride(task.clientEmail || '')
     setEditingTo(!task.clientEmail)
     setIncludePhotos(true)
@@ -100,8 +147,14 @@ export default function NotificationEmailDialog({
     setLoadingAttachments(isDeparture && (includePhotos || includeReports))
 
     try {
-      // Build HTML body
-      let htmlBody = body.replace(/\n/g, '<br/>')
+      // Build HTML body with signature
+      const bodyHtml = body.replace(/\n/g, '<br/>')
+      let htmlBody = `
+<div style="font-family:Arial,sans-serif;color:#333;max-width:600px;">
+  <p style="font-size:14px;line-height:1.6;">${bodyHtml}</p>
+  <p style="font-size:14px;line-height:1.6;margin:16px 0 0;">Saludos cordiales,</p>
+  ${EMAIL_SIGNATURE}
+</div>`
 
       const attachments: { name: string; type: string; data: string }[] = []
 
