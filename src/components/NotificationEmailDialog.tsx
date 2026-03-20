@@ -31,24 +31,13 @@ export const STEP_SUBJECTS: Record<string, (ref: string, cntr: string) => string
   fiscal: (ref, cntr) => `Re: TWF - Salida ${cntr || 'carga'} - Ref ${ref}`,
 }
 
-// Logo URL hosted on the TWF Vercel deployment
-const LOGO_URL = 'https://twfnew-c7v2.vercel.app/images/twf-logo-full-new.png'
+// Signature image hosted on the TWF Vercel deployment
+const FIRMA_URL = 'https://twfnew-c7v2.vercel.app/images/FIRMA.png'
 
 const EMAIL_SIGNATURE = `
-<table cellpadding="0" cellspacing="0" border="0" style="margin-top:24px;border-top:2px solid #e8762b;padding-top:16px;">
-  <tr>
-    <td style="padding-right:16px;vertical-align:top;">
-      <img src="${LOGO_URL}" alt="TWF" width="120" style="width:120px;height:auto;" />
-    </td>
-    <td style="vertical-align:top;font-family:Arial,sans-serif;">
-      <strong style="color:#1a3a5c;font-size:14px;">BRIAN RIDVANOVICH</strong><br/>
-      <em style="color:#e8762b;font-size:12px;">General Manager</em><br/>
-      <span style="color:#555;font-size:12px;">&#9742; +598 99 511 196</span><br/>
-      <span style="color:#555;font-size:12px;">&#9993; bridvanovich@twf.uy</span><br/>
-      <span style="color:#888;font-size:11px;">Montevideo, Uruguay</span>
-    </td>
-  </tr>
-</table>`
+<div style="margin-top:24px;border-top:2px solid #e8762b;padding-top:16px;">
+  <img src="${FIRMA_URL}" alt="Brian Ridvanovich - TWF General Manager" width="500" style="width:500px;max-width:100%;height:auto;" />
+</div>`
 
 function buildEmailHtml(greeting: string, bodyLines: string[]): string {
   return `
