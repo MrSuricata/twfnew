@@ -245,7 +245,10 @@ export default function NotificationChecklist({ shipments, originPhotos, reports
       const subject = STEP_SUBJECTS[task.step]?.(task.shipmentRef, task.containerNumber) || ''
       const body = STEP_TEMPLATES[task.step]?.(task) || ''
       const htmlBody = body.replace(/\n/g, '<br/>')
-      await sendNotificationEmail(task.id, { to: task.clientEmail, subject, htmlBody })
+      await sendNotificationEmail(task.id, {
+        to: task.clientEmail, subject, htmlBody,
+        threadId: task.emailThreadId || undefined,
+      })
       handleEmailSent(task.id)
       toast.success(`Email enviado a ${task.clientEmail}`)
     } catch (err: any) {

@@ -227,8 +227,8 @@ export async function confirmShipmentEvent(shipmentRef: string, containerNumber:
   return data.task
 }
 
-/** Send a notification email via n8n webhook. Supports attachments. */
-export async function sendNotificationEmail(taskId: string, emailData: { to: string; subject: string; htmlBody: string; replyTo?: string; attachments?: { name: string; type: string; data: string }[] }): Promise<void> {
+/** Send a notification email via n8n webhook. Supports attachments and thread chaining. */
+export async function sendNotificationEmail(taskId: string, emailData: { to: string; subject: string; htmlBody: string; replyTo?: string; threadId?: string; attachments?: { name: string; type: string; data: string }[] }): Promise<void> {
   const res = await authFetch('/api/notifications/send-email', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

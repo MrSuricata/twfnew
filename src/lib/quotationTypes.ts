@@ -78,6 +78,8 @@ export interface NotificationTask {
   reportOk: boolean             // only relevant for departure
   emailSent: boolean
   emailSentAt?: string
+  emailThreadId?: string        // Gmail thread ID for reply chaining
+  emailSubject?: string         // Subject used in first email
 
   status: NotificationStatus
   notes: string

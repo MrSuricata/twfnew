@@ -106,6 +106,22 @@ async function handleConfirm(req: VercelRequest, res: VercelResponse) {
       reportOk = (reportCount || 0) > 0
     }
 
+    // For border/fiscal steps, inherit threadId from the departure task
+    let emailThreadId = ''
+    let emailSubject = ''
+    if (step !== 'departure') {
+      const departureId = `ntask-${shipmentRef}-${cntr || 'all'}-departure`
+      const { data: depTask } = await db
+        .from('notification_tasks')
+        .select('email_thread_id, email_subject')
+        .eq('id', departureId)
+        .single()
+      if (depTask?.email_thread_id) {
+        emailThreadId = depTask.email_thread_id
+        emailSubject = depTask.email_subject || ''
+      }
+    }
+
     const task = {
       id: taskId,
       shipment_ref: shipmentRef,
@@ -120,6 +136,8 @@ async function handleConfirm(req: VercelRequest, res: VercelResponse) {
       photos_ok: photosOk,
       report_ok: reportOk,
       email_sent: false,
+      email_thread_id: emailThreadId,
+      email_subject: emailSubject,
       status: 'pending',
       notes: '',
       created_at: new Date().toISOString(),
@@ -135,7 +153,8 @@ async function handleConfirm(req: VercelRequest, res: VercelResponse) {
         cliente: task.cliente, clientEmail: task.client_email, clientName: task.client_name,
         step: task.step, stepNumber: task.step_number, dueDate: task.due_date,
         salidaDate: task.salida_date, photosOk: task.photos_ok, reportOk: task.report_ok,
-        emailSent: task.email_sent, status: task.status, notes: task.notes,
+        emailSent: task.email_sent, emailThreadId: task.email_thread_id || '',
+        emailSubject: task.email_subject || '', status: task.status, notes: task.notes,
         createdAt: task.created_at, updatedAt: task.updated_at,
       },
       alreadyExists: false,
@@ -195,7 +214,7 @@ async function handleSendEmail(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ error: 'Admin authentication required' })
   }
 
-  const { taskId, to, subject, htmlBody, replyTo, attachments } = req.body || {}
+  const { taskId, to, subject, htmlBody, replyTo, attachments, threadId } = req.body || {}
   if (!taskId || !to || !subject || !htmlBody) {
     return res.status(400).json({ error: 'taskId, to, subject, and htmlBody are required' })
   }
@@ -207,7 +226,7 @@ async function handleSendEmail(req: VercelRequest, res: VercelResponse) {
 
     const n8nWebhook = process.env.N8N_SEND_EMAIL_WEBHOOK
     if (n8nWebhook) {
-      const n8nResult = await sendViaN8n(n8nWebhook, { to, subject, htmlBody, replyTo, attachments })
+      const n8nResult = await sendViaN8n(n8nWebhook, { to, subject, htmlBody, replyTo, attachments, threadId })
       sent = n8nResult.ok
       responseData = n8nResult.data
       method = 'n8n'
