@@ -57,8 +57,8 @@ export function compressImage(file: File, maxWidth: number, quality: number): Pr
  */
 export async function processPhoto(file: File): Promise<{ full: string; thumbnail: string }> {
   const [full, thumbnail] = await Promise.all([
-    compressImage(file, 1200, 0.7),  // ~300-500KB
-    compressImage(file, 300, 0.6),    // ~30-80KB
+    compressImage(file, 800, 0.65),   // ~150-250KB (optimized for email attachments)
+    compressImage(file, 300, 0.6),    // ~30-80KB (gallery thumbnails)
   ])
   return { full, thumbnail }
 }
