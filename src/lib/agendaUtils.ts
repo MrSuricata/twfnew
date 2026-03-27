@@ -266,46 +266,8 @@ export function shipmentsToEvents(
       if (isValidDateStr(op.SALIDA)) {
         const salidaEvent = makeEvent('salida', op.SALIDA)
         if (salidaEvent) events.push(salidaEvent)
-      } else if (depotFilter) {
-        // No SALIDA date but depot filter active → show as pending on today
-        // Only show if ETA is recent (last 30 days) or future — skip old completed ops
-        const etaStr = op.ETA_OP || shipment.ETA || ''
-        if (etaStr) {
-          const etaDate = parseDateLocal(etaStr)
-          if (etaDate) {
-            const daysSinceEta = Math.floor((Date.now() - etaDate.getTime()) / (1000 * 60 * 60 * 24))
-            if (daysSinceEta > 30) continue // Skip ops with ETA older than 30 days
-          }
-        }
-        // Skip if already devolved
-        if (op.DEV && isValidDateStr(op.DEV)) continue
-
-        const todayStr = toDateKey(new Date())
-        const pendingEvent: CalendarEvent = {
-          id: `${baseId}-pending`,
-          date: todayStr,
-          type: 'salida',
-          ref: shipment.REF,
-          operativa: op.OPERATIVA || 'CONTENEDOR',
-          cntr: op.CNTR_OP || '',
-          tipo: op.TIPO || '',
-          cliente: op.CLIENTE_OP || shipment.CLIENTE || '',
-          fiscal: op.FISCAL || '',
-          deposito: op.DEPOSITO || '',
-          libre: op.LIBRE || shipment.LIBRE_HASTA || '',
-          descripcion: op.DESCRIPCION || '',
-          kg: op.KG || 0,
-          pkgs: op.PKGS || 0,
-          m3: op.M3 || 0,
-          transporte: op.TRANSPORTE || '',
-          alerts: [...alerts, { emoji: '📋', label: 'Sin fecha de salida', type: 'pending' }],
-          shipment,
-          op,
-          statusColor: 'amber',
-          statusLabel: 'Pendiente de coordinar'
-        }
-        events.push(pendingEvent)
       }
+      // Ops without SALIDA are shown in the Pending sidebar, not on the calendar
     }
   }
 

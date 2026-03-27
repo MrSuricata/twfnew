@@ -14,9 +14,10 @@ import ShipmentDetailsDialog from '../ShipmentDetailsDialog'
 interface AgendaCalendarProps {
   shipments: ParsedShipment[]
   depotFilter?: string
+  partnerView?: boolean
 }
 
-export default function AgendaCalendar({ shipments, depotFilter }: AgendaCalendarProps) {
+export default function AgendaCalendar({ shipments, depotFilter, partnerView = false }: AgendaCalendarProps) {
   const [view, setView] = useState<AgendaView>('week')
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedShipment, setSelectedShipment] = useState<ParsedShipment | null>(null)
@@ -227,6 +228,7 @@ export default function AgendaCalendar({ shipments, depotFilter }: AgendaCalenda
         onOpenChange={setDialogOpen}
         onSave={() => {}} // Read-only from agenda
         clientView={false}
+        partnerView={partnerView}
       />
     </div>
   )

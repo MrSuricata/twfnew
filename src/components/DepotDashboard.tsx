@@ -40,7 +40,7 @@ export default function DepotDashboard({ shipments, depotName, userName, onLogou
 
       {/* Agenda Calendar filtered by depot */}
       <main className="max-w-[1600px] mx-auto p-4">
-        <AgendaCalendar shipments={shipments} depotFilter={depotName} />
+        <AgendaCalendar shipments={shipments} depotFilter={depotName} partnerView={true} />
       </main>
     </div>
   )

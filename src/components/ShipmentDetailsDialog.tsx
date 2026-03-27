@@ -42,6 +42,7 @@ interface ShipmentDetailsDialogProps {
   onOpenChange: (open: boolean) => void
   onSave: (updatedShipment: ParsedShipment) => void
   clientView?: boolean
+  partnerView?: boolean
   documents?: ShipmentDocument[]
   reports?: OperativeReport[]
   originPhotos?: OriginPhoto[]
@@ -54,6 +55,7 @@ export default function ShipmentDetailsDialog({
   onOpenChange,
   onSave,
   clientView = false,
+  partnerView = false,
   documents = [],
   reports = [],
   originPhotos = [],
@@ -159,8 +161,28 @@ export default function ShipmentDetailsDialog({
         </DialogHeader>
 
         <Tabs defaultValue={clientView ? "tracking" : "general"} className="w-full mt-4">
-          <TabsList className={`grid w-full ${clientView ? 'grid-cols-4' : 'grid-cols-5'}`}>
-            {clientView ? (
+          <TabsList className={`grid w-full ${partnerView ? 'grid-cols-3' : clientView ? 'grid-cols-4' : 'grid-cols-5'}`}>
+            {partnerView ? (
+              <>
+                <TabsTrigger value="general">
+                  <Info size={18} className="mr-2" />
+                  <span className="hidden sm:inline">General</span>
+                </TabsTrigger>
+                <TabsTrigger value="operativa">
+                  <Truck size={18} className="mr-2" />
+                  <span className="hidden sm:inline">Operativa</span>
+                </TabsTrigger>
+                <TabsTrigger value="photos" className="relative">
+                  <Package size={18} className="mr-2" />
+                  <span className="hidden sm:inline">Fotos</span>
+                  {(() => {
+                    const cnt = originPhotos.filter(p => p.shipmentRef === editedShipment.REF).length
+                    if (cnt === 0) return null
+                    return <span className="ml-1 text-[10px] font-bold rounded-full min-w-[16px] h-[16px] flex items-center justify-center bg-accent text-accent-foreground">{cnt}</span>
+                  })()}
+                </TabsTrigger>
+              </>
+            ) : clientView ? (
               <>
                 <TabsTrigger value="tracking">
                   <Package size={18} className="mr-2" />
