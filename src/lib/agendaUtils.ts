@@ -225,8 +225,8 @@ export function shipmentsToEvents(
     const status = getShipmentStatus(shipment)
 
     for (const op of ops) {
-      // Apply depot filter if provided
-      if (depotFilter && op.FISCAL && !op.FISCAL.toLowerCase().includes(depotFilter.toLowerCase())) {
+      // Apply depot filter if provided — filters by DEPOSITO (cargo depot), not FISCAL
+      if (depotFilter && op.DEPOSITO && !op.DEPOSITO.toLowerCase().includes(depotFilter.toLowerCase())) {
         continue
       }
 
