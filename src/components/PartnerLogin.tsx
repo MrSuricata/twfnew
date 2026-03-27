@@ -21,10 +21,10 @@ export default function PartnerLogin({ onLogin, onBack }: PartnerLoginProps) {
     setLoading(true)
 
     try {
-      const res = await fetch('/api/auth/partner-login', {
+      const res = await fetch('/api/auth/admin-login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, type: 'partner' }),
       })
 
       const data = await res.json()
@@ -36,7 +36,7 @@ export default function PartnerLogin({ onLogin, onBack }: PartnerLoginProps) {
       }
 
       toast.success('Inicio de sesión exitoso')
-      onLogin(data.token, data.role, data.user)
+      onLogin(data.token, data.role, { email: data.email, name: data.name, filterValue: data.filterValue })
     } catch (err) {
       toast.error('Error de conexión — intente nuevamente')
     }
@@ -50,7 +50,7 @@ export default function PartnerLogin({ onLogin, onBack }: PartnerLoginProps) {
         <Card>
           <CardHeader className="text-center">
             <div className="flex justify-center mb-4">
-              <img src="/images/twf-logo-white.png" alt="TWF" className="h-12 w-auto" />
+              <img src="/images/twf-logo-full-new.png" alt="TWF" className="h-12 w-auto" />
             </div>
             <CardTitle className="text-2xl">Acceso Partners</CardTitle>
             <p className="text-muted-foreground text-sm">
