@@ -81,11 +81,8 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
         <Breadcrumbs items={getBreadcrumbs()} />
         
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5 lg:grid-cols-9 max-w-6xl">
-            <TabsTrigger value="notifications" className="relative">
-              <BellRinging size={20} className="mr-2" />
-              <span className="hidden sm:inline">Avisos</span>
-            </TabsTrigger>
+          <TabsList className="grid w-full grid-cols-4 lg:grid-cols-8 max-w-5xl">
+            {/* Avisos oculto por el momento */}
             <TabsTrigger value="agenda">
               <CalendarBlank size={20} className="mr-2" />
               <span className="hidden sm:inline">Agenda</span>
@@ -120,13 +117,7 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="notifications">
-            <NotificationChecklist
-              shipments={shipments}
-              originPhotos={originPhotos}
-              reports={reports}
-            />
-          </TabsContent>
+          {/* Avisos oculto por el momento */}
 
           <TabsContent value="agenda">
             <AgendaCalendar shipments={shipments || []} />
