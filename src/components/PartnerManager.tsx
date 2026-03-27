@@ -113,18 +113,18 @@ export default function PartnerManager() {
     setSaving(true)
 
     try {
-      const method = editingId ? 'PUT' : 'POST'
+      const isEdit = !!editingId
+      const url = isEdit ? `/api/data/partner-users?id=${editingId}` : '/api/data/partner-users'
       const body: Record<string, any> = {
         email: form.email,
         name: form.name,
         role: form.role,
         filterValue: form.filterValue,
       }
-      if (editingId) body.id = editingId
       if (form.password) body.password = form.password
 
-      const res = await authFetch('/api/data/partner-users', {
-        method,
+      const res = await authFetch(url, {
+        method: isEdit ? 'PATCH' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       })
@@ -165,10 +165,10 @@ export default function PartnerManager() {
 
   const handleToggleActive = async (user: PartnerUser) => {
     try {
-      const res = await authFetch('/api/data/partner-users', {
-        method: 'PUT',
+      const res = await authFetch(`/api/data/partner-users?id=${user.id}`, {
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: user.id, active: !user.active }),
+        body: JSON.stringify({ active: !user.active }),
       })
 
       if (!res.ok) throw new Error('Error al actualizar')
