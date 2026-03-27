@@ -34,5 +34,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })
   }
 
+  if (payload.role === 'depot') {
+    return res.status(200).json({
+      role: 'depot',
+      email: payload.email,
+      name: payload.name,
+      filterValue: payload.depotName,
+    })
+  }
+
+  if (payload.role === 'transport') {
+    return res.status(200).json({
+      role: 'transport',
+      email: payload.email,
+      name: payload.name,
+      filterValue: payload.transportName,
+    })
+  }
+
   return res.status(401).json({ error: 'Unknown role' })
 }

@@ -14,7 +14,21 @@ export interface ClientPayload {
   clientePattern: string
 }
 
-export type TokenPayload = AdminPayload | ClientPayload
+export interface DepotPayload {
+  role: 'depot'
+  email: string
+  name: string
+  depotName: string
+}
+
+export interface TransportPayload {
+  role: 'transport'
+  email: string
+  name: string
+  transportName: string
+}
+
+export type TokenPayload = AdminPayload | ClientPayload | DepotPayload | TransportPayload
 
 // ─── Helpers ────────────────────────────────────────────────────────────
 function getSecret(): string {
@@ -40,6 +54,18 @@ export function signClientToken(
 ): string {
   const payload: ClientPayload = { role: 'client', email, name, company, clientePattern }
   return jwt.sign(payload, getSecret(), { expiresIn: '24h' })
+}
+
+/** Sign a depot user JWT (12h expiry) */
+export function signDepotToken(email: string, name: string, depotName: string): string {
+  const payload: DepotPayload = { role: 'depot', email, name, depotName }
+  return jwt.sign(payload, getSecret(), { expiresIn: '12h' })
+}
+
+/** Sign a transport user JWT (12h expiry) */
+export function signTransportToken(email: string, name: string, transportName: string): string {
+  const payload: TransportPayload = { role: 'transport', email, name, transportName }
+  return jwt.sign(payload, getSecret(), { expiresIn: '12h' })
 }
 
 /** Verify any JWT and return its payload */

@@ -10,11 +10,14 @@ import { loadAdminData, saveQuotes, saveDocuments, saveReports, saveReportWithFi
 
 import Login from './components/Login'
 import ClientLogin from './components/ClientLogin'
+import PartnerLogin from './components/PartnerLogin'
 import DashboardEnhanced from './components/DashboardEnhanced'
 import ClientPortal from './components/ClientPortal'
+import DepotDashboard from './components/DepotDashboard'
+import TransportDashboard from './components/TransportDashboard'
 import PublicSiteEnhanced from './components/PublicSiteEnhanced'
 
-type View = 'public' | 'admin-login' | 'admin-dashboard' | 'client-login' | 'client-portal'
+type View = 'public' | 'admin-login' | 'admin-dashboard' | 'client-login' | 'client-portal' | 'partner-login' | 'depot-dashboard' | 'transport-dashboard'
 
 // Client accounts are managed server-side via CLIENTS_JSON env var.
 // No hardcoded client data in client bundle.
@@ -49,6 +52,7 @@ function getInitialView(): View {
   const path = window.location.pathname.toLowerCase()
   if (path === '/admin') return 'admin-login'
   if (path === '/portal') return 'client-login'
+  if (path === '/depot' || path === '/transport' || path === '/partner') return 'partner-login'
   return 'public'
 }
 
@@ -56,6 +60,8 @@ function App() {
   const [currentView, setCurrentView] = useState<View>(getInitialView)
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false)
   const [clientEmail, setClientEmail] = useState<string>('')
+  const [partnerData, setPartnerData] = useState<{ role: string; name: string; filterValue: string } | null>(null)
+  const [partnerShipments, setPartnerShipments] = useState<ParsedShipment[]>([])
   const [language, setLanguage] = useState<Language>('es')
 
   // Initialize from localStorage (fast local cache), then override from DB
@@ -138,6 +144,14 @@ function App() {
         } else if (result.role === 'client' && path === '/portal') {
           setClientEmail(result.data?.email || '')
           setCurrentView('client-portal')
+        } else if (result.role === 'depot' && (path === '/depot' || path === '/partner')) {
+          setPartnerData({ role: 'depot', name: result.data?.name || '', filterValue: result.data?.filterValue || '' })
+          loadPartnerShipments()
+          setCurrentView('depot-dashboard')
+        } else if (result.role === 'transport' && (path === '/transport' || path === '/partner')) {
+          setPartnerData({ role: 'transport', name: result.data?.name || '', filterValue: result.data?.filterValue || '' })
+          loadPartnerShipments()
+          setCurrentView('transport-dashboard')
         }
       }
     })
@@ -339,6 +353,36 @@ function App() {
     navigateTo('public')
   }
 
+  // ── Partner (depot/transport) handlers ──
+  const loadPartnerShipments = async () => {
+    try {
+      const res = await authFetch('/api/data/partner-shipments')
+      if (res.ok) {
+        const data = await res.json()
+        setPartnerShipments(data.shipments || [])
+      }
+    } catch (err) {
+      console.error('Error loading partner shipments:', err)
+    }
+  }
+
+  const handlePartnerLogin = (_token: string, role: string, userData: any) => {
+    setPartnerData({ role, name: userData.name, filterValue: userData.filterValue })
+    loadPartnerShipments()
+    if (role === 'depot') {
+      navigateTo('depot-dashboard')
+    } else {
+      navigateTo('transport-dashboard')
+    }
+  }
+
+  const handlePartnerLogout = () => {
+    clearAuth()
+    setPartnerData(null)
+    setPartnerShipments([])
+    navigateTo('public')
+  }
+
   const handleLanguageChange = (lang: Language) => {
     setLanguage(lang)
   }
@@ -406,6 +450,37 @@ function App() {
       <ClientLogin
         onLogin={handleClientLogin}
         onBack={() => setCurrentView('public')}
+      />
+    )
+  }
+
+  if (currentView === 'partner-login') {
+    return (
+      <PartnerLogin
+        onLogin={handlePartnerLogin}
+        onBack={() => navigateTo('public')}
+      />
+    )
+  }
+
+  if (currentView === 'depot-dashboard' && partnerData?.role === 'depot') {
+    return (
+      <DepotDashboard
+        shipments={partnerShipments}
+        depotName={partnerData.filterValue}
+        userName={partnerData.name}
+        onLogout={handlePartnerLogout}
+      />
+    )
+  }
+
+  if (currentView === 'transport-dashboard' && partnerData?.role === 'transport') {
+    return (
+      <TransportDashboard
+        shipments={partnerShipments}
+        transportName={partnerData.filterValue}
+        userName={partnerData.name}
+        onLogout={handlePartnerLogout}
       />
     )
   }

@@ -1,0 +1,277 @@
+{
+  "name": "TWF - Telegram Bot Notificaciones",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": ["message"],
+        "additionalFields": {}
+      },
+      "id": "telegram-trigger",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [220, 300],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-bot",
+          "name": "Telegram Bot @Jarvis_braibot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parsear mensaje de Brian\nconst message = $input.first().json.message;\nconst text = (message.text || '').toLowerCase().trim();\nconst chatId = message.chat.id;\n\n// Palabras clave por tipo de notificación\nconst SALIDA_KEYS = ['salida', 'salio', 'salió', 'sale', 'partio', 'partió'];\nconst CRUCE_KEYS = ['cruce', 'cruzo', 'cruzó', 'libero', 'liberó', 'liberado', 'liberada', 'frontera'];\nconst ARRIBO_KEYS = ['arribo', 'arribó', 'fiscal', 'llego', 'llegó'];\n\n// Extraer referencia (4 dígitos)\nconst refMatch = text.match(/\\b[aA]?(\\d{4})\\b/);\nconst ref = refMatch ? refMatch[1] : null;\n\n// Detectar tipo\nlet tipo = null;\nif (SALIDA_KEYS.some(k => text.includes(k))) tipo = 'salida';\nelse if (CRUCE_KEYS.some(k => text.includes(k))) tipo = 'cruce';\nelse if (ARRIBO_KEYS.some(k => text.includes(k))) tipo = 'arribo';\n\n// Extraer fecha (\"miercoles 25\", \"lunes 28/03\", \"25/03\", etc.)\nconst dias = ['lunes','martes','miercoles','miércoles','jueves','viernes','sabado','sábado','domingo'];\nlet fecha = null;\nlet fechaTexto = null;\n\n// Patrón: día de la semana + número\nconst diaMatch = text.match(new RegExp(`(${dias.join('|')})\\\\s*(\\\\d{1,2})(?:[/\\\\-](\\\\d{1,2}))?`));\nif (diaMatch) {\n  const dia = diaMatch[1].charAt(0).toUpperCase() + diaMatch[1].slice(1).replace('é','e').replace('á','a');\n  const num = diaMatch[2];\n  const mes = diaMatch[3] || new Date().toLocaleDateString('es-AR', {month:'2-digit'}).replace(/^0/,'');\n  fecha = `${num}/${mes.padStart(2,'0')}`;\n  fechaTexto = `${dia} ${fecha}`;\n}\n\n// Patrón: solo número/mes\nif (!fecha) {\n  const numMatch = text.match(/(\\d{1,2})[/\\-](\\d{1,2})/);\n  if (numMatch) {\n    fecha = `${numMatch[1]}/${numMatch[2].padStart(2,'0')}`;\n    fechaTexto = fecha;\n  }\n}\n\n// Extraer contenedor (4 letras + 7 números)\nconst cntrMatch = text.match(/[A-Za-z]{4}\\d{7}/);\nconst contenedor = cntrMatch ? cntrMatch[0].toUpperCase() : null;\n\nreturn [{\n  json: {\n    chatId,\n    ref,\n    tipo,\n    fecha,\n    fechaTexto,\n    contenedor,\n    textoOriginal: message.text,\n    esValido: !!(ref && tipo)\n  }\n}];"
+      },
+      "id": "parse-message",
+      "name": "Parsear Mensaje",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.esValido }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "check-valid",
+      "name": "¿Mensaje válido?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [660, 300]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "operation": "search",
+        "query": "=subject:{{ $('Parsear Mensaje').item.json.ref }}",
+        "options": {
+          "maxResults": 5
+        }
+      },
+      "id": "gmail-search",
+      "name": "Gmail - Buscar Hilo",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [880, 200],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "gmail-oauth",
+          "name": "Gmail TWF"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "thread",
+        "operation": "get",
+        "threadId": "={{ $json.threadId }}"
+      },
+      "id": "gmail-read-thread",
+      "name": "Gmail - Leer Thread",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1100, 200],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "gmail-oauth",
+          "name": "Gmail TWF"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Componer email de notificación\nconst parsed = $('Parsear Mensaje').first().json;\nconst thread = $input.first().json;\n\n// Determinar saludo según hora\nconst hora = new Date().getHours();\nconst saludos_dia = [\n  'Buenos días,',\n  'Estimados, buenos días,',\n  'Buenas,'\n];\nconst saludos_tarde = [\n  'Buenas tardes,',\n  'Estimados, buenas tardes,',\n  'Buenas,',\n  'Hola, buenas tardes,'\n];\nconst saludos = hora < 12 ? saludos_dia : saludos_tarde;\nconst saludo = saludos[Math.floor(Math.random() * saludos.length)];\n\n// Cierres variados\nconst cierres = ['Saludos cordiales,', 'Quedamos a disposición,', 'Saludos,'];\nconst cierre = cierres[Math.floor(Math.random() * cierres.length)];\n\n// Templates por tipo\nlet mensaje = '';\nswitch(parsed.tipo) {\n  case 'salida':\n    mensaje = 'Les informamos que la unidad ha salido rumbo a frontera. Los mantenemos informados sobre la liberación.';\n    break;\n  case 'cruce':\n    if (parsed.fechaTexto) {\n      mensaje = `Les informamos que la unidad ha sido liberada de frontera. Se presenta el ${parsed.fechaTexto} en destino.`;\n    } else {\n      mensaje = 'Les informamos que la unidad ha sido liberada de frontera.';\n    }\n    break;\n  case 'arribo':\n    mensaje = 'Les confirmamos que la unidad ya se encuentra en fiscal. Quedamos a la espera de la liberación para coordinar la descarga.';\n    break;\n}\n\n// HTML del email\nconst htmlBody = `<div style=\"font-family:Arial,sans-serif;color:#333;max-width:600px;\">\n  <p style=\"font-size:14px;line-height:1.6;\">${saludo}</p>\n  <p style=\"font-size:14px;line-height:1.6;\">${mensaje}</p>\n  <p style=\"font-size:14px;line-height:1.6;margin:16px 0 0;\">${cierre}</p>\n  <div style=\"margin-top:24px;border-top:2px solid #e8762b;padding-top:16px;\">\n    <img src=\"https://twfnew-c7v2.vercel.app/images/FIRMA.png\" alt=\"Brian Ridvanovich - TWF General Manager\" width=\"500\" style=\"width:500px;max-width:100%;height:auto;\" />\n  </div>\n</div>`;\n\n// Datos del thread para el draft\nconst lastMessage = thread.messages ? thread.messages[thread.messages.length - 1] : thread;\nconst subject = lastMessage.subject || thread.subject || `OP ${parsed.ref}`;\nconst to = lastMessage.to || thread.to || '';\n\n// Tipo display\nconst tipoDisplay = {\n  'salida': 'Salida desde Uruguay',\n  'cruce': 'Cruce de frontera',\n  'arribo': 'Arribo a fiscal'\n};\n\nreturn [{\n  json: {\n    threadId: thread.threadId || thread.id,\n    subject: subject.startsWith('Re:') ? subject : `Re: ${subject}`,\n    to,\n    htmlBody,\n    tipoDisplay: tipoDisplay[parsed.tipo],\n    ref: parsed.ref,\n    chatId: parsed.chatId\n  }\n}];"
+      },
+      "id": "build-email",
+      "name": "Componer Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1320, 200]
+    },
+    {
+      "parameters": {
+        "resource": "draft",
+        "operation": "create",
+        "subject": "={{ $json.subject }}",
+        "toList": "={{ $json.to }}",
+        "options": {
+          "threadId": "={{ $json.threadId }}"
+        },
+        "message": "={{ $json.htmlBody }}"
+      },
+      "id": "gmail-draft",
+      "name": "Gmail - Crear Borrador",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1540, 200],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "gmail-oauth",
+          "name": "Gmail TWF"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "sendMessage",
+        "chatId": "={{ $('Componer Email').item.json.chatId }}",
+        "text": "=✅ Borrador listo para OP {{ $('Componer Email').item.json.ref }} — {{ $('Componer Email').item.json.tipoDisplay }}\n\nRevisalo en Gmail y dale enviar cuando quieras.",
+        "additionalFields": {}
+      },
+      "id": "telegram-confirm",
+      "name": "Telegram - Confirmar",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1760, 200],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-bot",
+          "name": "Telegram Bot @Jarvis_braibot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "sendMessage",
+        "chatId": "={{ $('Parsear Mensaje').item.json.chatId }}",
+        "text": "❌ No entendí el mensaje. Usá este formato:\n\n7439 cruce miercoles 25\n7532 salida\n7566 arribo\n\nNecesito: número de referencia + tipo (salida/cruce/arribo)",
+        "additionalFields": {}
+      },
+      "id": "telegram-error",
+      "name": "Telegram - Error",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [880, 420],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-bot",
+          "name": "Telegram Bot @Jarvis_braibot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "sendMessage",
+        "chatId": "={{ $('Parsear Mensaje').item.json.chatId }}",
+        "text": "=⚠️ No encontré hilo en Gmail para la referencia {{ $('Parsear Mensaje').item.json.ref }}.\n\nRevisá que el número de referencia sea correcto.",
+        "additionalFields": {}
+      },
+      "id": "telegram-no-thread",
+      "name": "Telegram - Sin Hilo",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1100, 420],
+      "credentials": {
+        "telegramApi": {
+          "id": "telegram-bot",
+          "name": "Telegram Bot @Jarvis_braibot"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Parsear Mensaje",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parsear Mensaje": {
+      "main": [
+        [
+          {
+            "node": "¿Mensaje válido?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Mensaje válido?": {
+      "main": [
+        [
+          {
+            "node": "Gmail - Buscar Hilo",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Telegram - Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail - Buscar Hilo": {
+      "main": [
+        [
+          {
+            "node": "Gmail - Leer Thread",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail - Leer Thread": {
+      "main": [
+        [
+          {
+            "node": "Componer Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Componer Email": {
+      "main": [
+        [
+          {
+            "node": "Gmail - Crear Borrador",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail - Crear Borrador": {
+      "main": [
+        [
+          {
+            "node": "Telegram - Confirmar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [
+    {
+      "name": "TWF",
+      "createdAt": "2026-03-21T00:00:00.000Z",
+      "updatedAt": "2026-03-21T00:00:00.000Z"
+    }
+  ],
+  "triggerCount": 1,
+  "active": false
+}

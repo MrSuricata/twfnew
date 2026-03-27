@@ -79,6 +79,18 @@ CREATE TABLE IF NOT EXISTS clients (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 7. Partner users (depot & transport accounts)
+CREATE TABLE IF NOT EXISTS partner_users (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  email TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('depot', 'transport')),
+  filter_value TEXT NOT NULL,
+  password_hash TEXT NOT NULL,
+  active BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Disable RLS (security handled by API layer with JWT auth)
 ALTER TABLE quotes DISABLE ROW LEVEL SECURITY;
 ALTER TABLE documents DISABLE ROW LEVEL SECURITY;
@@ -93,3 +105,6 @@ CREATE INDEX IF NOT EXISTS idx_reports_shipment_ref ON reports(shipment_ref);
 CREATE INDEX IF NOT EXISTS idx_quotes_status ON quotes(status);
 CREATE INDEX IF NOT EXISTS idx_quotes_email ON quotes(email);
 CREATE INDEX IF NOT EXISTS idx_clients_email ON clients(email);
+CREATE INDEX IF NOT EXISTS idx_partner_email ON partner_users(email);
+
+ALTER TABLE partner_users DISABLE ROW LEVEL SECURITY;

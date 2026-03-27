@@ -22,6 +22,7 @@ import CaseStudiesEditor from './CaseStudiesEditor'
 import TestimonialsEditor from './TestimonialsEditor'
 import AnalyticsDashboard from './AnalyticsDashboard'
 import ClientManager from './ClientManager'
+import PartnerManager from './PartnerManager'
 import { ParsedShipment } from '@/lib/shipmentTypes'
 import { ClientAccount, ShipmentDocument, OperativeReport, OriginPhoto } from '@/lib/quotationTypes'
 import Breadcrumbs from './Breadcrumbs'
@@ -52,7 +53,8 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
       'case-studies': 'Casos de Éxito',
       testimonials: 'Testimonios',
       tracking: 'Tracking',
-      clients: 'Clientes'
+      clients: 'Clientes',
+      partners: 'Partners'
     }
     
     return [{ label: breadcrumbMap[activeTab] || 'Dashboard' }]
@@ -79,7 +81,7 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
         <Breadcrumbs items={getBreadcrumbs()} />
         
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4 lg:grid-cols-8 max-w-5xl">
+          <TabsList className="grid w-full grid-cols-5 lg:grid-cols-9 max-w-6xl">
             <TabsTrigger value="notifications" className="relative">
               <BellRinging size={20} className="mr-2" />
               <span className="hidden sm:inline">Avisos</span>
@@ -111,6 +113,10 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
             <TabsTrigger value="clients">
               <UsersThree size={20} className="mr-2" />
               <span className="hidden sm:inline">Clientes</span>
+            </TabsTrigger>
+            <TabsTrigger value="partners">
+              <UsersThree size={20} className="mr-2" />
+              <span className="hidden sm:inline">Partners</span>
             </TabsTrigger>
           </TabsList>
 
@@ -172,6 +178,10 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
               }}
               shipments={shipments}
             />
+          </TabsContent>
+
+          <TabsContent value="partners">
+            <PartnerManager />
           </TabsContent>
         </Tabs>
       </div>

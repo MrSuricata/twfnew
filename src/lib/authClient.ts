@@ -3,18 +3,20 @@
 // JWT tokens live in a module-level variable (NOT localStorage) for security.
 // ─────────────────────────────────────────────────────────────────────
 
+export type UserRole = 'admin' | 'client' | 'depot' | 'transport'
+
 let _token: string | null = null
-let _role: 'admin' | 'client' | null = null
+let _role: UserRole | null = null
 let _userData: Record<string, string> | null = null
 
 // ─── Getters ────────────────────────────────────────────────────────
 export function getToken(): string | null { return _token }
-export function getRole(): 'admin' | 'client' | null { return _role }
+export function getRole(): UserRole | null { return _role }
 export function getUserData(): Record<string, string> | null { return _userData }
 export function isAuthenticated(): boolean { return _token !== null }
 
 /** Internal setter for auth state */
-function setAuth(token: string, role: 'admin' | 'client', data?: Record<string, string>) {
+function setAuth(token: string, role: UserRole, data?: Record<string, string>) {
   _token = token
   _role = role
   _userData = data || null
@@ -112,8 +114,36 @@ export async function verifyOTPServer(email: string, code: string): Promise<{ su
   }
 }
 
+// ─── Partner Login (depot/transport) ─────────────────────────────────
+export async function loginPartner(email: string, password: string): Promise<{ success: boolean; error?: string; role?: string; data?: Record<string, string> }> {
+  try {
+    const res = await fetch('/api/auth/partner-login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    })
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      return { success: false, error: data.error || 'Credenciales inválidas' }
+    }
+
+    const data = await res.json()
+    const role = data.role as UserRole
+    setAuth(data.token, role, {
+      email: data.email,
+      name: data.name,
+      filterValue: data.filterValue,
+    })
+    return { success: true, role: data.role, data: { email: data.email, name: data.name, filterValue: data.filterValue } }
+  } catch (err) {
+    console.error('Partner login error:', err)
+    return { success: false, error: 'Error de conexión con el servidor' }
+  }
+}
+
 // ─── Session Restore ────────────────────────────────────────────────
-export async function verifySession(): Promise<{ valid: boolean; role?: 'admin' | 'client'; data?: Record<string, string> }> {
+export async function verifySession(): Promise<{ valid: boolean; role?: UserRole; data?: Record<string, string> }> {
   try {
     const storedToken = sessionStorage.getItem('twf-token')
     if (!storedToken) return { valid: false }
