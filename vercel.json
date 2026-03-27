@@ -4,7 +4,10 @@
   "framework": "vite",
   "rewrites": [
     { "source": "/admin", "destination": "/index.html" },
-    { "source": "/portal", "destination": "/index.html" }
+    { "source": "/portal", "destination": "/index.html" },
+    { "source": "/partner", "destination": "/index.html" },
+    { "source": "/depot", "destination": "/index.html" },
+    { "source": "/transport", "destination": "/index.html" }
   ],
   "headers": [
     {
