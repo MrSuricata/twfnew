@@ -268,6 +268,18 @@ export function shipmentsToEvents(
         if (salidaEvent) events.push(salidaEvent)
       } else if (depotFilter) {
         // No SALIDA date but depot filter active → show as pending on today
+        // Only show if ETA is recent (last 30 days) or future — skip old completed ops
+        const etaStr = op.ETA_OP || shipment.ETA || ''
+        if (etaStr) {
+          const etaDate = parseDateLocal(etaStr)
+          if (etaDate) {
+            const daysSinceEta = Math.floor((Date.now() - etaDate.getTime()) / (1000 * 60 * 60 * 24))
+            if (daysSinceEta > 30) continue // Skip ops with ETA older than 30 days
+          }
+        }
+        // Skip if already devolved
+        if (op.DEV && isValidDateStr(op.DEV)) continue
+
         const todayStr = toDateKey(new Date())
         const pendingEvent: CalendarEvent = {
           id: `${baseId}-pending`,
