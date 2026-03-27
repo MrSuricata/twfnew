@@ -2,23 +2,34 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { authenticateRequest } from '../_lib/jwt.js'
 import { handleCors } from '../_lib/cors.js'
 import { getSupabase } from '../_lib/supabase.js'
+import { createHash } from 'crypto'
 
 // ─── Combined Data API ───────────────────────────────────────────────
 // Handles: /api/data/quotes, /api/data/documents, /api/data/reports,
-//          /api/data/settings, /api/data/shipments-cache
+//          /api/data/settings, /api/data/shipments-cache,
+//          /api/data/partner-users, /api/data/partner-shipments
 // ─────────────────────────────────────────────────────────────────────
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handleCors(req, res)) return
 
-  // All data endpoints require admin auth
   const payload = authenticateRequest(req.headers.authorization)
+  const entity = req.query.entity as string
+  const db = getSupabase()
+
+  // Partner-shipments allows depot/transport roles
+  if (entity === 'partner-shipments') {
+    if (!payload || (payload.role !== 'depot' && payload.role !== 'transport')) {
+      return res.status(401).json({ error: 'Partner authentication required' })
+    }
+    try { return handlePartnerShipments(req, res, db, payload) }
+    catch (e: any) { console.error('[partner-shipments] error:', e?.message); return res.status(500).json({ error: 'Database error' }) }
+  }
+
+  // All other endpoints require admin auth
   if (!payload || payload.role !== 'admin') {
     return res.status(401).json({ error: 'Admin authentication required' })
   }
-
-  const entity = req.query.entity as string
-  const db = getSupabase()
 
   try {
     switch (entity) {
@@ -38,6 +49,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return handleNotificationTasks(req, res, db)
       case 'shipments-cache':
         return handleShipmentsCache(req, res, db)
+      case 'partner-users':
+        return handlePartnerUsers(req, res, db)
       default:
         return res.status(404).json({ error: `Unknown entity: ${entity}` })
     }
@@ -573,6 +586,90 @@ async function handleShipmentsCache(req: VercelRequest, res: VercelResponse, db:
     }, { onConflict: 'id' })
     if (error) throw error
     return res.status(200).json({ saved: true, count: shipments.length })
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' })
+}
+
+// ── Partner Shipments (depot/transport filtered) ────────────────────
+
+async function handlePartnerShipments(req: VercelRequest, res: VercelResponse, db: any, payload: any) {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
+
+  const { data, error } = await db.from('shipments_cache').select('*').eq('id', 1).single()
+  if (error && error.code !== 'PGRST116') throw error
+
+  const allShipments: any[] = data?.data || []
+  const filtered = allShipments.map((shipment: any) => {
+    const operativas: any[] = shipment.operativas || []
+    const matchingOps = operativas.filter((op: any) => {
+      if (payload.role === 'depot') {
+        return (op.DEPOSITO || '').toLowerCase() === (payload.depotName || '').toLowerCase()
+      }
+      if (payload.role === 'transport') {
+        return (op.TRANSPORTE || '').toLowerCase().includes((payload.transportName || '').toLowerCase())
+      }
+      return false
+    })
+    if (matchingOps.length === 0) return null
+    return { ...shipment, operativas: matchingOps }
+  }).filter(Boolean)
+
+  return res.status(200).json({ shipments: filtered, syncedAt: data?.synced_at || null })
+}
+
+// ── Partner Users (admin CRUD) ──────────────────────────────────────
+
+function hashPw(password: string): string {
+  return createHash('sha256').update(password).digest('hex')
+}
+
+async function handlePartnerUsers(req: VercelRequest, res: VercelResponse, db: any) {
+  if (req.method === 'GET') {
+    const { data, error } = await db.from('partner_users').select('*').order('created_at', { ascending: false })
+    if (error) throw error
+    return res.status(200).json({ users: (data || []).map((u: any) => ({
+      id: u.id, email: u.email, name: u.name, role: u.role,
+      filterValue: u.filter_value, active: u.active ?? true, createdAt: u.created_at,
+    })) })
+  }
+
+  if (req.method === 'POST') {
+    const { email, name, password, role, filterValue } = req.body || {}
+    if (!email || !name || !password || !role || !filterValue) {
+      return res.status(400).json({ error: 'email, name, password, role, filterValue required' })
+    }
+    const { data, error } = await db.from('partner_users').insert({
+      email: email.toLowerCase().trim(), name: name.trim(),
+      password_hash: hashPw(password), role, filter_value: filterValue, active: true,
+    }).select('id').single()
+    if (error) throw error
+    return res.status(201).json({ created: true, id: data.id })
+  }
+
+  if (req.method === 'PATCH') {
+    const id = req.query.id as string
+    if (!id) return res.status(400).json({ error: 'id required' })
+    const body = req.body || {}
+    const updates: Record<string, unknown> = {}
+    if (body.email !== undefined) updates.email = body.email.toLowerCase().trim()
+    if (body.name !== undefined) updates.name = body.name.trim()
+    if (body.password !== undefined) updates.password_hash = hashPw(body.password)
+    if (body.role !== undefined) updates.role = body.role
+    if (body.filterValue !== undefined) updates.filter_value = body.filterValue
+    if (body.active !== undefined) updates.active = body.active
+    if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No fields' })
+    const { error } = await db.from('partner_users').update(updates).eq('id', id)
+    if (error) throw error
+    return res.status(200).json({ updated: true })
+  }
+
+  if (req.method === 'DELETE') {
+    const id = req.query.id as string
+    if (!id) return res.status(400).json({ error: 'id required' })
+    const { error } = await db.from('partner_users').delete().eq('id', id)
+    if (error) throw error
+    return res.status(200).json({ deleted: true })
   }
 
   return res.status(405).json({ error: 'Method not allowed' })

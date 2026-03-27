@@ -117,10 +117,10 @@ export async function verifyOTPServer(email: string, code: string): Promise<{ su
 // ─── Partner Login (depot/transport) ─────────────────────────────────
 export async function loginPartner(email: string, password: string): Promise<{ success: boolean; error?: string; role?: string; data?: Record<string, string> }> {
   try {
-    const res = await fetch('/api/auth/partner-login', {
+    const res = await fetch('/api/auth/admin-login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, type: 'partner' }),
     })
 
     if (!res.ok) {
