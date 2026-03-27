@@ -8,6 +8,7 @@ import AgendaDayView from './AgendaDayView'
 import AgendaWeekView from './AgendaWeekView'
 import AgendaMonthView from './AgendaMonthView'
 import AgendaAnnualView from './AgendaAnnualView'
+import AgendaPendingSidebar from './AgendaPendingSidebar'
 import ShipmentDetailsDialog from '../ShipmentDetailsDialog'
 
 interface AgendaCalendarProps {
@@ -21,6 +22,7 @@ export default function AgendaCalendar({ shipments, depotFilter }: AgendaCalenda
   const [selectedShipment, setSelectedShipment] = useState<ParsedShipment | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [activeDepots, setActiveDepots] = useState<Set<string>>(new Set())
+  const [showPendingSidebar, setShowPendingSidebar] = useState(false)
 
   // Transform all shipments into calendar events
   const allEvents = useMemo(
@@ -111,9 +113,26 @@ export default function AgendaCalendar({ shipments, depotFilter }: AgendaCalenda
     })
   }, [view])
 
+  // Count pending coordination (depot + transporte but no salida)
+  const pendingCount = useMemo(() => {
+    let count = 0
+    for (const s of shipments) {
+      if (!s.operativas) continue
+      for (const op of s.operativas) {
+        if (op.DEPOSITO?.trim() && op.TRANSPORTE?.trim() && !op.SALIDA?.trim()) count++
+      }
+    }
+    return count
+  }, [shipments])
+
   // Event selection → open shipment details
   const handleSelectShipment = useCallback((event: CalendarEvent) => {
     setSelectedShipment(event.shipment)
+    setDialogOpen(true)
+  }, [])
+
+  const handleSelectShipmentDirect = useCallback((shipment: ParsedShipment) => {
+    setSelectedShipment(shipment)
     setDialogOpen(true)
   }, [])
 
@@ -147,42 +166,59 @@ export default function AgendaCalendar({ shipments, depotFilter }: AgendaCalenda
         activeDepots={activeDepots}
         onToggleDepot={toggleDepot}
         onClearDepots={() => setActiveDepots(new Set())}
+        pendingCount={pendingCount}
+        showPendingSidebar={showPendingSidebar}
+        onTogglePendingSidebar={() => setShowPendingSidebar(prev => !prev)}
       />
 
-      {view === 'day' && (
-        <AgendaDayView
-          date={currentDate}
-          events={filteredEvents}
-          onSelectShipment={handleSelectShipment}
-        />
-      )}
+      <div className="flex gap-0 overflow-hidden rounded-xl border border-border bg-card">
+        {/* Main calendar area */}
+        <div className={`flex-1 min-w-0 transition-all ${showPendingSidebar ? '' : ''}`}>
+          {view === 'day' && (
+            <AgendaDayView
+              date={currentDate}
+              events={filteredEvents}
+              onSelectShipment={handleSelectShipment}
+            />
+          )}
 
-      {view === 'week' && (
-        <AgendaWeekView
-          date={currentDate}
-          events={filteredEvents}
-          onSelectShipment={handleSelectShipment}
-          onDayClick={handleDayClick}
-        />
-      )}
+          {view === 'week' && (
+            <AgendaWeekView
+              date={currentDate}
+              events={filteredEvents}
+              onSelectShipment={handleSelectShipment}
+              onDayClick={handleDayClick}
+            />
+          )}
 
-      {view === 'month' && (
-        <AgendaMonthView
-          date={currentDate}
-          events={filteredEvents}
-          onSelectShipment={handleSelectShipment}
-          onDayClick={handleDayClick}
-        />
-      )}
+          {view === 'month' && (
+            <AgendaMonthView
+              date={currentDate}
+              events={filteredEvents}
+              onSelectShipment={handleSelectShipment}
+              onDayClick={handleDayClick}
+            />
+          )}
 
-      {view === 'annual' && (
-        <AgendaAnnualView
-          date={currentDate}
-          events={filteredEvents}
-          onMonthClick={handleMonthClick}
-          onDayClick={handleDayClick}
-        />
-      )}
+          {view === 'annual' && (
+            <AgendaAnnualView
+              date={currentDate}
+              events={filteredEvents}
+              onMonthClick={handleMonthClick}
+              onDayClick={handleDayClick}
+            />
+          )}
+        </div>
+
+        {/* Pending coordination sidebar */}
+        {showPendingSidebar && (
+          <AgendaPendingSidebar
+            shipments={shipments}
+            onClose={() => setShowPendingSidebar(false)}
+            onSelectShipment={handleSelectShipmentDirect}
+          />
+        )}
+      </div>
 
       {/* Reuse existing shipment details dialog */}
       <ShipmentDetailsDialog

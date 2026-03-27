@@ -35,10 +35,12 @@ interface ExcelImportProps {
 export default function ExcelImport({ onImportComplete, shipmentRecords = [], onRecordsUpdate }: ExcelImportProps) {
   const [localShipmentRecords, setLocalShipmentRecords] = useState<ParsedShipment[]>(shipmentRecords)
   const [autoSyncEnabled, setAutoSyncEnabled] = useState<boolean>(() => {
-    return localStorage.getItem('twf-auto-sync') === 'true'
+    const stored = localStorage.getItem('twf-auto-sync')
+    if (stored === null) return true // ON por defecto
+    return stored === 'true'
   })
   const [syncInterval, setSyncInterval] = useState<number>(() => {
-    return parseInt(localStorage.getItem('twf-sync-interval') || '10') || 10
+    return parseInt(localStorage.getItem('twf-sync-interval') || '5') || 5
   })
   const [isImporting, setIsImporting] = useState(false)
   const [importPreview, setImportPreview] = useState<ParsedShipment[]>([])

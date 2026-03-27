@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button'
-import { CaretLeft, CaretRight, Funnel, X } from '@phosphor-icons/react'
+import { CaretLeft, CaretRight, Funnel, X, Warning } from '@phosphor-icons/react'
 import type { AgendaView } from '@/lib/agendaTypes'
 import { MONTH_NAMES } from '@/lib/agendaTypes'
 
@@ -14,6 +14,9 @@ interface AgendaToolbarProps {
   activeDepots?: Set<string>
   onToggleDepot?: (depot: string) => void
   onClearDepots?: () => void
+  pendingCount?: number
+  showPendingSidebar?: boolean
+  onTogglePendingSidebar?: () => void
 }
 
 const VIEW_LABELS: Record<AgendaView, string> = {
@@ -67,7 +70,10 @@ export default function AgendaToolbar({
   availableDepots = [],
   activeDepots = new Set(),
   onToggleDepot,
-  onClearDepots
+  onClearDepots,
+  pendingCount = 0,
+  showPendingSidebar = false,
+  onTogglePendingSidebar
 }: AgendaToolbarProps) {
   return (
     <div className="bg-card border border-border rounded-xl p-4 shadow-sm space-y-3">
@@ -116,21 +122,46 @@ export default function AgendaToolbar({
           </p>
         </div>
 
-        {/* View selector */}
-        <div className="flex items-center bg-muted rounded-lg p-0.5">
-          {(Object.keys(VIEW_LABELS) as AgendaView[]).map(v => (
+        {/* View selector + pending button */}
+        <div className="flex items-center gap-2">
+          <div className="flex items-center bg-muted rounded-lg p-0.5">
+            {(Object.keys(VIEW_LABELS) as AgendaView[]).map(v => (
+              <button
+                key={v}
+                onClick={() => onViewChange(v)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                  view === v
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {VIEW_LABELS[v]}
+              </button>
+            ))}
+          </div>
+
+          {onTogglePendingSidebar && (
             <button
-              key={v}
-              onClick={() => onViewChange(v)}
-              className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
-                view === v
-                  ? 'bg-background text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground'
+              onClick={onTogglePendingSidebar}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-all ${
+                showPendingSidebar
+                  ? 'bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800'
+                  : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted hover:text-foreground'
               }`}
             >
-              {VIEW_LABELS[v]}
+              <Warning size={14} weight={showPendingSidebar ? 'fill' : 'regular'} />
+              Pendientes
+              {pendingCount > 0 && (
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                  showPendingSidebar
+                    ? 'bg-amber-200 text-amber-800 dark:bg-amber-800 dark:text-amber-200'
+                    : 'bg-muted text-muted-foreground'
+                }`}>
+                  {pendingCount}
+                </span>
+              )}
             </button>
-          ))}
+          )}
         </div>
       </div>
 
