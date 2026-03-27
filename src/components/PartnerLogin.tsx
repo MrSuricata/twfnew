@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { SignIn, Envelope, Lock, Warehouse, Truck } from '@phosphor-icons/react'
 import { toast } from 'sonner'
+import { loginPartner } from '@/lib/authClient'
 
 interface PartnerLoginProps {
   onLogin: (token: string, role: string, userData: any) => void
@@ -21,22 +22,16 @@ export default function PartnerLogin({ onLogin, onBack }: PartnerLoginProps) {
     setLoading(true)
 
     try {
-      const res = await fetch('/api/auth/admin-login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, type: 'partner' }),
-      })
+      const result = await loginPartner(email, password)
 
-      const data = await res.json()
-
-      if (!res.ok) {
-        toast.error(data.error || 'Credenciales incorrectas')
+      if (!result.success) {
+        toast.error(result.error || 'Credenciales incorrectas')
         setLoading(false)
         return
       }
 
       toast.success('Inicio de sesión exitoso')
-      onLogin(data.token, data.role, { email: data.email, name: data.name, filterValue: data.filterValue })
+      onLogin('ok', result.role || '', result.data || {})
     } catch (err) {
       toast.error('Error de conexión — intente nuevamente')
     }
