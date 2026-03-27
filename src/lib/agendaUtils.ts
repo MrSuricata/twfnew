@@ -214,7 +214,8 @@ export function daysUntil(dateStr: string): number {
 
 export function shipmentsToEvents(
   shipments: ParsedShipment[],
-  depotFilter?: string
+  depotFilter?: string,
+  transportFilter?: string
 ): CalendarEvent[] {
   const events: CalendarEvent[] = []
 
@@ -225,8 +226,13 @@ export function shipmentsToEvents(
     const status = getShipmentStatus(shipment)
 
     for (const op of ops) {
-      // Apply depot filter if provided — filters by DEPOSITO (cargo depot), not FISCAL
+      // Apply depot filter if provided — filters by DEPOSITO (cargo depot)
       if (depotFilter && op.DEPOSITO && !op.DEPOSITO.toLowerCase().includes(depotFilter.toLowerCase())) {
+        continue
+      }
+
+      // Apply transport filter if provided — filters by TRANSPORTE
+      if (transportFilter && op.TRANSPORTE && !op.TRANSPORTE.toLowerCase().includes(transportFilter.toLowerCase())) {
         continue
       }
 

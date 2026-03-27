@@ -14,10 +14,11 @@ import ShipmentDetailsDialog from '../ShipmentDetailsDialog'
 interface AgendaCalendarProps {
   shipments: ParsedShipment[]
   depotFilter?: string
+  transportFilter?: string
   partnerView?: boolean
 }
 
-export default function AgendaCalendar({ shipments, depotFilter, partnerView = false }: AgendaCalendarProps) {
+export default function AgendaCalendar({ shipments, depotFilter, transportFilter, partnerView = false }: AgendaCalendarProps) {
   const [view, setView] = useState<AgendaView>('week')
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedShipment, setSelectedShipment] = useState<ParsedShipment | null>(null)
@@ -27,8 +28,8 @@ export default function AgendaCalendar({ shipments, depotFilter, partnerView = f
 
   // Transform all shipments into calendar events
   const allEvents = useMemo(
-    () => shipmentsToEvents(shipments, depotFilter),
-    [shipments, depotFilter]
+    () => shipmentsToEvents(shipments, depotFilter, transportFilter),
+    [shipments, depotFilter, transportFilter]
   )
 
   // Extract unique depots from events
