@@ -150,10 +150,8 @@ export default function PartnerManager() {
     if (!window.confirm(`¿Eliminar partner ${user.name}?`)) return
 
     try {
-      const res = await authFetch('/api/data/partner-users', {
+      const res = await authFetch(`/api/data/partner-users?id=${user.id}`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: user.id }),
       })
 
       if (!res.ok) throw new Error('Error al eliminar')
@@ -344,7 +342,7 @@ export default function PartnerManager() {
                 id="partner-filter"
                 value={form.filterValue}
                 onChange={(e) => setForm(f => ({ ...f, filterValue: e.target.value }))}
-                placeholder={form.role === 'depot' ? 'Ej: CACEC, ZP RAFAELA' : 'Ej: SOLTRANS'}
+                placeholder={form.role === 'depot' ? 'Ej: GODILCO, PLANIR, TCP' : 'Ej: RAFAELA, MARE, TRANSCAL'}
                 required
               />
               <p className="text-xs text-muted-foreground">

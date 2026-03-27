@@ -262,10 +262,38 @@ export function shipmentsToEvents(
         }
       }
 
-      // Only show on SALIDA date (loading/departure day) — skip if no date assigned
-      if (!isValidDateStr(op.SALIDA)) continue
-      const salidaEvent = makeEvent('salida', op.SALIDA)
-      if (salidaEvent) events.push(salidaEvent)
+      // Show on SALIDA date, or today if no date assigned (for depot/transport views)
+      if (isValidDateStr(op.SALIDA)) {
+        const salidaEvent = makeEvent('salida', op.SALIDA)
+        if (salidaEvent) events.push(salidaEvent)
+      } else if (depotFilter) {
+        // No SALIDA date but depot filter active → show as pending on today
+        const todayStr = toDateKey(new Date())
+        const pendingEvent: CalendarEvent = {
+          id: `${baseId}-pending`,
+          date: todayStr,
+          type: 'salida',
+          ref: shipment.REF,
+          operativa: op.OPERATIVA || 'CONTENEDOR',
+          cntr: op.CNTR_OP || '',
+          tipo: op.TIPO || '',
+          cliente: op.CLIENTE_OP || shipment.CLIENTE || '',
+          fiscal: op.FISCAL || '',
+          deposito: op.DEPOSITO || '',
+          libre: op.LIBRE || shipment.LIBRE_HASTA || '',
+          descripcion: op.DESCRIPCION || '',
+          kg: op.KG || 0,
+          pkgs: op.PKGS || 0,
+          m3: op.M3 || 0,
+          transporte: op.TRANSPORTE || '',
+          alerts: [...alerts, { emoji: '📋', label: 'Sin fecha de salida', type: 'pending' }],
+          shipment,
+          op,
+          statusColor: 'amber',
+          statusLabel: 'Pendiente de coordinar'
+        }
+        events.push(pendingEvent)
+      }
     }
   }
 
