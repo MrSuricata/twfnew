@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button'
-import { CaretLeft, CaretRight, CalendarBlank } from '@phosphor-icons/react'
+import { CaretLeft, CaretRight, Funnel, X } from '@phosphor-icons/react'
 import type { AgendaView } from '@/lib/agendaTypes'
 import { MONTH_NAMES } from '@/lib/agendaTypes'
 
@@ -10,6 +10,10 @@ interface AgendaToolbarProps {
   alertCount: number
   onViewChange: (view: AgendaView) => void
   onNavigate: (direction: 'prev' | 'next' | 'today') => void
+  availableDepots?: string[]
+  activeDepots?: Set<string>
+  onToggleDepot?: (depot: string) => void
+  onClearDepots?: () => void
 }
 
 const VIEW_LABELS: Record<AgendaView, string> = {
@@ -59,10 +63,14 @@ export default function AgendaToolbar({
   eventCount,
   alertCount,
   onViewChange,
-  onNavigate
+  onNavigate,
+  availableDepots = [],
+  activeDepots = new Set(),
+  onToggleDepot,
+  onClearDepots
 }: AgendaToolbarProps) {
   return (
-    <div className="bg-card border border-border rounded-xl p-4 shadow-sm">
+    <div className="bg-card border border-border rounded-xl p-4 shadow-sm space-y-3">
       {/* Top row: navigation + period + view selector */}
       <div className="flex items-center justify-between gap-4">
         {/* Navigation buttons */}
@@ -125,6 +133,38 @@ export default function AgendaToolbar({
           ))}
         </div>
       </div>
+
+      {/* Depot filter row */}
+      {availableDepots.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <Funnel size={14} className="text-muted-foreground shrink-0" />
+          {availableDepots.map(depot => {
+            const isActive = activeDepots.has(depot)
+            return (
+              <button
+                key={depot}
+                onClick={() => onToggleDepot?.(depot)}
+                className={`px-2.5 py-1 text-[11px] font-medium rounded-full border transition-all ${
+                  isActive
+                    ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                    : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted hover:text-foreground'
+                }`}
+              >
+                {depot}
+              </button>
+            )
+          })}
+          {activeDepots.size > 0 && (
+            <button
+              onClick={onClearDepots}
+              className="px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+            >
+              <X size={10} weight="bold" />
+              Limpiar
+            </button>
+          )}
+        </div>
+      )}
     </div>
   )
 }

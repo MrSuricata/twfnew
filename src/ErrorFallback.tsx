@@ -21,10 +21,10 @@ export default function ErrorFallback({ error, resetErrorBoundary }: ErrorFallba
         </div>
 
         <h1 className="text-2xl font-bold mb-2" style={{ color: '#f1f5f9' }}>
-          Algo salio mal
+          Algo salió mal
         </h1>
         <p className="text-base mb-6" style={{ color: '#94a3b8' }}>
-          Ha ocurrido un error inesperado en la aplicacion.
+          Ha ocurrido un error inesperado en la aplicación.
           Puedes intentar recuperarte o volver al inicio.
         </p>
 
@@ -72,7 +72,7 @@ export default function ErrorFallback({ error, resetErrorBoundary }: ErrorFallba
         </div>
 
         <p className="mt-8 text-xs" style={{ color: '#475569' }}>
-          Si el problema persiste, intenta recargar la pagina o contacta al administrador.
+          Si el problema persiste, intentá recargar la página o contactá al administrador.
         </p>
       </div>
     </div>

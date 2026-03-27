@@ -180,7 +180,7 @@ export default function CaseStudiesEditor() {
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="iconType">Icono *</Label>
                 <Select 
@@ -230,7 +230,7 @@ export default function CaseStudiesEditor() {
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="origin">Origen *</Label>
                 <Input
@@ -277,7 +277,7 @@ export default function CaseStudiesEditor() {
             <div className="space-y-3">
               <Label>Resultados (3)</Label>
               {[0, 1, 2].map((index) => (
-                <div key={index} className="grid grid-cols-2 gap-2">
+                <div key={index} className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   <Input
                     placeholder="Etiqueta (ej: Tiempo de tránsito)"
                     value={formData.results?.[index]?.label || ''}

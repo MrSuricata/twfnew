@@ -57,7 +57,12 @@ export default function AgendaWeekView({ date, events, onSelectShipment, onDayCl
       <div className="grid grid-cols-6 min-h-[400px]">
         {weekDates.map((d, i) => {
           const dateKey = toDateKey(d)
-          const dayEvents = eventsByDate.get(dateKey) || []
+          const dayEvents = (eventsByDate.get(dateKey) || []).sort((a, b) => {
+            const depoA = (a.deposito || '').toLowerCase()
+            const depoB = (b.deposito || '').toLowerCase()
+            if (depoA !== depoB) return depoA.localeCompare(depoB)
+            return (a.ref || '').localeCompare(b.ref || '')
+          })
           const today = isToday(d)
 
           return (

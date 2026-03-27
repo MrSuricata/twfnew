@@ -20,6 +20,7 @@ export default function AgendaCalendar({ shipments, depotFilter }: AgendaCalenda
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedShipment, setSelectedShipment] = useState<ParsedShipment | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [activeDepots, setActiveDepots] = useState<Set<string>>(new Set())
 
   // Transform all shipments into calendar events
   const allEvents = useMemo(
@@ -27,31 +28,55 @@ export default function AgendaCalendar({ shipments, depotFilter }: AgendaCalenda
     [shipments, depotFilter]
   )
 
+  // Extract unique depots from events
+  const availableDepots = useMemo(() => {
+    const depots = new Set<string>()
+    for (const e of allEvents) {
+      if (e.deposito) depots.add(e.deposito.toUpperCase())
+    }
+    return Array.from(depots).sort()
+  }, [allEvents])
+
+  // Filter events by active depots
+  const filteredEvents = useMemo(() => {
+    if (activeDepots.size === 0) return allEvents
+    return allEvents.filter(e => e.deposito && activeDepots.has(e.deposito.toUpperCase()))
+  }, [allEvents, activeDepots])
+
+  const toggleDepot = useCallback((depot: string) => {
+    setActiveDepots(prev => {
+      const next = new Set(prev)
+      if (next.has(depot)) next.delete(depot)
+      else next.add(depot)
+      return next
+    })
+  }, [])
+
   // Filter events visible in current range
   const visibleEvents = useMemo(() => {
     switch (view) {
       case 'day': {
         const key = toDateKey(currentDate)
-        return allEvents.filter(e => e.date === key)
+        return filteredEvents.filter(e => e.date === key)
       }
       case 'week': {
         const weekDates = getWeekDates(currentDate)
         const start = toDateKey(weekDates[0])
         const end = toDateKey(weekDates[5])
-        return allEvents.filter(e => e.date >= start && e.date <= end)
+        return filteredEvents.filter(e => e.date >= start && e.date <= end)
       }
       case 'month': {
         const y = currentDate.getFullYear()
         const m = String(currentDate.getMonth() + 1).padStart(2, '0')
         const prefix = `${y}-${m}`
-        return allEvents.filter(e => e.date.startsWith(prefix))
+        return filteredEvents.filter(e => e.date.startsWith(prefix))
       }
       case 'annual': {
         const yPrefix = `${currentDate.getFullYear()}-`
-        return allEvents.filter(e => e.date.startsWith(yPrefix))
+        return filteredEvents.filter(e => e.date.startsWith(yPrefix))
       }
     }
-  }, [allEvents, view, currentDate])
+  }, [filteredEvents, view, currentDate])
 
   const alertCount = useMemo(() => countAlertsInRange(visibleEvents), [visibleEvents])
 
@@ -118,12 +143,16 @@ export default function AgendaCalendar({ shipments, depotFilter }: AgendaCalenda
         alertCount={alertCount}
         onViewChange={setView}
         onNavigate={handleNavigate}
+        availableDepots={availableDepots}
+        activeDepots={activeDepots}
+        onToggleDepot={toggleDepot}
+        onClearDepots={() => setActiveDepots(new Set())}
       />
 
       {view === 'day' && (
         <AgendaDayView
           date={currentDate}
-          events={allEvents}
+          events={filteredEvents}
           onSelectShipment={handleSelectShipment}
         />
       )}
@@ -131,7 +160,7 @@ export default function AgendaCalendar({ shipments, depotFilter }: AgendaCalenda
       {view === 'week' && (
         <AgendaWeekView
           date={currentDate}
-          events={allEvents}
+          events={filteredEvents}
           onSelectShipment={handleSelectShipment}
           onDayClick={handleDayClick}
         />
@@ -140,7 +169,7 @@ export default function AgendaCalendar({ shipments, depotFilter }: AgendaCalenda
       {view === 'month' && (
         <AgendaMonthView
           date={currentDate}
-          events={allEvents}
+          events={filteredEvents}
           onSelectShipment={handleSelectShipment}
           onDayClick={handleDayClick}
         />
@@ -149,7 +178,7 @@ export default function AgendaCalendar({ shipments, depotFilter }: AgendaCalenda
       {view === 'annual' && (
         <AgendaAnnualView
           date={currentDate}
-          events={allEvents}
+          events={filteredEvents}
           onMonthClick={handleMonthClick}
           onDayClick={handleDayClick}
         />

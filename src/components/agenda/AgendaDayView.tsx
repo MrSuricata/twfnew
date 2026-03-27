@@ -19,7 +19,12 @@ export default function AgendaDayView({ date, events, onSelectShipment }: Agenda
   const grouped = EVENT_ORDER.map(type => ({
     type,
     config: EVENT_TYPE_CONFIG[type],
-    events: dayEvents.filter(e => e.type === type)
+    events: dayEvents.filter(e => e.type === type).sort((a, b) => {
+      const depoA = (a.deposito || '').toLowerCase()
+      const depoB = (b.deposito || '').toLowerCase()
+      if (depoA !== depoB) return depoA.localeCompare(depoB)
+      return (a.ref || '').localeCompare(b.ref || '')
+    })
   })).filter(g => g.events.length > 0)
 
   const dayIndex = date.getDay() // 0=Sun..6=Sat
