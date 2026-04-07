@@ -29,7 +29,7 @@ export default function DepotDashboard({ shipments, depotName, userName, onLogou
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <img src="/images/twf-logo-white.png" alt="TWF" className="h-7 w-auto opacity-60" />
+            <img src="/images/twf-logo-full-new.png" alt="TWF" className="h-7 w-auto opacity-60" />
             <Button variant="outline" size="sm" onClick={onLogout}>
               <SignOut size={18} className="mr-1.5" />
               Salir
