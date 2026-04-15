@@ -146,7 +146,7 @@ export default function PartnerManager() {
         throw new Error(err.error || 'Error al guardar')
       }
 
-      toast.success(editingId ? 'Partner actualizado' : 'Partner creado')
+      toast.success(editingId ? 'Partner actualizado' : 'Partner creado — email de bienvenida enviado')
       setShowDialog(false)
       setForm(EMPTY_FORM)
       setEditingId(null)

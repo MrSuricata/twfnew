@@ -2,6 +2,8 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { authenticateRequest } from '../_lib/jwt.js'
 import { handleCors } from '../_lib/cors.js'
 import { getSupabase } from '../_lib/supabase.js'
+import { sendMail } from '../_lib/mail.js'
+import { welcomeClientEmail, welcomePartnerEmail } from '../_lib/emailTemplates.js'
 import { createHash } from 'crypto'
 
 // ─── Combined Data API ───────────────────────────────────────────────
@@ -306,9 +308,48 @@ async function handleClients(req: VercelRequest, res: VercelResponse, db: any) {
       created_at_ts: c.createdAt || c.created_at_ts || Date.now(),
       cliente_pattern: c.clientePattern || c.cliente_pattern || '',
     }))
+
+    // Detect brand-new clients (by email) BEFORE the upsert so we can
+    // send welcome emails only for first-time creations, not edits.
+    let newRows: typeof rows = []
+    try {
+      const incomingEmails = rows
+        .map(r => (r.email || '').toLowerCase().trim())
+        .filter(Boolean)
+      if (incomingEmails.length > 0) {
+        const { data: existing } = await db
+          .from('clients')
+          .select('email')
+          .in('email', incomingEmails)
+        const existingSet = new Set(
+          (existing || []).map((c: any) => (c.email || '').toLowerCase().trim())
+        )
+        newRows = rows.filter(
+          r => r.email && !existingSet.has(r.email.toLowerCase().trim())
+        )
+      }
+    } catch (e) {
+      console.warn('[clients] could not pre-check new emails:', e)
+    }
+
     const { error } = await db.from('clients').upsert(rows, { onConflict: 'id' })
     if (error) throw error
-    return res.status(200).json({ saved: true, count: rows.length })
+
+    // Fire-and-forget welcome emails for new clients (does not block response).
+    let welcomesSent = 0
+    for (const r of newRows) {
+      welcomesSent++
+      sendMail({
+        to: r.email,
+        ...welcomeClientEmail({ name: r.name, email: r.email }),
+      })
+        .then(result => {
+          if (!result.ok) console.warn(`[welcome-client] not sent to ${r.email}: ${result.error}`)
+        })
+        .catch(err => console.warn('[welcome-client] failed:', err))
+    }
+
+    return res.status(200).json({ saved: true, count: rows.length, welcomesSent })
   }
 
   if (req.method === 'DELETE') {
@@ -647,12 +688,30 @@ async function handlePartnerUsers(req: VercelRequest, res: VercelResponse, db: a
     if (!email || !name || !password || !role || !filterValue) {
       return res.status(400).json({ error: 'email, name, password, role, filterValue required' })
     }
+    const cleanEmail = email.toLowerCase().trim()
+    const cleanName = name.trim()
     const { data, error } = await db.from('partner_users').insert({
-      email: email.toLowerCase().trim(), name: name.trim(),
+      email: cleanEmail, name: cleanName,
       password_hash: hashPw(password), role, filter_value: filterValue, active: true,
     }).select('id').single()
     if (error) throw error
-    return res.status(201).json({ created: true, id: data.id })
+
+    // Fire-and-forget welcome email — never block response or include password.
+    sendMail({
+      to: cleanEmail,
+      ...welcomePartnerEmail({
+        name: cleanName,
+        email: cleanEmail,
+        role: role as 'depot' | 'transport',
+        filterValue,
+      }),
+    })
+      .then(result => {
+        if (!result.ok) console.warn(`[welcome-partner] not sent to ${cleanEmail}: ${result.error}`)
+      })
+      .catch(err => console.warn('[welcome-partner] failed:', err))
+
+    return res.status(201).json({ created: true, id: data.id, welcomeSent: true })
   }
 
   if (req.method === 'PATCH') {

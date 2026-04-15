@@ -129,7 +129,7 @@ export default function ClientManager({ clients, onUpdateClients, shipments = []
           createdAt: Date.now()
         }
         updated = [...clients, newClient]
-        toast.success('Cliente creado — el cliente ingresará con código OTP por email')
+        toast.success('Cliente creado — email de bienvenida enviado')
       }
 
       await onUpdateClients(updated)
