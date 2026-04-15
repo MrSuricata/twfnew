@@ -1,4 +1,10 @@
 User-agent: *
 Allow: /
+Disallow: /admin
+Disallow: /portal
+Disallow: /depot
+Disallow: /transport
+Disallow: /partner
+Disallow: /api/
 
 Sitemap: https://twf.uy/sitemap.xml
