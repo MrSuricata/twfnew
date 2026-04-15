@@ -42,6 +42,7 @@ import { toast } from 'sonner'
 import { authFetch } from '@/lib/authClient'
 import { fetchClientReports, fetchClientOriginPhotos } from '@/lib/dataClient'
 import ShipmentDetailsDialog from './ShipmentDetailsDialog'
+import { matchesPattern } from '@/lib/clientMatching'
 
 interface ClientPortalProps {
   onLogout: () => void
@@ -107,13 +108,6 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
   }, [clientEmail])
 
   const currentClient = clients?.find(c => c.email === clientEmail)
-
-  // Multi-pattern matching helper (supports "PATTERN1,PATTERN2")
-  const matchesPattern = (cliente: string, pattern: string) => {
-    if (!cliente || !pattern) return false
-    const clienteUpper = cliente.toUpperCase()
-    return pattern.toUpperCase().split(',').map(p => p.trim()).filter(Boolean).some(p => clienteUpper.includes(p))
-  }
 
   // Use server data if available, fallback to props
   const clientShipments = serverShipments.length > 0
@@ -631,17 +625,26 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
                 <CardContent className="pt-12 pb-12 text-center">
                   <Package size={48} className="mx-auto mb-4 text-muted-foreground" />
                   <h3 className="text-lg font-semibold mb-2">
-                    {hasActiveFilters ? 'Sin resultados' : 'No hay cargas activas'}
+                    {hasActiveFilters ? 'Sin resultados' : 'Aún no tenés cargas activas'}
                   </h3>
-                  <p className="text-muted-foreground">
+                  <p className="text-sm text-muted-foreground max-w-md mx-auto">
                     {hasActiveFilters
                       ? 'No se encontraron cargas con los filtros aplicados'
-                      : 'Actualmente no tienes cargas en tránsito'}
+                      : 'Cuando tus contenedores estén en camino, aparecerán acá con su estado y documentación.'}
                   </p>
-                  {hasActiveFilters && (
-                    <Button variant="outline" size="sm" onClick={clearFilters} className="mt-3">
+                  {hasActiveFilters ? (
+                    <Button variant="outline" size="sm" onClick={clearFilters} className="mt-4">
                       Limpiar filtros
                     </Button>
+                  ) : (
+                    <div className="mt-6 text-xs text-muted-foreground space-y-1">
+                      <p>¿Consultas? Contactanos:</p>
+                      <p>
+                        <a href="mailto:info@twf.uy" className="text-accent hover:underline">info@twf.uy</a>
+                        {' · '}
+                        <a href="mailto:bridvanovich@twf.uy" className="text-accent hover:underline">bridvanovich@twf.uy</a>
+                      </p>
+                    </div>
                   )}
                 </CardContent>
               </Card>

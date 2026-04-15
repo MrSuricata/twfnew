@@ -10,15 +10,27 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import {
   UserPlus,
   PencilSimple,
   Trash,
-  UserCircle
+  UserCircle,
+  CircleNotch
 } from '@phosphor-icons/react'
 import { ClientAccount } from '@/lib/quotationTypes'
 import { toast } from 'sonner'
 import { ParsedShipment } from '@/lib/shipmentTypes'
 import { impersonateClient } from '@/lib/dataClient'
+import { getMatchCount as computeMatchCount } from '@/lib/clientMatching'
 
 interface ClientManagerProps {
   clients: ClientAccount[]
@@ -45,17 +57,13 @@ export default function ClientManager({ clients, onUpdateClients, shipments = []
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<ClientForm>(EMPTY_FORM)
   const [formError, setFormError] = useState<string | null>(null)
+  const [isSaving, setIsSaving] = useState(false)
+  const [deleteId, setDeleteId] = useState<string | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [impersonatingId, setImpersonatingId] = useState<string | null>(null)
+  const clientToDelete = clients.find(c => c.id === deleteId)
 
-  const matchesPattern = (cliente: string, pattern: string) => {
-    if (!cliente || !pattern) return false
-    const clienteUpper = cliente.toUpperCase()
-    return pattern.toUpperCase().split(',').map(p => p.trim()).filter(Boolean).some(p => clienteUpper.includes(p))
-  }
-
-  const getMatchCount = (pattern: string) => {
-    if (!pattern) return 0
-    return shipments.filter(s => matchesPattern(s.CLIENTE, pattern)).length
-  }
+  const getMatchCount = (pattern: string) => computeMatchCount(shipments, pattern)
 
   const openNew = () => {
     setForm(EMPTY_FORM)
@@ -75,7 +83,7 @@ export default function ClientManager({ clients, onUpdateClients, shipments = []
     setShowDialog(true)
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setFormError(null)
 
     const email = form.email.trim()
@@ -94,50 +102,61 @@ export default function ClientManager({ clients, onUpdateClients, shipments = []
       return
     }
 
-    let updated: ClientAccount[]
+    setIsSaving(true)
+    try {
+      let updated: ClientAccount[]
 
-    if (editingId) {
-      updated = clients.map(c => {
-        if (c.id !== editingId) return c
-        return {
-          ...c,
+      if (editingId) {
+        updated = clients.map(c => {
+          if (c.id !== editingId) return c
+          return {
+            ...c,
+            email,
+            name,
+            company,
+            clientePattern
+          }
+        })
+
+        toast.success('Cliente actualizado')
+      } else {
+        const newClient: ClientAccount = {
+          id: `${Date.now()}`,
           email,
           name,
           company,
-          clientePattern
+          clientePattern,
+          createdAt: Date.now()
         }
-      })
-
-      toast.success('Cliente actualizado')
-    } else {
-      const newClient: ClientAccount = {
-        id: `${Date.now()}`,
-        email,
-        name,
-        company,
-        clientePattern,
-        createdAt: Date.now()
+        updated = [...clients, newClient]
+        toast.success('Cliente creado — el cliente ingresará con código OTP por email')
       }
-      updated = [...clients, newClient]
-      toast.success('Cliente creado — el cliente ingresará con código OTP por email')
-    }
 
-    onUpdateClients(updated)
-    setShowDialog(false)
-    setForm(EMPTY_FORM)
-    setEditingId(null)
+      await onUpdateClients(updated)
+      setShowDialog(false)
+      setForm(EMPTY_FORM)
+      setEditingId(null)
+    } finally {
+      setIsSaving(false)
+    }
   }
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     const client = clients.find(c => c.id === id)
     if (!client) return
-    if (!window.confirm(`¿Eliminar cliente ${client.name}?`)) return
 
-    onUpdateClients(clients.filter(c => c.id !== id))
-    toast.success('Cliente eliminado')
+    setIsDeleting(true)
+    try {
+      await onUpdateClients(clients.filter(c => c.id !== id))
+      toast.success('Cliente eliminado')
+      setDeleteId(null)
+    } finally {
+      setIsDeleting(false)
+    }
   }
 
   const handleImpersonate = async (client: ClientAccount) => {
+    setImpersonatingId(client.id)
     try {
       const result = await impersonateClient(client.email)
       toast.info('Iniciando sesión como ' + client.name)
@@ -149,6 +168,7 @@ export default function ClientManager({ clients, onUpdateClients, shipments = []
     } catch (err: any) {
       console.error('[impersonate] error:', err)
       toast.error(err?.message || 'No se pudo iniciar sesión como este cliente')
+      setImpersonatingId(null)
     }
   }
 
@@ -199,13 +219,21 @@ export default function ClientManager({ clients, onUpdateClients, shipments = []
                     </div>
                   </div>
                   <div className="flex gap-1 shrink-0 ml-4">
-                    <Button variant="ghost" size="icon" onClick={() => handleImpersonate(client)} title="Ver portal como este cliente">
-                      <UserCircle size={18} />
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleImpersonate(client)}
+                      title="Ver portal como este cliente"
+                      disabled={impersonatingId === client.id}
+                    >
+                      {impersonatingId === client.id
+                        ? <CircleNotch size={18} className="animate-spin" />
+                        : <UserCircle size={18} />}
                     </Button>
                     <Button variant="ghost" size="icon" onClick={() => openEdit(client)} title="Editar">
                       <PencilSimple size={18} />
                     </Button>
-                    <Button variant="ghost" size="icon" onClick={() => handleDelete(client.id)} title="Eliminar" className="text-red-500 hover:text-red-600 hover:bg-red-50">
+                    <Button variant="ghost" size="icon" onClick={() => setDeleteId(client.id)} title="Eliminar" className="text-red-500 hover:text-red-600 hover:bg-red-50">
                       <Trash size={18} />
                     </Button>
                   </div>
@@ -280,16 +308,52 @@ export default function ClientManager({ clients, onUpdateClients, shipments = []
             )}
 
             <div className="flex gap-2 pt-2">
-              <Button variant="outline" className="flex-1" onClick={() => setShowDialog(false)}>
+              <Button variant="outline" className="flex-1" onClick={() => setShowDialog(false)} disabled={isSaving}>
                 Cancelar
               </Button>
-              <Button onClick={handleSave} className="flex-1 bg-accent text-accent-foreground hover:bg-accent/90">
-                {editingId ? 'Guardar' : 'Crear Cliente'}
+              <Button
+                onClick={handleSave}
+                disabled={isSaving}
+                className="flex-1 bg-accent text-accent-foreground hover:bg-accent/90 gap-2"
+              >
+                {isSaving ? (
+                  <><CircleNotch size={16} className="animate-spin" /> Guardando...</>
+                ) : (
+                  editingId ? 'Guardar' : 'Crear Cliente'
+                )}
               </Button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!deleteId} onOpenChange={(open) => { if (!open && !isDeleting) setDeleteId(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar cliente?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción eliminará a {clientToDelete?.name} ({clientToDelete?.email}) permanentemente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                if (deleteId) handleDelete(deleteId)
+              }}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 gap-2"
+            >
+              {isDeleting ? (
+                <><CircleNotch size={16} className="animate-spin" /> Eliminando...</>
+              ) : (
+                'Eliminar'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

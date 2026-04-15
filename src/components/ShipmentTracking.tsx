@@ -37,6 +37,7 @@ import {
   ImageSquare,
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
+import { copyToClipboard } from '@/lib/clipboard'
 import {
   Select,
   SelectContent,
@@ -255,7 +256,6 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
 
         try {
           await saveReportWithFile(newReport)
-          toast.success('Informe guardado en base de datos')
         } catch (err) {
           console.warn('[DB] Failed to save report file:', err)
           toast.warning('Informe guardado localmente pero NO se subió a la base de datos. El archivo puede ser demasiado grande.', { duration: 8000 })
@@ -283,13 +283,15 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
   }
 
   const handleDeleteReport = async (reportId: string) => {
-    const updated = reports.filter(r => r.id !== reportId)
-    if (onUpdateReports) onUpdateReports(updated)
     try {
       await deleteReportFromDB(reportId)
     } catch (err) {
       console.warn('[DB] Failed to delete report:', err)
+      toast.error('No se pudo eliminar el informe')
+      return
     }
+    const updated = reports.filter(r => r.id !== reportId)
+    if (onUpdateReports) onUpdateReports(updated)
     toast.success('Informe eliminado')
   }
 
@@ -568,16 +570,18 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
       <Card>
         <CardContent className="p-0">
           {filteredRecords.length === 0 ? (
-            <div className="text-center py-12">
-              <Package size={40} className="mx-auto mb-3 text-muted-foreground" />
-              <h3 className="text-base font-semibold mb-1">Sin resultados</h3>
-              <p className="text-sm text-muted-foreground">
+            <div className="text-center py-16 px-6">
+              <Package size={48} className="mx-auto mb-4 text-muted-foreground" />
+              <h3 className="text-lg font-semibold mb-2">
+                {hasActiveFilters ? 'No se encontraron cargas con estos filtros' : 'No hay datos importados'}
+              </h3>
+              <p className="text-sm text-muted-foreground max-w-md mx-auto">
                 {hasActiveFilters
-                  ? 'No se encontraron cargas con los filtros actuales'
-                  : 'No hay datos importados'}
+                  ? 'Probá ajustar los filtros o limpialos para ver todas las cargas.'
+                  : 'Importá un archivo Excel desde la pestaña "Importar" para cargar tus operaciones.'}
               </p>
               {hasActiveFilters && (
-                <Button variant="link" className="mt-2 text-sm" onClick={resetFilters}>
+                <Button variant="outline" size="sm" className="mt-4" onClick={resetFilters}>
                   Limpiar filtros
                 </Button>
               )}
@@ -632,7 +636,19 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
                           <TableCell className="pl-3 pr-0">
                             <span className={`block w-2 h-2 rounded-full ${getStatusDotClass(recStatus.color)}`} />
                           </TableCell>
-                          <TableCell className="font-mono text-xs font-bold whitespace-nowrap">{record.REF}</TableCell>
+                          <TableCell className="font-mono text-xs font-bold whitespace-nowrap">
+                            <button
+                              type="button"
+                              title="Click para copiar"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                copyToClipboard(record.REF, 'REF')
+                              }}
+                              className="font-mono font-bold hover:bg-accent/10 hover:text-accent transition-colors cursor-pointer rounded px-1 -mx-1"
+                            >
+                              {record.REF}
+                            </button>
+                          </TableCell>
                           <TableCell className="text-xs max-w-[140px] truncate">{record.CLIENTE}</TableCell>
                           <TableCell className="text-xs hidden md:table-cell whitespace-nowrap text-muted-foreground">{record.ETA || '—'}</TableCell>
                           <TableCell>
@@ -676,7 +692,21 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
                             </Badge>
                           </TableCell>
                           <TableCell className="hidden sm:table-cell">
-                            <span className="text-xs font-medium">{record.N}</span>
+                            {record.CNTR ? (
+                              <button
+                                type="button"
+                                title={`Click para copiar${record.N > 1 ? ` (${record.N} contenedores)` : ''}`}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  copyToClipboard(record.CNTR, 'CNTR')
+                                }}
+                                className="text-xs font-medium font-mono hover:bg-accent/10 hover:text-accent transition-colors cursor-pointer rounded px-1 -mx-1"
+                              >
+                                {record.N}
+                              </button>
+                            ) : (
+                              <span className="text-xs font-medium">{record.N}</span>
+                            )}
                           </TableCell>
                           <TableCell className="hidden lg:table-cell">
                             {reportCount > 0 ? (

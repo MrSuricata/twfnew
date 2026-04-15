@@ -7,6 +7,7 @@
 import { authFetch } from './authClient'
 import type { QuoteFormData, ClientAccount, ShipmentDocument, OperativeReport, OriginPhoto, NotificationTask, NotificationStep } from './quotationTypes'
 import type { ParsedShipment } from './shipmentTypes'
+import { matchesPattern } from './clientMatching'
 
 // ── Shipments (cached from Google Sheets sync) ──
 
@@ -307,10 +308,7 @@ export async function saveClientEmailInline(clienteValue: string, email: string)
     const clienteUpper = clienteValue.toUpperCase().trim()
 
     // Find existing client whose pattern matches this CLIENTE
-    const existing = clients.find(c => {
-      const patterns = (c.clientePattern || '').toUpperCase().split(',').map(p => p.trim()).filter(Boolean)
-      return patterns.some(p => clienteUpper.includes(p))
-    })
+    const existing = clients.find(c => matchesPattern(clienteUpper, c.clientePattern || ''))
 
     if (existing) {
       // Update email for existing client
