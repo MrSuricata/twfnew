@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button'
-import { CaretLeft, CaretRight, Funnel, X, Warning } from '@phosphor-icons/react'
+import { CaretLeft, CaretRight, Funnel, Truck, X, Warning } from '@phosphor-icons/react'
 import type { AgendaView } from '@/lib/agendaTypes'
 import { MONTH_NAMES } from '@/lib/agendaTypes'
 
@@ -14,6 +14,10 @@ interface AgendaToolbarProps {
   activeDepots?: Set<string>
   onToggleDepot?: (depot: string) => void
   onClearDepots?: () => void
+  availableTransports?: string[]
+  activeTransports?: Set<string>
+  onToggleTransport?: (transport: string) => void
+  onClearTransports?: () => void
   pendingCount?: number
   showPendingSidebar?: boolean
   onTogglePendingSidebar?: () => void
@@ -71,6 +75,10 @@ export default function AgendaToolbar({
   activeDepots = new Set(),
   onToggleDepot,
   onClearDepots,
+  availableTransports = [],
+  activeTransports = new Set(),
+  onToggleTransport,
+  onClearTransports,
   pendingCount = 0,
   showPendingSidebar = false,
   onTogglePendingSidebar
@@ -168,7 +176,7 @@ export default function AgendaToolbar({
       {/* Depot filter row */}
       {availableDepots.length > 0 && (
         <div className="flex items-center gap-2 flex-wrap">
-          <Funnel size={14} className="text-muted-foreground shrink-0" />
+          <Funnel size={14} className="text-muted-foreground shrink-0" aria-label="Depósitos" />
           {availableDepots.map(depot => {
             const isActive = activeDepots.has(depot)
             return (
@@ -188,6 +196,38 @@ export default function AgendaToolbar({
           {activeDepots.size > 0 && (
             <button
               onClick={onClearDepots}
+              className="px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+            >
+              <X size={10} weight="bold" />
+              Limpiar
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Transport filter row */}
+      {availableTransports.length > 0 && (
+        <div className="flex items-center gap-2 flex-wrap">
+          <Truck size={14} className="text-muted-foreground shrink-0" aria-label="Transportes" />
+          {availableTransports.map(transport => {
+            const isActive = activeTransports.has(transport)
+            return (
+              <button
+                key={transport}
+                onClick={() => onToggleTransport?.(transport)}
+                className={`px-2.5 py-1 text-[11px] font-medium rounded-full border transition-all ${
+                  isActive
+                    ? 'bg-accent text-accent-foreground border-accent shadow-sm'
+                    : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted hover:text-foreground'
+                }`}
+              >
+                {transport}
+              </button>
+            )
+          })}
+          {activeTransports.size > 0 && (
+            <button
+              onClick={onClearTransports}
               className="px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
             >
               <X size={10} weight="bold" />

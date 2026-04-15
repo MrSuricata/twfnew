@@ -25,6 +25,7 @@ export default function AgendaCalendar({ shipments, depotFilter, transportFilter
   const [selectedCntr, setSelectedCntr] = useState<string | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [activeDepots, setActiveDepots] = useState<Set<string>>(new Set())
+  const [activeTransports, setActiveTransports] = useState<Set<string>>(new Set())
   const [showPendingSidebar, setShowPendingSidebar] = useState(false)
 
   // Transform all shipments into calendar events
@@ -42,17 +43,49 @@ export default function AgendaCalendar({ shipments, depotFilter, transportFilter
     return Array.from(depots).sort()
   }, [allEvents])
 
-  // Filter events by active depots
+  // Extract unique transports from events. A TRANSPORTE cell can contain
+  // multiple transports separated by "/", ",", or "+". We split and collect
+  // each canonical name so filters match the same way partner-shipments do.
+  const availableTransports = useMemo(() => {
+    const transports = new Set<string>()
+    for (const e of allEvents) {
+      if (!e.transporte) continue
+      const parts = e.transporte.split(/[/,+]/).map(s => s.trim().toUpperCase()).filter(Boolean)
+      for (const p of parts) transports.add(p)
+    }
+    return Array.from(transports).sort()
+  }, [allEvents])
+
+  // Filter events by active depots + transports
   const filteredEvents = useMemo(() => {
-    if (activeDepots.size === 0) return allEvents
-    return allEvents.filter(e => e.deposito && activeDepots.has(e.deposito.toUpperCase()))
-  }, [allEvents, activeDepots])
+    let list = allEvents
+    if (activeDepots.size > 0) {
+      list = list.filter(e => e.deposito && activeDepots.has(e.deposito.toUpperCase()))
+    }
+    if (activeTransports.size > 0) {
+      list = list.filter(e => {
+        if (!e.transporte) return false
+        const parts = e.transporte.split(/[/,+]/).map(s => s.trim().toUpperCase()).filter(Boolean)
+        return parts.some(p => activeTransports.has(p))
+      })
+    }
+    return list
+  }, [allEvents, activeDepots, activeTransports])
 
   const toggleDepot = useCallback((depot: string) => {
     setActiveDepots(prev => {
       const next = new Set(prev)
       if (next.has(depot)) next.delete(depot)
       else next.add(depot)
+      return next
+    })
+  }, [])
+
+  const toggleTransport = useCallback((transport: string) => {
+    setActiveTransports(prev => {
+      const next = new Set(prev)
+      if (next.has(transport)) next.delete(transport)
+      else next.add(transport)
       return next
     })
   }, [])
@@ -116,13 +149,25 @@ export default function AgendaCalendar({ shipments, depotFilter, transportFilter
     })
   }, [view])
 
-  // Count pending coordination (depot + transporte but no salida)
+  // Count pending coordination — operativas with a container allocated
+  // (CNTR_OP) but still missing something: depósito, transporte, or salida.
+  // Skips already-dispatched ops (SALIDA filled) and rows without a container
+  // allocation (those aren't actionable yet).
   const pendingCount = useMemo(() => {
     let count = 0
     for (const s of shipments) {
       if (!s.operativas) continue
       for (const op of s.operativas) {
-        if (op.DEPOSITO?.trim() && op.TRANSPORTE?.trim() && !op.SALIDA?.trim()) count++
+        const hasCntr = (op.CNTR_OP || s.CNTR || '').trim() !== ''
+        if (!hasCntr) continue
+        const hasSalida = (op.SALIDA || '').trim() !== ''
+        if (hasSalida) continue
+        const missingDepot = !op.DEPOSITO?.trim()
+        const missingTransport = !op.TRANSPORTE?.trim()
+        // Count: missing depot, missing transport, OR both assigned but no salida.
+        if (missingDepot || missingTransport || (!missingDepot && !missingTransport)) {
+          count++
+        }
       }
     }
     return count
@@ -171,6 +216,10 @@ export default function AgendaCalendar({ shipments, depotFilter, transportFilter
         activeDepots={activeDepots}
         onToggleDepot={toggleDepot}
         onClearDepots={() => setActiveDepots(new Set())}
+        availableTransports={availableTransports}
+        activeTransports={activeTransports}
+        onToggleTransport={toggleTransport}
+        onClearTransports={() => setActiveTransports(new Set())}
         pendingCount={pendingCount}
         showPendingSidebar={showPendingSidebar}
         onTogglePendingSidebar={() => setShowPendingSidebar(prev => !prev)}
