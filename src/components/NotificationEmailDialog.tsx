@@ -31,8 +31,9 @@ export const STEP_SUBJECTS: Record<string, (ref: string, cntr: string) => string
   fiscal: (ref, cntr) => `Re: TWF - Salida ${cntr || 'carga'} - Ref ${ref}`,
 }
 
-// Signature image hosted on the TWF Vercel deployment
-const FIRMA_URL = 'https://twfnew-c7v2.vercel.app/images/FIRMA.png'
+// Signature image hosted on the TWF site. Override via VITE_BASE_URL if needed.
+const BASE_URL = import.meta.env.VITE_BASE_URL || 'https://twf.uy'
+const FIRMA_URL = `${BASE_URL}/images/FIRMA.png`
 
 const EMAIL_SIGNATURE = `
 <div style="margin-top:24px;border-top:2px solid #e8762b;padding-top:16px;">

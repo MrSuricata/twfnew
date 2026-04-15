@@ -14,7 +14,6 @@ import {
   BellRinging,
 } from '@phosphor-icons/react'
 
-import NotificationChecklist from './NotificationChecklist'
 import AgendaCalendar from './agenda/AgendaCalendar'
 import ShipmentTracking from './ShipmentTracking'
 import ExcelImport from './ExcelImport'

@@ -7,8 +7,7 @@
 import {
   ShipmentRecord,
   ParsedShipment,
-  OperativasRecord,
-  processShipmentRecord
+  OperativasRecord
 } from '@/lib/shipmentTypes'
 
 // ─── CSV Parsing (RFC 4180 compliant) ────────────────────────────────
@@ -116,24 +115,6 @@ export function parseDate(dateStr: string): string {
 
 // ─── Operativas Sheet Parsing ────────────────────────────────────────
 
-// GID loaded from server-side env only — not bundled in frontend
-const OPERATIVAS_GID = typeof process !== 'undefined' && process.env?.OPERATIVAS_GID || ''
-
-export function buildOperativasUrl(baseUrl: string): string | null {
-  try {
-    if (baseUrl.includes('/edit')) {
-      const sheetId = baseUrl.match(/\/d\/([a-zA-Z0-9-_]+)/)?.[1]
-      if (!sheetId) return null
-      return `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${OPERATIVAS_GID}`
-    }
-    const url = new URL(baseUrl)
-    url.searchParams.set('gid', OPERATIVAS_GID)
-    return url.toString()
-  } catch {
-    return null
-  }
-}
-
 /**
  * Normalize Operativas REF: strip trailing " 1", " 2", " 3" suffixes.
  * e.g. "A6749 1" → "A6749", "A6749 2" → "A6749", "A6749" → "A6749"
@@ -198,21 +179,6 @@ export function parseOperativasData(csvData: string): Map<string, OperativasReco
   }
 
   return opMap
-}
-
-export async function fetchOperativasSheet(baseUrl: string): Promise<Map<string, OperativasRecord[]>> {
-  const operativasUrl = buildOperativasUrl(baseUrl)
-  if (!operativasUrl) return new Map()
-
-  try {
-    const response = await fetch(operativasUrl)
-    if (!response.ok) return new Map()
-    const csvData = await response.text()
-    return parseOperativasData(csvData)
-  } catch {
-    console.warn('No se pudo cargar la hoja Operativas')
-    return new Map()
-  }
 }
 
 // ─── Main Sheet Parsing ──────────────────────────────────────────────
@@ -426,25 +392,3 @@ export function filterShipments(shipments: ParsedShipment[]): ParsedShipment[] {
   })
 }
 
-// ─── Full Sync Function (for background use) ────────────────────────
-
-export async function performFullSync(sheetsUrl: string): Promise<ParsedShipment[]> {
-  const csvUrl = buildCsvUrl(sheetsUrl)
-
-  const [mainResponse, opMap] = await Promise.all([
-    fetch(csvUrl),
-    fetchOperativasSheet(sheetsUrl)
-  ])
-
-  if (!mainResponse.ok) {
-    throw new Error('No se pudo acceder al archivo.')
-  }
-
-  const csvData = await mainResponse.text()
-  const rawRecords = parseMainSheetCSV(csvData)
-  let processed = rawRecords.map(processShipmentRecord)
-  processed = mergeOperativasData(processed, opMap)
-  processed = filterShipments(processed)
-
-  return processed
-}
