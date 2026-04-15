@@ -16,8 +16,13 @@ import ClientPortal from './components/ClientPortal'
 import DepotDashboard from './components/DepotDashboard'
 import TransportDashboard from './components/TransportDashboard'
 import PublicSiteEnhanced from './components/PublicSiteEnhanced'
+import TermsPage from './components/TermsPage'
+import PrivacyPage from './components/PrivacyPage'
+import NotFoundPage from './components/NotFoundPage'
 
-type View = 'public' | 'admin-login' | 'admin-dashboard' | 'client-login' | 'client-portal' | 'partner-login' | 'depot-dashboard' | 'transport-dashboard'
+type View = 'public' | 'admin-login' | 'admin-dashboard' | 'client-login' | 'client-portal' | 'partner-login' | 'depot-dashboard' | 'transport-dashboard' | 'terms' | 'privacy' | 'not-found'
+
+const KNOWN_PATHS = new Set(['/', '/admin', '/portal', '/depot', '/transport', '/partner', '/terminos', '/privacidad'])
 
 // Client accounts are managed server-side via CLIENTS_JSON env var.
 // No hardcoded client data in client bundle.
@@ -53,7 +58,10 @@ function getInitialView(): View {
   if (path === '/admin') return 'admin-login'
   if (path === '/portal') return 'client-login'
   if (path === '/depot' || path === '/transport' || path === '/partner') return 'partner-login'
-  return 'public'
+  if (path === '/terminos') return 'terms'
+  if (path === '/privacidad') return 'privacy'
+  if (path === '/') return 'public'
+  return 'not-found'
 }
 
 function App() {
@@ -358,6 +366,8 @@ function App() {
       'admin-dashboard': '/admin',
       'client-login': '/portal',
       'client-portal': '/portal',
+      'terms': '/terminos',
+      'privacy': '/privacidad',
     }
     const targetPath = pathMap[view] || '/'
     if (window.location.pathname !== targetPath) {
@@ -373,6 +383,14 @@ function App() {
         setCurrentView(isAdminLoggedIn ? 'admin-dashboard' : 'admin-login')
       } else if (path === '/portal') {
         setCurrentView(clientEmail ? 'client-portal' : 'client-login')
+      } else if (path === '/terminos') {
+        setCurrentView('terms')
+      } else if (path === '/privacidad') {
+        setCurrentView('privacy')
+      } else if (path === '/') {
+        setCurrentView('public')
+      } else if (!KNOWN_PATHS.has(path)) {
+        setCurrentView('not-found')
       } else {
         setCurrentView('public')
       }
@@ -550,6 +568,18 @@ function App() {
         shipments={shipments}
       />
     )
+  }
+
+  if (currentView === 'terms') {
+    return <TermsPage onBack={() => navigateTo('public')} />
+  }
+
+  if (currentView === 'privacy') {
+    return <PrivacyPage onBack={() => navigateTo('public')} />
+  }
+
+  if (currentView === 'not-found') {
+    return <NotFoundPage onGoHome={() => navigateTo('public')} />
   }
 
   return (

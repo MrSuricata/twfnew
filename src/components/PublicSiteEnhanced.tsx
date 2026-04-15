@@ -1250,11 +1250,21 @@ export default function PublicSite({
             <div>
               <h4 className="font-semibold mb-4 text-primary-foreground/90">Legal</h4>
               <ul className="space-y-2 text-sm text-primary-foreground/60">
-                <li className="hover:text-primary-foreground transition-colors cursor-default">
-                  {t.footerNav.terms}
+                <li>
+                  <a
+                    href="/terminos"
+                    className="hover:text-primary-foreground transition-colors"
+                  >
+                    {t.footerNav.terms}
+                  </a>
                 </li>
-                <li className="hover:text-primary-foreground transition-colors cursor-default">
-                  {t.footerNav.privacy}
+                <li>
+                  <a
+                    href="/privacidad"
+                    className="hover:text-primary-foreground transition-colors"
+                  >
+                    {t.footerNav.privacy}
+                  </a>
                 </li>
               </ul>
             </div>
