@@ -1,7 +1,12 @@
 import { useState, useMemo, useCallback } from 'react'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
+import { parseLocalDate } from '@/lib/shipmentTypes'
 import type { AgendaView, CalendarEvent } from '@/lib/agendaTypes'
 import { shipmentsToEvents, groupEventsByDate, countAlertsInRange, getWeekDates, toDateKey } from '@/lib/agendaUtils'
+
+// Shipment is "pending to coordinate" only if it's already at MVD port or
+// arrives within this many days. Farther-out ETAs aren't actionable yet.
+const PENDING_WINDOW_DAYS = 4
 
 import AgendaToolbar from './AgendaToolbar'
 import AgendaDayView from './AgendaDayView'
@@ -150,10 +155,14 @@ export default function AgendaCalendar({ shipments, depotFilter, transportFilter
   }, [view])
 
   // Count pending coordination — operativas with a container allocated
-  // (CNTR_OP) but still missing something: depósito, transporte, or salida.
-  // Skips already-dispatched ops (SALIDA filled) and rows without a container
-  // allocation (those aren't actionable yet).
+  // (CNTR_OP), not yet dispatched (no SALIDA), AND the ship is already in
+  // Montevideo or arrives within PENDING_WINDOW_DAYS. Farther ETAs aren't
+  // urgent. Within the window, anything missing (depot, transport, or just
+  // salida date) counts as pending.
   const pendingCount = useMemo(() => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const MS_DAY = 24 * 60 * 60 * 1000
     let count = 0
     for (const s of shipments) {
       if (!s.operativas) continue
@@ -162,12 +171,13 @@ export default function AgendaCalendar({ shipments, depotFilter, transportFilter
         if (!hasCntr) continue
         const hasSalida = (op.SALIDA || '').trim() !== ''
         if (hasSalida) continue
-        const missingDepot = !op.DEPOSITO?.trim()
-        const missingTransport = !op.TRANSPORTE?.trim()
-        // Count: missing depot, missing transport, OR both assigned but no salida.
-        if (missingDepot || missingTransport || (!missingDepot && !missingTransport)) {
-          count++
-        }
+        // ETA: use operativa-specific ETA_OP if present, fall back to shipment ETA
+        const etaStr = (op.ETA_OP || s.ETA || '').trim()
+        const etaDate = parseLocalDate(etaStr)
+        if (!etaDate) continue // No ETA → not actionable yet
+        const daysUntilEta = Math.ceil((etaDate.getTime() - today.getTime()) / MS_DAY)
+        if (daysUntilEta > PENDING_WINDOW_DAYS) continue
+        count++
       }
     }
     return count
@@ -269,6 +279,7 @@ export default function AgendaCalendar({ shipments, depotFilter, transportFilter
         {showPendingSidebar && !partnerView && (
           <AgendaPendingSidebar
             shipments={shipments}
+            windowDays={PENDING_WINDOW_DAYS}
             onClose={() => setShowPendingSidebar(false)}
             onSelectShipment={handleSelectShipmentDirect}
           />
