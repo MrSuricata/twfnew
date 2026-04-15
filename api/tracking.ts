@@ -17,9 +17,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!q) {
     return res.status(400).json({ error: 'Query parameter "q" is required' })
   }
-  // SECURITY: Require minimum 3 chars to prevent bulk enumeration
-  if (q.length < 3) {
-    return res.status(400).json({ error: 'Query must be at least 3 characters' })
+  // SECURITY: Require minimum 5 chars to prevent bulk enumeration
+  if (q.length < 5) {
+    return res.status(400).json({ error: 'Query must be at least 5 characters' })
   }
 
   // Strategy: try Google Sheets live first, fallback to Supabase cache
@@ -65,11 +65,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({ results: [], source: 'none' })
   }
 
-  // Search by REF, CNTR, or MBL
+  // Search by REF, CNTR, or MBL — exact match or startsWith only (prevents enumeration scraping)
+  const matches = (field: any): boolean => {
+    if (!field) return false
+    const v = String(field).toLowerCase()
+    return v === q || v.startsWith(q)
+  }
   const filtered = allShipments.filter((r: any) =>
-    r.REF?.toLowerCase().includes(q) ||
-    r.CNTR?.toLowerCase().includes(q) ||
-    r.MBL?.toLowerCase().includes(q)
+    matches(r.REF) ||
+    matches(r.CNTR) ||
+    matches(r.MBL)
   )
 
   // Return results without sensitive financial fields

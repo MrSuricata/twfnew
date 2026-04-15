@@ -600,14 +600,22 @@ async function handlePartnerShipments(req: VercelRequest, res: VercelResponse, d
   if (error && error.code !== 'PGRST116') throw error
 
   const allShipments: any[] = data?.data || []
+  // Support both legacy (depotName/transportName) and new (filterValue) JWT payloads.
+  const rawFilter: string = payload.filterValue || payload.depotName || payload.transportName || ''
+  const filterValueUpper = rawFilter.trim().toUpperCase()
   const filtered = allShipments.map((shipment: any) => {
     const operativas: any[] = shipment.operativas || []
     const matchingOps = operativas.filter((op: any) => {
       if (payload.role === 'depot') {
-        return (op.DEPOSITO || '').toLowerCase() === (payload.depotName || '').toLowerCase()
+        return (op.DEPOSITO || '').trim().toUpperCase() === filterValueUpper
       }
       if (payload.role === 'transport') {
-        return (op.TRANSPORTE || '').toLowerCase().includes((payload.transportName || '').toLowerCase())
+        // Exact match case-insensitive — split on common separators
+        // ("/", ",", "+") to support entries like "MARITIMA / URUGUAY".
+        const raw: string = op.TRANSPORTE || ''
+        if (!raw) return false
+        const parts = raw.split(/[\/,+]/).map((t: string) => t.trim().toUpperCase()).filter(Boolean)
+        return parts.some((t: string) => t === filterValueUpper)
       }
       return false
     })

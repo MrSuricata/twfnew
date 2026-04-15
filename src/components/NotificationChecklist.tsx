@@ -48,6 +48,8 @@ const STEP_ICONS: Record<NotificationStep, string> = {
   fiscal: '📦',
 }
 
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
 export default function NotificationChecklist({ shipments, originPhotos, reports }: NotificationChecklistProps) {
   const [tasks, setTasks] = useState<NotificationTask[]>([])
   const [loading, setLoading] = useState(true)
@@ -216,7 +218,7 @@ export default function NotificationChecklist({ shipments, originPhotos, reports
     if (!trimmed) { toast.error('Ingresá al menos un email'); return }
     // Basic validation: all comma-separated parts should look like emails
     const emails = trimmed.split(',').map(e => e.trim()).filter(Boolean)
-    const invalid = emails.find(e => !e.includes('@') || !e.includes('.'))
+    const invalid = emails.find(e => !EMAIL_REGEX.test(e))
     if (invalid) { toast.error(`Email inválido: ${invalid}`); return }
 
     setSavingEmailId(taskId)

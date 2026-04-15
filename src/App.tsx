@@ -80,6 +80,13 @@ function App() {
   const dbLoadedRef = useRef(false)
   const dbLoadingRef = useRef(false) // Guard against concurrent calls
 
+  // Track pending writes so loadDataFromDB doesn't clobber local edits made
+  // by the user before the initial DB load completes.
+  const pendingClientWritesRef = useRef(0)
+  const pendingDocumentsWritesRef = useRef(0)
+  const pendingReportsWritesRef = useRef(0)
+  const pendingQuotesWritesRef = useRef(0)
+
   // ── Load data from Supabase when admin logs in ──
   const loadDataFromDB = useCallback(async () => {
     if (dbLoadedRef.current || dbLoadingRef.current) return
@@ -96,22 +103,24 @@ function App() {
         saveToStorage('twf-shipments', filtered)
       }
 
-      if (data.quotes.length > 0 || data.quotes.length === 0) {
+      if (pendingQuotesWritesRef.current === 0) {
         setQuotes(data.quotes)
         saveToStorage('twf-quotes', data.quotes)
       }
 
-      if (data.documents.length > 0 || data.documents.length === 0) {
+      if (pendingDocumentsWritesRef.current === 0) {
         setDocuments(data.documents)
         saveToStorage('twf-documents', data.documents)
       }
 
-      if (data.reports.length > 0 || data.reports.length === 0) {
+      if (pendingReportsWritesRef.current === 0) {
         setReports(data.reports)
         saveToStorage('twf-reports', data.reports)
       }
 
-      if (data.clients.length > 0) {
+      // If the user performed (or is performing) a client write locally before
+      // DB load completed, don't clobber their changes with the older DB snapshot.
+      if (pendingClientWritesRef.current === 0 && data.clients.length > 0) {
         setClients(data.clients)
         saveToStorage('twf-clients', data.clients)
       }
@@ -239,12 +248,17 @@ function App() {
   const handleUpdateClients = (updated: ClientAccount[]) => {
     setClients(updated)
     saveToStorage('twf-clients', updated)
-    // Save to Supabase so clients are shared across machines + OTP works
-    // Only write if DB data was loaded (prevents stale localStorage overwriting fresh DB)
-    if (isAdminLoggedIn && dataFresh) {
-      saveClients(updated).catch(err =>
-        console.warn('[DB] Failed to save clients:', err)
-      )
+    // Save to Supabase so clients are shared across machines + OTP works.
+    // Always persist when admin is logged in (even if initial DB load hasn't
+    // finished) — otherwise explicit user deletes/edits would only hit
+    // localStorage and get reverted when loadDataFromDB resolves.
+    if (isAdminLoggedIn) {
+      pendingClientWritesRef.current += 1
+      saveClients(updated)
+        .catch(err => console.warn('[DB] Failed to save clients:', err))
+        .finally(() => {
+          pendingClientWritesRef.current = Math.max(0, pendingClientWritesRef.current - 1)
+        })
     }
   }
 
@@ -257,23 +271,35 @@ function App() {
   const handleUpdateDocuments = (docs: ShipmentDocument[]) => {
     setDocuments(docs)
     saveToStorage('twf-documents', docs)
-    // Save to Supabase in background (only if fresh data was loaded)
-    if (isAdminLoggedIn && dataFresh) {
-      saveDocuments(docs).catch(err =>
-        console.warn('[DB] Failed to save documents:', err)
-      )
+    // Save to Supabase. Always persist when admin is logged in (even if initial
+    // DB load hasn't finished) — otherwise explicit user edits would only hit
+    // localStorage and get reverted when loadDataFromDB resolves.
+    if (isAdminLoggedIn) {
+      pendingDocumentsWritesRef.current += 1
+      saveDocuments(docs)
+        .catch(err => console.warn('[DB] Failed to save documents:', err))
+        .finally(() => {
+          pendingDocumentsWritesRef.current = Math.max(0, pendingDocumentsWritesRef.current - 1)
+        })
     }
   }
 
   const handleUpdateReports = (updated: OperativeReport[]) => {
     setReports(updated)
     saveToStorage('twf-reports', updated)
-    // Save to Supabase in background (only if fresh data was loaded)
-    if (isAdminLoggedIn && dataFresh) {
-      saveReports(updated).catch(err => {
-        console.warn('[DB] Failed to save reports:', err)
-        toast.warning('Error al sincronizar informes con la base de datos', { duration: 5000 })
-      })
+    // Save to Supabase. Always persist when admin is logged in (even if initial
+    // DB load hasn't finished) — otherwise explicit user edits would only hit
+    // localStorage and get reverted when loadDataFromDB resolves.
+    if (isAdminLoggedIn) {
+      pendingReportsWritesRef.current += 1
+      saveReports(updated)
+        .catch(err => {
+          console.warn('[DB] Failed to save reports:', err)
+          toast.warning('Error al sincronizar informes con la base de datos', { duration: 5000 })
+        })
+        .finally(() => {
+          pendingReportsWritesRef.current = Math.max(0, pendingReportsWritesRef.current - 1)
+        })
     }
   }
 
@@ -287,11 +313,16 @@ function App() {
   const handleUpdateQuotes = (updated: QuoteFormData[]) => {
     setQuotes(updated)
     saveToStorage('twf-quotes', updated)
-    // Save to Supabase in background (only if fresh data was loaded)
-    if (isAdminLoggedIn && dataFresh) {
-      saveQuotes(updated).catch(err =>
-        console.warn('[DB] Failed to save quotes:', err)
-      )
+    // Save to Supabase. Always persist when admin is logged in (even if initial
+    // DB load hasn't finished) — otherwise explicit user edits would only hit
+    // localStorage and get reverted when loadDataFromDB resolves.
+    if (isAdminLoggedIn) {
+      pendingQuotesWritesRef.current += 1
+      saveQuotes(updated)
+        .catch(err => console.warn('[DB] Failed to save quotes:', err))
+        .finally(() => {
+          pendingQuotesWritesRef.current = Math.max(0, pendingQuotesWritesRef.current - 1)
+        })
     }
   }
 

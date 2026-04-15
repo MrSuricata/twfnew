@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { FilePdf, FileXls, Boat, Package, Clock, Users, Truck, Warehouse, Cube, CaretLeft, CaretRight } from '@phosphor-icons/react'
-import { ParsedShipment, OperativasRecord } from '@/lib/shipmentTypes'
+import { ParsedShipment, OperativasRecord, parseLocalDate } from '@/lib/shipmentTypes'
 import { exportToCSV, exportToPDF } from '@/lib/exportUtils'
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
@@ -15,8 +15,8 @@ const COLORS = ['#E8965A', '#2B4162', '#12664F', '#D4A373', '#8B5A3C', '#5B8C5A'
 function getYearFromDate(dateStr: string): number | null {
   if (!dateStr) return null
   try {
-    const d = new Date(dateStr)
-    if (isNaN(d.getTime())) return null
+    const d = parseLocalDate(dateStr)
+    if (!d) return null
     return d.getFullYear()
   } catch {
     return null
@@ -54,7 +54,8 @@ export default function AnalyticsDashboard({ shipments }: AnalyticsDashboardProp
 
     yearShipments.forEach(s => {
       if (s.ETA) {
-        const date = new Date(s.ETA)
+        const date = parseLocalDate(s.ETA)
+        if (!date) return
         const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
         if (monthKey <= currentMonth) {
           monthCounts[monthKey] = (monthCounts[monthKey] || 0) + 1
@@ -123,8 +124,9 @@ export default function AnalyticsDashboard({ shipments }: AnalyticsDashboardProp
 
     yearShipments.forEach(s => {
       if (s.ETD && s.ETA) {
-        const etd = new Date(s.ETD)
-        const eta = new Date(s.ETA)
+        const etd = parseLocalDate(s.ETD)
+        const eta = parseLocalDate(s.ETA)
+        if (!etd || !eta) return
         const days = Math.floor((eta.getTime() - etd.getTime()) / (1000 * 60 * 60 * 24))
         if (days > 0 && days < 365) {
           transits.push(days)

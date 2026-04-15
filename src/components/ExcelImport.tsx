@@ -58,22 +58,14 @@ export default function ExcelImport({ onImportComplete, shipmentRecords = [], on
     localStorage.setItem('twf-sync-interval', String(syncInterval))
   }, [syncInterval])
 
-  // Auto-sync via server API
+  // Auto-sync is handled globally by App.tsx (reads twf-auto-sync/twf-sync-interval from localStorage).
+  // This component only exposes the toggle + manual sync; the global interval drives actual fetches
+  // to avoid duplicate concurrent calls when the user is on the "Importar" tab.
+
+  // Keep local view in sync with prop updates (e.g. when global auto-sync refreshes shipments)
   useEffect(() => {
-    if (!autoSyncEnabled) return
-
-    const syncData = async () => {
-      try {
-        await performServerSync(true)
-      } catch (error) {
-        console.error('Auto-sync error:', error)
-      }
-    }
-
-    syncData()
-    const intervalId = setInterval(syncData, (syncInterval || 5) * 60 * 1000)
-    return () => clearInterval(intervalId)
-  }, [autoSyncEnabled, syncInterval])
+    setLocalShipmentRecords(shipmentRecords)
+  }, [shipmentRecords])
 
   // ── Server-side sync via API ──
   const performServerSync = async (isSilent: boolean = false) => {

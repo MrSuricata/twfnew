@@ -39,7 +39,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       role: 'depot',
       email: payload.email,
       name: payload.name,
-      filterValue: payload.depotName,
+      filterValue: payload.filterValue || payload.depotName,
     })
   }
 
@@ -48,7 +48,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       role: 'transport',
       email: payload.email,
       name: payload.name,
-      filterValue: payload.transportName,
+      filterValue: payload.filterValue || payload.transportName,
     })
   }
 

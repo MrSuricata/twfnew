@@ -36,7 +36,7 @@ import {
   Funnel,
   Boat,
 } from '@phosphor-icons/react'
-import { ParsedShipment, getShipmentStatus, generateShipmentAlerts, isShipmentCompleted, ShipmentAlert } from '@/lib/shipmentTypes'
+import { ParsedShipment, getShipmentStatus, generateShipmentAlerts, isShipmentCompleted, ShipmentAlert, parseLocalDate } from '@/lib/shipmentTypes'
 import { ClientAccount, OperativeReport, OriginPhoto } from '@/lib/quotationTypes'
 import { toast } from 'sonner'
 import { authFetch } from '@/lib/authClient'
@@ -125,8 +125,10 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
   const getDaysUntilFree = (libreHasta: string): number => {
     if (!libreHasta) return 999
     try {
-      const freeDate = new Date(libreHasta)
+      const freeDate = parseLocalDate(libreHasta)
+      if (!freeDate) return 999
       const today = new Date()
+      today.setHours(0, 0, 0, 0)
       const diff = Math.floor((freeDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
       return diff
     } catch {
@@ -180,19 +182,29 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
 
     // Date range filter (by ETA)
     if (filterDateFrom) {
-      const from = new Date(filterDateFrom)
-      filtered = filtered.filter(s => {
-        if (!s.ETA) return false
-        try { return new Date(s.ETA) >= from } catch { return true }
-      })
+      const from = parseLocalDate(filterDateFrom)
+      if (from) {
+        filtered = filtered.filter(s => {
+          if (!s.ETA) return false
+          try {
+            const etaDate = parseLocalDate(s.ETA)
+            return etaDate ? etaDate >= from : true
+          } catch { return true }
+        })
+      }
     }
     if (filterDateTo) {
-      const to = new Date(filterDateTo)
-      to.setHours(23, 59, 59)
-      filtered = filtered.filter(s => {
-        if (!s.ETA) return true
-        try { return new Date(s.ETA) <= to } catch { return true }
-      })
+      const to = parseLocalDate(filterDateTo)
+      if (to) {
+        to.setHours(23, 59, 59)
+        filtered = filtered.filter(s => {
+          if (!s.ETA) return true
+          try {
+            const etaDate = parseLocalDate(s.ETA)
+            return etaDate ? etaDate <= to : true
+          } catch { return true }
+        })
+      }
     }
 
     return filtered

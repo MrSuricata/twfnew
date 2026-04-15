@@ -104,7 +104,7 @@ export interface ShipmentAlert {
  * new Date("2026-03-13") → UTC midnight → in UTC-3 becomes March 12 21:00!
  * This function parses it as local midnight instead.
  */
-function parseLocalDate(s: string): Date | null {
+export function parseLocalDate(s: string): Date | null {
   if (!s || s.trim() === '') return null
   const parts = s.split('-')
   if (parts.length === 3) {
