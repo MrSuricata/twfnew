@@ -1,12 +1,15 @@
 import type { CalendarEvent } from '@/lib/agendaTypes'
 import { getOperativaColor } from '@/lib/agendaTypes'
 import { formatDateShort, daysUntil } from '@/lib/agendaUtils'
+import { copyToClipboard } from '@/lib/clipboard'
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
+
+const COPY_CLASS = 'hover:bg-accent/10 hover:text-accent transition-colors cursor-pointer rounded px-1 -mx-1'
 
 interface AgendaEventCardProps {
   event: CalendarEvent
@@ -33,7 +36,25 @@ export default function AgendaEventCard({ event, compact = true, onClick }: Agen
           {/* Row 1: REF + tipo operativa */}
           <div className="flex items-center gap-1.5 min-w-0">
             <span className="text-[11px]">{opColor.dot}</span>
-            <span className="text-xs font-bold text-foreground truncate">{event.ref}</span>
+            <span
+              role="button"
+              tabIndex={0}
+              title="Click para copiar"
+              onClick={(e) => {
+                e.stopPropagation()
+                copyToClipboard(event.ref, 'REF')
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  copyToClipboard(event.ref, 'REF')
+                }
+              }}
+              className={`text-xs font-bold text-foreground truncate ${COPY_CLASS}`}
+            >
+              {event.ref}
+            </span>
             <span className={`text-[10px] font-medium truncate ${opColor.textColor}`}>
               · {event.operativa}
             </span>
@@ -42,7 +63,26 @@ export default function AgendaEventCard({ event, compact = true, onClick }: Agen
           {/* Row 2: Container + type */}
           {event.cntr && (
             <div className="text-[11px] text-muted-foreground font-mono truncate">
-              {event.cntr}{event.tipo ? ` · ${event.tipo}` : ''}
+              <span
+                role="button"
+                tabIndex={0}
+                title="Click para copiar"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  copyToClipboard(event.cntr, 'CNTR')
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    copyToClipboard(event.cntr, 'CNTR')
+                  }
+                }}
+                className={COPY_CLASS}
+              >
+                {event.cntr}
+              </span>
+              {event.tipo ? ` · ${event.tipo}` : ''}
             </div>
           )}
 
@@ -132,7 +172,25 @@ export default function AgendaEventCard({ event, compact = true, onClick }: Agen
         {/* Header: REF + Operativa badge + Alerts */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-base font-bold text-foreground">{event.ref}</span>
+            <span
+              role="button"
+              tabIndex={0}
+              title="Click para copiar"
+              onClick={(e) => {
+                e.stopPropagation()
+                copyToClipboard(event.ref, 'REF')
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  copyToClipboard(event.ref, 'REF')
+                }
+              }}
+              className={`text-base font-bold text-foreground ${COPY_CLASS}`}
+            >
+              {event.ref}
+            </span>
             <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${opColor.bg} ${opColor.textColor}`}>
               {event.operativa}
             </span>
@@ -223,7 +281,29 @@ export default function AgendaEventCard({ event, compact = true, onClick }: Agen
 
         {/* Container details */}
         <div className="flex items-center gap-3 text-xs bg-muted/30 rounded-lg px-3 py-2">
-          <span className="font-mono font-bold text-foreground">{event.cntr || '—'}</span>
+          {event.cntr ? (
+            <span
+              role="button"
+              tabIndex={0}
+              title="Click para copiar"
+              onClick={(e) => {
+                e.stopPropagation()
+                copyToClipboard(event.cntr, 'CNTR')
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  copyToClipboard(event.cntr, 'CNTR')
+                }
+              }}
+              className={`font-mono font-bold text-foreground ${COPY_CLASS}`}
+            >
+              {event.cntr}
+            </span>
+          ) : (
+            <span className="font-mono font-bold text-foreground">—</span>
+          )}
           {event.tipo && (
             <span className="text-muted-foreground">· {event.tipo}</span>
           )}

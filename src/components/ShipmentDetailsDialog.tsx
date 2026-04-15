@@ -31,6 +31,7 @@ import {
   DownloadSimple
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
+import { copyToClipboard } from '@/lib/clipboard'
 import { ParsedShipment, getShipmentStatus } from '@/lib/shipmentTypes'
 import { ShipmentDocument, OperativeReport, OriginPhoto } from '@/lib/quotationTypes'
 import { fetchReportFile } from '@/lib/dataClient'
@@ -160,7 +161,12 @@ export default function ShipmentDetailsDialog({
                 Detalles de Carga
               </DialogTitle>
               <p className="text-sm text-muted-foreground mt-2">
-                REF: <span className="font-mono font-semibold text-foreground text-base">{editedShipment.REF}</span>
+                REF: <button
+                  type="button"
+                  title="Click para copiar"
+                  onClick={() => copyToClipboard(editedShipment.REF, 'REF')}
+                  className="font-mono font-semibold text-foreground text-base hover:bg-accent/10 hover:text-accent transition-colors cursor-pointer rounded px-1 -mx-1"
+                >{editedShipment.REF}</button>
                 {!clientView && editedShipment.CLIENTE && (
                   <span className="ml-4">
                     Cliente: <span className="font-semibold text-foreground">{editedShipment.CLIENTE}</span>
@@ -552,7 +558,18 @@ export default function ShipmentDetailsDialog({
                               {/* Container header */}
                               <div className="flex items-center justify-between px-4 py-2.5 bg-muted/30 border-b">
                                 <div className="flex items-center gap-2">
-                                  <span className="font-mono font-bold text-sm">{op.CNTR_OP || `Contenedor ${idx + 1}`}</span>
+                                  {op.CNTR_OP ? (
+                                    <button
+                                      type="button"
+                                      title="Click para copiar"
+                                      onClick={() => copyToClipboard(op.CNTR_OP, 'CNTR')}
+                                      className="font-mono font-bold text-sm hover:bg-accent/10 hover:text-accent transition-colors cursor-pointer rounded px-1 -mx-1"
+                                    >
+                                      {op.CNTR_OP}
+                                    </button>
+                                  ) : (
+                                    <span className="font-mono font-bold text-sm">{`Contenedor ${idx + 1}`}</span>
+                                  )}
                                   {op.TIPO && (
                                     <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 font-medium">{op.TIPO}</Badge>
                                   )}
@@ -989,7 +1006,18 @@ export default function ShipmentDetailsDialog({
                         >
                           {/* Header row */}
                           <div className="flex items-center gap-2 px-3 py-2 bg-muted/30 border-b">
-                            <span className="font-mono font-bold text-xs">{op.CNTR_OP || `#${idx + 1}`}</span>
+                            {op.CNTR_OP ? (
+                              <button
+                                type="button"
+                                title="Click para copiar"
+                                onClick={() => copyToClipboard(op.CNTR_OP, 'CNTR')}
+                                className="font-mono font-bold text-xs hover:bg-accent/10 hover:text-accent transition-colors cursor-pointer rounded px-1 -mx-1"
+                              >
+                                {op.CNTR_OP}
+                              </button>
+                            ) : (
+                              <span className="font-mono font-bold text-xs">{`#${idx + 1}`}</span>
+                            )}
                             {op.TIPO && <Badge variant="outline" className="text-[10px] h-4 px-1.5">{op.TIPO}</Badge>}
                             {op.OPERATIVA && (
                               <Badge className={`text-[10px] h-4 px-1.5 ml-auto ${

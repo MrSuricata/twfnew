@@ -15,7 +15,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { FileXls, ChatCircleText, Clock, CheckCircle, XCircle, Trophy } from '@phosphor-icons/react'
+import { FileXls, ChatCircleText, Clock, CheckCircle, XCircle, Trophy, FileText } from '@phosphor-icons/react'
 import { QuoteFormData, QuoteStatus, QuoteNote } from '@/lib/quotationTypes'
 import { exportQuotesToExcel } from '@/lib/exportUtils'
 import { toast } from 'sonner'
@@ -181,8 +181,21 @@ export default function QuotesManagement({ quotes, onUpdateQuote }: QuotesManage
         </CardHeader>
         <CardContent>
           {sortedQuotes.length === 0 ? (
-            <div className="text-center py-12 text-muted-foreground">
-              No hay cotizaciones para mostrar
+            <div className="text-center py-12 px-6">
+              <FileText size={48} className="mx-auto mb-4 text-muted-foreground" />
+              <h3 className="text-lg font-semibold mb-2">
+                {filterStatus === 'all' ? 'No hay cotizaciones aún' : 'Sin cotizaciones en este estado'}
+              </h3>
+              <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                {filterStatus === 'all'
+                  ? 'Las solicitudes enviadas por el formulario público aparecerán acá.'
+                  : 'Probá cambiar el filtro para ver cotizaciones en otros estados.'}
+              </p>
+              {filterStatus !== 'all' && (
+                <Button variant="outline" size="sm" className="mt-4" onClick={() => setFilterStatus('all')}>
+                  Ver todas
+                </Button>
+              )}
             </div>
           ) : (
             <div className="overflow-x-auto">

@@ -26,7 +26,17 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { UserPlus, Trash, PencilSimple, Warehouse, Truck, ShieldCheck } from '@phosphor-icons/react'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { UserPlus, Trash, PencilSimple, Warehouse, Truck, ShieldCheck, CircleNotch } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import { authFetch } from '@/lib/authClient'
 
@@ -63,6 +73,8 @@ export default function PartnerManager() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [form, setForm] = useState<PartnerForm>(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
+  const [deleteUser, setDeleteUser] = useState<PartnerUser | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -147,8 +159,7 @@ export default function PartnerManager() {
   }
 
   const handleDelete = async (user: PartnerUser) => {
-    if (!window.confirm(`¿Eliminar partner ${user.name}?`)) return
-
+    setIsDeleting(true)
     try {
       const res = await authFetch(`/api/data/partner-users?id=${user.id}`, {
         method: 'DELETE',
@@ -157,9 +168,12 @@ export default function PartnerManager() {
       if (!res.ok) throw new Error('Error al eliminar')
 
       toast.success('Partner eliminado')
+      setDeleteUser(null)
       fetchUsers()
     } catch {
       toast.error('Error al eliminar partner')
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -214,8 +228,8 @@ export default function PartnerManager() {
           <CardContent className="pt-12 pb-12 text-center">
             <UserPlus size={48} className="mx-auto mb-4 text-muted-foreground" />
             <h3 className="text-lg font-semibold mb-2">No hay partners</h3>
-            <p className="text-muted-foreground mb-4">
-              Crea el primer usuario partner para depósitos o transportes
+            <p className="text-sm text-muted-foreground mb-4 max-w-md mx-auto">
+              Agregá tus primeros partners (depósitos y transportes) para darles acceso a su agenda.
             </p>
             <Button onClick={openNew} className="bg-accent text-accent-foreground hover:bg-accent/90">
               <UserPlus size={20} className="mr-2" />
@@ -265,7 +279,7 @@ export default function PartnerManager() {
                           <Button variant="ghost" size="sm" onClick={() => openEdit(user)}>
                             <PencilSimple size={16} />
                           </Button>
-                          <Button variant="ghost" size="sm" onClick={() => handleDelete(user)} className="text-destructive hover:text-destructive">
+                          <Button variant="ghost" size="sm" onClick={() => setDeleteUser(user)} className="text-destructive hover:text-destructive">
                             <Trash size={16} />
                           </Button>
                         </div>
@@ -369,14 +383,45 @@ export default function PartnerManager() {
               <Button
                 onClick={handleSave}
                 disabled={saving}
-                className="bg-accent text-accent-foreground hover:bg-accent/90"
+                className="bg-accent text-accent-foreground hover:bg-accent/90 gap-2"
               >
-                {saving ? 'Guardando...' : editingId ? 'Actualizar' : 'Crear'}
+                {saving ? (
+                  <><CircleNotch size={16} className="animate-spin" /> Guardando...</>
+                ) : editingId ? 'Actualizar' : 'Crear'}
               </Button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!deleteUser} onOpenChange={(open) => { if (!open && !isDeleting) setDeleteUser(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar partner?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción eliminará a {deleteUser?.name} ({deleteUser?.email}) permanentemente.
+              El usuario perderá acceso al portal de {deleteUser?.role === 'depot' ? 'depósito' : 'transporte'}.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                if (deleteUser) handleDelete(deleteUser)
+              }}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 gap-2"
+            >
+              {isDeleting ? (
+                <><CircleNotch size={16} className="animate-spin" /> Eliminando...</>
+              ) : (
+                'Eliminar'
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
