@@ -274,6 +274,30 @@ export async function saveClients(clients: ClientAccount[]): Promise<void> {
 }
 
 /**
+ * Admin-only: request a client session token for the given email without
+ * going through the OTP flow. Used to "view portal as client X" for QA/debug.
+ * Returns the same shape as /api/auth/otp verify: { token, role, email, name, company }.
+ */
+export async function impersonateClient(email: string): Promise<{
+  token: string
+  role: 'client'
+  email: string
+  name: string
+  company: string
+}> {
+  const res = await authFetch('/api/auth/impersonate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+/**
  * Save a client email inline from the notification checklist.
  * Updates existing client or creates a new one with clientePattern = CLIENTE value.
  */

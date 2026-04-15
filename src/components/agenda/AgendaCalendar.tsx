@@ -22,6 +22,7 @@ export default function AgendaCalendar({ shipments, depotFilter, transportFilter
   const [view, setView] = useState<AgendaView>('week')
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedShipment, setSelectedShipment] = useState<ParsedShipment | null>(null)
+  const [selectedCntr, setSelectedCntr] = useState<string | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
   const [activeDepots, setActiveDepots] = useState<Set<string>>(new Set())
   const [showPendingSidebar, setShowPendingSidebar] = useState(false)
@@ -130,11 +131,13 @@ export default function AgendaCalendar({ shipments, depotFilter, transportFilter
   // Event selection → open shipment details
   const handleSelectShipment = useCallback((event: CalendarEvent) => {
     setSelectedShipment(event.shipment)
+    setSelectedCntr(event.cntr || null)
     setDialogOpen(true)
   }, [])
 
   const handleSelectShipmentDirect = useCallback((shipment: ParsedShipment) => {
     setSelectedShipment(shipment)
+    setSelectedCntr(null)
     setDialogOpen(true)
   }, [])
 
@@ -212,8 +215,9 @@ export default function AgendaCalendar({ shipments, depotFilter, transportFilter
           )}
         </div>
 
-        {/* Pending coordination sidebar */}
-        {showPendingSidebar && (
+        {/* Pending coordination sidebar — admin-only (meaningless to a
+            single partner since they only see their own depot/transport). */}
+        {showPendingSidebar && !partnerView && (
           <AgendaPendingSidebar
             shipments={shipments}
             onClose={() => setShowPendingSidebar(false)}
@@ -230,6 +234,7 @@ export default function AgendaCalendar({ shipments, depotFilter, transportFilter
         onSave={() => {}} // Read-only from agenda
         clientView={false}
         partnerView={partnerView}
+        highlightCntr={selectedCntr}
       />
     </div>
   )

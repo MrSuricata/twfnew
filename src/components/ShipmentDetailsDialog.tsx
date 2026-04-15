@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -47,6 +47,7 @@ interface ShipmentDetailsDialogProps {
   reports?: OperativeReport[]
   originPhotos?: OriginPhoto[]
   onUpdateOriginPhotos?: (photos: OriginPhoto[]) => void
+  highlightCntr?: string | null
 }
 
 export default function ShipmentDetailsDialog({
@@ -60,14 +61,27 @@ export default function ShipmentDetailsDialog({
   reports = [],
   originPhotos = [],
   onUpdateOriginPhotos,
+  highlightCntr = null,
 }: ShipmentDetailsDialogProps) {
   const [editedShipment, setEditedShipment] = useState<ParsedShipment | null>(null)
+  const highlightedCntrRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     if (open && shipment) {
       setEditedShipment({ ...shipment })
     }
   }, [open, shipment])
+
+  // Scroll to highlighted container when dialog opens
+  useEffect(() => {
+    if (open && highlightCntr && highlightedCntrRef.current) {
+      // Wait for dialog animation / tab render
+      const t = setTimeout(() => {
+        highlightedCntrRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }, 250)
+      return () => clearTimeout(t)
+    }
+  }, [open, highlightCntr, editedShipment])
 
   const handleOpen = (isOpen: boolean) => {
     if (!isOpen) {
@@ -161,7 +175,7 @@ export default function ShipmentDetailsDialog({
         </DialogHeader>
 
         <Tabs defaultValue={clientView ? "tracking" : "general"} className="w-full mt-4">
-          <TabsList className={`grid w-full ${partnerView ? 'grid-cols-3' : clientView ? 'grid-cols-4' : 'grid-cols-5'}`}>
+          <TabsList className={`grid w-full ${partnerView ? 'grid-cols-2' : clientView ? 'grid-cols-4' : 'grid-cols-5'}`}>
             {partnerView ? (
               <>
                 <TabsTrigger value="general">
@@ -172,15 +186,8 @@ export default function ShipmentDetailsDialog({
                   <Truck size={18} className="mr-2" />
                   <span className="hidden sm:inline">Operativa</span>
                 </TabsTrigger>
-                <TabsTrigger value="photos" className="relative">
-                  <Package size={18} className="mr-2" />
-                  <span className="hidden sm:inline">Fotos</span>
-                  {(() => {
-                    const cnt = originPhotos.filter(p => p.shipmentRef === editedShipment.REF).length
-                    if (cnt === 0) return null
-                    return <span className="ml-1 text-[10px] font-bold rounded-full min-w-[16px] h-[16px] flex items-center justify-center bg-accent text-accent-foreground">{cnt}</span>
-                  })()}
-                </TabsTrigger>
+                {/* "Fotos" tab intentionally hidden in partnerView until
+                    partner-scoped photo fetch is implemented. See report. */}
               </>
             ) : clientView ? (
               <>
@@ -533,8 +540,15 @@ export default function ShipmentDetailsDialog({
 
                         {allOps.map((op, idx) => {
                           const cStatus = getContainerStatus(op)
+                          const isHighlighted = !!highlightCntr && op.CNTR_OP === highlightCntr
                           return (
-                            <div key={idx} className="rounded-xl border bg-card shadow-sm overflow-hidden">
+                            <div
+                              key={idx}
+                              ref={isHighlighted ? highlightedCntrRef : undefined}
+                              className={`rounded-xl border bg-card shadow-sm overflow-hidden transition-all ${
+                                isHighlighted ? 'ring-2 ring-accent ring-offset-2 ring-offset-background border-accent/50' : ''
+                              }`}
+                            >
                               {/* Container header */}
                               <div className="flex items-center justify-between px-4 py-2.5 bg-muted/30 border-b">
                                 <div className="flex items-center gap-2">
@@ -963,8 +977,16 @@ export default function ShipmentDetailsDialog({
 
                     {/* Container cards */}
                     <div className="space-y-2">
-                      {editedShipment.operativas.map((op, idx) => (
-                        <div key={idx} className="rounded-lg border overflow-hidden">
+                      {editedShipment.operativas.map((op, idx) => {
+                        const isHighlighted = !!highlightCntr && op.CNTR_OP === highlightCntr
+                        return (
+                        <div
+                          key={idx}
+                          ref={isHighlighted && !clientView ? highlightedCntrRef : undefined}
+                          className={`rounded-lg border overflow-hidden transition-all ${
+                            isHighlighted ? 'ring-2 ring-accent ring-offset-2 ring-offset-background border-accent/50' : ''
+                          }`}
+                        >
                           {/* Header row */}
                           <div className="flex items-center gap-2 px-3 py-2 bg-muted/30 border-b">
                             <span className="font-mono font-bold text-xs">{op.CNTR_OP || `#${idx + 1}`}</span>
@@ -991,7 +1013,8 @@ export default function ShipmentDetailsDialog({
                             </div>
                           </div>
                         </div>
-                      ))}
+                        )
+                      })}
                     </div>
                   </div>
                 </>

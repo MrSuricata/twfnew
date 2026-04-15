@@ -12,11 +12,13 @@ import {
 import {
   UserPlus,
   PencilSimple,
-  Trash
+  Trash,
+  UserCircle
 } from '@phosphor-icons/react'
 import { ClientAccount } from '@/lib/quotationTypes'
 import { toast } from 'sonner'
 import { ParsedShipment } from '@/lib/shipmentTypes'
+import { impersonateClient } from '@/lib/dataClient'
 
 interface ClientManagerProps {
   clients: ClientAccount[]
@@ -76,14 +78,19 @@ export default function ClientManager({ clients, onUpdateClients, shipments = []
   const handleSave = () => {
     setFormError(null)
 
-    if (!form.email || !form.name || !form.clientePattern) {
+    const email = form.email.trim()
+    const name = form.name.trim()
+    const company = form.company.trim()
+    const clientePattern = form.clientePattern.trim()
+
+    if (!email || !name || !clientePattern) {
       setFormError('Email, nombre y patrón son obligatorios')
       return
     }
 
-    const emailExists = clients.some(c => c.email.toLowerCase() === form.email.toLowerCase() && c.id !== editingId)
+    const emailExists = clients.some(c => c.email.trim().toLowerCase() === email.toLowerCase() && c.id !== editingId)
     if (emailExists) {
-      setFormError(`Ya existe un cliente con el email "${form.email}"`)
+      setFormError(`Ya existe un cliente con el email "${email}"`)
       return
     }
 
@@ -94,10 +101,10 @@ export default function ClientManager({ clients, onUpdateClients, shipments = []
         if (c.id !== editingId) return c
         return {
           ...c,
-          email: form.email,
-          name: form.name,
-          company: form.company,
-          clientePattern: form.clientePattern
+          email,
+          name,
+          company,
+          clientePattern
         }
       })
 
@@ -105,10 +112,10 @@ export default function ClientManager({ clients, onUpdateClients, shipments = []
     } else {
       const newClient: ClientAccount = {
         id: `${Date.now()}`,
-        email: form.email,
-        name: form.name,
-        company: form.company,
-        clientePattern: form.clientePattern,
+        email,
+        name,
+        company,
+        clientePattern,
         createdAt: Date.now()
       }
       updated = [...clients, newClient]
@@ -128,6 +135,21 @@ export default function ClientManager({ clients, onUpdateClients, shipments = []
 
     onUpdateClients(clients.filter(c => c.id !== id))
     toast.success('Cliente eliminado')
+  }
+
+  const handleImpersonate = async (client: ClientAccount) => {
+    try {
+      const result = await impersonateClient(client.email)
+      toast.info('Iniciando sesión como ' + client.name)
+      // Persist the client token so session restore picks it up on /portal.
+      // Full page nav reinitializes the auth module, which reads this key.
+      try { sessionStorage.setItem('twf-token', result.token) } catch {}
+      // Small delay so the toast is visible before the redirect.
+      setTimeout(() => { window.location.href = '/portal' }, 300)
+    } catch (err: any) {
+      console.error('[impersonate] error:', err)
+      toast.error(err?.message || 'No se pudo iniciar sesión como este cliente')
+    }
   }
 
   return (
@@ -177,6 +199,9 @@ export default function ClientManager({ clients, onUpdateClients, shipments = []
                     </div>
                   </div>
                   <div className="flex gap-1 shrink-0 ml-4">
+                    <Button variant="ghost" size="icon" onClick={() => handleImpersonate(client)} title="Ver portal como este cliente">
+                      <UserCircle size={18} />
+                    </Button>
                     <Button variant="ghost" size="icon" onClick={() => openEdit(client)} title="Editar">
                       <PencilSimple size={18} />
                     </Button>

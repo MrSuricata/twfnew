@@ -19,7 +19,8 @@ export default function AgendaEventCard({ event, compact = true, onClick }: Agen
   const libreRemaining = event.libre ? daysUntil(event.libre) : null
 
   if (compact) {
-    return (
+    const hasCargoInfo = event.kg > 0 || event.pkgs > 0
+    const cardButton = (
       <button
         onClick={onClick}
         className={`w-full text-left rounded-lg border border-border/60 overflow-hidden
@@ -42,6 +43,15 @@ export default function AgendaEventCard({ event, compact = true, onClick }: Agen
           {event.cntr && (
             <div className="text-[11px] text-muted-foreground font-mono truncate">
               {event.cntr}{event.tipo ? ` · ${event.tipo}` : ''}
+            </div>
+          )}
+
+          {/* Row 2b: Cargo info (kg / btos) — keeps the clicked container's info visible */}
+          {hasCargoInfo && (
+            <div className="text-[10px] text-muted-foreground truncate">
+              {event.kg > 0 && `${event.kg.toLocaleString()} kg`}
+              {event.kg > 0 && event.pkgs > 0 && ' · '}
+              {event.pkgs > 0 && `${event.pkgs.toLocaleString()} btos`}
             </div>
           )}
 
@@ -87,6 +97,25 @@ export default function AgendaEventCard({ event, compact = true, onClick }: Agen
         </div>
       </button>
     )
+
+    // Wrap in tooltip showing description when available
+    if (event.descripcion) {
+      return (
+        <TooltipProvider delayDuration={400}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              {cardButton}
+            </TooltipTrigger>
+            <TooltipContent side="top" className="text-xs max-w-xs">
+              <div className="font-semibold mb-0.5">{event.cntr || event.ref}</div>
+              <div className="text-muted-foreground">{event.descripcion}</div>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )
+    }
+
+    return cardButton
   }
 
   // ─── Detailed card (Day view) ───────────────────────────────────────
