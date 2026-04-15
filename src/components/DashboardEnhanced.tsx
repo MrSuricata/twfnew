@@ -12,6 +12,7 @@ import {
   CalendarBlank,
   Package,
   BellRinging,
+  Warning,
 } from '@phosphor-icons/react'
 
 import AgendaCalendar from './agenda/AgendaCalendar'
@@ -33,6 +34,7 @@ interface DashboardEnhancedProps {
   documents?: ShipmentDocument[]
   reports?: OperativeReport[]
   originPhotos?: OriginPhoto[]
+  dbSyncError?: string | null
   onUpdateShipments?: (shipments: ParsedShipment[]) => void
   onUpdateClients?: (clients: ClientAccount[]) => void
   onUpdateDocuments?: (docs: ShipmentDocument[]) => void
@@ -40,7 +42,7 @@ interface DashboardEnhancedProps {
   onUpdateOriginPhotos?: (photos: OriginPhoto[]) => void
 }
 
-export default function DashboardEnhanced({ onLogout, clients = [], shipments = [], documents = [], reports = [], originPhotos = [], onUpdateShipments, onUpdateClients, onUpdateDocuments, onUpdateReports, onUpdateOriginPhotos }: DashboardEnhancedProps) {
+export default function DashboardEnhanced({ onLogout, clients = [], shipments = [], documents = [], reports = [], originPhotos = [], dbSyncError = null, onUpdateShipments, onUpdateClients, onUpdateDocuments, onUpdateReports, onUpdateOriginPhotos }: DashboardEnhancedProps) {
   const [activeTab, setActiveTab] = useState('agenda')
 
   const getBreadcrumbs = () => {
@@ -75,6 +77,16 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
           </div>
         </div>
       </nav>
+
+      {dbSyncError && (
+        <div className="bg-yellow-50 dark:bg-yellow-950 border-b border-yellow-200 dark:border-yellow-800 px-4 py-2 text-sm text-yellow-900 dark:text-yellow-200 flex items-center gap-2">
+          <Warning size={16} weight="fill" />
+          <span>Trabajando con datos locales — {dbSyncError}. Los cambios se sincronizarán cuando vuelva la conexión.</span>
+          <button onClick={() => window.location.reload()} className="ml-auto underline hover:no-underline">
+            Reintentar
+          </button>
+        </div>
+      )}
 
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-8">
         <Breadcrumbs items={getBreadcrumbs()} />

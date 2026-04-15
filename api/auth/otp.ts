@@ -14,6 +14,12 @@ interface ClientConfig {
 // ─── Rate limiting (Supabase-backed, survives across Lambda instances) ──
 import { checkRateLimit } from '../_lib/rateLimiter.js'
 
+// ─── In-memory per-email OTP cooldown (1 request per minute) ────────
+// Prevents OTP spam/cost abuse. Best-effort: resets per Lambda instance,
+// Supabase-backed limiter below covers abuse across instances.
+const otpRateLimit = new Map<string, number>() // email → lastRequestTs
+const OTP_COOLDOWN_MS = 60_000 // 1 minuto entre requests
+
 // ─── EmailJS server-side send ───────────────────────────────────────
 async function sendOTPEmail(email: string, code: string): Promise<boolean> {
   const serviceId = process.env.EMAILJS_SERVICE_ID
@@ -123,6 +129,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // ── ACTION: REQUEST OTP ─────────────────────────────────────────
   if (action === 'request') {
+    // In-memory cooldown (1 req/min per email). Silent response to preserve
+    // anti-enumeration — do not send email, do not persist OTP.
+    const now = Date.now()
+    const lastRequest = otpRateLimit.get(normalizedEmail) || 0
+    if (now - lastRequest < OTP_COOLDOWN_MS) {
+      return res.status(200).json({ sent: true })
+    }
+    otpRateLimit.set(normalizedEmail, now)
+
+    // Opportunistic cleanup of stale entries (>1h old)
+    if (otpRateLimit.size > 100) {
+      const cutoff = now - 3600_000
+      for (const [k, v] of otpRateLimit) {
+        if (v < cutoff) otpRateLimit.delete(k)
+      }
+    }
+
     // Rate limit (Supabase-backed)
     const { limited, retryAfterMs } = await checkRateLimit(`otp:${normalizedEmail}`)
     if (limited) {

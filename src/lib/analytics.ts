@@ -9,9 +9,16 @@ declare global {
   }
 }
 
-export const GA_TRACKING_ID = 'G-XXXXXXXXXX'
+export const GA_TRACKING_ID = import.meta.env.VITE_GA_TRACKING_ID || ''
+
+const isGAConfigured = (): boolean => {
+  if (!GA_TRACKING_ID) return false
+  if (GA_TRACKING_ID.startsWith('G-XXX')) return false
+  return true
+}
 
 export const pageview = (url: string) => {
+  if (!isGAConfigured()) return
   if (typeof window.gtag !== 'undefined') {
     window.gtag('config', GA_TRACKING_ID, {
       page_path: url,
@@ -25,6 +32,7 @@ export const event = ({ action, category, label, value }: {
   label?: string
   value?: number
 }) => {
+  if (!isGAConfigured()) return
   if (typeof window.gtag !== 'undefined') {
     window.gtag('event', action, {
       event_category: category,
@@ -91,6 +99,7 @@ export const trackServiceView = (serviceName: string) => {
 }
 
 export const initGA = () => {
+  if (!isGAConfigured()) return
   if (typeof window !== 'undefined' && !window.gtag) {
     const script = document.createElement('script')
     script.async = true

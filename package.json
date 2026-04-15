@@ -8,6 +8,8 @@
         "kill": "fuser -k 5000/tcp",
         "build": "tsc -b --noCheck && vite build",
         "lint": "eslint .",
+        "typecheck": "tsc --noEmit",
+        "check": "npm run typecheck && npm run lint -- --max-warnings 0",
         "optimize": "vite optimize",
         "preview": "vite preview"
     },

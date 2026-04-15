@@ -75,6 +75,7 @@ function App() {
   // Track whether fresh data has loaded from Supabase
   const [isDataLoading, setIsDataLoading] = useState(false)
   const [dataFresh, setDataFresh] = useState(false)
+  const [dbSyncError, setDbSyncError] = useState<string | null>(null)
 
   const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const dbLoadedRef = useRef(false)
@@ -131,10 +132,12 @@ function App() {
       }
 
       setDataFresh(true)
+      setDbSyncError(null)
       toast.success('Datos sincronizados desde la base de datos')
     } catch (error) {
       console.warn('[DB] Failed to load from Supabase, using local cache:', error)
       setDataFresh(false)
+      setDbSyncError('No se pudo conectar con la base de datos')
       // Non-fatal: localStorage data still available
     } finally {
       dbLoadingRef.current = false
@@ -181,13 +184,31 @@ function App() {
   }, [])
 
   // ── Background Auto-Sync via server API ──
+  const syncConsecutiveFailuresRef = useRef<number>(0)
   const runBackgroundSync = useCallback(async () => {
     // Only sync if admin is logged in (has valid token)
     if (!isAdminLoggedIn) return
 
+    const markFailure = () => {
+      syncConsecutiveFailuresRef.current += 1
+      if (syncConsecutiveFailuresRef.current >= 3) {
+        toast.error('El sync de Google Sheets viene fallando. Verificá conexión.', { duration: 10_000, id: 'sync-error' })
+      }
+    }
+
+    const markSuccess = () => {
+      if (syncConsecutiveFailuresRef.current >= 3) {
+        toast.success('Sync restaurado')
+      }
+      syncConsecutiveFailuresRef.current = 0
+    }
+
     try {
       const res = await authFetch('/api/sheets/sync')
-      if (!res.ok) return
+      if (!res.ok) {
+        markFailure()
+        return
+      }
 
       const data = await res.json()
       const synced = data.shipments || []
@@ -196,8 +217,10 @@ function App() {
         saveToStorage('twf-shipments', synced)
         // Note: sync endpoint already caches to Supabase
       }
+      markSuccess()
     } catch (error) {
       console.warn('[Auto-sync] Error:', error)
+      markFailure()
     }
   }, [isAdminLoggedIn])
 
@@ -466,6 +489,7 @@ function App() {
           documents={documents}
           reports={reports}
           originPhotos={originPhotos}
+          dbSyncError={dbSyncError}
           onUpdateShipments={handleUpdateShipments}
           onUpdateClients={handleUpdateClients}
           onUpdateDocuments={handleUpdateDocuments}
