@@ -175,65 +175,79 @@ export default function AgendaToolbar({
 
       {/* Depot filter row */}
       {availableDepots.length > 0 && (
-        <div className="flex items-center gap-2 flex-wrap">
-          <Funnel size={14} className="text-muted-foreground shrink-0" aria-label="Depósitos" />
-          {availableDepots.map(depot => {
-            const isActive = activeDepots.has(depot)
-            return (
+        <div className="flex items-start gap-2 flex-wrap border-t border-border/60 pt-3">
+          <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
+            <Funnel size={12} className="text-muted-foreground" weight="fill" />
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Depósito
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 flex-wrap flex-1">
+            {availableDepots.map(depot => {
+              const isActive = activeDepots.has(depot)
+              return (
+                <button
+                  key={depot}
+                  onClick={() => onToggleDepot?.(depot)}
+                  className={`px-2.5 py-1 text-[11px] font-medium rounded-full border transition-all ${
+                    isActive
+                      ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                      : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted hover:text-foreground'
+                  }`}
+                >
+                  {depot}
+                </button>
+              )
+            })}
+            {activeDepots.size > 0 && (
               <button
-                key={depot}
-                onClick={() => onToggleDepot?.(depot)}
-                className={`px-2.5 py-1 text-[11px] font-medium rounded-full border transition-all ${
-                  isActive
-                    ? 'bg-primary text-primary-foreground border-primary shadow-sm'
-                    : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted hover:text-foreground'
-                }`}
+                onClick={onClearDepots}
+                className="px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
               >
-                {depot}
+                <X size={10} weight="bold" />
+                Limpiar
               </button>
-            )
-          })}
-          {activeDepots.size > 0 && (
-            <button
-              onClick={onClearDepots}
-              className="px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
-            >
-              <X size={10} weight="bold" />
-              Limpiar
-            </button>
-          )}
+            )}
+          </div>
         </div>
       )}
 
       {/* Transport filter row */}
       {availableTransports.length > 0 && (
-        <div className="flex items-center gap-2 flex-wrap">
-          <Truck size={14} className="text-muted-foreground shrink-0" aria-label="Transportes" />
-          {availableTransports.map(transport => {
-            const isActive = activeTransports.has(transport)
-            return (
+        <div className="flex items-start gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
+            <Truck size={12} className="text-muted-foreground" weight="fill" />
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Transporte
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 flex-wrap flex-1">
+            {availableTransports.map(transport => {
+              const isActive = activeTransports.has(transport)
+              return (
+                <button
+                  key={transport}
+                  onClick={() => onToggleTransport?.(transport)}
+                  className={`px-2.5 py-1 text-[11px] font-medium rounded-full border transition-all ${
+                    isActive
+                      ? 'bg-accent text-accent-foreground border-accent shadow-sm'
+                      : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted hover:text-foreground'
+                  }`}
+                >
+                  {transport}
+                </button>
+              )
+            })}
+            {activeTransports.size > 0 && (
               <button
-                key={transport}
-                onClick={() => onToggleTransport?.(transport)}
-                className={`px-2.5 py-1 text-[11px] font-medium rounded-full border transition-all ${
-                  isActive
-                    ? 'bg-accent text-accent-foreground border-accent shadow-sm'
-                    : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted hover:text-foreground'
-                }`}
+                onClick={onClearTransports}
+                className="px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
               >
-                {transport}
+                <X size={10} weight="bold" />
+                Limpiar
               </button>
-            )
-          })}
-          {activeTransports.size > 0 && (
-            <button
-              onClick={onClearTransports}
-              className="px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
-            >
-              <X size={10} weight="bold" />
-              Limpiar
-            </button>
-          )}
+            )}
+          </div>
         </div>
       )}
     </div>
