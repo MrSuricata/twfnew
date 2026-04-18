@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { getSupabase } from '../_lib/supabase.js'
 import { validate, QuoteSubmitSchema } from '../_lib/schemas.js'
+import { checkRateLimitWithConfig } from '../_lib/rateLimiter.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const allowedOrigin = process.env.ALLOWED_ORIGIN || 'https://twf.uy'
@@ -12,6 +13,40 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
   try {
+    // ── Turnstile captcha verification (server-side) ──
+    const turnstileSecret = process.env.TURNSTILE_SECRET_KEY
+    if (!turnstileSecret) {
+      console.error('[quotes/submit] TURNSTILE_SECRET_KEY not set')
+      return res.status(500).json({ error: 'Server misconfigured' })
+    }
+    const turnstileToken = req.body?.turnstileToken
+    if (!turnstileToken || typeof turnstileToken !== 'string') {
+      return res.status(400).json({ error: 'Captcha requerido' })
+    }
+    const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()
+      || req.socket?.remoteAddress
+      || 'unknown'
+    const tsParams = new URLSearchParams()
+    tsParams.set('secret', turnstileSecret)
+    tsParams.set('response', turnstileToken)
+    tsParams.set('remoteip', ip)
+    let tsOk = false
+    try {
+      const tsRes = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+        method: 'POST',
+        body: tsParams,
+      })
+      const tsData: any = await tsRes.json().catch(() => ({}))
+      tsOk = tsData?.success === true
+    } catch (e) {
+      console.error('[quotes/submit] Turnstile verify failed:', e)
+    }
+    if (!tsOk) return res.status(400).json({ error: 'Captcha inválido' })
+
+    // ── Rate limit: 3 submits / hour / IP, block 24h on breach ──
+    const { limited } = await checkRateLimitWithConfig(`quote:${ip}`, 3, 60 * 60_000, 24 * 60 * 60_000)
+    if (limited) return res.status(429).json({ error: 'Demasiadas solicitudes de cotización. Probá mañana.' })
+
     const v = validate(QuoteSubmitSchema, req.body)
     if (!v.ok) return res.status(400).json({ error: v.error })
     const { name, email, phone, cargoType, origin, destination, details, language } = v.data
