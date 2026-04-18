@@ -4,7 +4,7 @@ import { handleCors } from '../_lib/cors.js'
 import { getSupabase } from '../_lib/supabase.js'
 import { sendMail } from '../_lib/mail.js'
 import { welcomeClientEmail, welcomePartnerEmail } from '../_lib/emailTemplates.js'
-import { createHash } from 'crypto'
+import { hashPassword } from '../_lib/password.js'
 
 // ─── Combined Data API ───────────────────────────────────────────────
 // Handles: /api/data/quotes, /api/data/documents, /api/data/reports,
@@ -669,10 +669,6 @@ async function handlePartnerShipments(req: VercelRequest, res: VercelResponse, d
 
 // ── Partner Users (admin CRUD) ──────────────────────────────────────
 
-function hashPw(password: string): string {
-  return createHash('sha256').update(password).digest('hex')
-}
-
 async function handlePartnerUsers(req: VercelRequest, res: VercelResponse, db: any) {
   if (req.method === 'GET') {
     const { data, error } = await db.from('partner_users').select('*').order('created_at', { ascending: false })
@@ -690,9 +686,10 @@ async function handlePartnerUsers(req: VercelRequest, res: VercelResponse, db: a
     }
     const cleanEmail = email.toLowerCase().trim()
     const cleanName = name.trim()
+    const password_hash = await hashPassword(password)
     const { data, error } = await db.from('partner_users').insert({
       email: cleanEmail, name: cleanName,
-      password_hash: hashPw(password), role, filter_value: filterValue, active: true,
+      password_hash, role, filter_value: filterValue, active: true,
     }).select('id').single()
     if (error) throw error
 
@@ -721,7 +718,7 @@ async function handlePartnerUsers(req: VercelRequest, res: VercelResponse, db: a
     const updates: Record<string, unknown> = {}
     if (body.email !== undefined) updates.email = body.email.toLowerCase().trim()
     if (body.name !== undefined) updates.name = body.name.trim()
-    if (body.password !== undefined) updates.password_hash = hashPw(body.password)
+    if (body.password !== undefined) updates.password_hash = await hashPassword(body.password)
     if (body.role !== undefined) updates.role = body.role
     if (body.filterValue !== undefined) updates.filter_value = body.filterValue
     if (body.active !== undefined) updates.active = body.active
