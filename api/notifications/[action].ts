@@ -265,8 +265,12 @@ async function handleSendEmail(req: VercelRequest, res: VercelResponse) {
 
 async function handleCheckPending(req: VercelRequest, res: VercelResponse) {
   const cronSecret = process.env.CRON_SECRET
+  if (!cronSecret) {
+    console.error('[check-pending] CRON_SECRET env var not set — refusing to run')
+    return res.status(500).json({ error: 'Server misconfigured' })
+  }
   const authHeader = req.headers.authorization
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
+  if (authHeader !== `Bearer ${cronSecret}`) {
     return res.status(401).json({ error: 'Unauthorized' })
   }
 
