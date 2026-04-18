@@ -459,13 +459,27 @@ export async function performServerSync(sheetsUrl: string): Promise<ParsedShipme
 
 /**
  * Check if a CLIENTE field matches a pattern string.
- * Supports multiple patterns separated by comma: "CHIAPERO,MARTINEZ,ACME"
+ * - Supports multiple comma-separated patterns: "CHIAPERO,MARTINEZ,ACME"
+ * - Patterns shorter than 5 chars are silently dropped (prevents accidental
+ *   cross-client matches via short substrings).
+ * - Match is word-boundary (pattern must be flanked by non-alphanumerics or string edges)
+ *   so "SA" would not match inside "SANTOS" if it were allowed. Regex metacharacters in
+ *   the pattern are escaped.
  */
 export function matchesClientePattern(cliente: string, pattern: string): boolean {
   if (!cliente || !pattern) return false
   const clienteUpper = cliente.toUpperCase()
-  const patterns = pattern.toUpperCase().split(',').map(p => p.trim()).filter(Boolean)
-  return patterns.some(p => clienteUpper.includes(p))
+  const patterns = pattern
+    .toUpperCase()
+    .split(',')
+    .map(p => p.trim())
+    .filter(p => p.length >= 5)
+  if (patterns.length === 0) return false
+  return patterns.some(p => {
+    const escaped = p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const re = new RegExp(`(^|[^A-Z0-9])${escaped}([^A-Z0-9]|$)`)
+    return re.test(clienteUpper)
+  })
 }
 
 /** Strip sensitive financial and identifying fields for non-admin views */
