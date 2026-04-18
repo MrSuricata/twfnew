@@ -2,6 +2,14 @@
 
 Follow this guide to deploy the `security/twf-critical-high` branch to production. It closes all 4 Critical + 6 High severity findings from the 2026-04-18 security audit.
 
+## 0. Safety snapshot before deploy
+
+**Before changing anything** in Vercel env vars, copy these values to a secure scratch file (not in git):
+- Current `ADMIN_PASS_HASH` (the old SHA-256 one — only needed if you need to roll back).
+- Current `SUPABASE_ANON_KEY` (needed for emergency rollback if RLS policies break the API).
+
+Having these around makes the rollback in §6 a 30-second operation instead of a scramble.
+
 ## 1. Prerequisites
 
 ### Cloudflare Turnstile (free)
@@ -111,6 +119,14 @@ Run through this list. Each should PASS.
   ```
 - **Restore anon key (emergency):** re-add `SUPABASE_ANON_KEY` in Vercel env, revert `api/_lib/supabase.ts` to use it. Combined with RLS off, restores old behavior.
 
+## 6b. Known CSP deviation
+
+The deployed `Content-Security-Policy` keeps `'unsafe-inline'` in `script-src` to support the existing Google Analytics bootstrap (inline snippet loaded from `src/lib/analytics.ts`). This is a **weaker** position than the ideal (strict nonce/hash-based CSP).
+
+Trade-off: removes XSS defense-in-depth for inline scripts, but retained because GA is in active use and nonce/hash-based loading requires changing how GA is bootstrapped. Documented here as an explicit deviation from the spec's "script-src 'self' https://challenges.cloudflare.com" target.
+
+**Follow-up:** migrate GA loading to use a nonce or external-only script and then tighten `script-src` to remove `'unsafe-inline'`. This is on the out-of-scope list below.
+
 ## 7. Out of scope (follow-up sub-project)
 
 After this deploy and a second security review, the next pass covers:
@@ -119,7 +135,7 @@ After this deploy and a second security review, the next pass covers:
 - Move `fileData` base64 out of `localStorage` in admin.
 - Audit log for admin mutations.
 - JWT key rotation with `kid` header.
-- Tighter CSP (remove `'unsafe-inline'` on style after a sweep; eventually drop it from script-src too).
+- Tighter CSP: migrate GA to nonce-based loading, then remove `'unsafe-inline'` from script-src (see §6b). Also tighten style-src.
 
 ## 8. What changed (summary for the changelog)
 

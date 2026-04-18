@@ -653,10 +653,13 @@ async function handleShipmentsCache(req: VercelRequest, res: VercelResponse, db:
   }
 
   if (req.method === 'POST') {
-    const { shipments } = req.body || {}
-    if (!Array.isArray(shipments)) {
-      return res.status(400).json({ error: 'shipments array required' })
-    }
+    // Minimal shape validation — admin-only, but cache poisons downstream /api/tracking
+    const ShipmentsCacheSchema = z.object({
+      shipments: z.array(z.record(z.unknown())).max(10000),
+    })
+    const v = validate(ShipmentsCacheSchema, req.body)
+    if (!v.ok) return res.status(400).json({ error: v.error })
+    const { shipments } = v.data
     const { error } = await db.from('shipments_cache').upsert({
       id: 1,
       data: shipments,

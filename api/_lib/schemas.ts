@@ -49,7 +49,10 @@ export const ClientRowSchema = z.object({
   company: z.string().max(200).optional().default(''),
   createdAt: z.number().int().optional(),
   created_at_ts: z.number().int().optional(),
-  clientePattern: z.string().min(5).max(400).regex(clientePatternRe, 'invalid chars'),
+  clientePattern: z.string().min(5).max(400).regex(clientePatternRe, 'invalid chars').refine(
+    (s) => s.split(',').map(t => t.trim()).every(t => t.length >= 5),
+    { message: 'each comma-separated token must be ≥5 chars' }
+  ),
 })
 
 /** Settings upsert (PUT) */

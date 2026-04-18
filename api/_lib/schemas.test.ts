@@ -72,6 +72,13 @@ describe('ClientRowSchema', () => {
     })
     expect(r.success).toBe(true)
   })
+  it('rejects comma-separated pattern where a token is <5 chars', () => {
+    // Total string passes min(5) but "AB" is only 2 chars
+    const r = ClientRowSchema.safeParse({
+      id: 'c1', email: 'a@b.co', name: 'Acme', clientePattern: 'AB,CHIAPERO'
+    })
+    expect(r.success).toBe(false)
+  })
 })
 
 describe('SettingsUpsertSchema', () => {
