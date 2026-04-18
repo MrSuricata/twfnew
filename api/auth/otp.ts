@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { generateOTP, storeOTP, verifyOTP } from '../_lib/otpStore.js'
 import { signClientToken } from '../_lib/jwt.js'
 import { getSupabase } from '../_lib/supabase.js'
+import { validate, OtpRequestSchema, OtpVerifySchema } from '../_lib/schemas.js'
 
 // ─── Types ──────────────────────────────────────────────────────────
 interface ClientConfig {
@@ -121,14 +122,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') return res.status(204).end()
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  const { action, email, code } = req.body || {}
-
-  if (!email) return res.status(400).json({ error: 'Email required' })
-
-  const normalizedEmail = email.toLowerCase().trim()
+  const action = req.body?.action
+  if (action !== 'request' && action !== 'verify') {
+    return res.status(400).json({ error: 'Invalid action. Use "request" or "verify".' })
+  }
 
   // ── ACTION: REQUEST OTP ─────────────────────────────────────────
   if (action === 'request') {
+    const v = validate(OtpRequestSchema, req.body)
+    if (!v.ok) return res.status(400).json({ error: v.error })
+    const normalizedEmail = v.data.email.toLowerCase().trim()
+
     // In-memory cooldown (1 req/min per email). Silent response to preserve
     // anti-enumeration — do not send email, do not persist OTP.
     const now = Date.now()
@@ -179,7 +183,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   // ── ACTION: VERIFY OTP ──────────────────────────────────────────
   if (action === 'verify') {
-    if (!code) return res.status(400).json({ error: 'Code required' })
+    const v = validate(OtpVerifySchema, req.body)
+    if (!v.ok) return res.status(400).json({ error: v.error })
+    const normalizedEmail = v.data.email.toLowerCase().trim()
+    const code = v.data.code
 
     const valid = await verifyOTP(normalizedEmail, code)
 

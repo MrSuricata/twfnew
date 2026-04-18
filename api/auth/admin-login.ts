@@ -3,6 +3,7 @@ import { signAdminToken, signDepotToken, signTransportToken } from '../_lib/jwt.
 import { checkRateLimit, clearRateLimit } from '../_lib/rateLimiter.js'
 import { getSupabase } from '../_lib/supabase.js'
 import { verifyPassword } from '../_lib/password.js'
+import { validate, AdminLoginSchema, PartnerLoginSchema } from '../_lib/schemas.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS
@@ -17,14 +18,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     // Route to partner login if type === 'partner'
     if (req.body?.type === 'partner') {
-      return handlePartnerLogin(req, res)
+      const vP = validate(PartnerLoginSchema, req.body)
+      if (!vP.ok) return res.status(400).json({ error: vP.error })
+      return handlePartnerLogin(req, res, { email: vP.data.email, password: vP.data.password })
     }
 
-    const { username, password } = req.body || {}
-
-    if (!username || !password) {
-      return res.status(400).json({ error: 'Username and password required' })
-    }
+    const v = validate(AdminLoginSchema, req.body)
+    if (!v.ok) return res.status(400).json({ error: v.error })
+    const { username, password } = v.data
 
     // Rate limiting by IP
     const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()
@@ -76,11 +77,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
 // ── Partner login (depot/transport) ─────────────────────────────────
 // Called when body has { email, password, type: 'partner' }
-async function handlePartnerLogin(req: VercelRequest, res: VercelResponse) {
-  const { email, password } = req.body || {}
-  if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password required' })
-  }
+async function handlePartnerLogin(req: VercelRequest, res: VercelResponse, body: { email: string; password: string }) {
+  const { email, password } = body
 
   const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || 'unknown'
   const { limited } = await checkRateLimit(`partner-login:${ip}`)
