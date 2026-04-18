@@ -1,6 +1,12 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { performServerSync, parseContainers, stripFinancialFields } from './_lib/csvParser.js'
 import { getSupabase } from './_lib/supabase.js'
+import { checkRateLimitWithConfig } from './_lib/rateLimiter.js'
+
+// Strict formats — prevent enumeration via substring scraping
+const REF_RE = /^A?\d{4,5}$/i                 // e.g. A7509, 7509, A75098
+const CNTR_RE = /^[A-Z]{4}\d{7}$/i            // ISO container: MSCU1234567
+const MBL_RE = /^[A-Z0-9]{9,20}$/i            // bill of lading / master bill
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS — restrict to configured origin
@@ -13,13 +19,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'OPTIONS') return res.status(204).end()
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
 
-  const q = (req.query.q as string || '').toLowerCase().trim()
-  if (!q) {
-    return res.status(400).json({ error: 'Query parameter "q" is required' })
+  const q = (req.query.q as string || '').trim().toUpperCase()
+  if (!q) return res.status(400).json({ error: 'Query parameter "q" is required' })
+
+  // Require exact REF / container / MBL format — no substring queries.
+  if (!REF_RE.test(q) && !CNTR_RE.test(q) && !MBL_RE.test(q)) {
+    return res.status(400).json({
+      error: 'Formato inválido. Ingresá referencia TWF (ej: A7509), container (ej: MSCU1234567) o MBL.',
+    })
   }
-  // SECURITY: Require minimum 5 chars to prevent bulk enumeration
-  if (q.length < 5) {
-    return res.status(400).json({ error: 'Query must be at least 5 characters' })
+
+  // Rate limit by IP: 30 queries/hour, 1h block on breach
+  const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim()
+    || req.socket?.remoteAddress
+    || 'unknown'
+  const { limited, retryAfterMs } = await checkRateLimitWithConfig(`tracking:${ip}`, 30, 60 * 60_000, 60 * 60_000)
+  if (limited) {
+    res.setHeader('Retry-After', String(Math.ceil((retryAfterMs || 0) / 1000)))
+    return res.status(429).json({ error: 'Demasiadas búsquedas. Reintentá más tarde.' })
   }
 
   // Strategy: try Google Sheets live first, fallback to Supabase cache
@@ -65,17 +82,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({ results: [], source: 'none' })
   }
 
-  // Search by REF, CNTR, or MBL — exact match or startsWith only (prevents enumeration scraping)
-  const matches = (field: any): boolean => {
-    if (!field) return false
-    const v = String(field).toLowerCase()
-    return v === q || v.startsWith(q)
-  }
-  const filtered = allShipments.filter((r: any) =>
-    matches(r.REF) ||
-    matches(r.CNTR) ||
-    matches(r.MBL)
-  )
+  // Exact match only. CNTR may be comma-separated; check each token.
+  const eq = (v: unknown) => typeof v === 'string' && v.toUpperCase() === q
+  const cntrHit = (v: unknown) => typeof v === 'string'
+    && v.toUpperCase().split(',').map(x => x.trim()).some(x => x === q)
+  const filtered = allShipments.filter((r: any) => eq(r.REF) || cntrHit(r.CNTR) || eq(r.MBL))
 
   // Return results without sensitive financial fields
   const safe = stripFinancialFields(filtered)
