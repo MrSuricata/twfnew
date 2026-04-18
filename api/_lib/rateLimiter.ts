@@ -3,7 +3,7 @@ import { getSupabase } from './supabase.js'
 /**
  * Supabase-backed rate limiter for serverless environments.
  *
- * Table schema (run once in Supabase SQL Editor):
+ * Table schema (see supabase-schema.sql):
  * CREATE TABLE IF NOT EXISTS rate_limits (
  *   key            TEXT PRIMARY KEY,
  *   attempts       INTEGER     NOT NULL DEFAULT 0,
@@ -12,15 +12,21 @@ import { getSupabase } from './supabase.js'
  * );
  */
 
-const MAX_ATTEMPTS = 5
-const WINDOW_MS = 15 * 60 * 1000       // 15 minutes
-const BLOCK_DURATION_MS = 30 * 60 * 1000 // 30 minutes block after max attempts
+// Default config (used by checkRateLimit callers)
+const DEFAULT_MAX_ATTEMPTS = 5
+const DEFAULT_WINDOW_MS = 15 * 60 * 1000        // 15 minutes
+const DEFAULT_BLOCK_MS = 30 * 60 * 1000          // 30 minutes
 
 /**
- * Check if a key is rate limited. Returns { limited, retryAfter }.
+ * Check if a key is rate limited with custom config. Returns { limited, retryAfterMs }.
  * If not limited, increments the attempt counter.
  */
-export async function checkRateLimit(key: string): Promise<{ limited: boolean; retryAfterMs?: number }> {
+export async function checkRateLimitWithConfig(
+  key: string,
+  maxAttempts: number,
+  windowMs: number,
+  blockMs: number,
+): Promise<{ limited: boolean; retryAfterMs?: number }> {
   const db = getSupabase()
   const now = new Date()
 
@@ -58,7 +64,7 @@ export async function checkRateLimit(key: string): Promise<{ limited: boolean; r
 
   // Window expired? Reset counter
   const windowStart = new Date(data.first_attempt).getTime()
-  if (now.getTime() - windowStart > WINDOW_MS) {
+  if (now.getTime() - windowStart > windowMs) {
     await db.from('rate_limits').update({
       attempts: 1,
       first_attempt: now.toISOString(),
@@ -69,14 +75,14 @@ export async function checkRateLimit(key: string): Promise<{ limited: boolean; r
 
   // Within window — check attempts
   const newAttempts = data.attempts + 1
-  if (newAttempts > MAX_ATTEMPTS) {
+  if (newAttempts > maxAttempts) {
     // Block the key
-    const blockedUntil = new Date(now.getTime() + BLOCK_DURATION_MS).toISOString()
+    const blockedUntil = new Date(now.getTime() + blockMs).toISOString()
     await db.from('rate_limits').update({
       attempts: newAttempts,
       blocked_until: blockedUntil,
     }).eq('key', key)
-    return { limited: true, retryAfterMs: BLOCK_DURATION_MS }
+    return { limited: true, retryAfterMs: blockMs }
   }
 
   // Increment
@@ -84,9 +90,12 @@ export async function checkRateLimit(key: string): Promise<{ limited: boolean; r
   return { limited: false }
 }
 
-/**
- * Clear rate limit for a key (call on successful login).
- */
+/** Default rate limit: 5 attempts / 15 min / 30-min block. */
+export async function checkRateLimit(key: string): Promise<{ limited: boolean; retryAfterMs?: number }> {
+  return checkRateLimitWithConfig(key, DEFAULT_MAX_ATTEMPTS, DEFAULT_WINDOW_MS, DEFAULT_BLOCK_MS)
+}
+
+/** Clear rate limit for a key (call on successful login). */
 export async function clearRateLimit(key: string): Promise<void> {
   const db = getSupabase()
   await db.from('rate_limits').delete().eq('key', key)
