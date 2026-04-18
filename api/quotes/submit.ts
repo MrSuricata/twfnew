@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { getSupabase } from '../_lib/supabase.js'
+import { validate, QuoteSubmitSchema } from '../_lib/schemas.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const allowedOrigin = process.env.ALLOWED_ORIGIN || 'https://twf.uy'
@@ -11,11 +12,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
   try {
-    const { name, email, phone, cargoType, origin, destination, details, language } = req.body || {}
-
-    if (!name || !email || !cargoType) {
-      return res.status(400).json({ error: 'Name, email, and cargo type are required' })
-    }
+    const v = validate(QuoteSubmitSchema, req.body)
+    if (!v.ok) return res.status(400).json({ error: v.error })
+    const { name, email, phone, cargoType, origin, destination, details, language } = v.data
 
     // Generate a unique ID for this quote
     const quoteId = `q-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`
