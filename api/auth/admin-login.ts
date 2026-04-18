@@ -1,8 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { createHash } from 'crypto'
 import { signAdminToken, signDepotToken, signTransportToken } from '../_lib/jwt.js'
 import { checkRateLimit, clearRateLimit } from '../_lib/rateLimiter.js'
 import { getSupabase } from '../_lib/supabase.js'
+import { verifyPassword } from '../_lib/password.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS
@@ -49,10 +49,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(500).json({ error: 'Server configuration error' })
     }
 
-    // Compare username (case-insensitive) and password hash (SHA-256)
-    const inputHash = createHash('sha256').update(password).digest('hex')
+    // Compare username (case-insensitive) and verify password with bcrypt
+    const usernameOk = username.toLowerCase() === adminUser.toLowerCase()
+    const passwordOk = await verifyPassword(password, adminPassHash)
 
-    if (username.toLowerCase() !== adminUser.toLowerCase() || inputHash !== adminPassHash) {
+    if (!usernameOk || !passwordOk) {
       return res.status(401).json({ error: 'Invalid credentials' })
     }
 
@@ -95,8 +96,8 @@ async function handlePartnerLogin(req: VercelRequest, res: VercelResponse) {
 
   if (dbError || !user) return res.status(401).json({ error: 'Credenciales inválidas' })
 
-  const inputHash = createHash('sha256').update(password).digest('hex')
-  if (inputHash !== user.password_hash) return res.status(401).json({ error: 'Credenciales inválidas' })
+  const passwordOk = await verifyPassword(password, user.password_hash)
+  if (!passwordOk) return res.status(401).json({ error: 'Credenciales inválidas' })
 
   await clearRateLimit(`partner-login:${ip}`)
 
