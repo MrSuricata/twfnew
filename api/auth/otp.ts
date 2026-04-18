@@ -114,31 +114,53 @@ async function getClients(): Promise<ClientConfig[]> {
 
 // ─── Handler ────────────────────────────────────────────────────────
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const startedAt = Date.now()
+  const MIN_RESPONSE_MS = 400 // equalize timing to prevent email enumeration
+
+  /**
+   * Send a JSON response, ensuring total handler time is ≥ MIN_RESPONSE_MS.
+   * This prevents side-channel email enumeration via response timing.
+   */
+  const sendResponse = async (status: number, body: any) => {
+    const elapsed = Date.now() - startedAt
+    const wait = Math.max(0, MIN_RESPONSE_MS - elapsed)
+    if (wait > 0) await new Promise(r => setTimeout(r, wait))
+    return res.status(status).json(body)
+  }
+
   const allowedOrigin = process.env.ALLOWED_ORIGIN || 'https://twf.uy'
   res.setHeader('Access-Control-Allow-Origin', allowedOrigin)
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
 
+  // OPTIONS can short-circuit without timing equalization (no sensitive data)
   if (req.method === 'OPTIONS') return res.status(204).end()
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  if (req.method !== 'POST') return sendResponse(405, { error: 'Method not allowed' })
 
   const action = req.body?.action
   if (action !== 'request' && action !== 'verify') {
-    return res.status(400).json({ error: 'Invalid action. Use "request" or "verify".' })
+    return sendResponse(400, { error: 'Invalid action. Use "request" or "verify".' })
   }
 
   // ── ACTION: REQUEST OTP ─────────────────────────────────────────
   if (action === 'request') {
     const v = validate(OtpRequestSchema, req.body)
-    if (!v.ok) return res.status(400).json({ error: v.error })
+    if (!v.ok) return sendResponse(400, { error: v.error })
     const normalizedEmail = v.data.email.toLowerCase().trim()
+
+    // Per-IP rate limit (in addition to per-email) — blocks email bombing
+    const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || 'unknown'
+    const ipLimit = await checkRateLimit(`otp-ip:${ip}`)
+    if (ipLimit.limited) {
+      return sendResponse(429, { error: 'Demasiadas solicitudes. Reintentá más tarde.' })
+    }
 
     // In-memory cooldown (1 req/min per email). Silent response to preserve
     // anti-enumeration — do not send email, do not persist OTP.
     const now = Date.now()
     const lastRequest = otpRateLimit.get(normalizedEmail) || 0
     if (now - lastRequest < OTP_COOLDOWN_MS) {
-      return res.status(200).json({ sent: true })
+      return sendResponse(200, { sent: true })
     }
     otpRateLimit.set(normalizedEmail, now)
 
@@ -154,7 +176,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { limited, retryAfterMs } = await checkRateLimit(`otp:${normalizedEmail}`)
     if (limited) {
       const retryMin = Math.ceil((retryAfterMs || 0) / 60000)
-      return res.status(429).json({ error: `Demasiadas solicitudes. Reintentá en ${retryMin} minutos.` })
+      return sendResponse(429, { error: `Demasiadas solicitudes. Reintentá en ${retryMin} minutos.` })
     }
 
     // Validate client exists (checks env var + Supabase)
@@ -162,9 +184,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const client = clients.find(c => c.email.toLowerCase().trim() === normalizedEmail)
 
     if (!client) {
-      // Don't reveal if email exists or not (timing-safe)
-      // But return success anyway so attacker can't enumerate emails
-      return res.status(200).json({ sent: true })
+      // Don't reveal if email exists or not (timing-safe via sendResponse)
+      return sendResponse(200, { sent: true })
     }
 
     // Generate and store OTP (async — Supabase backed)
@@ -175,23 +196,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const sent = await sendOTPEmail(normalizedEmail, otpCode)
 
     if (!sent) {
-      return res.status(500).json({ error: 'Error al enviar el código' })
+      return sendResponse(500, { error: 'Error al enviar el código' })
     }
 
-    return res.status(200).json({ sent: true })
+    return sendResponse(200, { sent: true })
   }
 
   // ── ACTION: VERIFY OTP ──────────────────────────────────────────
   if (action === 'verify') {
     const v = validate(OtpVerifySchema, req.body)
-    if (!v.ok) return res.status(400).json({ error: v.error })
+    if (!v.ok) return sendResponse(400, { error: v.error })
     const normalizedEmail = v.data.email.toLowerCase().trim()
     const code = v.data.code
 
     const valid = await verifyOTP(normalizedEmail, code)
 
     if (!valid) {
-      return res.status(401).json({ error: 'Código inválido o expirado' })
+      return sendResponse(401, { error: 'Código inválido o expirado' })
     }
 
     // Find client to include in JWT (checks env var + Supabase)
@@ -199,7 +220,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const client = clients.find(c => c.email.toLowerCase().trim() === normalizedEmail)
 
     if (!client) {
-      return res.status(401).json({ error: 'Cliente no encontrado' })
+      return sendResponse(401, { error: 'Cliente no encontrado' })
     }
 
     // Sign JWT
@@ -210,7 +231,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       client.clientePattern
     )
 
-    return res.status(200).json({
+    return sendResponse(200, {
       token,
       role: 'client',
       email: client.email,
@@ -219,5 +240,5 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     })
   }
 
-  return res.status(400).json({ error: 'Invalid action. Use "request" or "verify".' })
+  return sendResponse(400, { error: 'Invalid action. Use "request" or "verify".' })
 }
