@@ -40,13 +40,13 @@ export default function ClientLogin({ onLogin, onBack }: ClientLoginProps) {
 
   const handleSendCode = useCallback(async (isResend = false) => {
     if (!email.trim()) {
-      toast.error('Ingresa tu email')
+      toast.error('Ingresá tu email')
       return
     }
 
     // Cooldown check (client-side only for UX)
     if (isResend && countdown > 0) {
-      toast.error(`Espera ${countdown}s para reenviar`)
+      toast.error(`Esperá ${countdown}s para reenviar`)
       return
     }
 
@@ -59,9 +59,9 @@ export default function ClientLogin({ onLogin, onBack }: ClientLoginProps) {
         setStep('otp')
         setOtpValue('')
         setCountdown(60)
-        toast.success(isResend ? 'Nuevo codigo enviado' : `Codigo enviado a ${email}`)
+        toast.success(isResend ? 'Nuevo código enviado' : `Código enviado a ${email}`)
       } else {
-        toast.error(result.error || 'Error al enviar el codigo')
+        toast.error(result.error || 'Error al enviar el código')
       }
     } catch {
       toast.error('Error al procesar la solicitud')
@@ -84,11 +84,11 @@ export default function ClientLogin({ onLogin, onBack }: ClientLoginProps) {
         toast.success(`Bienvenido/a${name ? `, ${name}` : ''}`)
         onLogin(email.toLowerCase().trim())
       } else {
-        toast.error(result.error || 'Codigo incorrecto')
+        toast.error(result.error || 'Código incorrecto')
         setOtpValue('')
       }
     } catch {
-      toast.error('Error al verificar el codigo')
+      toast.error('Error al verificar el código')
       setOtpValue('')
     } finally {
       setIsLoading(false)
