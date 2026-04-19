@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { ShipmentTableSkeleton, StatCardSkeleton } from '@/components/SkeletonLoaders'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -438,6 +439,20 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
           </p>
         </div>
 
+        {isLoadingData && serverShipments.length === 0 && (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+              <StatCardSkeleton />
+              <StatCardSkeleton />
+              <StatCardSkeleton />
+              <StatCardSkeleton />
+            </div>
+            <ShipmentTableSkeleton />
+          </>
+        )}
+
+        {!(isLoadingData && serverShipments.length === 0) && (
+        <>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <Card>
             <CardContent className="pt-6">
@@ -1026,6 +1041,8 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
             )}
           </TabsContent>
         </Tabs>
+        </>
+        )}
       </div>
 
       {selectedShipment && (
