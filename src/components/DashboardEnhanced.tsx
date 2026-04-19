@@ -89,7 +89,10 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
       )}
 
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-8">
-        <Breadcrumbs items={getBreadcrumbs()} />
+        <Breadcrumbs
+          items={getBreadcrumbs()}
+          onHomeClick={activeTab !== 'agenda' ? () => setActiveTab('agenda') : undefined}
+        />
         
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="grid w-full grid-cols-4 lg:grid-cols-8 max-w-5xl">
