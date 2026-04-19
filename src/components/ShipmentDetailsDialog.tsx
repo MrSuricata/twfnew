@@ -450,9 +450,9 @@ export default function ShipmentDetailsDialog({
                 if (days > 5) return null
                 return (
                   <div className={`rounded-lg p-4 border-l-4 ${
-                    days < 0 ? 'bg-red-50 dark:bg-red-950/20 border-l-red-500' :
-                    days <= 2 ? 'bg-orange-50 dark:bg-orange-950/20 border-l-orange-500' :
-                    'bg-yellow-50 dark:bg-yellow-950/20 border-l-yellow-500'
+                    days < 0 ? 'bg-red-50 border-l-red-500' :
+                    days <= 2 ? 'bg-orange-50 border-l-orange-500' :
+                    'bg-yellow-50 border-l-yellow-500'
                   }`}>
                     <div className="flex items-center gap-2 text-sm font-medium">
                       <Info size={16} className={days < 0 ? 'text-red-500' : days <= 2 ? 'text-orange-500' : 'text-yellow-600'} />
@@ -484,11 +484,11 @@ export default function ShipmentDetailsDialog({
                   }
                   // Per-container status
                   const getContainerStatus = (op: typeof allOps[0]) => {
-                    if (op.DEV && (isPast(op.DEV) || isToday(op.DEV))) return { text: 'Devuelto', bg: 'bg-gray-100 dark:bg-gray-800', color: 'text-gray-600 dark:text-gray-400', dot: 'bg-gray-400' }
-                    if (op.ETA_FISC && (isPast(op.ETA_FISC) || isToday(op.ETA_FISC))) return { text: 'En Fiscal', bg: 'bg-green-50 dark:bg-green-950/30', color: 'text-green-700 dark:text-green-400', dot: 'bg-green-500' }
-                    if (op.SALIDA && isToday(op.SALIDA)) return { text: 'Sale Hoy', bg: 'bg-blue-50 dark:bg-blue-950/30', color: 'text-blue-700 dark:text-blue-400', dot: 'bg-blue-500' }
-                    if (op.SALIDA && isPast(op.SALIDA)) return { text: 'En Frontera', bg: 'bg-orange-50 dark:bg-orange-950/30', color: 'text-orange-700 dark:text-orange-400', dot: 'bg-orange-500' }
-                    return { text: 'En Terminal', bg: 'bg-yellow-50 dark:bg-yellow-950/30', color: 'text-yellow-700 dark:text-yellow-500', dot: 'bg-yellow-500' }
+                    if (op.DEV && (isPast(op.DEV) || isToday(op.DEV))) return { text: 'Devuelto', bg: 'bg-gray-100', color: 'text-gray-600', dot: 'bg-gray-400' }
+                    if (op.ETA_FISC && (isPast(op.ETA_FISC) || isToday(op.ETA_FISC))) return { text: 'En Fiscal', bg: 'bg-green-50', color: 'text-green-700', dot: 'bg-green-500' }
+                    if (op.SALIDA && isToday(op.SALIDA)) return { text: 'Sale Hoy', bg: 'bg-blue-50', color: 'text-blue-700', dot: 'bg-blue-500' }
+                    if (op.SALIDA && isPast(op.SALIDA)) return { text: 'En Frontera', bg: 'bg-orange-50', color: 'text-orange-700', dot: 'bg-orange-500' }
+                    return { text: 'En Terminal', bg: 'bg-yellow-50', color: 'text-yellow-700', dot: 'bg-yellow-500' }
                   }
 
                   return (
@@ -507,7 +507,7 @@ export default function ShipmentDetailsDialog({
                             </div>
                             <div className={`rounded-lg px-3 py-2 ${
                               editedShipment.LIBRE_HASTA && getDaysUntilFree(editedShipment.LIBRE_HASTA) <= 2
-                                ? 'bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800'
+                                ? 'bg-red-50 border border-red-200'
                                 : 'bg-muted/50'
                             }`}>
                               <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Libre Hasta</div>
@@ -595,9 +595,9 @@ export default function ShipmentDetailsDialog({
                               <div className="grid grid-cols-2 gap-2 px-4 pt-3 pb-2">
                                 <div className={`rounded-lg px-3 py-2 ${
                                   op.SALIDA && isToday(op.SALIDA)
-                                    ? 'bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800'
+                                    ? 'bg-blue-50 border border-blue-200'
                                     : op.SALIDA && isPast(op.SALIDA)
-                                    ? 'bg-green-50/50 dark:bg-green-950/20'
+                                    ? 'bg-green-50/50'
                                     : 'bg-muted/40'
                                 }`}>
                                   <div className="flex items-center gap-1.5 mb-0.5">
@@ -608,17 +608,17 @@ export default function ShipmentDetailsDialog({
                                     {op.SALIDA ? fmtDate(op.SALIDA) : 'Pendiente'}
                                   </div>
                                   {op.SALIDA && isToday(op.SALIDA) && (
-                                    <div className="text-[10px] text-blue-600 dark:text-blue-400 font-medium">Sale hoy</div>
+                                    <div className="text-[10px] text-blue-600 font-medium">Sale hoy</div>
                                   )}
                                   {op.SALIDA && isPast(op.SALIDA) && (
-                                    <div className="text-[10px] text-green-600 dark:text-green-400 font-medium">En camino</div>
+                                    <div className="text-[10px] text-green-600 font-medium">En camino</div>
                                   )}
                                 </div>
                                 <div className={`rounded-lg px-3 py-2 ${
                                   op.ETA_FISC && isToday(op.ETA_FISC)
-                                    ? 'bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-800'
+                                    ? 'bg-green-50 border border-green-200'
                                     : op.ETA_FISC && isPast(op.ETA_FISC)
-                                    ? 'bg-green-50/50 dark:bg-green-950/20'
+                                    ? 'bg-green-50/50'
                                     : 'bg-muted/40'
                                 }`}>
                                   <div className="flex items-center gap-1.5 mb-0.5">
@@ -629,10 +629,10 @@ export default function ShipmentDetailsDialog({
                                     {op.ETA_FISC ? fmtDate(op.ETA_FISC) : 'Pendiente'}
                                   </div>
                                   {op.ETA_FISC && isToday(op.ETA_FISC) && (
-                                    <div className="text-[10px] text-green-600 dark:text-green-400 font-medium">Llega hoy</div>
+                                    <div className="text-[10px] text-green-600 font-medium">Llega hoy</div>
                                   )}
                                   {op.ETA_FISC && isPast(op.ETA_FISC) && op.FISCAL && (
-                                    <div className="text-[10px] text-green-600 dark:text-green-400 font-medium">{op.FISCAL}</div>
+                                    <div className="text-[10px] text-green-600 font-medium">{op.FISCAL}</div>
                                   )}
                                 </div>
                               </div>
@@ -753,8 +753,8 @@ export default function ShipmentDetailsDialog({
                       .map(report => (
                         <div key={report.id} className="border rounded-xl p-4 hover:bg-muted/30 transition-colors">
                           <div className="flex items-start gap-3">
-                            <div className="bg-red-100 dark:bg-red-900/30 p-2.5 rounded-lg shrink-0 mt-0.5">
-                              <FileText size={24} className="text-red-600 dark:text-red-400" />
+                            <div className="bg-red-100 p-2.5 rounded-lg shrink-0 mt-0.5">
+                              <FileText size={24} className="text-red-600" />
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 flex-wrap">

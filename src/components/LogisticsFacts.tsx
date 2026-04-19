@@ -31,7 +31,7 @@ export default function LogisticsFacts({ language = 'es' }: LogisticsFactsProps)
 
   return (
     <div className="w-full max-w-4xl mx-auto my-8 px-4">
-      <div className="relative overflow-hidden rounded-2xl bg-white/40 dark:bg-slate-900/40 backdrop-blur-md border border-white/20 dark:border-slate-700/30 shadow-lg">
+      <div className="relative overflow-hidden rounded-2xl bg-white/40 backdrop-blur-md border border-white/20 shadow-lg">
         <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
           <Lightbulb size={120} weight="duotone" className="text-amber-500/50" />
         </div>
@@ -44,7 +44,7 @@ export default function LogisticsFacts({ language = 'es' }: LogisticsFactsProps)
           </div>
           
           <div className="flex-1 w-full text-center md:text-left">
-            <h4 className="font-bold text-xs text-amber-600 dark:text-amber-400 mb-2 uppercase tracking-widest opacity-80">
+            <h4 className="font-bold text-xs text-amber-600 mb-2 uppercase tracking-widest opacity-80">
               {t.title}
             </h4>
             <div className="relative h-24 md:h-16 flex items-center justify-center md:justify-start">
@@ -55,7 +55,7 @@ export default function LogisticsFacts({ language = 'es' }: LogisticsFactsProps)
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
                   transition={{ duration: 0.5, ease: "easeOut" }}
-                  className="absolute w-full text-lg md:text-xl font-medium text-slate-800 dark:text-slate-100 leading-snug"
+                  className="absolute w-full text-lg md:text-xl font-medium text-slate-800 leading-snug"
                 >
                   {facts[currentFactIndex]}
                 </motion.p>

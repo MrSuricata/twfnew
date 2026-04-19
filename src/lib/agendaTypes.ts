@@ -51,37 +51,37 @@ export const EVENT_TYPE_CONFIG: Record<EventType, EventTypeConfig> = {
   salida: {
     label: 'Salida MVD',
     color: 'bg-blue-500',
-    bg: 'bg-blue-50 dark:bg-blue-950/30',
+    bg: 'bg-blue-50',
     dot: '🔵',
-    textColor: 'text-blue-700 dark:text-blue-300'
+    textColor: 'text-blue-700'
   },
   eta_fisc: {
     label: 'Llegada Fiscal',
     color: 'bg-green-500',
-    bg: 'bg-green-50 dark:bg-green-950/30',
+    bg: 'bg-green-50',
     dot: '🟢',
-    textColor: 'text-green-700 dark:text-green-300'
+    textColor: 'text-green-700'
   },
   libre: {
     label: 'Vencimiento Libre',
     color: 'bg-orange-500',
-    bg: 'bg-orange-50 dark:bg-orange-950/30',
+    bg: 'bg-orange-50',
     dot: '🟠',
-    textColor: 'text-orange-700 dark:text-orange-300'
+    textColor: 'text-orange-700'
   },
   descarga: {
     label: 'Descarga',
     color: 'bg-purple-500',
-    bg: 'bg-purple-50 dark:bg-purple-950/30',
+    bg: 'bg-purple-50',
     dot: '🟣',
-    textColor: 'text-purple-700 dark:text-purple-300'
+    textColor: 'text-purple-700'
   },
   dev: {
     label: 'Devolución',
     color: 'bg-gray-400',
-    bg: 'bg-gray-50 dark:bg-gray-800/30',
+    bg: 'bg-gray-50',
     dot: '⚪',
-    textColor: 'text-gray-600 dark:text-gray-400'
+    textColor: 'text-gray-600'
   }
 }
 
@@ -97,39 +97,39 @@ export interface OperativaColorConfig {
 const OPERATIVA_COLORS: Record<string, OperativaColorConfig> = {
   TRASIEGO: {
     color: 'bg-blue-500',
-    bg: 'bg-blue-50 dark:bg-blue-950/30',
+    bg: 'bg-blue-50',
     dot: '🔵',
-    textColor: 'text-blue-700 dark:text-blue-300',
+    textColor: 'text-blue-700',
     label: 'Trasiego'
   },
   CONTENEDOR: {
     color: 'bg-rose-500',
-    bg: 'bg-rose-50 dark:bg-rose-950/30',
+    bg: 'bg-rose-50',
     dot: '🔴',
-    textColor: 'text-rose-700 dark:text-rose-300',
+    textColor: 'text-rose-700',
     label: 'Contenedor'
   },
   'CARGA A PISO': {
     color: 'bg-amber-500',
-    bg: 'bg-amber-50 dark:bg-amber-950/30',
+    bg: 'bg-amber-50',
     dot: '🟡',
-    textColor: 'text-amber-700 dark:text-amber-300',
+    textColor: 'text-amber-700',
     label: 'Carga a Piso'
   },
   DEVUELTO: {
     color: 'bg-gray-400',
-    bg: 'bg-gray-50 dark:bg-gray-800/30',
+    bg: 'bg-gray-50',
     dot: '⚪',
-    textColor: 'text-gray-600 dark:text-gray-400',
+    textColor: 'text-gray-600',
     label: 'Devuelto'
   }
 }
 
 const DEFAULT_OPERATIVA_COLOR: OperativaColorConfig = {
   color: 'bg-slate-500',
-  bg: 'bg-slate-50 dark:bg-slate-900/30',
+  bg: 'bg-slate-50',
   dot: '⚫',
-  textColor: 'text-slate-700 dark:text-slate-300',
+  textColor: 'text-slate-700',
   label: 'Otro'
 }
 

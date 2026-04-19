@@ -457,8 +457,8 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
         {[
           { label: 'Total', value: stats.total, color: 'text-foreground', bg: 'bg-muted/50', filterAction: () => { setStatusFilter('all'); setLibreFilter('all'); setSearchText(''); setCurrentPage(1) } },
-          { label: 'Vencidos', value: stats.vencidos, color: 'text-red-600', bg: stats.vencidos > 0 ? 'bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900' : 'bg-muted/50', filterAction: () => { setStatusFilter('all'); setLibreFilter('vencido'); setSearchText(''); setCurrentPage(1) } },
-          { label: 'Urgentes', value: stats.urgentes, color: 'text-orange-600', bg: stats.urgentes > 0 ? 'bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-900' : 'bg-muted/50', filterAction: () => { setStatusFilter('all'); setLibreFilter('urgente'); setSearchText(''); setCurrentPage(1) } },
+          { label: 'Vencidos', value: stats.vencidos, color: 'text-red-600', bg: stats.vencidos > 0 ? 'bg-red-50 border border-red-200' : 'bg-muted/50', filterAction: () => { setStatusFilter('all'); setLibreFilter('vencido'); setSearchText(''); setCurrentPage(1) } },
+          { label: 'Urgentes', value: stats.urgentes, color: 'text-orange-600', bg: stats.urgentes > 0 ? 'bg-orange-50 border border-orange-200' : 'bg-muted/50', filterAction: () => { setStatusFilter('all'); setLibreFilter('urgente'); setSearchText(''); setCurrentPage(1) } },
           { label: 'En Tránsito', value: stats.enTransito, color: 'text-blue-600', bg: 'bg-muted/50', filterAction: () => { setLibreFilter('all'); setStatusFilter('en_transito'); setSearchText(''); setCurrentPage(1) } },
           { label: 'En Fiscal', value: stats.enFiscal, color: 'text-green-600', bg: 'bg-muted/50', filterAction: () => { setLibreFilter('all'); setStatusFilter('llego_fiscal'); setSearchText(''); setCurrentPage(1) } },
         ].map((s, i) => {
@@ -663,10 +663,10 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
                                 <div className="flex flex-col">
                                   <span className="text-xs whitespace-nowrap">{record.LIBRE_HASTA}</span>
                                   <span className={`text-[10px] font-semibold ${
-                                    daysUntilFree < 0 ? 'text-red-600 dark:text-red-400' :
-                                    daysUntilFree <= 2 ? 'text-orange-600 dark:text-orange-400' :
-                                    daysUntilFree <= 5 ? 'text-yellow-600 dark:text-yellow-400' :
-                                    'text-green-600 dark:text-green-400'
+                                    daysUntilFree < 0 ? 'text-red-600' :
+                                    daysUntilFree <= 2 ? 'text-orange-600' :
+                                    daysUntilFree <= 5 ? 'text-yellow-600' :
+                                    'text-green-600'
                                   }`}>
                                     {daysUntilFree < 0
                                       ? `Vencido ${Math.abs(daysUntilFree)}d`

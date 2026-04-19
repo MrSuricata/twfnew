@@ -42,25 +42,25 @@ const REASON_CONFIG: Record<PendingReason, {
     label: 'Sin depósito',
     icon: MapPin,
     stripe: 'border-l-rose-500',
-    chip: 'bg-rose-50 dark:bg-rose-950/40',
-    chipText: 'text-rose-700 dark:text-rose-300',
-    headerText: 'text-rose-600 dark:text-rose-400',
+    chip: 'bg-rose-50',
+    chipText: 'text-rose-700',
+    headerText: 'text-rose-600',
   },
   no_transport: {
     label: 'Sin transporte',
     icon: Truck,
     stripe: 'border-l-amber-500',
-    chip: 'bg-amber-50 dark:bg-amber-950/40',
-    chipText: 'text-amber-700 dark:text-amber-300',
-    headerText: 'text-amber-600 dark:text-amber-400',
+    chip: 'bg-amber-50',
+    chipText: 'text-amber-700',
+    headerText: 'text-amber-600',
   },
   no_salida: {
     label: 'Falta salida',
     icon: Calendar,
     stripe: 'border-l-blue-500',
-    chip: 'bg-blue-50 dark:bg-blue-950/40',
-    chipText: 'text-blue-700 dark:text-blue-300',
-    headerText: 'text-blue-600 dark:text-blue-400',
+    chip: 'bg-blue-50',
+    chipText: 'text-blue-700',
+    headerText: 'text-blue-600',
   },
 }
 
@@ -75,12 +75,12 @@ function etaPill(daysUntil: number): { text: string; cls: string } {
     const ago = Math.abs(daysUntil)
     return {
       text: ago === 1 ? 'llegó ayer' : `llegó hace ${ago}d`,
-      cls: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300',
+      cls: 'bg-emerald-50 text-emerald-700',
     }
   }
-  if (daysUntil === 0) return { text: 'llega HOY', cls: 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300 font-bold' }
-  if (daysUntil === 1) return { text: 'llega mañana', cls: 'bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 font-semibold' }
-  return { text: `llega en ${daysUntil}d`, cls: 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300' }
+  if (daysUntil === 0) return { text: 'llega HOY', cls: 'bg-rose-100 text-rose-700 font-bold' }
+  if (daysUntil === 1) return { text: 'llega mañana', cls: 'bg-amber-100 text-amber-700 font-semibold' }
+  return { text: `llega en ${daysUntil}d`, cls: 'bg-amber-50 text-amber-700' }
 }
 
 export default function AgendaPendingSidebar({ shipments, windowDays = 4, onClose, onSelectShipment }: AgendaPendingSidebarProps) {
@@ -155,7 +155,7 @@ export default function AgendaPendingSidebar({ shipments, windowDays = 4, onClos
   return (
     <div className="w-80 border-l bg-background flex flex-col h-full overflow-hidden">
       {/* Header — compact, single row */}
-      <div className="flex items-center justify-between px-4 py-3 border-b bg-gradient-to-b from-amber-50/60 to-transparent dark:from-amber-950/20">
+      <div className="flex items-center justify-between px-4 py-3 border-b bg-gradient-to-b from-amber-50/60 to-transparent">
         <div className="flex items-center gap-2 min-w-0">
           <Warning className="text-amber-500 shrink-0" size={18} weight="fill" />
           <div className="min-w-0">
@@ -246,7 +246,7 @@ export default function AgendaPendingSidebar({ shipments, windowDays = 4, onClos
                             <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded ${
                               item.deposito
                                 ? 'bg-muted/60 text-foreground'
-                                : 'bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400 italic'
+                                : 'bg-rose-50 text-rose-600 italic'
                             }`}>
                               <MapPin size={10} weight={item.deposito ? 'regular' : 'fill'} />
                               {item.deposito || 'sin depósito'}
@@ -254,7 +254,7 @@ export default function AgendaPendingSidebar({ shipments, windowDays = 4, onClos
                             <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded ${
                               item.transporte
                                 ? 'bg-muted/60 text-foreground'
-                                : 'bg-amber-50 text-amber-600 dark:bg-amber-950/40 dark:text-amber-400 italic'
+                                : 'bg-amber-50 text-amber-600 italic'
                             }`}>
                               <Truck size={10} weight={item.transporte ? 'regular' : 'fill'} />
                               {item.transporte || 'sin transporte'}
