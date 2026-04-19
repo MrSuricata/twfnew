@@ -6,6 +6,11 @@ interface ErrorFallbackProps {
 }
 
 export default function ErrorFallback({ error, resetErrorBoundary }: ErrorFallbackProps) {
+  const isDev = import.meta.env.DEV
+  // Stable-ish error ID for users to reference when reporting issues
+  const errorId = Math.abs(
+    (error.message || 'unknown').split('').reduce((a, c) => (a << 5) - a + c.charCodeAt(0), 0)
+  ).toString(16).slice(0, 8).toUpperCase()
   return (
     <div
       className="min-h-screen flex items-center justify-center p-6"
@@ -34,13 +39,13 @@ export default function ErrorFallback({ error, resetErrorBoundary }: ErrorFallba
           style={{ background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.2)' }}
         >
           <p className="text-xs font-semibold mb-2" style={{ color: '#fca5a5' }}>
-            Detalles del error:
+            {isDev ? 'Detalles del error:' : 'Referencia del error:'}
           </p>
           <pre
             className="text-xs whitespace-pre-wrap break-words overflow-auto max-h-32 font-mono"
             style={{ color: '#fda4af' }}
           >
-            {error.message}
+            {isDev ? error.message : `#${errorId}`}
           </pre>
         </div>
 
