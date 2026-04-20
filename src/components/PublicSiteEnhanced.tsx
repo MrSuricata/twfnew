@@ -112,6 +112,7 @@ export default function PublicSite({
   const t = useTranslation(language)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
   const [scrolled, setScrolled] = useState(false)
   const [activeSection, setActiveSection] = useState('inicio')
   const [showScrollTop, setShowScrollTop] = useState(false)
@@ -131,6 +132,20 @@ export default function PublicSite({
 
   useEffect(() => {
     initGA()
+  }, [])
+
+  // Inject Cloudflare Turnstile script (once per page) and register global callbacks
+  useEffect(() => {
+    if (document.querySelector('script[data-turnstile]')) return
+    const s = document.createElement('script')
+    s.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js'
+    s.async = true
+    s.defer = true
+    s.setAttribute('data-turnstile', 'true')
+    document.head.appendChild(s)
+    // Expose callbacks on window for the widget's data-callback attribute to find
+    ;(window as any).onTurnstileVerify = (token: string) => setTurnstileToken(token)
+    ;(window as any).onTurnstileExpire = () => setTurnstileToken(null)
   }, [])
 
   // Navbar scroll effect + scroll-to-top visibility
@@ -294,8 +309,15 @@ export default function PublicSite({
       fetch('/api/quotes/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...formData, language })
-      }).catch(err => console.warn('Quote email failed:', err))
+        body: JSON.stringify({ ...formData, language, turnstileToken })
+      })
+        .then(res => {
+          if (res.ok) {
+            setTurnstileToken(null)
+            ;(window as any).turnstile?.reset()
+          }
+        })
+        .catch(err => console.warn('Quote email failed:', err))
 
       toast.success(t.quote.success, { duration: 3000 })
 
@@ -963,14 +985,22 @@ export default function PublicSite({
                     />
                   </div>
 
-                  <Button 
-                    type="submit" 
-                    disabled={isSubmitting}
-                    className="w-full bg-accent text-accent-foreground hover:bg-accent/90" 
+                  <div
+                    className="cf-turnstile"
+                    data-sitekey={import.meta.env.VITE_TURNSTILE_SITE_KEY}
+                    data-callback="onTurnstileVerify"
+                    data-expired-callback="onTurnstileExpire"
+                    data-theme="light"
+                  />
+
+                  <Button
+                    type="submit"
+                    disabled={isSubmitting || !turnstileToken}
+                    className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
                     size="lg"
                   >
-                    {isSubmitting ? t.quote.submitting : t.quote.submit}
-                    {!isSubmitting && <ArrowRight size={20} className="ml-2" />}
+                    {isSubmitting ? t.quote.submitting : (!turnstileToken ? 'Completá el captcha' : t.quote.submit)}
+                    {!isSubmitting && turnstileToken && <ArrowRight size={20} className="ml-2" />}
                   </Button>
                 </form>
               </CardContent>

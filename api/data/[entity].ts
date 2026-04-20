@@ -4,7 +4,33 @@ import { handleCors } from '../_lib/cors.js'
 import { getSupabase } from '../_lib/supabase.js'
 import { sendMail } from '../_lib/mail.js'
 import { welcomeClientEmail, welcomePartnerEmail } from '../_lib/emailTemplates.js'
-import { createHash } from 'crypto'
+import { hashPassword } from '../_lib/password.js'
+import {
+  validate,
+  QuoteRowSchema,
+  ClientRowSchema,
+  SettingsUpsertSchema,
+  PartnerUserCreateSchema,
+  PartnerUserPatchSchema,
+  DocumentRowSchema,
+  ReportRowSchema,
+  OriginPhotoRowSchema,
+  NotificationTaskRowSchema,
+  NotificationTaskPatchSchema,
+} from '../_lib/schemas.js'
+import { z } from 'zod'
+
+/** Validate `req.body` as either a single object or an array against `itemSchema`. */
+function validateBatch<T>(itemSchema: z.ZodSchema<T>, body: unknown): { ok: true; items: T[] } | { ok: false; error: string } {
+  const arr = Array.isArray(body) ? body : [body]
+  const results: T[] = []
+  for (let i = 0; i < arr.length; i++) {
+    const r = validate(itemSchema, arr[i])
+    if (!r.ok) return { ok: false, error: `item[${i}]: ${r.error}` }
+    results.push(r.data)
+  }
+  return { ok: true, items: results }
+}
 
 // ─── Combined Data API ───────────────────────────────────────────────
 // Handles: /api/data/quotes, /api/data/documents, /api/data/reports,
@@ -70,14 +96,15 @@ async function handleQuotes(req: VercelRequest, res: VercelResponse, db: any) {
       .from('quotes')
       .select('*')
       .order('timestamp', { ascending: false })
+      .limit(500)
     if (error) throw error
     return res.status(200).json({ quotes: data || [] })
   }
 
   if (req.method === 'POST') {
-    const body = req.body
-    const items = Array.isArray(body) ? body : [body]
-    const rows = items.map((q: any) => ({
+    const v = validateBatch(QuoteRowSchema, req.body)
+    if (!v.ok) return res.status(400).json({ error: v.error })
+    const rows = v.items.map((q) => ({
       id: q.id,
       name: q.name,
       email: q.email,
@@ -111,7 +138,7 @@ async function handleQuotes(req: VercelRequest, res: VercelResponse, db: any) {
 
 async function handleDocuments(req: VercelRequest, res: VercelResponse, db: any) {
   if (req.method === 'GET') {
-    let query = db.from('documents').select('*').order('uploaded_at', { ascending: false })
+    let query = db.from('documents').select('*').order('uploaded_at', { ascending: false }).limit(500)
     const shipmentRef = req.query.shipmentRef as string
     if (shipmentRef) query = query.eq('shipment_ref', shipmentRef)
     const { data, error } = await query
@@ -130,9 +157,9 @@ async function handleDocuments(req: VercelRequest, res: VercelResponse, db: any)
   }
 
   if (req.method === 'POST') {
-    const body = req.body
-    const items = Array.isArray(body) ? body : [body]
-    const rows = items.map((d: any) => ({
+    const v = validateBatch(DocumentRowSchema, req.body)
+    if (!v.ok) return res.status(400).json({ error: v.error })
+    const rows = v.items.map((d) => ({
       id: d.id,
       shipment_ref: d.shipmentRef || d.shipment_ref,
       name: d.name,
@@ -190,7 +217,7 @@ async function handleReports(req: VercelRequest, res: VercelResponse, db: any) {
     }
 
     // Bulk list — fetch all then strip file_data in response (robust even if schema changes)
-    let query = db.from('reports').select('*').order('created_at_ts', { ascending: false })
+    let query = db.from('reports').select('*').order('created_at_ts', { ascending: false }).limit(500)
     const shipmentRef = req.query.shipmentRef as string
     if (shipmentRef) query = query.eq('shipment_ref', shipmentRef)
     const { data, error } = await query
@@ -234,8 +261,10 @@ async function handleReports(req: VercelRequest, res: VercelResponse, db: any) {
 
     // Single report WITH file (individual upload)
     if (mode === 'file') {
-      const r = req.body
-      if (!r || !r.id) return res.status(400).json({ error: 'Report object with id required' })
+      const vR = validate(ReportRowSchema, req.body)
+      if (!vR.ok) return res.status(400).json({ error: vR.error })
+      const r = vR.data
+      if (!r.id) return res.status(400).json({ error: 'Report object with id required' })
       const row = buildRow(r, true)
       // Always include container_number for individual saves
       row.container_number = r.containerNumber || r.container_number || ''
@@ -251,9 +280,9 @@ async function handleReports(req: VercelRequest, res: VercelResponse, db: any) {
     }
 
     // Bulk metadata sync (NO file_data)
-    const body = req.body
-    const items = Array.isArray(body) ? body : [body]
-    const rows = items.map((r: any) => buildRow(r, false))
+    const vBulk = validateBatch(ReportRowSchema, req.body)
+    if (!vBulk.ok) return res.status(400).json({ error: vBulk.error })
+    const rows = vBulk.items.map(r => buildRow(r, false))
     let { error } = await db.from('reports').upsert(rows, { onConflict: 'id', ignoreDuplicates: false })
     // Retry without container_number if column doesn't exist
     if (error && error.message?.includes('container_number')) {
@@ -284,6 +313,7 @@ async function handleClients(req: VercelRequest, res: VercelResponse, db: any) {
       .from('clients')
       .select('*')
       .order('created_at_ts', { ascending: false })
+      .limit(500)
     if (error) throw error
 
     const clients = (data || []).map((c: any) => ({
@@ -298,15 +328,15 @@ async function handleClients(req: VercelRequest, res: VercelResponse, db: any) {
   }
 
   if (req.method === 'POST') {
-    const body = req.body
-    const items = Array.isArray(body) ? body : [body]
-    const rows = items.map((c: any) => ({
+    const v = validateBatch(ClientRowSchema, req.body)
+    if (!v.ok) return res.status(400).json({ error: v.error })
+    const rows = v.items.map((c) => ({
       id: c.id,
       email: c.email,
       name: c.name,
       company: c.company || '',
       created_at_ts: c.createdAt || c.created_at_ts || Date.now(),
-      cliente_pattern: c.clientePattern || c.cliente_pattern || '',
+      cliente_pattern: c.clientePattern || '',
     }))
 
     // Detect brand-new clients (by email) BEFORE the upsert so we can
@@ -381,11 +411,12 @@ async function handleSettings(req: VercelRequest, res: VercelResponse, db: any) 
   }
 
   if (req.method === 'PUT') {
-    const { key, value } = req.body || {}
-    if (!key) return res.status(400).json({ error: 'key is required' })
+    const v = validate(SettingsUpsertSchema, req.body)
+    if (!v.ok) return res.status(400).json({ error: v.error })
+    const { key, value } = v.data
     const { error } = await db.from('settings').upsert({
       key,
-      value: typeof value === 'object' ? value : { v: value },
+      value: typeof value === 'object' && value !== null ? value : { v: value },
       updated_at: new Date().toISOString(),
     }, { onConflict: 'key' })
     if (error) throw error
@@ -422,6 +453,7 @@ async function handleNotificationTasks(req: VercelRequest, res: VercelResponse, 
     }
     // 'all' = no extra filters
 
+    query = query.limit(500)
     const { data, error } = await query
     if (error) throw error
 
@@ -452,9 +484,9 @@ async function handleNotificationTasks(req: VercelRequest, res: VercelResponse, 
   }
 
   if (req.method === 'POST') {
-    const body = req.body
-    const items = Array.isArray(body) ? body : [body]
-    const rows = items.map((t: any) => ({
+    const v = validateBatch(NotificationTaskRowSchema, req.body)
+    if (!v.ok) return res.status(400).json({ error: v.error })
+    const rows = v.items.map((t) => ({
       id: t.id,
       shipment_ref: t.shipmentRef || t.shipment_ref,
       container_number: t.containerNumber || t.container_number || '',
@@ -481,8 +513,10 @@ async function handleNotificationTasks(req: VercelRequest, res: VercelResponse, 
   if (req.method === 'PATCH') {
     const id = req.query.id as string
     if (!id) return res.status(400).json({ error: 'id query parameter required' })
+    const vP = validate(NotificationTaskPatchSchema, req.body)
+    if (!vP.ok) return res.status(400).json({ error: vP.error })
+    const body = vP.data
     const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
-    const body = req.body || {}
     // Map camelCase to snake_case for allowed fields
     if (body.photosOk !== undefined) updates.photos_ok = body.photosOk
     if (body.reportOk !== undefined) updates.report_ok = body.reportOk
@@ -544,6 +578,7 @@ async function handleOriginPhotos(req: VercelRequest, res: VercelResponse, db: a
     let query = db.from('origin_photos')
       .select('id, shipment_ref, container_number, caption, photo_type, file_name, file_type, thumbnail_data, created_at_ts, created_by')
       .order('created_at_ts', { ascending: false })
+      .limit(500)
     const shipmentRef = req.query.shipmentRef as string
     if (shipmentRef) query = query.eq('shipment_ref', shipmentRef)
     const { data, error } = await query
@@ -568,8 +603,10 @@ async function handleOriginPhotos(req: VercelRequest, res: VercelResponse, db: a
     if (mode !== 'file') {
       return res.status(400).json({ error: 'Use ?mode=file to upload a photo' })
     }
-    const p = req.body
-    if (!p || !p.id) return res.status(400).json({ error: 'Photo object with id required' })
+    const vP = validate(OriginPhotoRowSchema, req.body)
+    if (!vP.ok) return res.status(400).json({ error: vP.error })
+    const p = vP.data
+    if (!p.id) return res.status(400).json({ error: 'Photo object with id required' })
     const row = {
       id: p.id,
       shipment_ref: p.shipmentRef || p.shipment_ref,
@@ -616,10 +653,13 @@ async function handleShipmentsCache(req: VercelRequest, res: VercelResponse, db:
   }
 
   if (req.method === 'POST') {
-    const { shipments } = req.body || {}
-    if (!Array.isArray(shipments)) {
-      return res.status(400).json({ error: 'shipments array required' })
-    }
+    // Minimal shape validation — admin-only, but cache poisons downstream /api/tracking
+    const ShipmentsCacheSchema = z.object({
+      shipments: z.array(z.record(z.unknown())).max(10000),
+    })
+    const v = validate(ShipmentsCacheSchema, req.body)
+    if (!v.ok) return res.status(400).json({ error: v.error })
+    const { shipments } = v.data
     const { error } = await db.from('shipments_cache').upsert({
       id: 1,
       data: shipments,
@@ -669,13 +709,9 @@ async function handlePartnerShipments(req: VercelRequest, res: VercelResponse, d
 
 // ── Partner Users (admin CRUD) ──────────────────────────────────────
 
-function hashPw(password: string): string {
-  return createHash('sha256').update(password).digest('hex')
-}
-
 async function handlePartnerUsers(req: VercelRequest, res: VercelResponse, db: any) {
   if (req.method === 'GET') {
-    const { data, error } = await db.from('partner_users').select('*').order('created_at', { ascending: false })
+    const { data, error } = await db.from('partner_users').select('*').order('created_at', { ascending: false }).limit(500)
     if (error) throw error
     return res.status(200).json({ users: (data || []).map((u: any) => ({
       id: u.id, email: u.email, name: u.name, role: u.role,
@@ -684,15 +720,15 @@ async function handlePartnerUsers(req: VercelRequest, res: VercelResponse, db: a
   }
 
   if (req.method === 'POST') {
-    const { email, name, password, role, filterValue } = req.body || {}
-    if (!email || !name || !password || !role || !filterValue) {
-      return res.status(400).json({ error: 'email, name, password, role, filterValue required' })
-    }
+    const v = validate(PartnerUserCreateSchema, req.body)
+    if (!v.ok) return res.status(400).json({ error: v.error })
+    const { email, name, password, role, filterValue } = v.data
     const cleanEmail = email.toLowerCase().trim()
     const cleanName = name.trim()
+    const password_hash = await hashPassword(password)
     const { data, error } = await db.from('partner_users').insert({
       email: cleanEmail, name: cleanName,
-      password_hash: hashPw(password), role, filter_value: filterValue, active: true,
+      password_hash, role, filter_value: filterValue, active: true,
     }).select('id').single()
     if (error) throw error
 
@@ -717,11 +753,13 @@ async function handlePartnerUsers(req: VercelRequest, res: VercelResponse, db: a
   if (req.method === 'PATCH') {
     const id = req.query.id as string
     if (!id) return res.status(400).json({ error: 'id required' })
-    const body = req.body || {}
+    const vP = validate(PartnerUserPatchSchema, req.body)
+    if (!vP.ok) return res.status(400).json({ error: vP.error })
+    const body = vP.data
     const updates: Record<string, unknown> = {}
     if (body.email !== undefined) updates.email = body.email.toLowerCase().trim()
     if (body.name !== undefined) updates.name = body.name.trim()
-    if (body.password !== undefined) updates.password_hash = hashPw(body.password)
+    if (body.password !== undefined) updates.password_hash = await hashPassword(body.password)
     if (body.role !== undefined) updates.role = body.role
     if (body.filterValue !== undefined) updates.filter_value = body.filterValue
     if (body.active !== undefined) updates.active = body.active

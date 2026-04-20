@@ -1,0 +1,231 @@
+import { z } from 'zod'
+
+// ─── Settings allowlist ─────────────────────────────────────────────
+// Start empty: no settings keys are currently written by the app.
+// To allow a new settings key, add it here AND verify the admin UI writes it.
+export const SETTINGS_ALLOWLIST: readonly string[] = [] as const
+
+// ─── Helpers ────────────────────────────────────────────────────────
+/** Strip HTML tags. Not bulletproof, but blocks naive injection attempts. */
+const stripHtml = (s: string) => s.replace(/<[^>]*>/g, '')
+
+// ─── Schemas ────────────────────────────────────────────────────────
+
+/** Public quote form submission */
+export const QuoteSubmitSchema = z.object({
+  name: z.string().min(1).max(100).transform(s => s.trim()),
+  email: z.string().email().max(200).transform(s => s.toLowerCase().trim()),
+  phone: z.string().max(40).optional(),
+  cargoType: z.string().min(1).max(100),
+  origin: z.string().max(200).optional(),
+  destination: z.string().max(200).optional(),
+  details: z.string().max(2000).transform(stripHtml).optional(),
+  language: z.string().max(8).optional(),
+})
+
+/** Admin-synced quote row (bulk upsert) */
+export const QuoteRowSchema = z.object({
+  id: z.string().min(1).max(100),
+  name: z.string().min(1).max(100),
+  email: z.string().email().max(200),
+  phone: z.string().max(40).optional().default(''),
+  cargoType: z.string().max(100).optional(),
+  cargo_type: z.string().max(100).optional(),
+  origin: z.string().max(200).optional().default(''),
+  destination: z.string().max(200).optional().default(''),
+  details: z.string().max(2000).optional().default(''),
+  timestamp: z.number().int().positive().optional(),
+  status: z.enum(['pending', 'contacted', 'quoted', 'closed', 'lost']).optional(),
+  notes: z.array(z.any()).optional(),
+  language: z.string().max(8).optional(),
+})
+
+/** Client row (admin CRUD) */
+const clientePatternRe = /^[A-Z0-9 .&,/-]+(,[A-Z0-9 .&,/-]+)*$/i
+export const ClientRowSchema = z.object({
+  id: z.string().min(1).max(100),
+  email: z.string().email().max(200),
+  name: z.string().min(1).max(200),
+  company: z.string().max(200).optional().default(''),
+  createdAt: z.number().int().optional(),
+  created_at_ts: z.number().int().optional(),
+  clientePattern: z.string().min(5).max(400).regex(clientePatternRe, 'invalid chars').refine(
+    (s) => s.split(',').map(t => t.trim()).every(t => t.length >= 5),
+    { message: 'each comma-separated token must be ≥5 chars' }
+  ),
+})
+
+/** Settings upsert (PUT) */
+export const SettingsUpsertSchema = z.object({
+  key: z.string().refine(
+    (k) => (SETTINGS_ALLOWLIST as readonly string[]).includes(k),
+    { message: 'key not in SETTINGS_ALLOWLIST' }
+  ),
+  value: z.unknown(),
+})
+
+/** Partner user create (POST) */
+export const PartnerUserCreateSchema = z.object({
+  email: z.string().email().max(200),
+  name: z.string().min(1).max(200),
+  password: z.string().min(10).max(200),
+  role: z.enum(['depot', 'transport']),
+  filterValue: z.string().min(2).max(200),
+})
+
+/** Partner user patch (PATCH, partial) */
+export const PartnerUserPatchSchema = z.object({
+  email: z.string().email().max(200).optional(),
+  name: z.string().min(1).max(200).optional(),
+  password: z.string().min(10).max(200).optional(),
+  role: z.enum(['depot', 'transport']).optional(),
+  filterValue: z.string().min(2).max(200).optional(),
+  active: z.boolean().optional(),
+})
+
+/** Document row */
+export const DocumentRowSchema = z.object({
+  id: z.string().min(1).max(100),
+  shipmentRef: z.string().min(1).max(100).optional(),
+  shipment_ref: z.string().min(1).max(100).optional(),
+  name: z.string().min(1).max(300),
+  type: z.string().max(100).optional().default(''),
+  uploadedAt: z.number().int().optional(),
+  uploaded_at: z.number().int().optional(),
+  uploadedBy: z.string().max(200).optional().default(''),
+  uploaded_by: z.string().max(200).optional().default(''),
+  url: z.string().max(2000).optional().default(''),
+  data: z.string().optional().default(''),
+}).refine(d => d.shipmentRef || d.shipment_ref, { message: 'shipmentRef required' })
+
+/** Report row */
+export const ReportRowSchema = z.object({
+  id: z.string().min(1).max(100),
+  shipmentRef: z.string().min(1).max(100).optional(),
+  shipment_ref: z.string().min(1).max(100).optional(),
+  containerNumber: z.string().max(50).optional(),
+  container_number: z.string().max(50).optional(),
+  title: z.string().min(1).max(300),
+  content: z.string().max(20000).optional().default(''),
+  fileName: z.string().max(300).optional(),
+  file_name: z.string().max(300).optional(),
+  fileType: z.string().max(100).optional(),
+  file_type: z.string().max(100).optional(),
+  fileData: z.string().optional(),
+  file_data: z.string().optional(),
+  createdAt: z.number().int().optional(),
+  created_at_ts: z.number().int().optional(),
+  createdBy: z.string().max(200).optional(),
+  created_by: z.string().max(200).optional(),
+}).refine(r => r.shipmentRef || r.shipment_ref, { message: 'shipmentRef required' })
+
+/** Origin photo row */
+export const OriginPhotoRowSchema = z.object({
+  id: z.string().min(1).max(100),
+  shipmentRef: z.string().min(1).max(100).optional(),
+  shipment_ref: z.string().min(1).max(100).optional(),
+  containerNumber: z.string().max(50).optional(),
+  container_number: z.string().max(50).optional(),
+  caption: z.string().max(500).optional().default(''),
+  photoType: z.enum(['origen', 'destino', 'otro']).optional().default('origen'),
+  photo_type: z.enum(['origen', 'destino', 'otro']).optional(),
+  fileName: z.string().max(300).optional().default(''),
+  file_name: z.string().max(300).optional(),
+  fileType: z.string().max(100).optional().default(''),
+  file_type: z.string().max(100).optional(),
+  fileData: z.string().optional().default(''),
+  file_data: z.string().optional(),
+  thumbnailData: z.string().optional().default(''),
+  thumbnail_data: z.string().optional(),
+  createdAt: z.number().int().optional(),
+  created_at_ts: z.number().int().optional(),
+  createdBy: z.string().max(200).optional().default(''),
+  created_by: z.string().max(200).optional(),
+}).refine(p => p.shipmentRef || p.shipment_ref, { message: 'shipmentRef required' })
+
+/** Notification task row */
+export const NotificationTaskRowSchema = z.object({
+  id: z.string().min(1).max(100),
+  shipmentRef: z.string().min(1).max(100).optional(),
+  shipment_ref: z.string().min(1).max(100).optional(),
+  containerNumber: z.string().max(50).optional(),
+  container_number: z.string().max(50).optional(),
+  operativa: z.string().max(100).optional(),
+  cliente: z.string().max(200).optional(),
+  clientEmail: z.string().email().max(200).optional().or(z.literal('')),
+  client_email: z.string().email().max(200).optional().or(z.literal('')),
+  clientName: z.string().max(200).optional(),
+  client_name: z.string().max(200).optional(),
+  step: z.string().min(1).max(100),
+  stepNumber: z.number().int().optional(),
+  step_number: z.number().int().optional(),
+  dueDate: z.string().max(20).optional(),
+  due_date: z.string().max(20).optional(),
+  salidaDate: z.string().max(20).optional(),
+  salida_date: z.string().max(20).optional(),
+  photosOk: z.boolean().optional(),
+  photos_ok: z.boolean().optional(),
+  reportOk: z.boolean().optional(),
+  report_ok: z.boolean().optional(),
+  emailSent: z.boolean().optional(),
+  email_sent: z.boolean().optional(),
+  emailSentAt: z.string().optional().nullable(),
+  email_sent_at: z.string().optional().nullable(),
+  status: z.string().max(50).optional(),
+  notes: z.string().max(2000).optional(),
+})
+
+/** Notification task PATCH (partial) */
+export const NotificationTaskPatchSchema = z.object({
+  photosOk: z.boolean().optional(),
+  reportOk: z.boolean().optional(),
+  emailSent: z.boolean().optional(),
+  clientEmail: z.string().email().max(200).optional().or(z.literal('')),
+  clientName: z.string().max(200).optional(),
+  status: z.string().max(50).optional(),
+  notes: z.string().max(2000).optional(),
+})
+
+/** Admin login body */
+export const AdminLoginSchema = z.object({
+  username: z.string().min(1).max(200),
+  password: z.string().min(1).max(200),
+})
+
+/** Partner login body */
+export const PartnerLoginSchema = z.object({
+  email: z.string().email().max(200),
+  password: z.string().min(1).max(200),
+  type: z.literal('partner'),
+})
+
+/** OTP request body */
+export const OtpRequestSchema = z.object({
+  action: z.literal('request'),
+  email: z.string().email().max(200),
+})
+
+/** OTP verify body */
+export const OtpVerifySchema = z.object({
+  action: z.literal('verify'),
+  email: z.string().email().max(200),
+  code: z.string().regex(/^\d{6}$/, 'must be 6 digits'),
+})
+
+// ─── validate() helper ──────────────────────────────────────────────
+
+export type ValidationResult<T> =
+  | { ok: true; data: T }
+  | { ok: false; error: string }
+
+/** Parse and return a clean result object. Never throws. */
+export function validate<T>(schema: z.ZodSchema<T>, body: unknown): ValidationResult<T> {
+  const r = schema.safeParse(body)
+  if (!r.success) {
+    const error = r.error.issues
+      .map(i => `${i.path.length ? i.path.join('.') + ': ' : ''}${i.message}`)
+      .join('; ')
+    return { ok: false, error }
+  }
+  return { ok: true, data: r.data }
+}
