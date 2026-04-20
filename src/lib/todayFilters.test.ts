@@ -24,22 +24,27 @@ const TOMORROW = '2026-04-21'
 function mkOp(partial: Partial<OperativasRecord>): OperativasRecord {
   return {
     REF: partial.REF ?? 'A7500',
-    CLIENTE_OP: partial.CLIENTE_OP ?? '',
-    CNTR_OP: partial.CNTR_OP ?? '',
-    OPERATIVA: partial.OPERATIVA ?? 'CONTENEDOR',
+    TLX: partial.TLX ?? '',
+    DEPOSITO: partial.DEPOSITO ?? '',
     ETA_OP: partial.ETA_OP ?? '',
     SALIDA: partial.SALIDA ?? '',
     ETA_FISC: partial.ETA_FISC ?? '',
     LIBRE: partial.LIBRE ?? '',
+    OPERATIVA: partial.OPERATIVA ?? 'CONTENEDOR',
+    CNTR_OP: partial.CNTR_OP ?? '',
+    PKGS: partial.PKGS ?? 0,
+    KG: partial.KG ?? 0,
+    M3: partial.M3 ?? 0,
+    DESCRIPCION: partial.DESCRIPCION ?? '',
+    FISCAL: partial.FISCAL ?? '',
     DESCARGA: partial.DESCARGA ?? '',
     DEV: partial.DEV ?? '',
-    DEPOSITO: partial.DEPOSITO ?? '',
-    TRANSPORTE: partial.TRANSPORTE ?? '',
-    FISCAL: partial.FISCAL ?? '',
-    SENASA: partial.SENASA ?? '',
+    CLIENTE_OP: partial.CLIENTE_OP ?? '',
+    TIPO: partial.TIPO ?? '',
     WOOD: partial.WOOD ?? '',
-    NOTAS: partial.NOTAS ?? '',
-  } as OperativasRecord
+    TRANSPORTE: partial.TRANSPORTE ?? '',
+    HORARIO: partial.HORARIO ?? '',
+  }
 }
 
 function mkShip(ref: string, operativas: OperativasRecord[], extra: Partial<ParsedShipment> = {}): ParsedShipment {
