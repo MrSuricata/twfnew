@@ -79,7 +79,7 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
       </nav>
 
       {dbSyncError && (
-        <div className="bg-yellow-50 dark:bg-yellow-950 border-b border-yellow-200 dark:border-yellow-800 px-4 py-2 text-sm text-yellow-900 dark:text-yellow-200 flex items-center gap-2">
+        <div className="bg-yellow-50 border-b border-yellow-200 px-4 py-2 text-sm text-yellow-900 flex items-center gap-2">
           <Warning size={16} weight="fill" />
           <span>Trabajando con datos locales — {dbSyncError}. Los cambios se sincronizarán cuando vuelva la conexión.</span>
           <button onClick={() => window.location.reload()} className="ml-auto underline hover:no-underline">
@@ -89,7 +89,10 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
       )}
 
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-8">
-        <Breadcrumbs items={getBreadcrumbs()} />
+        <Breadcrumbs
+          items={getBreadcrumbs()}
+          onHomeClick={activeTab !== 'agenda' ? () => setActiveTab('agenda') : undefined}
+        />
         
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="grid w-full grid-cols-4 lg:grid-cols-8 max-w-5xl">

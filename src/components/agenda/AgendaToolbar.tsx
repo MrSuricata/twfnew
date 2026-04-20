@@ -123,7 +123,7 @@ export default function AgendaToolbar({
           <p className="text-xs text-muted-foreground">
             {eventCount} operacion{eventCount !== 1 ? 'es' : ''}
             {alertCount > 0 && (
-              <span className="ml-2 text-orange-600 dark:text-orange-400">
+              <span className="ml-2 text-orange-600">
                 · {alertCount} alerta{alertCount !== 1 ? 's' : ''}
               </span>
             )}
@@ -153,7 +153,7 @@ export default function AgendaToolbar({
               onClick={onTogglePendingSidebar}
               className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-all ${
                 showPendingSidebar
-                  ? 'bg-amber-50 text-amber-700 border-amber-300 dark:bg-amber-950/30 dark:text-amber-400 dark:border-amber-800'
+                  ? 'bg-amber-50 text-amber-700 border-amber-300'
                   : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted hover:text-foreground'
               }`}
             >
@@ -162,7 +162,7 @@ export default function AgendaToolbar({
               {pendingCount > 0 && (
                 <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
                   showPendingSidebar
-                    ? 'bg-amber-200 text-amber-800 dark:bg-amber-800 dark:text-amber-200'
+                    ? 'bg-amber-200 text-amber-800'
                     : 'bg-muted text-muted-foreground'
                 }`}>
                   {pendingCount}

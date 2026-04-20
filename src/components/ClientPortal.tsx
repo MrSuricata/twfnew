@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { ShipmentTableSkeleton, StatCardSkeleton } from '@/components/SkeletonLoaders'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -254,10 +255,10 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
 
   const getAlertBorderColor = (severity: string) => {
     switch (severity) {
-      case 'critical': return 'border-l-red-500 bg-red-50 dark:bg-red-950/20'
-      case 'warning': return 'border-l-orange-500 bg-orange-50 dark:bg-orange-950/20'
-      case 'info': return 'border-l-blue-500 bg-blue-50 dark:bg-blue-950/20'
-      case 'success': return 'border-l-green-500 bg-green-50 dark:bg-green-950/20'
+      case 'critical': return 'border-l-red-500 bg-red-50'
+      case 'warning': return 'border-l-orange-500 bg-orange-50'
+      case 'info': return 'border-l-blue-500 bg-blue-50'
+      case 'success': return 'border-l-green-500 bg-green-50'
       default: return 'border-l-gray-500'
     }
   }
@@ -412,16 +413,16 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
         {visibleAlerts.filter(a => a.severity === 'critical').length > 0 && (
           <div className="mb-6 space-y-2">
             {visibleAlerts.filter(a => a.severity === 'critical').map(alert => (
-              <div key={alert.id} className="flex items-center gap-3 bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900 rounded-lg px-4 py-3">
+              <div key={alert.id} className="flex items-center gap-3 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
                 <Warning size={20} weight="fill" className="text-red-500 shrink-0" />
                 <div className="flex-1 text-sm">
-                  <span className="font-semibold text-red-700 dark:text-red-400">{alert.title}:</span>
-                  <span className="ml-1 text-red-600 dark:text-red-300">{alert.message}</span>
+                  <span className="font-semibold text-red-700">{alert.title}:</span>
+                  <span className="ml-1 text-red-600">{alert.message}</span>
                 </div>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-7 w-7 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/50"
+                  className="h-7 w-7 text-red-500 hover:bg-red-100"
                   onClick={() => dismissAlert(alert.id)}
                 >
                   <XIcon size={16} />
@@ -438,6 +439,20 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
           </p>
         </div>
 
+        {isLoadingData && serverShipments.length === 0 && (
+          <>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+              <StatCardSkeleton />
+              <StatCardSkeleton />
+              <StatCardSkeleton />
+              <StatCardSkeleton />
+            </div>
+            <ShipmentTableSkeleton />
+          </>
+        )}
+
+        {!(isLoadingData && serverShipments.length === 0) && (
+        <>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <Card>
             <CardContent className="pt-6">
@@ -726,9 +741,9 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
                         {/* Libre Hasta */}
                         <div className={`rounded-lg border p-3 ${
                           !shipment.LIBRE_HASTA ? 'bg-muted/30' :
-                          daysLibre < 0 ? 'bg-red-50 border-red-200 dark:bg-red-950/20 dark:border-red-900' :
-                          daysLibre <= 3 ? 'bg-orange-50 border-orange-200 dark:bg-orange-950/20 dark:border-orange-900' :
-                          'bg-green-50 border-green-200 dark:bg-green-950/20 dark:border-green-900'
+                          daysLibre < 0 ? 'bg-red-50 border-red-200' :
+                          daysLibre <= 3 ? 'bg-orange-50 border-orange-200' :
+                          'bg-green-50 border-green-200'
                         }`}>
                           <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
                             <Timer size={14} />
@@ -738,9 +753,9 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
                             <>
                               <div className="text-sm font-bold">{shipment.LIBRE_HASTA}</div>
                               <div className={`text-xs font-semibold mt-0.5 ${
-                                daysLibre < 0 ? 'text-red-600 dark:text-red-400' :
-                                daysLibre <= 3 ? 'text-orange-600 dark:text-orange-400' :
-                                'text-green-600 dark:text-green-400'
+                                daysLibre < 0 ? 'text-red-600' :
+                                daysLibre <= 3 ? 'text-orange-600' :
+                                'text-green-600'
                               }`}>
                                 {daysLibre < 0 ? `Vencido hace ${Math.abs(daysLibre)} día${Math.abs(daysLibre) === 1 ? '' : 's'}` :
                                  daysLibre === 0 ? 'Vence HOY' :
@@ -758,16 +773,16 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
                           const salidaDate = ops.find(o => o.SALIDA)?.SALIDA
                           return (
                             <div className={`rounded-lg border p-3 ${
-                              hasSalida ? 'bg-blue-50 border-blue-200 dark:bg-blue-950/20 dark:border-blue-900' : 'bg-muted/30'
+                              hasSalida ? 'bg-blue-50 border-blue-200' : 'bg-muted/30'
                             }`}>
                               <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
                                 <Truck size={14} />
                                 <span className="font-medium">Salida Montevideo</span>
                               </div>
                               {hasSalida ? (
-                                <div className="text-sm font-bold text-blue-700 dark:text-blue-300">{salidaDate}</div>
+                                <div className="text-sm font-bold text-blue-700">{salidaDate}</div>
                               ) : (
-                                <div className="text-sm font-semibold text-orange-600 dark:text-orange-400">A CONFIRMAR</div>
+                                <div className="text-sm font-semibold text-orange-600">A CONFIRMAR</div>
                               )}
                               {firstOp?.FISCAL && (
                                 <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
@@ -804,9 +819,9 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
                                 </div>
                                 <div className="text-xs">
                                   {c.salida ? (
-                                    <span className="text-green-700 dark:text-green-400 font-medium">Salida: {c.salida}</span>
+                                    <span className="text-green-700 font-medium">Salida: {c.salida}</span>
                                   ) : (
-                                    <span className="text-orange-600 dark:text-orange-400 font-medium">Salida: A CONFIRMAR</span>
+                                    <span className="text-orange-600 font-medium">Salida: A CONFIRMAR</span>
                                   )}
                                 </div>
                               </div>
@@ -1026,6 +1041,8 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
             )}
           </TabsContent>
         </Tabs>
+        </>
+        )}
       </div>
 
       {selectedShipment && (

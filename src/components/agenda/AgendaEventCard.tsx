@@ -107,9 +107,9 @@ export default function AgendaEventCard({ event, compact = true, onClick }: Agen
             {event.libre && (
               <span className={`ml-auto shrink-0 font-medium ${
                 libreRemaining !== null && libreRemaining <= 2
-                  ? 'text-red-600 dark:text-red-400'
+                  ? 'text-red-600'
                   : libreRemaining !== null && libreRemaining <= 5
-                    ? 'text-orange-600 dark:text-orange-400'
+                    ? 'text-orange-600'
                     : ''
               }`}>
                 Libre: {formatDateShort(event.libre)}
