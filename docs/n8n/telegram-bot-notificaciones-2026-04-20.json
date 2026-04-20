@@ -1,0 +1,772 @@
+{
+  "name": "TWF - Telegram Bot Notificaciones",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "id": "18a6dc98-c502-4d04-883f-5d564fb423ce",
+      "name": "Telegram Trigger",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        2160,
+        -848
+      ],
+      "webhookId": "8f118aa8-d942-4132-a6a7-8e5ea0ad02b8",
+      "credentials": {
+        "telegramApi": {
+          "id": "m60a1RLUsVqpTXD8",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 8,
+              "triggerAtMinute": 47
+            }
+          ]
+        }
+      },
+      "id": "4365b19a-c1f6-4bf5-a8cb-c2d66b4c475e",
+      "name": "Resumen Diario 8:47am",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        2096,
+        -48
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Parsear mensaje de Brian — v6 con info + resumen\nconst message = $input.first().json.message;\nconst text = (message.text || message.caption || '').toLowerCase().trim();\nconst chatId = message.chat.id;\n\nconst state = $getWorkflowStaticData('global');\n\n// === SI / NO ===\nconst SI_KEYS = ['si', 'sí', 'dale', 'ok', 'ese', 'esa', 'confirmo', 'yes'];\nconst NO_KEYS = ['no', 'nah', 'siguiente', 'otro', 'next', 'ese no'];\nconst esSi = SI_KEYS.some(k => text === k || text === k + '!');\nconst esNo = NO_KEYS.some(k => text === k || text === k + '!');\n\nif (state.pendiente && (esSi || esNo)) {\n  if (esSi) state.pendiente = false;\n  return [{ json: { chatId, accion: esSi ? 'confirmar' : 'siguiente', textoOriginal: message.text } }];\n}\n\n// === EXTRAER REFERENCIA ===\nconst refMatch = text.match(/\\b[aA]?(\\d{4})\\b/);\nconst ref = refMatch ? refMatch[1] : null;\n\n// === INFO / CONSULTA ===\nconst INFO_KEYS = ['info', 'datos', 'consulta', 'estado', 'que hay', 'qué hay', 'mostrame', 'buscame', 'buscar'];\nconst isInfo = INFO_KEYS.some(k => text.includes(k));\nif (isInfo && ref) {\n  return [{ json: { chatId, ref, accion: 'info', textoOriginal: message.text } }];\n}\n\n// === RESUMEN ===\nconst RESUMEN_KEYS = ['resumen', 'pendientes', 'que falta', 'qué falta', 'que tengo', 'qué tengo', 'briefing', 'urgente'];\nconst isResumen = RESUMEN_KEYS.some(k => text.includes(k));\nif (isResumen) {\n  return [{ json: { chatId, accion: 'resumen', textoOriginal: message.text } }];\n}\n\n// === NOTIFICACIÓN (salida/cruce/arribo) ===\nconst SALIDA_KEYS = ['salida', 'salio', 'salió', 'sale', 'partio', 'partió'];\nconst CRUCE_KEYS = ['cruce', 'cruzo', 'cruzó', 'libero', 'liberó', 'liberado', 'liberada', 'frontera'];\nconst ARRIBO_KEYS = ['arribo', 'arribó', 'fiscal', 'llego', 'llegó'];\n\nlet tipo = null;\nif (SALIDA_KEYS.some(k => text.includes(k))) tipo = 'salida';\nelse if (CRUCE_KEYS.some(k => text.includes(k))) tipo = 'cruce';\nelse if (ARRIBO_KEYS.some(k => text.includes(k))) tipo = 'arribo';\n\nlet fechaTexto = null;\nconst dias = ['lunes','martes','miercoles','miércoles','jueves','viernes','sabado','sábado','domingo'];\nconst diaMatch = text.match(new RegExp(`(${dias.join('|')})\\\\s*(\\\\d{1,2})(?:[/\\\\-](\\\\d{1,2}))?`));\nif (diaMatch) {\n  const dia = diaMatch[1].charAt(0).toUpperCase() + diaMatch[1].slice(1).replace('é','e').replace('á','a');\n  const num = diaMatch[2];\n  const mes = diaMatch[3] || String(new Date().getMonth() + 1);\n  fechaTexto = `${dia} ${num}/${mes.padStart(2,'0')}`;\n}\nif (!fechaTexto) {\n  const numMatch = text.match(/(\\d{1,2})[/\\-](\\d{1,2})/);\n  if (numMatch) fechaTexto = `${numMatch[1]}/${numMatch[2].padStart(2,'0')}`;\n}\n\nif (ref && tipo) {\n  state.pendiente = false; state.resultados = []; state.indice = 0;\n  state.ref = ref; state.tipo = tipo; state.fechaTexto = fechaTexto; state.chatId = chatId;\n  const hasPhoto = !!(message.photo && message.photo.length > 0);\n  const photoFileId = message.photo ? message.photo[message.photo.length - 1].file_id : null;\n  return [{ json: { chatId, ref, tipo, fechaTexto, accion: 'buscar', hasPhoto, photoFileId, textoOriginal: message.text } }];\n}\n\n// === Solo ref sin tipo → tratar como info ===\nif (ref && !tipo) {\n  return [{ json: { chatId, ref, accion: 'info', textoOriginal: message.text } }];\n}\n\nreturn [{ json: { chatId, accion: 'error', textoOriginal: message.text } }];"
+      },
+      "id": "8ee4dffd-9b79-4cc4-90a1-696a764ae1f9",
+      "name": "Parsear Mensaje",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2384,
+        -848
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.accion }}",
+              "rightValue": "buscar",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "54278928-2fea-444d-a346-a149c5b8f8f3",
+      "name": "¿Es búsqueda?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2624,
+        -848
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "c2",
+              "leftValue": "={{ $json.accion }}",
+              "rightValue": "info",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "f05e85f6-656c-497b-a355-01717c55ebff",
+      "name": "¿Es info?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2624,
+        -544
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "c3",
+              "leftValue": "={{ $json.accion }}",
+              "rightValue": "confirmar",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "5f67de4d-40a2-44aa-81cc-c1b8c6a08f94",
+      "name": "¿Es confirmación?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2624,
+        -256
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "c4",
+              "leftValue": "={{ $json.accion }}",
+              "rightValue": "resumen",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d2b13f1e-73e6-497f-82a3-8f820270df94",
+      "name": "¿Es resumen?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        2624,
+        64
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "limit": 10,
+        "filters": {
+          "q": "=subject:{{ $json.ref }}"
+        }
+      },
+      "id": "e7e3d93e-6f3d-4e01-a0e8-0827289287fb",
+      "name": "Gmail - Buscar Hilos",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        2880,
+        -944
+      ],
+      "webhookId": "d67be77e-3751-4cab-9351-1fc88a55cc81",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "wLnIMA5Tul3NYRZF",
+          "name": "Gmail account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst state = $getWorkflowStaticData('global');\n\nif (!items || items.length === 0) {\n  state.pendiente = false;\n  return [{ json: { chatId: state.chatId, mensaje: `⚠️ No encontré ningún hilo en Gmail para la referencia ${state.ref}.` } }];\n}\n\nconst seen = new Set();\nconst resultados = [];\nfor (const item of items) {\n  const tid = item.json.threadId;\n  if (tid && !seen.has(tid)) {\n    seen.add(tid);\n    resultados.push({ threadId: tid, subject: item.json.Subject || item.json.subject || 'Sin asunto', snippet: (item.json.snippet || '').substring(0, 80), from: item.json.From || item.json.from || '', to: item.json.To || item.json.to || '' });\n  }\n}\n\nstate.resultados = resultados;\nstate.indice = 0;\nstate.pendiente = true;\n\nconst actual = resultados[0];\nconst total = resultados.length;\n\nreturn [{ json: { chatId: state.chatId, mensaje: `🔍 Encontré ${total} hilo(s) para ref ${state.ref}.\\n\\n📧 [1/${total}] ${actual.subject}\\n📝 ${actual.snippet}...\\n\\n¿Es este hilo? Respondé SI o NO` } }];"
+      },
+      "id": "b9afed59-475a-4cd2-983d-3f159a7b630e",
+      "name": "Guardar y Preguntar",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3120,
+        -944
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.mensaje }}",
+        "additionalFields": {}
+      },
+      "id": "2cc59058-3b22-4ed2-b112-76847b233423",
+      "name": "Telegram - Preguntar",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3360,
+        -944
+      ],
+      "webhookId": "92680dd6-4934-41c8-81b4-5780c7bfa657",
+      "credentials": {
+        "telegramApi": {
+          "id": "m60a1RLUsVqpTXD8",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const state = $getWorkflowStaticData('global');\nif (!state.resultados || state.resultados.length === 0) {\n  return [{ json: { chatId: $input.first().json.chatId, error: true, mensaje: '⚠️ No hay búsqueda pendiente. Mandame un comando como: 7439 salida' } }];\n}\nconst elegido = state.resultados[state.indice || 0];\nreturn [{ json: { threadId: elegido.threadId, ref: state.ref, tipo: state.tipo, fechaTexto: state.fechaTexto || null, chatId: state.chatId || $input.first().json.chatId } }];"
+      },
+      "id": "729d0751-e9c9-4580-b916-983530a7ecae",
+      "name": "Cargar Hilo Confirmado",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2880,
+        -352
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "thread",
+        "operation": "get",
+        "threadId": "={{ $json.threadId }}",
+        "options": {}
+      },
+      "id": "ac7ed5a3-afca-4965-9641-3d93a37cfa76",
+      "name": "Gmail - Leer Thread",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        3120,
+        -352
+      ],
+      "webhookId": "04322bc5-f42a-4465-b1b0-e182fb26801f",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "wLnIMA5Tul3NYRZF",
+          "name": "Gmail account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const threadData = $input.first().json;\nconst confirmado = $('Cargar Hilo Confirmado').first().json;\n\nlet messages = [];\nif (Array.isArray(threadData)) messages = threadData;\nelse if (threadData.messages && Array.isArray(threadData.messages)) messages = threadData.messages;\nelse messages = [threadData];\n\nconst lastMsg = messages[messages.length - 1];\n\nfunction extractEmail(field) {\n  if (!field) return '';\n  if (typeof field === 'string') return field;\n  if (field.value && Array.isArray(field.value)) return field.value.map(v => v.name ? `${v.name} <${v.address}>` : v.address).join(', ');\n  if (field.text) return field.text;\n  return '';\n}\nfunction esBrian(e) { return e && e.toLowerCase().includes('bridvanovich'); }\n\nconst subject = lastMsg.Subject || lastMsg.subject || threadData.Subject || threadData.subject || `OP ${confirmado.ref}`;\n\nlet to = '';\nfor (const msg of messages) {\n  const msgFrom = extractEmail(msg.From) || extractEmail(msg.from) || '';\n  if (esBrian(msgFrom)) {\n    const msgTo = extractEmail(msg.To) || extractEmail(msg.to) || '';\n    const msgCc = extractEmail(msg.Cc) || extractEmail(msg.cc) || '';\n    const todos = [msgTo, msgCc].filter(Boolean).join(', ');\n    to = todos.split(',').map(s => s.trim()).filter(s => s && s.includes('@') && !esBrian(s)).join(', ');\n    if (to) break;\n  }\n}\nif (!to) { const from = extractEmail(lastMsg.From) || extractEmail(lastMsg.from) || ''; if (!esBrian(from)) to = from; }\n\nconst threadId = threadData.threadId || threadData.id || '';\nconst hora = new Date().getHours();\nconst saludos = hora < 12 ? ['Buenos días,', 'Estimados, buenos días,', 'Buenas,'] : ['Buenas tardes,', 'Estimados, buenas tardes,', 'Buenas,', 'Hola, buenas tardes,'];\nconst saludo = saludos[Math.floor(Math.random() * saludos.length)];\nconst cierres = ['Saludos cordiales,', 'Quedamos a disposición,', 'Saludos,'];\nconst cierre = cierres[Math.floor(Math.random() * cierres.length)];\n\nlet mensaje = '';\nswitch(confirmado.tipo) {\n  case 'salida': mensaje = 'Les informamos que la unidad ha salido rumbo a frontera. Los mantenemos informados sobre la liberación.'; break;\n  case 'cruce': mensaje = confirmado.fechaTexto ? `Les informamos que la unidad ha sido liberada de frontera. Se presenta el ${confirmado.fechaTexto} en destino.` : 'Les informamos que la unidad ha sido liberada de frontera.'; break;\n  case 'arribo': mensaje = 'Les confirmamos que la unidad ya se encuentra en fiscal. Quedamos a la espera de la liberación para coordinar la descarga.'; break;\n}\n\nconst htmlBody = `<div style=\"font-family:Arial,sans-serif;color:#333;max-width:600px;\"><p style=\"font-size:14px;line-height:1.6;\">${saludo}</p><p style=\"font-size:14px;line-height:1.6;\">${mensaje}</p><p style=\"font-size:14px;line-height:1.6;margin:16px 0 0;\">${cierre}</p><div style=\"margin-top:24px;border-top:2px solid #e8762b;padding-top:16px;\"><img src=\"https://twfnew-c7v2.vercel.app/images/FIRMA.png\" alt=\"Brian Ridvanovich - TWF General Manager\" width=\"500\" style=\"width:500px;max-width:100%;height:auto;\" /></div></div>`;\n\nconst tipoDisplay = { 'salida': 'Salida desde Uruguay', 'cruce': 'Cruce de frontera', 'arribo': 'Arribo a fiscal' };\nconst emailMatch = to.match(/[\\w.-]+@[\\w.-]+/);\n\nreturn [{ json: { threadId, subject: subject.startsWith('Re:') ? subject : `Re: ${subject}`, to, htmlBody, tipoDisplay: tipoDisplay[confirmado.tipo], ref: confirmado.ref, chatId: confirmado.chatId, threadSubject: subject, destinatarioDisplay: emailMatch ? emailMatch[0] : 'sin destinatario' } }];"
+      },
+      "id": "740c6747-452f-44ce-845b-36dcf594d2ad",
+      "name": "Componer Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3360,
+        -352
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "draft",
+        "subject": "={{ $json.subject }}",
+        "emailType": "html",
+        "message": "={{ $json.htmlBody }}",
+        "options": {
+          "threadId": "={{ $json.threadId }}",
+          "sendTo": "={{ $json.to }}"
+        }
+      },
+      "id": "31c7f773-c373-43c3-a3ee-a1563f0d901e",
+      "name": "Gmail - Crear Borrador",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        3600,
+        -352
+      ],
+      "webhookId": "9ed0bcbc-42be-4f64-a5fb-21f346326ced",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "wLnIMA5Tul3NYRZF",
+          "name": "Gmail account 3"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Componer Email').item.json.chatId }}",
+        "text": "=✅ Borrador listo para OP {{ $('Componer Email').item.json.ref }} — {{ $('Componer Email').item.json.tipoDisplay }}\n\n📧 Hilo: {{ $('Componer Email').item.json.threadSubject }}\n📬 Para: {{ $('Componer Email').item.json.destinatarioDisplay }}\n\nRevisalo en Gmail y dale enviar cuando quieras.",
+        "additionalFields": {}
+      },
+      "id": "6ba6711b-8652-4a90-8b5b-47618c52fc68",
+      "name": "Telegram - Confirmar",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3840,
+        -352
+      ],
+      "webhookId": "102e34ca-93f6-4ac3-aa2d-5f2a29561e80",
+      "credentials": {
+        "telegramApi": {
+          "id": "m60a1RLUsVqpTXD8",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const state = $getWorkflowStaticData('global');\nif (!state.pendiente || !state.resultados) {\n  return [{ json: { chatId: state.chatId || $json.chatId, mensaje: '⚠️ No hay búsqueda pendiente. Mandame un comando como: 7439 salida' } }];\n}\nstate.indice = (state.indice || 0) + 1;\nif (state.indice >= state.resultados.length) {\n  state.pendiente = false;\n  return [{ json: { chatId: state.chatId, mensaje: `❌ No hay más hilos para ref ${state.ref}. Probá con otro número.` } }];\n}\nconst actual = state.resultados[state.indice];\nconst total = state.resultados.length;\nreturn [{ json: { chatId: state.chatId, mensaje: `📧 [${state.indice + 1}/${total}] ${actual.subject}\\n📝 ${actual.snippet}...\\n\\n¿Es este hilo? Respondé SI o NO` } }];"
+      },
+      "id": "bc2b9ca0-8286-46f9-a6af-0cdfa8c7719e",
+      "name": "Mostrar Siguiente",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2880,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.mensaje }}",
+        "additionalFields": {}
+      },
+      "id": "72cbd623-4441-492e-97d2-8a6467dc1f2f",
+      "name": "Telegram - Siguiente",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3120,
+        352
+      ],
+      "webhookId": "00b64959-fe7f-4234-ad9e-952e9ae2c4af",
+      "credentials": {
+        "telegramApi": {
+          "id": "m60a1RLUsVqpTXD8",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "❌ No entendí. Comandos disponibles:\n\n📧 Notificar: 7439 salida / cruce / arribo\n🔍 Info: info 7439\n📋 Resumen: resumen / pendientes\n\nO mandame solo el número (ej: 7439) para ver info.",
+        "additionalFields": {}
+      },
+      "id": "58357e90-bc5e-4268-9a72-803dcd801cb8",
+      "name": "Telegram - Error",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2880,
+        656
+      ],
+      "webhookId": "b77d79e1-5c0c-4dad-9196-daff5c482b12",
+      "credentials": {
+        "telegramApi": {
+          "id": "m60a1RLUsVqpTXD8",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vR1L0gDUbrXqFW_33bLA-0Gsb73x2hItsyNwUFZTHdjTlGnxO0AuE8ojBrdrtvjp0frdl8v45xCGYFM/pub?output=csv",
+        "options": {
+          "redirect": {
+            "redirect": {}
+          },
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "id": "ffd3a160-56fb-4717-bc09-8cb3a5ed2288",
+      "name": "Fetch CSV Info",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2880,
+        -656
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Compilar info de operación — v6\nconst csvRaw = $('Fetch CSV Info').first().json.data || $('Fetch CSV Info').first().json.body || '';\nconst parsed = $('Parsear Mensaje').first().json;\nconst ref = parsed.ref;\n\n// Parsear CSV\nconst lines = csvRaw.split('\\n');\nconst headers = lines[0].split(',').map(h => h.trim().replace(/\"/g, ''));\nlet opData = null;\n\nfor (let i = 1; i < lines.length; i++) {\n  const vals = lines[i].split(',').map(v => v.trim().replace(/\"/g, ''));\n  const refVal = vals[0] || '';\n  if (refVal.replace(/^A/i, '') === ref || refVal === ref || refVal === 'A' + ref) {\n    opData = {};\n    headers.forEach((h, idx) => { opData[h] = vals[idx] || ''; });\n    break;\n  }\n}\n\nlet msg = '';\nif (opData) {\n  msg = `📦 OPERACIÓN ${ref}\\n━━━━━━━━━━━━━━━━━━\\n\\n`;\n  msg += `👤 Cliente: ${opData.CLIENTE || '-'}\\n`;\n  msg += `📦 CNTR: ${opData.CNTR || '-'}\\n`;\n  msg += `🚢 Línea: ${opData.LINEA || '-'}\\n`;\n  msg += `🚢 Buque: ${opData.BUQUE || '-'}\\n`;\n  msg += `🏗️ Terminal: ${opData.TERMINAL || '-'}\\n`;\n  msg += `📅 ETD: ${opData.ETD || '-'} | ETA: ${opData.ETA || '-'}\\n`;\n  msg += '\\n';\n\n  \n  msg += `💰 COSTOS\\n`;\n  msg += `Terminal: $${opData.CTERMINAL || '0'} | Dev: $${opData.CDEV || '0'}\\n`;\n  msg += `Locales: $${opData.LOCALES || '0'} | Flete: $${opData.FLETE || '0'}\\n`;\n  msg += `Forma pago: ${opData.FORMA_PAGO || '-'} | VTO: ${opData.VTO || '-'}\\n\\n`;\n  \n  msg += `✅ CHECKS\\n`;\n  msg += `CR: ${opData.CR === 'TRUE' ? '✅' : '❌'} | BL: ${opData.BL === 'TRUE' ? '✅' : '❌'} | `;\n  msg += `AD: ${opData.AD === 'TRUE' ? '✅' : '❌'} | AT: ${opData.AT === 'TRUE' ? '✅' : '❌'}\\n`;\n  \n} else {\n  msg = `⚠️ No encontré la referencia ${ref} en la planilla.\\nProbá con otro número.`;\n}\n\nreturn [{ json: { chatId: parsed.chatId, mensaje: msg } }];"
+      },
+      "id": "11130744-03be-49d2-9447-70fdf944cc30",
+      "name": "Compilar Info",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3120,
+        -656
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.mensaje }}",
+        "additionalFields": {}
+      },
+      "id": "f29fdaa1-997a-4dad-9c51-a7ec2a92eb98",
+      "name": "Telegram - Info",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3360,
+        -656
+      ],
+      "webhookId": "cc258b56-cfe9-4625-8641-3bd932ffd293",
+      "credentials": {
+        "telegramApi": {
+          "id": "m60a1RLUsVqpTXD8",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://docs.google.com/spreadsheets/d/e/2PACX-1vR1L0gDUbrXqFW_33bLA-0Gsb73x2hItsyNwUFZTHdjTlGnxO0AuE8ojBrdrtvjp0frdl8v45xCGYFM/pub?output=csv",
+        "options": {
+          "redirect": {
+            "redirect": {}
+          },
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "id": "bbcc766c-9447-4009-99c8-7049661b7336",
+      "name": "Fetch CSV Resumen",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2880,
+        -48
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Compilar resumen diario — v7 formato bonito\nconst csvRaw = $('Fetch CSV Resumen').first().json.data || $('Fetch CSV Resumen').first().json.body || '';\n\n// chatId: si vino del bot usa ese, si no el de Brian para schedule\nlet chatId;\ntry { chatId = $('Parsear Mensaje').first().json.chatId; }\ncatch (e) { chatId = 6402826821; }\n\nconst lines = csvRaw.split('\\n');\nconst headers = lines[0].split(',').map(h => h.trim().replace(/\"/g, ''));\nconst ops = [];\n\nfor (let i = 1; i < lines.length; i++) {\n  if (!lines[i].trim()) continue;\n  const vals = lines[i].split(',').map(v => v.trim().replace(/\"/g, ''));\n  const op = {};\n  headers.forEach((h, idx) => { op[h] = vals[idx] || ''; });\n  if (op.Ref && op.Ref.trim()) ops.push(op);\n}\n\n// Helpers\nconst hoy = new Date();\nhoy.setHours(0, 0, 0, 0);\nconst MS_DAY = 86_400_000;\n\nfunction parseFecha(f) {\n  if (!f) return null;\n  const parts = f.split('/');\n  if (parts.length >= 2) {\n    const d = parseInt(parts[0]);\n    const m = parseInt(parts[1]) - 1;\n    const y = parts[2] ? parseInt(parts[2]) : hoy.getFullYear();\n    const date = new Date(y, m, d);\n    date.setHours(0, 0, 0, 0);\n    return date;\n  }\n  return null;\n}\n\nfunction diffDias(fecha) {\n  if (!fecha) return 999;\n  return Math.round((fecha - hoy) / MS_DAY);\n}\n\nconst cleanRef = r => (r || '').replace(/^A/i, '');\n\n// Formato bonito de fecha\nconst fechaLarga = hoy.toLocaleDateString('es-UY', {\n  weekday: 'long', day: 'numeric', month: 'long'\n});\nconst fechaCapitalized = fechaLarga.charAt(0).toUpperCase() + fechaLarga.slice(1);\n\n// ── Categorizar ───────────────────────────────────────────────\nconst llegaHoy = [];       // ETA = hoy\nconst llegaManana = [];    // ETA = mañana\nconst pagosVencidos = [];\nconst pagosHoy = [];\nconst pagosEstaSemana = [];\nconst checksFaltantes = [];\nconst libreVence = [];\n\nfor (const op of ops) {\n  const ref = cleanRef(op.Ref || op.REF);\n  const cliente = (op.CLIENTE || '-').trim();\n  const etaDias = diffDias(parseFecha(op.ETA));\n  const vtoDias = diffDias(parseFecha(op.VTO));\n\n  // Arribos\n  if (etaDias === 0) {\n    llegaHoy.push(`• \\`${ref}\\` — *${cliente}* · ${op.BUQUE || '-'} → ${op.TERMINAL || '-'}`);\n  } else if (etaDias === 1) {\n    llegaManana.push(`• \\`${ref}\\` — *${cliente}* · ${op.BUQUE || '-'} → ${op.TERMINAL || '-'}`);\n  }\n\n  // Pagos\n  const pushPago = (tipo, monto, vence) => {\n    if (vtoDias < 0) pagosVencidos.push(`• \\`${ref}\\` — ${tipo} *USD ${monto}* · vencido hace ${Math.abs(vtoDias)}d`);\n    else if (vtoDias === 0) pagosHoy.push(`• \\`${ref}\\` — ${tipo} *USD ${monto}* · vence HOY`);\n    else if (vtoDias <= 5) pagosEstaSemana.push(`• \\`${ref}\\` — ${tipo} USD ${monto} · vence en ${vtoDias}d (${op.VTO})`);\n  };\n  if (op.FLETE && parseFloat(op.FLETE) > 0 && vtoDias <= 5) pushPago('FLETE', op.FLETE, op.VTO);\n  if (op.LOCALES && parseFloat(op.LOCALES) > 0 && vtoDias <= 5) pushPago('LOCALES', op.LOCALES, op.VTO);\n\n  // Terminal (urgente por ETA, no VTO)\n  if (op.CTERMINAL && parseFloat(op.CTERMINAL) > 0) {\n    if (op.TERMINAL === 'MONTECON' && etaDias >= 0 && etaDias <= 5) {\n      pagosEstaSemana.push(`• \\`${ref}\\` — TERMINAL MONTECON USD ${op.CTERMINAL} · ETA ${op.ETA} (${etaDias}d)`);\n    } else if (op.TERMINAL === 'TCP' && etaDias >= 0 && etaDias <= 1) {\n      pagosHoy.push(`• \\`${ref}\\` — TERMINAL TCP *USD ${op.CTERMINAL}* · ETA ${op.ETA}`);\n    }\n  }\n\n  // Checks documentarios\n  if (etaDias >= 0 && etaDias <= 14) {\n    const faltantes = [];\n    if (op.CR !== 'TRUE') faltantes.push('CR');\n    if (op.BL !== 'TRUE') faltantes.push('BL');\n    if (op.AD !== 'TRUE') faltantes.push('AD');\n    if (op.AT !== 'TRUE') faltantes.push('AT');\n    if (faltantes.length > 0) {\n      checksFaltantes.push(`• \\`${ref}\\` — *${cliente}* · falta ${faltantes.join(', ')} (ETA ${op.ETA}, ${etaDias}d)`);\n    }\n  }\n}\n\n// ── Construir mensaje ─────────────────────────────────────────\nconst sections = [];\n\nsections.push(`📋 *RESUMEN TWF* — ${fechaCapitalized}`);\nsections.push(`━━━━━━━━━━━━━━━━━━━━`);\nsections.push(`📦 ${ops.length} operaciones activas`);\n\nif (llegaHoy.length > 0) {\n  sections.push(`\\n🚢 *LLEGAN HOY AL PUERTO (${llegaHoy.length})*`);\n  sections.push(llegaHoy.join('\\n'));\n}\n\nif (llegaManana.length > 0) {\n  sections.push(`\\n⚓ *LLEGAN MAÑANA (${llegaManana.length})*`);\n  sections.push(llegaManana.join('\\n'));\n}\n\nif (pagosVencidos.length > 0) {\n  sections.push(`\\n🔴 *PAGOS VENCIDOS (${pagosVencidos.length})*`);\n  sections.push(pagosVencidos.join('\\n'));\n}\n\nif (pagosHoy.length > 0) {\n  sections.push(`\\n🟠 *PAGOS VENCEN HOY (${pagosHoy.length})*`);\n  sections.push(pagosHoy.join('\\n'));\n}\n\nif (pagosEstaSemana.length > 0) {\n  sections.push(`\\n🟡 *PAGOS ESTA SEMANA (${pagosEstaSemana.length})*`);\n  sections.push(pagosEstaSemana.join('\\n'));\n}\n\nif (checksFaltantes.length > 0) {\n  sections.push(`\\n📄 *CHECKS FALTANTES — ETA <14d (${checksFaltantes.length})*`);\n  sections.push(checksFaltantes.join('\\n'));\n}\n\nif (llegaHoy.length === 0 && llegaManana.length === 0 &&\n    pagosVencidos.length === 0 && pagosHoy.length === 0 &&\n    pagosEstaSemana.length === 0 && checksFaltantes.length === 0) {\n  sections.push(`\\n☕ Día tranquilo — sin alertas urgentes.`);\n}\n\nsections.push(`\\n━━━━━━━━━━━━━━━━━━━━`);\nsections.push(`_Buenos días, acá tenés tu brief de hoy._ 🌅`);\n\nlet msg = sections.join('\\n');\n\n// Telegram limita 4096 chars\nif (msg.length > 4000) msg = msg.substring(0, 4000) + '\\n\\n_... (truncado)_';\n\nreturn [{ json: { chatId, mensaje: msg } }];"
+      },
+      "id": "d579ffc8-6b76-402c-89c5-695f82c8acc3",
+      "name": "Compilar Resumen",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3120,
+        -48
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chatId }}",
+        "text": "={{ $json.mensaje }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "id": "92578ef1-d4f4-4a05-b742-a9f10d43f15c",
+      "name": "Telegram - Resumen",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        3360,
+        -48
+      ],
+      "webhookId": "e5138194-d8ea-4e0f-8269-4dc4966affb3",
+      "credentials": {
+        "telegramApi": {
+          "id": "m60a1RLUsVqpTXD8",
+          "name": "Telegram account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Parsear Mensaje",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resumen Diario 8:47am": {
+      "main": [
+        [
+          {
+            "node": "Fetch CSV Resumen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parsear Mensaje": {
+      "main": [
+        [
+          {
+            "node": "¿Es búsqueda?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Es búsqueda?": {
+      "main": [
+        [
+          {
+            "node": "Gmail - Buscar Hilos",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "¿Es info?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Es info?": {
+      "main": [
+        [
+          {
+            "node": "Fetch CSV Info",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "¿Es confirmación?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Es confirmación?": {
+      "main": [
+        [
+          {
+            "node": "Cargar Hilo Confirmado",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "¿Es resumen?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Es resumen?": {
+      "main": [
+        [
+          {
+            "node": "Fetch CSV Resumen",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mostrar Siguiente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail - Buscar Hilos": {
+      "main": [
+        [
+          {
+            "node": "Guardar y Preguntar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Guardar y Preguntar": {
+      "main": [
+        [
+          {
+            "node": "Telegram - Preguntar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cargar Hilo Confirmado": {
+      "main": [
+        [
+          {
+            "node": "Gmail - Leer Thread",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail - Leer Thread": {
+      "main": [
+        [
+          {
+            "node": "Componer Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Componer Email": {
+      "main": [
+        [
+          {
+            "node": "Gmail - Crear Borrador",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail - Crear Borrador": {
+      "main": [
+        [
+          {
+            "node": "Telegram - Confirmar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mostrar Siguiente": {
+      "main": [
+        [
+          {
+            "node": "Telegram - Siguiente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch CSV Info": {
+      "main": [
+        [
+          {
+            "node": "Compilar Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compilar Info": {
+      "main": [
+        [
+          {
+            "node": "Telegram - Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch CSV Resumen": {
+      "main": [
+        [
+          {
+            "node": "Compilar Resumen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compilar Resumen": {
+      "main": [
+        [
+          {
+            "node": "Telegram - Resumen",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "versionId": "33631741-5ea2-46f7-8c44-0b6e9a1d0d6a",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "5183dacfb337f67a6ddf942e5fc1933fbdcbcb70cfbc634865715ab668d611e2"
+  },
+  "id": "MZA1M1s2xThr2NGF",
+  "tags": [
+    {
+      "updatedAt": "2026-03-21T20:56:38.930Z",
+      "createdAt": "2026-03-21T20:56:38.930Z",
+      "id": "0fBVVun08wbUA17t",
+      "name": "TWF"
+    }
+  ]
+}
