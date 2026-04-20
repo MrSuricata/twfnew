@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Toaster, toast } from 'sonner'
-import { Language } from '@/lib/i18n'
+import { Language, getStoredLanguage, setStoredLanguage } from '@/lib/i18n'
 import { QuoteFormData, ClientAccount, ShipmentDocument, OperativeReport, OriginPhoto } from '@/lib/quotationTypes'
 import { ParsedShipment } from '@/lib/shipmentTypes'
 import { getDemoShipments } from '@/lib/demoShipments'
@@ -70,7 +70,7 @@ function App() {
   const [clientEmail, setClientEmail] = useState<string>('')
   const [partnerData, setPartnerData] = useState<{ role: string; name: string; filterValue: string } | null>(null)
   const [partnerShipments, setPartnerShipments] = useState<ParsedShipment[]>([])
-  const [language, setLanguage] = useState<Language>('es')
+  const [language, setLanguage] = useState<Language>(() => getStoredLanguage())
 
   // Initialize from localStorage (fast local cache), then override from DB
   const [quotes, setQuotes] = useState<QuoteFormData[]>(() => loadFromStorage('twf-quotes', []))
@@ -457,6 +457,7 @@ function App() {
 
   const handleLanguageChange = (lang: Language) => {
     setLanguage(lang)
+    setStoredLanguage(lang)
   }
 
   if (currentView === 'admin-login') {

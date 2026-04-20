@@ -7,6 +7,7 @@ import { InputOTP, InputOTPGroup, InputOTPSlot, InputOTPSeparator } from '@/comp
 import { ArrowLeft, EnvelopeSimple, Package, ShieldCheck, ArrowCounterClockwise, CaretLeft } from '@phosphor-icons/react'
 import { requestOTP, verifyOTPServer } from '@/lib/authClient'
 import { toast } from 'sonner'
+import { useTranslation, getStoredLanguage } from '@/lib/i18n'
 
 type LoginStep = 'email' | 'otp'
 
@@ -22,6 +23,7 @@ export default function ClientLogin({ onLogin, onBack }: ClientLoginProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [countdown, setCountdown] = useState(0)
   const [clientName, setClientName] = useState('')
+  const t = useTranslation(getStoredLanguage())
 
   // Countdown timer for resend cooldown
   useEffect(() => {
@@ -40,13 +42,13 @@ export default function ClientLogin({ onLogin, onBack }: ClientLoginProps) {
 
   const handleSendCode = useCallback(async (isResend = false) => {
     if (!email.trim()) {
-      toast.error('Ingresá tu email')
+      toast.error(t.auth.enterEmail)
       return
     }
 
     // Cooldown check (client-side only for UX)
     if (isResend && countdown > 0) {
-      toast.error(`Esperá ${countdown}s para reenviar`)
+      toast.error(t.auth.waitCountdown.replace('{s}', String(countdown)))
       return
     }
 
@@ -59,16 +61,16 @@ export default function ClientLogin({ onLogin, onBack }: ClientLoginProps) {
         setStep('otp')
         setOtpValue('')
         setCountdown(60)
-        toast.success(isResend ? 'Nuevo código enviado' : `Código enviado a ${email}`)
+        toast.success(isResend ? t.auth.newCodeSent : t.auth.codeSent.replace('{email}', email))
       } else {
-        toast.error(result.error || 'Error al enviar el código')
+        toast.error(result.error || t.auth.otpSendError)
       }
     } catch {
-      toast.error('Error al procesar la solicitud')
+      toast.error(t.auth.otpProcessError)
     } finally {
       setIsLoading(false)
     }
-  }, [email, countdown])
+  }, [email, countdown, t])
 
   const handleVerifyOTP = useCallback(async (code: string) => {
     if (code.length !== 6) return
@@ -81,19 +83,19 @@ export default function ClientLogin({ onLogin, onBack }: ClientLoginProps) {
       if (result.success) {
         const name = result.clientData?.name || ''
         setClientName(name)
-        toast.success(`Bienvenido/a${name ? `, ${name}` : ''}`)
+        toast.success(`${t.auth.welcome}${name ? `, ${name}` : ''}`)
         onLogin(email.toLowerCase().trim())
       } else {
-        toast.error(result.error || 'Código incorrecto')
+        toast.error(result.error || t.auth.otpIncorrect)
         setOtpValue('')
       }
     } catch {
-      toast.error('Error al verificar el código')
+      toast.error(t.auth.otpVerifyError)
       setOtpValue('')
     } finally {
       setIsLoading(false)
     }
-  }, [email, onLogin])
+  }, [email, onLogin, t])
 
   const handleOTPChange = useCallback((value: string) => {
     setOtpValue(value)
@@ -174,7 +176,7 @@ export default function ClientLogin({ onLogin, onBack }: ClientLoginProps) {
                   disabled={isLoading}
                 >
                   {isLoading ? (
-                    'Enviando...'
+                    t.auth.sending
                   ) : (
                     <>
                       <EnvelopeSimple size={20} className="mr-2" />
@@ -219,7 +221,7 @@ export default function ClientLogin({ onLogin, onBack }: ClientLoginProps) {
                   disabled={isLoading || otpValue.length !== 6}
                 >
                   {isLoading ? (
-                    'Verificando...'
+                    t.auth.verifying
                   ) : (
                     <>
                       <ShieldCheck size={20} className="mr-2" />

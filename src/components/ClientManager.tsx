@@ -29,7 +29,7 @@ import {
 import { ClientAccount } from '@/lib/quotationTypes'
 import { toast } from 'sonner'
 import { ParsedShipment } from '@/lib/shipmentTypes'
-import { impersonateClient } from '@/lib/dataClient'
+import { impersonateClient, deleteClient } from '@/lib/dataClient'
 import { getMatchCount as computeMatchCount } from '@/lib/clientMatching'
 
 interface ClientManagerProps {
@@ -147,9 +147,12 @@ export default function ClientManager({ clients, onUpdateClients, shipments = []
 
     setIsDeleting(true)
     try {
+      await deleteClient(id)
       await onUpdateClients(clients.filter(c => c.id !== id))
       toast.success('Cliente eliminado')
       setDeleteId(null)
+    } catch (err: any) {
+      toast.error(err?.message || 'Error al eliminar cliente')
     } finally {
       setIsDeleting(false)
     }

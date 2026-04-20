@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
-import { SignOut, User } from '@phosphor-icons/react'
+import { SignOut, User, House } from '@phosphor-icons/react'
 
 interface PartnerDashboardShellProps {
   /** Decorative icon shown on the left (e.g. <Warehouse ... /> or <Truck ... />). */
@@ -42,7 +42,19 @@ export default function PartnerDashboardShell({
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <img src="/images/twf-logo-full-new.png" alt="TWF" className="h-7 w-auto opacity-60" />
+            <a
+              href="/"
+              title="Volver al inicio"
+              className="shrink-0 rounded-md hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring"
+            >
+              <img src="/images/twf-logo-full-new.png" alt="TWF" className="h-7 w-auto opacity-60 hover:opacity-100 transition-opacity" />
+            </a>
+            <Button variant="outline" size="sm" asChild>
+              <a href="/">
+                <House size={18} className="mr-1.5" />
+                Inicio
+              </a>
+            </Button>
             <Button variant="outline" size="sm" onClick={onLogout}>
               <SignOut size={18} className="mr-1.5" />
               Salir
