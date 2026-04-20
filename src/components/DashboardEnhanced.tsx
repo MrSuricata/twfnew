@@ -3,7 +3,6 @@ import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   SignOut,
-  MagnifyingGlass,
   Database,
   Star,
   ChatCircleText,
@@ -11,10 +10,11 @@ import {
   UsersThree,
   CalendarBlank,
   Package,
-  BellRinging,
   Warning,
+  Lightning,
 } from '@phosphor-icons/react'
 
+import TodayDashboard from './TodayDashboard'
 import AgendaCalendar from './agenda/AgendaCalendar'
 import ShipmentTracking from './ShipmentTracking'
 import ExcelImport from './ExcelImport'
@@ -43,10 +43,11 @@ interface DashboardEnhancedProps {
 }
 
 export default function DashboardEnhanced({ onLogout, clients = [], shipments = [], documents = [], reports = [], originPhotos = [], dbSyncError = null, onUpdateShipments, onUpdateClients, onUpdateDocuments, onUpdateReports, onUpdateOriginPhotos }: DashboardEnhancedProps) {
-  const [activeTab, setActiveTab] = useState('agenda')
+  const [activeTab, setActiveTab] = useState('hoy')
 
   const getBreadcrumbs = () => {
     const breadcrumbMap: Record<string, string> = {
+      hoy: 'Hoy',
       agenda: 'Agenda',
       analytics: 'Estadísticas',
       shipments: 'Cargas',
@@ -57,7 +58,7 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
       clients: 'Clientes',
       partners: 'Partners'
     }
-    
+
     return [{ label: breadcrumbMap[activeTab] || 'Dashboard' }]
   }
 
@@ -91,12 +92,15 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-8">
         <Breadcrumbs
           items={getBreadcrumbs()}
-          onHomeClick={activeTab !== 'agenda' ? () => setActiveTab('agenda') : undefined}
+          onHomeClick={activeTab !== 'hoy' ? () => setActiveTab('hoy') : undefined}
         />
-        
+
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4 lg:grid-cols-8 max-w-5xl">
-            {/* Avisos oculto por el momento */}
+          <TabsList className="grid w-full grid-cols-3 lg:grid-cols-9 max-w-5xl">
+            <TabsTrigger value="hoy">
+              <Lightning size={20} className="mr-2" weight="fill" />
+              <span className="hidden sm:inline">Hoy</span>
+            </TabsTrigger>
             <TabsTrigger value="agenda">
               <CalendarBlank size={20} className="mr-2" />
               <span className="hidden sm:inline">Agenda</span>
@@ -131,7 +135,16 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
             </TabsTrigger>
           </TabsList>
 
-          {/* Avisos oculto por el momento */}
+          <TabsContent value="hoy">
+            <TodayDashboard
+              shipments={shipments || []}
+              documents={documents}
+              reports={reports}
+              originPhotos={originPhotos}
+              onUpdateShipments={onUpdateShipments}
+              onUpdateOriginPhotos={onUpdateOriginPhotos}
+            />
+          </TabsContent>
 
           <TabsContent value="agenda">
             <AgendaCalendar shipments={shipments || []} />
