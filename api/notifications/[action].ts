@@ -1,267 +1,178 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { authenticateRequest } from '../_lib/jwt.js'
-import { handleCors } from '../_lib/cors.js'
 import { getSupabase } from '../_lib/supabase.js'
-import { matchesClientePattern } from '../_lib/csvParser.js'
 
-// ─── Consolidated Notifications API ──────────────────────────────────
-// Routes by [action] parameter:
-//   POST /api/notifications/confirm      → confirm a shipment event
-//   POST /api/notifications/send-email   → send notification email
-//   GET  /api/notifications/check-pending → cron: check for pending tasks
+// ─── Notifications API ──────────────────────────────────────────────
+// Only route:
+//   GET /api/notifications/check-pending — cron, sends daily TWF summary
+//   to the N8N_REMINDER_WEBHOOK (Telegram).
+//
+// Previously also handled:
+//   POST /api/notifications/confirm       — create a notification task
+//   POST /api/notifications/send-email    — send a client email per task
+// Those were removed in 2026-04 when the task-based workflow was replaced by
+// the HOY dashboard (web) + this daily summary (Telegram).
 // ─────────────────────────────────────────────────────────────────────
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (handleCors(req, res)) return
-
   const action = req.query.action as string
-
-  switch (action) {
-    case 'confirm':
-      return handleConfirm(req, res)
-    case 'send-email':
-      return handleSendEmail(req, res)
-    case 'check-pending':
-      return handleCheckPending(req, res)
-    default:
-      return res.status(404).json({ error: `Unknown action: ${action}` })
+  if (action !== 'check-pending') {
+    return res.status(404).json({ error: `Unknown action: ${action}` })
   }
+  return handleCheckPending(req, res)
 }
 
-// ── CONFIRM ──────────────────────────────────────────────────────────
+// ─── Today filter helpers (server copy — kept in sync with src/lib/todayFilters.ts) ──
 
-const STEP_CONFIG: Record<string, { stepNumber: number; label: string }> = {
-  departure: { stepNumber: 0, label: 'Salida' },
-  border:    { stepNumber: 1, label: 'Cruce Frontera' },
-  fiscal:    { stepNumber: 2, label: 'Llegada Fiscal' },
+const MS_PER_DAY = 86_400_000
+const BORDER_DAYS_MIN = 1
+const BORDER_DAYS_MAX = 2
+
+function parseLocalDate(s: string): Date | null {
+  if (!s || typeof s !== 'string' || s.trim() === '') return null
+  const parts = s.split('-')
+  if (parts.length === 3) {
+    const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]))
+    if (!isNaN(d.getTime())) return d
+  }
+  const d = new Date(s)
+  if (isNaN(d.getTime())) return null
+  d.setHours(0, 0, 0, 0)
+  return d
 }
 
-async function handleConfirm(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
-
-  const payload = authenticateRequest(req.headers.authorization)
-  if (!payload || payload.role !== 'admin') {
-    return res.status(401).json({ error: 'Admin authentication required' })
-  }
-
-  const { shipmentRef, containerNumber, step, salidaDate, operativa } = req.body || {}
-
-  if (!shipmentRef || !step || !STEP_CONFIG[step]) {
-    return res.status(400).json({ error: 'shipmentRef and step (departure|border|fiscal) required' })
-  }
-
-  const db = getSupabase()
-  const today = new Date().toISOString().split('T')[0]
-  const cntr = containerNumber || ''
-  const taskId = `ntask-${shipmentRef}-${cntr || 'all'}-${step}`
-
-  try {
-    const { data: existing } = await db
-      .from('notification_tasks')
-      .select('id')
-      .eq('id', taskId)
-      .single()
-
-    if (existing) {
-      return res.status(200).json({ task: existing, alreadyExists: true })
-    }
-
-    let cliente = ''
-    let clientEmail = ''
-    let clientName = ''
-
-    const { data: cache } = await db.from('shipments_cache').select('data').eq('id', 1).single()
-    if (cache?.data) {
-      const shipment = cache.data.find((s: any) => s.REF === shipmentRef)
-      if (shipment) {
-        cliente = shipment.CLIENTE || ''
-      }
-    }
-
-    if (cliente) {
-      const { data: clients } = await db.from('clients').select('email, name, cliente_pattern')
-      if (clients) {
-        const match = clients.find((c: any) => matchesClientePattern(cliente, c.cliente_pattern))
-        if (match) {
-          clientEmail = match.email || ''
-          clientName = match.name || ''
-        }
-      }
-    }
-
-    let photosOk = false
-    let reportOk = false
-
-    if (step === 'departure') {
-      const { count: photoCount } = await db
-        .from('origin_photos')
-        .select('id', { count: 'exact', head: true })
-        .eq('shipment_ref', shipmentRef)
-      photosOk = (photoCount || 0) > 0
-
-      const { count: reportCount } = await db
-        .from('reports')
-        .select('id', { count: 'exact', head: true })
-        .eq('shipment_ref', shipmentRef)
-      reportOk = (reportCount || 0) > 0
-    }
-
-    // For border/fiscal steps, inherit threadId from the departure task
-    let emailThreadId = ''
-    let emailSubject = ''
-    if (step !== 'departure') {
-      const departureId = `ntask-${shipmentRef}-${cntr || 'all'}-departure`
-      const { data: depTask } = await db
-        .from('notification_tasks')
-        .select('email_thread_id, email_subject')
-        .eq('id', departureId)
-        .single()
-      if (depTask?.email_thread_id) {
-        emailThreadId = depTask.email_thread_id
-        emailSubject = depTask.email_subject || ''
-      }
-    }
-
-    const task = {
-      id: taskId,
-      shipment_ref: shipmentRef,
-      container_number: cntr,
-      operativa: operativa || 'CONTENEDOR',
-      cliente,
-      client_email: clientEmail,
-      client_name: clientName,
-      step,
-      step_number: STEP_CONFIG[step].stepNumber,
-      due_date: today,
-      salida_date: salidaDate || today,
-      photos_ok: photosOk,
-      report_ok: reportOk,
-      email_sent: false,
-      email_thread_id: emailThreadId,
-      email_subject: emailSubject,
-      status: 'pending',
-      notes: '',
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    }
-
-    const { error } = await db.from('notification_tasks').upsert(task, { onConflict: 'id' })
-    if (error) throw error
-
-    return res.status(200).json({
-      task: {
-        id: task.id, shipmentRef: task.shipment_ref, containerNumber: task.container_number,
-        operativa: task.operativa || 'CONTENEDOR',
-        cliente: task.cliente, clientEmail: task.client_email, clientName: task.client_name,
-        step: task.step, stepNumber: task.step_number, dueDate: task.due_date,
-        salidaDate: task.salida_date, photosOk: task.photos_ok, reportOk: task.report_ok,
-        emailSent: task.email_sent, emailThreadId: task.email_thread_id || '',
-        emailSubject: task.email_subject || '', status: task.status, notes: task.notes,
-        createdAt: task.created_at, updatedAt: task.updated_at,
-      },
-      alreadyExists: false,
-    })
-  } catch (error: any) {
-    console.error('[notifications/confirm] Error:', error?.message || error)
-    return res.status(500).json({ error: 'Database error' })
-  }
+function todayLocal(): Date {
+  const t = new Date()
+  t.setHours(0, 0, 0, 0)
+  return t
 }
 
-// ── SEND EMAIL ───────────────────────────────────────────────────────
+function isValidDate(s: string): boolean { return parseLocalDate(s) !== null }
+function isDateToday(s: string): boolean { const d = parseLocalDate(s); return d !== null && d.getTime() === todayLocal().getTime() }
+function isDatePast(s: string): boolean { const d = parseLocalDate(s); return d !== null && d.getTime() < todayLocal().getTime() }
 
-async function sendViaN8n(webhook: string, data: { to: string; subject: string; htmlBody: string; replyTo?: string; attachments?: any[] }): Promise<{ ok: boolean; data?: any }> {
-  const r = await fetch(webhook, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data),
-  })
-  let responseData = null
-  try { responseData = await r.json() } catch {}
-  return { ok: r.ok, data: responseData }
+function daysSince(s: string): number | null {
+  const d = parseLocalDate(s)
+  if (!d) return null
+  return Math.floor((todayLocal().getTime() - d.getTime()) / MS_PER_DAY)
 }
 
-async function sendViaEmailJS(data: { to: string; subject: string; htmlBody: string }): Promise<boolean> {
-  const serviceId = process.env.EMAILJS_SERVICE_ID
-  const templateId = process.env.EMAILJS_TEMPLATE_NOTIFICATION || process.env.EMAILJS_TEMPLATE_QUOTE
-  const publicKey = process.env.EMAILJS_PUBLIC_KEY
-  const privateKey = process.env.EMAILJS_PRIVATE_KEY
-
-  if (!serviceId || !templateId || !publicKey) return false
-
-  const body: Record<string, unknown> = {
-    service_id: serviceId,
-    template_id: templateId,
-    user_id: publicKey,
-    template_params: {
-      to_email: data.to, email: data.to, subject: data.subject,
-      message: data.htmlBody, from_name: 'TWF - Transit World Forwarding',
-    },
-  }
-  if (privateKey) body.accessToken = privateKey
-
-  const r = await fetch('https://api.emailjs.com/api/v1.0/email/send', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-  if (!r.ok) console.error(`[send-email] EmailJS error (${r.status}):`, await r.text())
-  return r.ok
+interface OpLike {
+  REF?: string
+  SALIDA?: string
+  ETA_FISC?: string
+  CLIENTE_OP?: string
+  CNTR_OP?: string
+  DEPOSITO?: string
+  FISCAL?: string
+  TRANSPORTE?: string
+}
+interface ShipmentLike {
+  REF?: string
+  CLIENTE?: string
+  TERMINAL?: string
+  LIBRE_HASTA?: string
+  calculatedLibreHasta?: string
+  operativas?: OpLike[]
 }
 
-async function handleSendEmail(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+interface Match { s: ShipmentLike; op: OpLike }
 
-  const payload = authenticateRequest(req.headers.authorization)
-  if (!payload || payload.role !== 'admin') {
-    return res.status(401).json({ error: 'Admin authentication required' })
-  }
-
-  const { taskId, to, subject, htmlBody, replyTo, attachments, threadId } = req.body || {}
-  if (!taskId || !to || !subject || !htmlBody) {
-    return res.status(400).json({ error: 'taskId, to, subject, and htmlBody are required' })
-  }
-
-  try {
-    let sent = false
-    let method = ''
-    let responseData: any = null
-
-    const n8nWebhook = process.env.N8N_SEND_EMAIL_WEBHOOK
-    if (n8nWebhook) {
-      const n8nResult = await sendViaN8n(n8nWebhook, { to, subject, htmlBody, replyTo, attachments, threadId })
-      sent = n8nResult.ok
-      responseData = n8nResult.data
-      method = 'n8n'
-    }
-    if (!sent) {
-      sent = await sendViaEmailJS({ to, subject, htmlBody })
-      method = 'emailjs'
-    }
-    if (!sent) {
-      return res.status(502).json({ error: 'Email sending failed' })
-    }
-
-    // Save thread info for future replies
-    const db = getSupabase()
-    const updateData: Record<string, unknown> = {
-      email_sent: true, email_sent_at: new Date().toISOString(),
-      status: 'completed', updated_at: new Date().toISOString(),
-      email_subject: subject,
-    }
-    // If n8n returned a threadId, save it for reply chaining
-    if (responseData?.threadId) {
-      updateData.email_thread_id = responseData.threadId
-    }
-    await db.from('notification_tasks').update(updateData).eq('id', taskId)
-
-    return res.status(200).json({ sent: true, taskId, method, threadId: responseData?.threadId })
-  } catch (error: any) {
-    console.error('[send-email] Error:', error?.message || error)
-    return res.status(500).json({ error: 'Failed to send email' })
-  }
+function salientesHoy(ships: ShipmentLike[]): Match[] {
+  return ships.flatMap(s => (s.operativas || []).filter(op => isDateToday(op.SALIDA || '')).map(op => ({ s, op })))
+}
+function llegandoFiscalHoy(ships: ShipmentLike[]): Match[] {
+  return ships.flatMap(s => (s.operativas || []).filter(op => isDateToday(op.ETA_FISC || '')).map(op => ({ s, op })))
+}
+function enFronteraHoy(ships: ShipmentLike[]): Match[] {
+  return ships.flatMap(s => (s.operativas || []).filter(op => {
+    if (!isValidDate(op.SALIDA || '')) return false
+    const days = daysSince(op.SALIDA || '')
+    if (days === null || days < BORDER_DAYS_MIN || days > BORDER_DAYS_MAX) return false
+    if (isValidDate(op.ETA_FISC || '') && isDatePast(op.ETA_FISC || '')) return false
+    if (isDateToday(op.ETA_FISC || '')) return false
+    return true
+  }).map(op => ({ s, op })))
 }
 
-// ── CHECK PENDING (Cron) ─────────────────────────────────────────────
+interface LibreAlertLike { s: ShipmentLike; days: number; severity: 'vencido' | 'hoy' | 'urgente' }
+
+function libreAlerts(ships: ShipmentLike[]): LibreAlertLike[] {
+  const out: LibreAlertLike[] = []
+  for (const s of ships) {
+    const libre = s.LIBRE_HASTA || s.calculatedLibreHasta
+    if (!libre || !isValidDate(libre)) continue
+    const days = daysSince(libre)
+    if (days === null) continue
+    if (days > 0) out.push({ s, days, severity: 'vencido' })
+    else if (days === 0) out.push({ s, days: 0, severity: 'hoy' })
+    else if (days >= -2) out.push({ s, days, severity: 'urgente' })
+  }
+  return out.sort((a, b) => b.days - a.days)
+}
+
+// ─── Telegram message formatting ──
+
+function mdRow(s: ShipmentLike, op: OpLike): string {
+  const ref = s.REF || op.REF || '—'
+  const cliente = (op.CLIENTE_OP || s.CLIENTE || '—').trim()
+  const deposito = (op.DEPOSITO || '—').trim()
+  const fiscal = (op.FISCAL || '—').trim()
+  const transporte = (op.TRANSPORTE || '').trim()
+  const route = `${deposito} → ${fiscal}`
+  const suffix = transporte ? ` · ${transporte}` : ''
+  return `• \`${ref}\` — ${cliente} — ${route}${suffix}`
+}
+
+function buildTelegramMessage(ships: ShipmentLike[]): string {
+  const sal = salientesHoy(ships)
+  const front = enFronteraHoy(ships)
+  const fisc = llegandoFiscalHoy(ships)
+  const alerts = libreAlerts(ships)
+
+  const total = sal.length + front.length + fisc.length
+  const today = new Date().toLocaleDateString('es-UY', { weekday: 'long', day: 'numeric', month: 'long' })
+  const header = `🚚 *TWF — ${today.charAt(0).toUpperCase() + today.slice(1)}*\n`
+
+  if (total === 0 && alerts.length === 0) {
+    return `${header}\n☕ Día tranquilo — sin movimientos programados.`
+  }
+
+  const sections: string[] = []
+
+  // LIBRE first (urgent)
+  if (alerts.length > 0) {
+    const vencidos = alerts.filter(a => a.severity === 'vencido')
+    const hoy = alerts.filter(a => a.severity === 'hoy')
+    const urg = alerts.filter(a => a.severity === 'urgente')
+    if (vencidos.length > 0) {
+      sections.push(`🔴 *LIBRE VENCIDO (${vencidos.length})*\n` +
+        vencidos.map(a => `• \`${a.s.REF || '—'}\` — ${(a.s.CLIENTE || '—').trim()} — vence hace ${a.days}d`).join('\n'))
+    }
+    if (hoy.length > 0) {
+      sections.push(`🟠 *LIBRE HOY (${hoy.length})*\n` +
+        hoy.map(a => `• \`${a.s.REF || '—'}\` — ${(a.s.CLIENTE || '—').trim()} — último día en ${a.s.TERMINAL || '—'}`).join('\n'))
+    }
+    if (urg.length > 0) {
+      sections.push(`🟡 *LIBRE EN ${urg[0].days === -1 ? '1 día' : `${Math.abs(urg[0].days)} días`} (${urg.length})*\n` +
+        urg.map(a => `• \`${a.s.REF || '—'}\` — ${(a.s.CLIENTE || '—').trim()} — vence en ${Math.abs(a.days)}d`).join('\n'))
+    }
+  }
+
+  if (sal.length > 0) {
+    sections.push(`🚛 *SALIENDO HOY (${sal.length})*\n` + sal.map(m => mdRow(m.s, m.op)).join('\n'))
+  }
+  if (front.length > 0) {
+    sections.push(`🛂 *EN FRONTERA HOY (${front.length})* _estimado_\n` +
+      front.map(m => `• \`${m.s.REF || '—'}\` — ${(m.op.CLIENTE_OP || m.s.CLIENTE || '—').trim()} — salió hace ${daysSince(m.op.SALIDA || '')}d`).join('\n'))
+  }
+  if (fisc.length > 0) {
+    sections.push(`🏁 *LLEGANDO A FISCAL HOY (${fisc.length})*\n` + fisc.map(m => mdRow(m.s, m.op)).join('\n'))
+  }
+
+  return `${header}\n${sections.join('\n\n')}`
+}
+
+// ─── Handler ──
 
 async function handleCheckPending(req: VercelRequest, res: VercelResponse) {
   const cronSecret = process.env.CRON_SECRET
@@ -275,49 +186,48 @@ async function handleCheckPending(req: VercelRequest, res: VercelResponse) {
   }
 
   const db = getSupabase()
-  const today = new Date().toISOString().split('T')[0]
 
   try {
-    const { count: pendingCount, error } = await db
-      .from('notification_tasks')
-      .select('id', { count: 'exact', head: true })
-      .lte('due_date', today)
-      .eq('status', 'pending')
+    const { data: cache, error } = await db.from('shipments_cache').select('data').eq('id', 1).single()
     if (error) throw error
 
-    const pending = pendingCount || 0
-    if (pending === 0) {
-      return res.status(200).json({ pending: 0, reminded: false })
-    }
+    const shipments: ShipmentLike[] = Array.isArray(cache?.data) ? cache.data : []
+    const message = buildTelegramMessage(shipments)
 
-    const { data: tasks } = await db
-      .from('notification_tasks')
-      .select('shipment_ref, step, due_date')
-      .lte('due_date', today)
-      .eq('status', 'pending')
+    // Counts for the return payload
+    const sal = salientesHoy(shipments).length
+    const front = enFronteraHoy(shipments).length
+    const fisc = llegandoFiscalHoy(shipments).length
+    const alerts = libreAlerts(shipments).length
 
-    const overdue = (tasks || []).filter(t => t.due_date < today).length
-    const todayPending = (tasks || []).filter(t => t.due_date === today).length
-    const refs = [...new Set((tasks || []).map(t => t.shipment_ref))].join(', ')
-
-    const message = `⚠️ TWF Notificaciones Pendientes\n\n` +
-      `${overdue > 0 ? `🔴 ${overdue} vencida${overdue > 1 ? 's' : ''}\n` : ''}` +
-      `🟡 ${todayPending} de hoy\n\nRefs: ${refs}\n\n👉 Entrá al dashboard`
-
-    const n8nReminder = process.env.N8N_REMINDER_WEBHOOK
-    if (n8nReminder) {
+    const webhook = process.env.N8N_REMINDER_WEBHOOK
+    let delivered = false
+    if (webhook) {
       try {
-        await fetch(n8nReminder, {
+        const r = await fetch(webhook, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message, pending, overdue, todayPending, refs }),
+          body: JSON.stringify({
+            message,              // pre-formatted Markdown for Telegram
+            text: message,        // alias for webhooks that prefer `text`
+            parseMode: 'Markdown',
+            counts: { saliendo: sal, frontera: front, llegandoFiscal: fisc, libreAlerts: alerts },
+          }),
         })
+        delivered = r.ok
+        if (!r.ok) console.error(`[check-pending] webhook returned ${r.status}:`, await r.text().catch(() => ''))
       } catch (e) {
-        console.error('[check-pending] n8n webhook failed:', e)
+        console.error('[check-pending] webhook error:', e)
       }
+    } else {
+      console.warn('[check-pending] N8N_REMINDER_WEBHOOK not set — summary computed but not delivered')
     }
 
-    return res.status(200).json({ pending, overdue, todayPending, reminded: !!n8nReminder })
+    return res.status(200).json({
+      delivered,
+      counts: { saliendo: sal, frontera: front, llegandoFiscal: fisc, libreAlerts: alerts },
+      shipmentsScanned: shipments.length,
+    })
   } catch (error: any) {
     console.error('[check-pending] Error:', error?.message || error)
     return res.status(500).json({ error: 'Check failed' })
