@@ -10,7 +10,22 @@ interface AnalyticsDashboardProps {
   shipments: ParsedShipment[]
 }
 
-const COLORS = ['#E8965A', '#2B4162', '#12664F', '#D4A373', '#8B5A3C', '#5B8C5A', '#A0522D']
+// Chart palette — references the CSS custom properties defined in src/index.css
+// so that changing a theme token in CSS updates every chart at once.
+// See `--chart-1..5` in :root. Extras (6, 7) fall back to earth tones.
+const COLORS = [
+  'var(--chart-1)',
+  'var(--chart-2)',
+  'var(--chart-3)',
+  'var(--chart-4)',
+  'var(--chart-5)',
+  'oklch(0.55 0.12 30)',
+  'oklch(0.50 0.08 200)',
+]
+
+const CHART_PRIMARY = 'var(--chart-1)'
+const CHART_SECONDARY = 'var(--chart-2)'
+const CHART_TERTIARY = 'var(--chart-3)'
 
 function getYearFromDate(dateStr: string): number | null {
   if (!dateStr) return null
@@ -412,7 +427,7 @@ export default function AnalyticsDashboard({ shipments }: AnalyticsDashboardProp
                   <Tooltip
                     contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }}
                   />
-                  <Bar dataKey="cargas" fill="#E8965A" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="cargas" fill={CHART_PRIMARY} radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -436,7 +451,7 @@ export default function AnalyticsDashboard({ shipments }: AnalyticsDashboardProp
                   <XAxis type="number" tick={{ fontSize: 12 }} />
                   <YAxis dataKey="cliente" type="category" tick={{ fontSize: 11 }} width={120} />
                   <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }} />
-                  <Bar dataKey="contenedores" fill="#2B4162" radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="contenedores" fill={CHART_SECONDARY} radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -494,7 +509,7 @@ export default function AnalyticsDashboard({ shipments }: AnalyticsDashboardProp
                   <XAxis dataKey="name" tick={{ fontSize: 12 }} />
                   <YAxis tick={{ fontSize: 12 }} />
                   <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }} />
-                  <Bar dataKey="value" fill="#12664F" radius={[4, 4, 0, 0]} name="Operaciones" />
+                  <Bar dataKey="value" fill={CHART_TERTIARY} radius={[4, 4, 0, 0]} name="Operaciones" />
                 </BarChart>
               </ResponsiveContainer>
             ) : (

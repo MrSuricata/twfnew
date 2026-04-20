@@ -38,6 +38,7 @@ import {
   Boat,
 } from '@phosphor-icons/react'
 import { ParsedShipment, getShipmentStatus, generateShipmentAlerts, isShipmentCompleted, ShipmentAlert, parseLocalDate } from '@/lib/shipmentTypes'
+import { statusColorToClass, getUrgencyMeta } from '@/lib/statusColors'
 import { ClientAccount, OperativeReport, OriginPhoto } from '@/lib/quotationTypes'
 import { toast } from 'sonner'
 import { authFetch } from '@/lib/authClient'
@@ -265,26 +266,12 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
 
   const getStatusBadge = (shipment: ParsedShipment) => {
     const status = getShipmentStatus(shipment)
-    const colorMap: Record<string, string> = {
-      blue: 'bg-blue-500',
-      yellow: 'bg-yellow-500 text-black',
-      green: 'bg-green-500',
-      gray: 'bg-gray-500',
-      red: 'bg-red-500',
-      orange: 'bg-orange-500'
-    }
-    return <Badge className={colorMap[status.color] || 'bg-gray-500'}>{status.label}</Badge>
+    return <Badge className={statusColorToClass(status.color)}>{status.label}</Badge>
   }
 
   const getUrgencyBadge = (days: number) => {
-    if (days < 0) {
-      return <Badge className="bg-red-500">Vencido</Badge>
-    } else if (days <= 2) {
-      return <Badge className="bg-orange-500">Urgente</Badge>
-    } else if (days <= 5) {
-      return <Badge className="bg-yellow-500">Próximo</Badge>
-    }
-    return <Badge className="bg-green-500">A tiempo</Badge>
+    const urgency = getUrgencyMeta(days)
+    return <Badge className={urgency.badgeClass}>{urgency.label}</Badge>
   }
 
   const handleViewDetails = (shipment: ParsedShipment) => {

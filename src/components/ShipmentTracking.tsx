@@ -46,6 +46,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { ParsedShipment, getShipmentStatus, ShipmentStatusCode } from '@/lib/shipmentTypes'
+import { statusColorToClass, statusColorDotClass } from '@/lib/statusColors'
 import { OperativeReport, OriginPhoto, PhotoLocation } from '@/lib/quotationTypes'
 import { saveReportWithFile, deleteReport as deleteReportFromDB, saveOriginPhoto } from '@/lib/dataClient'
 import { processPhoto } from '@/lib/imageUtils'
@@ -311,21 +312,6 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
     if (!freeDate) return 999
     const today = new Date(); today.setHours(0, 0, 0, 0)
     return Math.floor((freeDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
-  }
-
-  const statusBadgeColorMap: Record<string, string> = {
-    blue: 'bg-blue-500', yellow: 'bg-yellow-500 text-black', green: 'bg-green-500',
-    gray: 'bg-gray-500', red: 'bg-red-500', orange: 'bg-orange-500'
-  }
-
-  const getStatusDotClass = (color: string) => {
-    switch (color) {
-      case 'green': return 'bg-green-500'
-      case 'yellow': return 'bg-yellow-500'
-      case 'red': return 'bg-red-500'
-      case 'gray': return 'bg-gray-400'
-      default: return 'bg-blue-500'
-    }
   }
 
   // ── Sorting handler ──
@@ -634,7 +620,7 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
                         >
                           {/* Status dot */}
                           <TableCell className="pl-3 pr-0">
-                            <span className={`block w-2 h-2 rounded-full ${getStatusDotClass(recStatus.color)}`} />
+                            <span className={`block w-2 h-2 rounded-full ${statusColorDotClass(recStatus.color)}`} />
                           </TableCell>
                           <TableCell className="font-mono text-xs font-bold whitespace-nowrap">
                             <button
@@ -687,7 +673,7 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
                             )}
                           </TableCell>
                           <TableCell>
-                            <Badge className={`text-[10px] whitespace-nowrap ${statusBadgeColorMap[recStatus.color] || 'bg-gray-500'}`}>
+                            <Badge className={`text-[10px] whitespace-nowrap ${statusColorToClass(recStatus.color)}`}>
                               {recStatus.label}
                             </Badge>
                           </TableCell>
