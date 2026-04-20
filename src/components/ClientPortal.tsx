@@ -44,6 +44,7 @@ import { toast } from 'sonner'
 import { authFetch } from '@/lib/authClient'
 import { fetchClientReports, fetchClientOriginPhotos } from '@/lib/dataClient'
 import ShipmentDetailsDialog from './ShipmentDetailsDialog'
+import AgendaCalendar from './agenda/AgendaCalendar'
 import { matchesPattern } from '@/lib/clientMatching'
 
 interface ClientPortalProps {
@@ -474,14 +475,18 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-3 max-w-2xl">
+          <TabsList className="grid w-full grid-cols-4 max-w-3xl">
             <TabsTrigger value="active">
               <Package size={20} className="mr-2" />
-              Activas
+              <span className="hidden sm:inline">Activas</span>
+            </TabsTrigger>
+            <TabsTrigger value="agenda">
+              <CalendarBlank size={20} className="mr-2" />
+              <span className="hidden sm:inline">Agenda</span>
             </TabsTrigger>
             <TabsTrigger value="alerts" className="relative">
               <Bell size={20} className="mr-2" />
-              Alertas
+              <span className="hidden sm:inline">Alertas</span>
               {visibleAlerts.length > 0 && (
                 <span className={`ml-1 text-[10px] font-bold rounded-full min-w-[16px] h-[16px] flex items-center justify-center ${
                   criticalCount > 0 ? 'bg-red-500 text-white' : 'bg-blue-500 text-white'
@@ -492,9 +497,24 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
             </TabsTrigger>
             <TabsTrigger value="history">
               <ClockCounterClockwise size={20} className="mr-2" />
-              Historial
+              <span className="hidden sm:inline">Historial</span>
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="agenda" className="space-y-4 mt-6">
+            <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm text-muted-foreground flex items-start gap-2">
+              <Info size={16} className="shrink-0 mt-0.5" />
+              <span>
+                Vista calendario de tus cargas. Clickeá una carga para ver detalles.
+                Usá los toggles del encabezado para cambiar entre semana, mes o año.
+              </span>
+            </div>
+            <AgendaCalendar
+              shipments={clientShipments}
+              clientView={true}
+              defaultView="month"
+            />
+          </TabsContent>
 
           <TabsContent value="active" className="space-y-4 mt-6">
             {/* ── Filter Bar ── */}

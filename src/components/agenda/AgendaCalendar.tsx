@@ -21,10 +21,21 @@ interface AgendaCalendarProps {
   depotFilter?: string
   transportFilter?: string
   partnerView?: boolean
+  /** Client view — restricts what the details dialog exposes (same trimming as client portal). */
+  clientView?: boolean
+  /** Initial calendar view. Defaults to 'week'. Clients prefer 'month' for monthly overview. */
+  defaultView?: AgendaView
 }
 
-export default function AgendaCalendar({ shipments, depotFilter, transportFilter, partnerView = false }: AgendaCalendarProps) {
-  const [view, setView] = useState<AgendaView>('week')
+export default function AgendaCalendar({
+  shipments,
+  depotFilter,
+  transportFilter,
+  partnerView = false,
+  clientView = false,
+  defaultView = 'week',
+}: AgendaCalendarProps) {
+  const [view, setView] = useState<AgendaView>(defaultView)
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedShipment, setSelectedShipment] = useState<ParsedShipment | null>(null)
   const [selectedCntr, setSelectedCntr] = useState<string | null>(null)
@@ -232,7 +243,8 @@ export default function AgendaCalendar({ shipments, depotFilter, transportFilter
         onClearTransports={() => setActiveTransports(new Set())}
         pendingCount={pendingCount}
         showPendingSidebar={showPendingSidebar}
-        onTogglePendingSidebar={() => setShowPendingSidebar(prev => !prev)}
+        // Pending-sidebar toggle is admin-only (makes no sense for a single partner/client).
+        onTogglePendingSidebar={partnerView || clientView ? undefined : () => setShowPendingSidebar(prev => !prev)}
       />
 
       <div className="flex gap-0 overflow-hidden rounded-xl border border-border bg-card">
@@ -275,8 +287,8 @@ export default function AgendaCalendar({ shipments, depotFilter, transportFilter
         </div>
 
         {/* Pending coordination sidebar — admin-only (meaningless to a
-            single partner since they only see their own depot/transport). */}
-        {showPendingSidebar && !partnerView && (
+            single partner or client since they only see their own data). */}
+        {showPendingSidebar && !partnerView && !clientView && (
           <AgendaPendingSidebar
             shipments={shipments}
             windowDays={PENDING_WINDOW_DAYS}
@@ -292,7 +304,7 @@ export default function AgendaCalendar({ shipments, depotFilter, transportFilter
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         onSave={() => {}} // Read-only from agenda
-        clientView={false}
+        clientView={clientView}
         partnerView={partnerView}
         highlightCntr={selectedCntr}
       />
