@@ -139,14 +139,14 @@ function hasShipArrived(shipment: ParsedShipment): boolean {
 /**
  * Validate that a string is a real date (not just non-empty text).
  */
-function isValidDate(s: string): boolean {
+export function isValidDate(s: string): boolean {
   return parseLocalDate(s) !== null
 }
 
 /**
  * Check if a date string represents a date that is strictly in the past (before today).
  */
-function isDatePast(s: string): boolean {
+export function isDatePast(s: string): boolean {
   const d = parseLocalDate(s)
   if (!d) return false
   return d.getTime() < todayLocal().getTime()
@@ -155,7 +155,7 @@ function isDatePast(s: string): boolean {
 /**
  * Check if a date string represents today's date.
  */
-function isDateToday(s: string): boolean {
+export function isDateToday(s: string): boolean {
   const d = parseLocalDate(s)
   if (!d) return false
   return d.getTime() === todayLocal().getTime()

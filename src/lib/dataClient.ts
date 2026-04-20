@@ -5,7 +5,7 @@
 // ─────────────────────────────────────────────────────────────────────
 
 import { authFetch } from './authClient'
-import type { QuoteFormData, ClientAccount, ShipmentDocument, OperativeReport, OriginPhoto, NotificationTask, NotificationStep } from './quotationTypes'
+import type { QuoteFormData, ClientAccount, ShipmentDocument, OperativeReport, OriginPhoto } from './quotationTypes'
 import type { ParsedShipment } from './shipmentTypes'
 import { matchesPattern } from './clientMatching'
 
@@ -191,60 +191,12 @@ export async function fetchClientOriginPhotos(): Promise<OriginPhoto[]> {
 }
 
 // ── Notification Tasks ──
-
-/** Fetch notification tasks by range: 'today' | 'overdue' | 'pending' | 'all' */
-export async function fetchNotificationTasks(range: string = 'pending'): Promise<NotificationTask[]> {
-  const res = await authFetch(`/api/data/notification-tasks?range=${range}`)
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  const data = await res.json()
-  return data.tasks || []
-}
-
-/** Update a notification task field (checkbox toggle, status change). */
-export async function updateNotificationTask(id: string, updates: Partial<NotificationTask>): Promise<void> {
-  const res = await authFetch(`/api/data/notification-tasks?id=${encodeURIComponent(id)}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(updates),
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.error || `HTTP ${res.status}`)
-  }
-}
-
-/** Confirm a shipment event (creates a notification task). */
-export async function confirmShipmentEvent(shipmentRef: string, containerNumber: string, step: NotificationStep, salidaDate?: string, operativa?: string): Promise<NotificationTask> {
-  const res = await authFetch('/api/notifications/confirm', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ shipmentRef, containerNumber, step, salidaDate, operativa }),
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.error || `HTTP ${res.status}`)
-  }
-  const data = await res.json()
-  return data.task
-}
-
-/** Send a notification email via n8n webhook. Supports attachments and thread chaining. */
-export async function sendNotificationEmail(taskId: string, emailData: { to: string; subject: string; htmlBody: string; replyTo?: string; threadId?: string; attachments?: { name: string; type: string; data: string }[] }): Promise<void> {
-  const res = await authFetch('/api/notifications/send-email', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ taskId, ...emailData }),
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.error || `HTTP ${res.status}`)
-  }
-}
-
-/** Skip/dismiss a notification task. */
-export async function skipNotificationTask(id: string): Promise<void> {
-  await updateNotificationTask(id, { status: 'skipped' as any })
-}
+// The old task-based workflow (confirm → send email → mark completed) was replaced
+// in 2026-04 with the HOY dashboard (see TodayDashboard.tsx + todayFilters.ts) +
+// a daily Telegram summary. The API endpoints below were removed:
+//   - POST /api/notifications/confirm
+//   - POST /api/notifications/send-email
+// The notification_tasks table is kept for historical audit; no new rows are written.
 
 // ── Clients ──
 
