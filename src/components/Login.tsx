@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label'
 import { LockKey, ArrowLeft, ShieldCheck, CircleNotch } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import { loginAdmin } from '@/lib/authClient'
+import { useTranslation, getStoredLanguage } from '@/lib/i18n'
 
 interface LoginProps {
   onLogin: () => void
@@ -16,6 +17,7 @@ export default function Login({ onLogin, onBack }: LoginProps) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
+  const t = useTranslation(getStoredLanguage())
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -24,10 +26,10 @@ export default function Login({ onLogin, onBack }: LoginProps) {
     const result = await loginAdmin(username, password)
 
     if (result.success) {
-      toast.success('Inicio de sesión exitoso')
+      toast.success(t.auth.loginSuccess)
       onLogin()
     } else {
-      toast.error(result.error || 'Usuario o contraseña incorrectos')
+      toast.error(result.error || t.auth.adminInvalid)
     }
 
     setLoading(false)
@@ -86,7 +88,7 @@ export default function Login({ onLogin, onBack }: LoginProps) {
                 ) : (
                   <LockKey size={20} className="mr-2" />
                 )}
-                {loading ? 'Verificando...' : 'Ingresar'}
+                {loading ? t.auth.verifying : t.auth.login}
               </Button>
             </form>
           </CardContent>

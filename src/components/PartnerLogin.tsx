@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label'
 import { SignIn, Envelope, Lock, Warehouse, Truck } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import { loginPartner } from '@/lib/authClient'
+import { useTranslation, getStoredLanguage } from '@/lib/i18n'
 
 interface PartnerLoginProps {
   onLogin: (token: string, role: string, userData: any) => void
@@ -16,6 +17,7 @@ export default function PartnerLogin({ onLogin, onBack }: PartnerLoginProps) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
+  const t = useTranslation(getStoredLanguage())
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -25,15 +27,15 @@ export default function PartnerLogin({ onLogin, onBack }: PartnerLoginProps) {
       const result = await loginPartner(email, password)
 
       if (!result.success) {
-        toast.error(result.error || 'Credenciales incorrectas')
+        toast.error(result.error || t.auth.partnerInvalid)
         setLoading(false)
         return
       }
 
-      toast.success('Inicio de sesión exitoso')
+      toast.success(t.auth.loginSuccess)
       onLogin('ok', result.role || '', result.data || {})
     } catch (err) {
-      toast.error('Error de conexión — intente nuevamente')
+      toast.error(t.auth.connectionError)
     }
 
     setLoading(false)
@@ -104,7 +106,7 @@ export default function PartnerLogin({ onLogin, onBack }: PartnerLoginProps) {
                 ) : (
                   <SignIn size={20} className="mr-2" />
                 )}
-                {loading ? 'Verificando...' : 'Ingresar'}
+                {loading ? t.auth.verifying : t.auth.login}
               </Button>
             </form>
           </CardContent>

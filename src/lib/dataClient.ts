@@ -226,6 +226,16 @@ export async function saveClients(clients: ClientAccount[]): Promise<void> {
   }
 }
 
+export async function deleteClient(id: string): Promise<void> {
+  const res = await authFetch(`/api/data/clients?id=${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
+}
+
 /**
  * Admin-only: request a client session token for the given email without
  * going through the OTP flow. Used to "view portal as client X" for QA/debug.

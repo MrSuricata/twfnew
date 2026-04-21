@@ -208,67 +208,37 @@ export default function PublicSite({
       icon: Boat,
       title: t.services.maritime,
       description: t.services.maritimeDesc,
-      details: [
-        'Importación y exportación global',
-        'Coordinación con MSC, CMA CGM, Maersk, Hapag Lloyd, COSCO, PIL',
-        'Consolidado y desconsolidado en depósitos fiscalizados',
-        'Gestión completa de documentación'
-      ]
+      details: t.services.maritimeDetails
     },
     {
       icon: Truck,
       title: t.services.land,
       description: t.services.landDesc,
-      details: [
-        'Transporte desde/hacia Brasil, Argentina, Paraguay y Chile',
-        'Coordinación puerta a puerta',
-        'Seguimiento en tiempo real',
-        'Gestión documental completa'
-      ]
+      details: t.services.landDetails
     },
     {
       icon: Airplane,
       title: t.services.air,
       description: t.services.airDesc,
-      details: [
-        'Importación/exportación express',
-        'Coordinación con principales aerolíneas',
-        'Ideal para cargas urgentes o alto valor',
-        'Tiempos de tránsito reducidos'
-      ]
+      details: t.services.airDetails
     },
     {
       icon: Package,
       title: t.services.local,
       description: t.services.localDesc,
-      details: [
-        'Trasiegos y desconsolidaciones',
-        'Entregas directas',
-        'Coordinación con Montecon, TCP',
-        'Gestión de liberaciones y tasas portuarias'
-      ]
+      details: t.services.localDetails
     },
     {
       icon: ChartLine,
       title: t.services.consulting,
       description: t.services.consultingDesc,
-      details: [
-        'Planificación de rutas, tiempos y costos',
-        'Asistencia aduanera y documentación',
-        'Optimización de embarques',
-        'Consultoría personalizada'
-      ]
+      details: t.services.consultingDetails
     },
     {
       icon: Warning,
       title: t.services.special,
       description: t.services.specialDesc,
-      details: [
-        'Coordinación segura y certificada',
-        'Cargas peligrosas o sobredimensionadas',
-        'Seguimiento detallado',
-        'Cumplimiento normativo total'
-      ]
+      details: t.services.specialDetails
     }
   ]
 
