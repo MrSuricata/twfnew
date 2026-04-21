@@ -696,7 +696,7 @@ export default function PublicSite({
               viewport={{ once: true, margin: "-100px" }}
               className="text-lg text-white/80 mb-6 leading-relaxed"
             >
-              Con más de 15 años en comercio exterior, <span className="font-semibold text-white">Transit World Forwarding</span> conecta tu negocio con más de 250 destinos en los 5 continentes.
+              {t.about.paragraph1Part1} <span className="font-semibold text-white">Transit World Forwarding</span> {t.about.paragraph1Part2}
             </motion.p>
             <motion.p
               initial={{ opacity: 0, y: 20 }}
@@ -705,7 +705,7 @@ export default function PublicSite({
               viewport={{ once: true, margin: "-100px" }}
               className="text-lg text-white/80 mb-8 leading-relaxed"
             >
-              Operamos desde Uruguay y Argentina con una red de agentes de confianza en los principales puertos del mundo. Cada cliente tiene un ejecutivo asignado que coordina su carga de punta a punta.
+              {t.about.paragraph2}
             </motion.p>
 
             <motion.div
@@ -716,10 +716,10 @@ export default function PublicSite({
               className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mt-12"
             >
               {[
-                { num: '+15', label: 'Años de Experiencia' },
-                { num: '3', label: 'Oficinas Operativas' },
-                { num: '+250', label: 'Destinos Conectados' },
-                { num: '24/7', label: 'Atención Continua' }
+                { num: '+15', label: t.about.stats.years },
+                { num: '3', label: t.about.stats.offices },
+                { num: '+250', label: t.about.stats.destinations },
+                { num: '24/7', label: t.about.stats.support }
               ].map((stat, idx) => (
                 <motion.div
                   key={idx}
@@ -742,12 +742,7 @@ export default function PublicSite({
               viewport={{ once: true, margin: "-100px" }}
               className="grid grid-cols-1 md:grid-cols-4 gap-6 mt-12 text-left"
             >
-              {[
-                { title: 'Compromiso', desc: 'Dedicación total con cada cliente y operación' },
-                { title: 'Eficiencia', desc: 'Procesos optimizados y resultados medibles' },
-                { title: 'Comunicación', desc: 'Información clara y constante' },
-                { title: 'Soluciones', desc: 'Estrategias inteligentes y personalizadas' },
-              ].map((val, i) => (
+              {t.about.values.map((val, i) => (
                 <motion.div
                   key={i}
                   initial={{ opacity: 0, y: 20 }}
@@ -780,7 +775,7 @@ export default function PublicSite({
                 loading="lazy"
               />
               <div className="bg-white/10 backdrop-blur-sm px-6 py-4 text-center">
-                <p className="text-white/80 text-sm">Nuestro equipo en terreno — supervisión directa de operativas en depósito fiscal</p>
+                <p className="text-white/80 text-sm">{t.about.teamCaption}</p>
               </div>
             </motion.div>
           </div>
@@ -797,20 +792,20 @@ export default function PublicSite({
             viewport={{ once: true, margin: "-100px" }}
             className="text-center mb-10"
           >
-            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-foreground">Nuestras Operativas</h2>
+            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-foreground">{t.operativas.title}</h2>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Imágenes reales de nuestras operaciones logísticas en puertos, depósitos y rutas internacionales
+              {t.operativas.subtitle}
             </p>
           </motion.div>
 
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             {[
-              { src: '/images/ops-loading.jpg', label: 'Carga de contenedores' },
-              { src: '/images/ops-crane-port.jpg', label: 'Operativa portuaria' },
-              { src: '/images/ops-container-yard.jpg', label: 'Depósito de contenedores' },
-              { src: '/images/ops-warehouse.jpg', label: 'Desconsolidado en depósito' },
-              { src: '/images/ops-supervising.jpg', label: 'Supervisión en terreno' },
-              { src: '/images/ops-forklift.jpg', label: 'Manejo de mercadería' },
+              { src: '/images/ops-loading.jpg', label: t.operativas.photoLoading },
+              { src: '/images/ops-crane-port.jpg', label: t.operativas.photoCrane },
+              { src: '/images/ops-container-yard.jpg', label: t.operativas.photoYard },
+              { src: '/images/ops-warehouse.jpg', label: t.operativas.photoWarehouse },
+              { src: '/images/ops-supervising.jpg', label: t.operativas.photoSupervising },
+              { src: '/images/ops-forklift.jpg', label: t.operativas.photoForklift },
             ].map((photo, idx) => (
               <motion.div
                 key={idx}

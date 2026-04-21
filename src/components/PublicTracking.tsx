@@ -6,6 +6,7 @@ import { Label } from '@/components/ui/label'
 import { MagnifyingGlass, Boat, MapPin, CalendarBlank, Package, CheckCircle, X as XIcon, Info, CircleNotch } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import { ParsedShipment, processShipmentRecord } from '@/lib/shipmentTypes'
+import { useTranslation, getStoredLanguage } from '@/lib/i18n'
 
 // Google Sheets URL removed — tracking uses /api/tracking only
 
@@ -14,6 +15,7 @@ interface PublicTrackingProps {
 }
 
 export default function PublicTracking({ shipments: localShipments = [] }: PublicTrackingProps) {
+  const t = useTranslation(getStoredLanguage())
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResult, setSearchResult] = useState<ParsedShipment | null>(null)
   const [isSearching, setIsSearching] = useState(false)
@@ -23,7 +25,7 @@ export default function PublicTracking({ shipments: localShipments = [] }: Publi
     e.preventDefault()
 
     if (!searchQuery.trim()) {
-      toast.error('Ingrese un número de contenedor, MBL o referencia')
+      toast.error(t.tracking.errorEnterQuery)
       return
     }
 
@@ -42,7 +44,7 @@ export default function PublicTracking({ shipments: localShipments = [] }: Publi
         )
         if (found) {
           setSearchResult(found)
-          toast.success('Envío encontrado')
+          toast.success(t.tracking.foundToast)
           setIsSearching(false)
           return
         }
@@ -69,14 +71,14 @@ export default function PublicTracking({ shipments: localShipments = [] }: Publi
 
       if (found) {
         setSearchResult(found)
-        toast.success('Envío encontrado')
+        toast.success(t.tracking.foundToast)
       } else {
         setSearchResult(null)
-        toast.error('No se encontró el envío. Verifique el número ingresado.')
+        toast.error(t.tracking.notFoundToast)
       }
     } catch (error) {
       console.error('Error searching:', error)
-      toast.error('Error al buscar. Intente nuevamente.')
+      toast.error(t.tracking.errorSearch)
       setSearchResult(null)
     } finally {
       setIsSearching(false)
@@ -130,13 +132,13 @@ export default function PublicTracking({ shipments: localShipments = [] }: Publi
         <CardContent className="pt-6">
           <form onSubmit={handleSearch} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="search">Número de Contenedor, MBL o Referencia</Label>
+              <Label htmlFor="search">{t.tracking.inputLabel}</Label>
               <div className="flex gap-2">
                 <Input
                   id="search"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Ej: TCNU6972495, A7039"
+                  placeholder={t.tracking.placeholder}
                   className="flex-1"
                   disabled={isSearching}
                 />
@@ -146,12 +148,12 @@ export default function PublicTracking({ shipments: localShipments = [] }: Publi
                   ) : (
                     <MagnifyingGlass size={20} className="mr-2" />
                   )}
-                  {isSearching ? 'Buscando...' : 'Buscar'}
+                  {isSearching ? t.tracking.searching : t.tracking.search}
                 </Button>
               </div>
             </div>
             <p className="text-sm text-muted-foreground">
-              Ingrese el número de contenedor, MBL o referencia para rastrear su envío
+              {t.tracking.helpText}
             </p>
           </form>
         </CardContent>
@@ -165,17 +167,17 @@ export default function PublicTracking({ shipments: localShipments = [] }: Publi
                 <Info size={24} className="text-accent" />
               </div>
               <div className="flex-1">
-                <h4 className="font-semibold mb-2">¿Cómo rastrear su envío?</h4>
+                <h4 className="font-semibold mb-2">{t.tracking.howToTitle}</h4>
                 <p className="text-sm text-muted-foreground mb-3">
-                  Puede buscar su carga utilizando cualquiera de los siguientes datos:
+                  {t.tracking.howToIntro}
                 </p>
                 <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
-                  <li><strong>Número de Contenedor</strong> (Ej: TCNU6972495)</li>
-                  <li><strong>Número de MBL</strong> (Conocimiento de embarque)</li>
-                  <li><strong>Referencia</strong> (Ej: A7039)</li>
+                  <li><strong>{t.tracking.howToCntrLabel}</strong> {t.tracking.howToCntrEx}</li>
+                  <li><strong>{t.tracking.howToMblLabel}</strong> {t.tracking.howToMblDesc}</li>
+                  <li><strong>{t.tracking.howToRefLabel}</strong> {t.tracking.howToRefEx}</li>
                 </ul>
                 <p className="text-sm text-muted-foreground mt-3">
-                  Si no cuenta con estos datos, contáctenos por WhatsApp o email y le proporcionaremos la información de seguimiento.
+                  {t.tracking.howToFooter}
                 </p>
               </div>
             </div>
@@ -191,9 +193,9 @@ export default function PublicTracking({ shipments: localShipments = [] }: Publi
                 <MagnifyingGlass size={22} className="text-amber-600" />
               </div>
               <div className="flex-1">
-                <h4 className="font-semibold mb-1 text-foreground">No se encontraron resultados</h4>
+                <h4 className="font-semibold mb-1 text-foreground">{t.tracking.notFoundTitle}</h4>
                 <p className="text-sm text-muted-foreground">
-                  No se encontró ningún envío con <span className="font-mono font-semibold text-foreground">"{searchQuery}"</span>. Verifique el número ingresado o contáctenos por WhatsApp para asistencia.
+                  {t.tracking.notFoundPrefix} <span className="font-mono font-semibold text-foreground">"{searchQuery}"</span>{t.tracking.notFoundSuffix}
                 </p>
               </div>
             </div>
@@ -204,54 +206,54 @@ export default function PublicTracking({ shipments: localShipments = [] }: Publi
       {searchResult && (
         <Card>
           <CardContent className="pt-6">
-            <h3 className="text-xl font-semibold mb-6">Información del Envío</h3>
+            <h3 className="text-xl font-semibold mb-6">{t.tracking.resultTitle}</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-muted-foreground text-sm">
                   <Package size={18} />
-                  <span>Referencia</span>
+                  <span>{t.tracking.refLabel}</span>
                 </div>
                 <p className="font-semibold text-lg font-mono">{searchResult.REF}</p>
               </div>
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-muted-foreground text-sm">
                   <CalendarBlank size={18} />
-                  <span>ETD (Salida)</span>
+                  <span>{t.tracking.etdLabel}</span>
                 </div>
-                <p className="font-semibold text-lg">{searchResult.ETD || 'Pendiente'}</p>
+                <p className="font-semibold text-lg">{searchResult.ETD || t.tracking.pending}</p>
               </div>
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-muted-foreground text-sm">
                   <CalendarBlank size={18} />
-                  <span>ETA (Llegada estimada)</span>
+                  <span>{t.tracking.etaLabel}</span>
                 </div>
-                <p className="font-semibold text-lg">{searchResult.ETA || 'Pendiente'}</p>
+                <p className="font-semibold text-lg">{searchResult.ETA || t.tracking.pending}</p>
               </div>
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-muted-foreground text-sm">
                   <Boat size={18} />
-                  <span>Buque</span>
+                  <span>{t.tracking.buqueLabel}</span>
                 </div>
-                <p className="font-semibold text-lg">{searchResult.BUQUE || 'Por confirmar'}</p>
+                <p className="font-semibold text-lg">{searchResult.BUQUE || t.tracking.toBeConfirmed}</p>
               </div>
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-muted-foreground text-sm">
                   <Boat size={18} />
-                  <span>Línea Naviera</span>
+                  <span>{t.tracking.lineaLabel}</span>
                 </div>
-                <p className="font-semibold text-lg">{searchResult.LINEA || 'Por confirmar'}</p>
+                <p className="font-semibold text-lg">{searchResult.LINEA || t.tracking.toBeConfirmed}</p>
               </div>
               <div className="space-y-2">
                 <div className="flex items-center gap-2 text-muted-foreground text-sm">
                   <MapPin size={18} />
-                  <span>Terminal</span>
+                  <span>{t.tracking.terminalLabel}</span>
                 </div>
-                <p className="font-semibold text-lg">{searchResult.TERMINAL || 'Por confirmar'}</p>
+                <p className="font-semibold text-lg">{searchResult.TERMINAL || t.tracking.toBeConfirmed}</p>
               </div>
             </div>
 
             <div className="mt-6 pt-6 border-t border-border">
-              <h4 className="font-semibold mb-4">Contenedores ({searchResult.N})</h4>
+              <h4 className="font-semibold mb-4">{t.tracking.containersLabel} ({searchResult.N})</h4>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                 {searchResult.containers.length > 0 ? (
                   searchResult.containers.map((container, index) => (
@@ -266,7 +268,7 @@ export default function PublicTracking({ shipments: localShipments = [] }: Publi
                   ))
                 ) : (
                   <p className="text-muted-foreground text-sm col-span-full">
-                    {searchResult.CNTR || 'Sin información de contenedores'}
+                    {searchResult.CNTR || t.tracking.noContainerInfo}
                   </p>
                 )}
               </div>
@@ -284,7 +286,7 @@ export default function PublicTracking({ shipments: localShipments = [] }: Publi
               </div>
               <div className="flex-1">
                 <p className="text-sm text-muted-foreground">
-                  Para más información sobre su envío, contacte a nuestro equipo vía WhatsApp o email.
+                  {t.tracking.moreInfo}
                 </p>
               </div>
             </div>

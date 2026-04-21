@@ -77,6 +77,55 @@ export interface Translations {
     freeDays: string
     urgent: string
     expired: string
+    inputLabel: string
+    searching: string
+    helpText: string
+    howToTitle: string
+    howToIntro: string
+    howToCntrLabel: string
+    howToCntrEx: string
+    howToMblLabel: string
+    howToMblDesc: string
+    howToRefLabel: string
+    howToRefEx: string
+    howToFooter: string
+    notFoundTitle: string
+    notFoundPrefix: string
+    notFoundSuffix: string
+    errorEnterQuery: string
+    errorSearch: string
+    foundToast: string
+    notFoundToast: string
+    resultTitle: string
+    refLabel: string
+    etdLabel: string
+    etaLabel: string
+    buqueLabel: string
+    lineaLabel: string
+    terminalLabel: string
+    containersLabel: string
+    pending: string
+    toBeConfirmed: string
+    noContainerInfo: string
+    moreInfo: string
+  }
+  about: {
+    paragraph1Part1: string
+    paragraph1Part2: string
+    paragraph2: string
+    stats: { years: string; offices: string; destinations: string; support: string }
+    values: Array<{ title: string; desc: string }>
+    teamCaption: string
+  }
+  operativas: {
+    title: string
+    subtitle: string
+    photoLoading: string
+    photoCrane: string
+    photoYard: string
+    photoWarehouse: string
+    photoSupervising: string
+    photoForklift: string
   }
   quote: {
     title: string
@@ -275,14 +324,73 @@ export const translations: Record<Language, Translations> = {
     tracking: {
       title: 'Tracking de Contenedores en Tiempo Real',
       subtitle: 'Ingrese el número de contenedor o referencia para rastrear su envío desde origen hasta destino',
-      placeholder: 'Número de contenedor o REF',
+      placeholder: 'Ej: TCNU6972495, A7039',
       search: 'Buscar',
       noResults: 'No se encontraron resultados',
       status: 'Estado',
       eta: 'ETA',
       freeDays: 'Días libres',
       urgent: 'Urgente',
-      expired: 'Vencido'
+      expired: 'Vencido',
+      inputLabel: 'Número de Contenedor, MBL o Referencia',
+      searching: 'Buscando...',
+      helpText: 'Ingrese el número de contenedor, MBL o referencia para rastrear su envío',
+      howToTitle: '¿Cómo rastrear su envío?',
+      howToIntro: 'Puede buscar su carga utilizando cualquiera de los siguientes datos:',
+      howToCntrLabel: 'Número de Contenedor',
+      howToCntrEx: '(Ej: TCNU6972495)',
+      howToMblLabel: 'Número de MBL',
+      howToMblDesc: '(Conocimiento de embarque)',
+      howToRefLabel: 'Referencia',
+      howToRefEx: '(Ej: A7039)',
+      howToFooter: 'Si no cuenta con estos datos, contáctenos por WhatsApp o email y le proporcionaremos la información de seguimiento.',
+      notFoundTitle: 'No se encontraron resultados',
+      notFoundPrefix: 'No se encontró ningún envío con',
+      notFoundSuffix: '. Verifique el número ingresado o contáctenos por WhatsApp para asistencia.',
+      errorEnterQuery: 'Ingrese un número de contenedor, MBL o referencia',
+      errorSearch: 'Error al buscar. Intente nuevamente.',
+      foundToast: 'Envío encontrado',
+      notFoundToast: 'No se encontró el envío. Verifique el número ingresado.',
+      resultTitle: 'Información del Envío',
+      refLabel: 'Referencia',
+      etdLabel: 'ETD (Salida)',
+      etaLabel: 'ETA (Llegada estimada)',
+      buqueLabel: 'Buque',
+      lineaLabel: 'Línea Naviera',
+      terminalLabel: 'Terminal',
+      containersLabel: 'Contenedores',
+      pending: 'Pendiente',
+      toBeConfirmed: 'Por confirmar',
+      noContainerInfo: 'Sin información de contenedores',
+      moreInfo: 'Para más información sobre su envío, contacte a nuestro equipo vía WhatsApp o email.'
+    },
+    about: {
+      paragraph1Part1: 'Con más de 15 años en comercio exterior,',
+      paragraph1Part2: 'conecta tu negocio con más de 250 destinos en los 5 continentes.',
+      paragraph2: 'Operamos desde Uruguay y Argentina con una red de agentes de confianza en los principales puertos del mundo. Cada cliente tiene un ejecutivo asignado que coordina su carga de punta a punta.',
+      stats: {
+        years: 'Años de Experiencia',
+        offices: 'Oficinas Operativas',
+        destinations: 'Destinos Conectados',
+        support: 'Atención Continua'
+      },
+      values: [
+        { title: 'Compromiso', desc: 'Dedicación total con cada cliente y operación' },
+        { title: 'Eficiencia', desc: 'Procesos optimizados y resultados medibles' },
+        { title: 'Comunicación', desc: 'Información clara y constante' },
+        { title: 'Soluciones', desc: 'Estrategias inteligentes y personalizadas' }
+      ],
+      teamCaption: 'Nuestro equipo en terreno — supervisión directa de operativas en depósito fiscal'
+    },
+    operativas: {
+      title: 'Nuestras Operativas',
+      subtitle: 'Imágenes reales de nuestras operaciones logísticas en puertos, depósitos y rutas internacionales',
+      photoLoading: 'Carga de contenedores',
+      photoCrane: 'Operativa portuaria',
+      photoYard: 'Depósito de contenedores',
+      photoWarehouse: 'Desconsolidado en depósito',
+      photoSupervising: 'Supervisión en terreno',
+      photoForklift: 'Manejo de mercadería'
     },
     quote: {
       title: 'Cotizá tu Flete Internacional Gratis',
@@ -497,14 +605,73 @@ export const translations: Record<Language, Translations> = {
     tracking: {
       title: 'Real-Time Container Tracking',
       subtitle: 'Enter container number or reference to track your shipment from origin to destination',
-      placeholder: 'Container number or REF',
+      placeholder: 'Ex: TCNU6972495, A7039',
       search: 'Search',
       noResults: 'No results found',
       status: 'Status',
       eta: 'ETA',
       freeDays: 'Free days',
       urgent: 'Urgent',
-      expired: 'Expired'
+      expired: 'Expired',
+      inputLabel: 'Container number, MBL or Reference',
+      searching: 'Searching...',
+      helpText: 'Enter the container number, MBL or reference to track your shipment',
+      howToTitle: 'How to track your shipment?',
+      howToIntro: 'You can search for your cargo using any of the following data:',
+      howToCntrLabel: 'Container Number',
+      howToCntrEx: '(Ex: TCNU6972495)',
+      howToMblLabel: 'MBL Number',
+      howToMblDesc: '(Master Bill of Lading)',
+      howToRefLabel: 'Reference',
+      howToRefEx: '(Ex: A7039)',
+      howToFooter: "If you don't have this data, contact us via WhatsApp or email and we'll provide the tracking information.",
+      notFoundTitle: 'No results found',
+      notFoundPrefix: 'No shipment found for',
+      notFoundSuffix: '. Check the number you entered or contact us via WhatsApp for assistance.',
+      errorEnterQuery: 'Enter a container number, MBL or reference',
+      errorSearch: 'Search error. Please try again.',
+      foundToast: 'Shipment found',
+      notFoundToast: 'Shipment not found. Check the number you entered.',
+      resultTitle: 'Shipment Information',
+      refLabel: 'Reference',
+      etdLabel: 'ETD (Departure)',
+      etaLabel: 'ETA (Estimated arrival)',
+      buqueLabel: 'Vessel',
+      lineaLabel: 'Shipping Line',
+      terminalLabel: 'Terminal',
+      containersLabel: 'Containers',
+      pending: 'Pending',
+      toBeConfirmed: 'To be confirmed',
+      noContainerInfo: 'No container information',
+      moreInfo: 'For more information about your shipment, contact our team via WhatsApp or email.'
+    },
+    about: {
+      paragraph1Part1: 'With over 15 years in foreign trade,',
+      paragraph1Part2: 'connects your business with 250+ destinations across 5 continents.',
+      paragraph2: 'We operate from Uruguay and Argentina with a network of trusted agents in the world’s main ports. Every client gets a dedicated account executive who coordinates their cargo end to end.',
+      stats: {
+        years: 'Years of Experience',
+        offices: 'Operations Offices',
+        destinations: 'Connected Destinations',
+        support: 'Continuous Support'
+      },
+      values: [
+        { title: 'Commitment', desc: 'Total dedication to each client and operation' },
+        { title: 'Efficiency', desc: 'Optimized processes and measurable results' },
+        { title: 'Communication', desc: 'Clear and constant information' },
+        { title: 'Solutions', desc: 'Smart and personalized strategies' }
+      ],
+      teamCaption: 'Our team on the ground — direct supervision of operations at the fiscal depot'
+    },
+    operativas: {
+      title: 'Our Operations',
+      subtitle: 'Real images of our logistics operations at ports, depots and international routes',
+      photoLoading: 'Container loading',
+      photoCrane: 'Port operations',
+      photoYard: 'Container yard',
+      photoWarehouse: 'Warehouse deconsolidation',
+      photoSupervising: 'Field supervision',
+      photoForklift: 'Cargo handling'
     },
     quote: {
       title: 'Get Your Free International Freight Quote',
@@ -719,14 +886,73 @@ export const translations: Record<Language, Translations> = {
     tracking: {
       title: 'Rastreamento de Contêineres em Tempo Real',
       subtitle: 'Digite o número do contêiner ou referência para rastrear seu envio da origem ao destino',
-      placeholder: 'Número do contêiner ou REF',
+      placeholder: 'Ex: TCNU6972495, A7039',
       search: 'Buscar',
       noResults: 'Nenhum resultado encontrado',
       status: 'Status',
       eta: 'ETA',
       freeDays: 'Dias livres',
       urgent: 'Urgente',
-      expired: 'Vencido'
+      expired: 'Vencido',
+      inputLabel: 'Número do Contêiner, MBL ou Referência',
+      searching: 'Buscando...',
+      helpText: 'Digite o número do contêiner, MBL ou referência para rastrear seu envio',
+      howToTitle: 'Como rastrear seu envio?',
+      howToIntro: 'Você pode buscar sua carga usando qualquer um dos seguintes dados:',
+      howToCntrLabel: 'Número do Contêiner',
+      howToCntrEx: '(Ex: TCNU6972495)',
+      howToMblLabel: 'Número do MBL',
+      howToMblDesc: '(Conhecimento de embarque)',
+      howToRefLabel: 'Referência',
+      howToRefEx: '(Ex: A7039)',
+      howToFooter: 'Se você não tiver esses dados, entre em contato via WhatsApp ou e-mail e forneceremos as informações de rastreamento.',
+      notFoundTitle: 'Nenhum resultado encontrado',
+      notFoundPrefix: 'Nenhum envio encontrado para',
+      notFoundSuffix: '. Verifique o número digitado ou entre em contato via WhatsApp para assistência.',
+      errorEnterQuery: 'Digite um número de contêiner, MBL ou referência',
+      errorSearch: 'Erro ao buscar. Tente novamente.',
+      foundToast: 'Envio encontrado',
+      notFoundToast: 'Envio não encontrado. Verifique o número digitado.',
+      resultTitle: 'Informações do Envio',
+      refLabel: 'Referência',
+      etdLabel: 'ETD (Saída)',
+      etaLabel: 'ETA (Chegada estimada)',
+      buqueLabel: 'Navio',
+      lineaLabel: 'Companhia Marítima',
+      terminalLabel: 'Terminal',
+      containersLabel: 'Contêineres',
+      pending: 'Pendente',
+      toBeConfirmed: 'A confirmar',
+      noContainerInfo: 'Sem informações de contêineres',
+      moreInfo: 'Para mais informações sobre seu envio, entre em contato com nossa equipe via WhatsApp ou e-mail.'
+    },
+    about: {
+      paragraph1Part1: 'Com mais de 15 anos em comércio exterior,',
+      paragraph1Part2: 'conecta seu negócio a mais de 250 destinos em 5 continentes.',
+      paragraph2: 'Operamos do Uruguai e Argentina com uma rede de agentes de confiança nos principais portos do mundo. Cada cliente tem um executivo dedicado que coordena sua carga de ponta a ponta.',
+      stats: {
+        years: 'Anos de Experiência',
+        offices: 'Escritórios Operacionais',
+        destinations: 'Destinos Conectados',
+        support: 'Atendimento Contínuo'
+      },
+      values: [
+        { title: 'Compromisso', desc: 'Dedicação total com cada cliente e operação' },
+        { title: 'Eficiência', desc: 'Processos otimizados e resultados mensuráveis' },
+        { title: 'Comunicação', desc: 'Informação clara e constante' },
+        { title: 'Soluções', desc: 'Estratégias inteligentes e personalizadas' }
+      ],
+      teamCaption: 'Nossa equipe em campo — supervisão direta das operações em depósito alfandegado'
+    },
+    operativas: {
+      title: 'Nossas Operações',
+      subtitle: 'Imagens reais de nossas operações logísticas em portos, depósitos e rotas internacionais',
+      photoLoading: 'Carregamento de contêineres',
+      photoCrane: 'Operação portuária',
+      photoYard: 'Pátio de contêineres',
+      photoWarehouse: 'Desconsolidação em depósito',
+      photoSupervising: 'Supervisão em campo',
+      photoForklift: 'Manuseio de mercadoria'
     },
     quote: {
       title: 'Solicite sua Cotação de Frete Grátis',
