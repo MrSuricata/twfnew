@@ -151,3 +151,77 @@ html {
   transform: scale(1.05);
   filter: brightness(1.1);
 }
+
+/* ── UX polish: custom thin scrollbar ── */
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: oklch(0.82 0.01 250);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 9999px;
+}
+*::-webkit-scrollbar-thumb:hover { background: oklch(0.72 0.03 250); background-clip: padding-box; border: 2px solid transparent; }
+* { scrollbar-width: thin; scrollbar-color: oklch(0.82 0.01 250) transparent; }
+
+/* ── UX polish: tab underline variant ── */
+.tabs-list-underline {
+  background: transparent !important;
+  border-radius: 0 !important;
+  padding: 0 !important;
+  height: auto !important;
+  width: 100%;
+  justify-content: flex-start;
+  gap: 0.25rem;
+  padding-left: 1rem !important;
+  padding-right: 1rem !important;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+.tab-underline {
+  background: transparent !important;
+  border-radius: 0 !important;
+  border-bottom: 2px solid transparent !important;
+  box-shadow: none !important;
+  height: 2.75rem !important;
+  padding: 0 0.75rem !important;
+  gap: 0.375rem !important;
+  color: var(--muted-foreground) !important;
+  transition: color 150ms ease-out, border-color 150ms ease-out !important;
+  position: relative;
+}
+.tab-underline:hover {
+  color: var(--foreground) !important;
+}
+.tab-underline[data-state="active"] {
+  border-bottom-color: var(--accent) !important;
+  color: var(--accent) !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* ── UX polish: skeleton shimmer ── */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.shimmer {
+  background: linear-gradient(90deg, oklch(0.92 0.005 250) 0%, oklch(0.96 0.005 250) 50%, oklch(0.92 0.005 250) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* ── UX polish: card lift on hover ── */
+.card-lift {
+  transition: transform 180ms ease-out, box-shadow 180ms ease-out;
+}
+.card-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px -8px oklch(0.25 0.08 250 / 0.15);
+}
+
+/* ── UX polish: button active press effect ── */
+button[data-slot="button"]:not(:disabled):active {
+  transform: scale(0.97);
+}

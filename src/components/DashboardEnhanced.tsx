@@ -23,6 +23,7 @@ import TestimonialsEditor from './TestimonialsEditor'
 import AnalyticsDashboard from './AnalyticsDashboard'
 import ClientManager from './ClientManager'
 import PartnerManager from './PartnerManager'
+import CommandPalette from './CommandPalette'
 import { ParsedShipment } from '@/lib/shipmentTypes'
 import { ClientAccount, ShipmentDocument, OperativeReport, OriginPhoto } from '@/lib/quotationTypes'
 import Breadcrumbs from './Breadcrumbs'
@@ -64,6 +65,13 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
 
   return (
     <div className="min-h-screen bg-background">
+      <CommandPalette
+        shipments={shipments}
+        clients={clients}
+        onNavigate={setActiveTab}
+        onLogout={onLogout}
+      />
+
       <nav className="bg-primary text-primary-foreground border-b border-border">
         <div className="max-w-7xl mx-auto px-4 md:px-6">
           <div className="flex items-center justify-between h-16">
@@ -71,10 +79,25 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
               <img src="/images/twf-logo-white.png" alt="TWF" className="h-8 w-auto" />
               <span className="text-xl font-bold">Admin</span>
             </div>
-            <Button variant="ghost" onClick={onLogout} className="text-primary-foreground hover:bg-primary-foreground/10">
-              <SignOut size={20} className="mr-2" />
-              Cerrar Sesión
-            </Button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  // Dispatch a synthetic Ctrl+K so CommandPalette opens
+                  const ev = new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true })
+                  document.dispatchEvent(ev)
+                }}
+                className="hidden md:inline-flex items-center gap-2 px-3 h-9 rounded-md text-sm bg-primary-foreground/10 hover:bg-primary-foreground/20 text-primary-foreground/80 hover:text-primary-foreground transition-colors border border-primary-foreground/10"
+                title="Abrir paleta de comandos (Ctrl+K)"
+              >
+                <span className="opacity-70">Buscar…</span>
+                <kbd className="ml-1 px-1.5 py-0.5 text-[10px] font-mono rounded bg-primary-foreground/20 border border-primary-foreground/10">Ctrl K</kbd>
+              </button>
+              <Button variant="ghost" onClick={onLogout} className="text-primary-foreground hover:bg-primary-foreground/10">
+                <SignOut size={20} className="mr-2" />
+                Cerrar Sesión
+              </Button>
+            </div>
           </div>
         </div>
       </nav>
