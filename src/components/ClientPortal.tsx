@@ -475,28 +475,28 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-4 max-w-3xl">
-            <TabsTrigger value="active">
-              <Package size={20} className="mr-2" />
+          <TabsList className="tabs-list-underline max-w-3xl">
+            <TabsTrigger value="active" className="tab-underline">
+              <Package size={18} className="mr-1.5" />
               <span className="hidden sm:inline">Activas</span>
             </TabsTrigger>
-            <TabsTrigger value="agenda">
-              <CalendarBlank size={20} className="mr-2" />
+            <TabsTrigger value="agenda" className="tab-underline">
+              <CalendarBlank size={18} className="mr-1.5" />
               <span className="hidden sm:inline">Agenda</span>
             </TabsTrigger>
-            <TabsTrigger value="alerts" className="relative">
-              <Bell size={20} className="mr-2" />
+            <TabsTrigger value="alerts" className="tab-underline relative">
+              <Bell size={18} className="mr-1.5" />
               <span className="hidden sm:inline">Alertas</span>
               {visibleAlerts.length > 0 && (
-                <span className={`ml-1 text-[10px] font-bold rounded-full min-w-[16px] h-[16px] flex items-center justify-center ${
-                  criticalCount > 0 ? 'bg-red-500 text-white' : 'bg-blue-500 text-white'
+                <span className={`ml-1 text-[10px] font-bold rounded-full min-w-[16px] h-[16px] flex items-center justify-center tabular-nums ${
+                  criticalCount > 0 ? 'bg-destructive text-destructive-foreground' : 'bg-blue-500 text-white'
                 }`}>
                   {visibleAlerts.length}
                 </span>
               )}
             </TabsTrigger>
-            <TabsTrigger value="history">
-              <ClockCounterClockwise size={20} className="mr-2" />
+            <TabsTrigger value="history" className="tab-underline">
+              <ClockCounterClockwise size={18} className="mr-1.5" />
               <span className="hidden sm:inline">Historial</span>
             </TabsTrigger>
           </TabsList>
