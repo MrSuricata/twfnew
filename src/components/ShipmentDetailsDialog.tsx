@@ -152,15 +152,15 @@ export default function ShipmentDetailsDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpen}>
-      <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader className="pr-10">
-          <div className="flex items-start justify-between flex-wrap gap-4">
-            <div className="flex-1">
-              <DialogTitle className="text-2xl flex items-center gap-2">
-                <Package size={28} className="text-accent" weight="duotone" />
+      <DialogContent className="max-w-5xl max-h-[90vh] w-[calc(100%-2rem)] p-0 gap-0 overflow-hidden flex flex-col">
+        <DialogHeader className="px-6 pt-5 pb-4 border-b shrink-0 bg-background">
+          <div className="flex items-start justify-between flex-wrap gap-4 pr-8">
+            <div className="flex-1 min-w-0">
+              <DialogTitle className="text-xl sm:text-2xl flex items-center gap-2">
+                <Package size={26} className="text-accent" weight="duotone" />
                 Detalles de Carga
               </DialogTitle>
-              <p className="text-sm text-muted-foreground mt-2">
+              <p className="text-sm text-muted-foreground mt-1.5">
                 REF: <button
                   type="button"
                   title="Click para copiar"
@@ -174,21 +174,21 @@ export default function ShipmentDetailsDialog({
                 )}
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0">
               {getUrgencyBadge(daysUntilFree)}
             </div>
           </div>
         </DialogHeader>
 
-        <Tabs defaultValue={clientView ? "tracking" : "general"} className="w-full mt-4">
-          <TabsList className={`grid w-full ${partnerView ? 'grid-cols-2' : clientView ? 'grid-cols-4' : 'grid-cols-5'}`}>
+        <Tabs defaultValue={clientView ? "tracking" : "general"} className="flex flex-col flex-1 overflow-hidden gap-0">
+          <TabsList className="tabs-list-underline">
             {partnerView ? (
               <>
-                <TabsTrigger value="general">
+                <TabsTrigger value="general" className="tab-underline">
                   <Info size={18} className="mr-2" />
                   <span className="hidden sm:inline">General</span>
                 </TabsTrigger>
-                <TabsTrigger value="operativa">
+                <TabsTrigger value="operativa" className="tab-underline">
                   <Truck size={18} className="mr-2" />
                   <span className="hidden sm:inline">Operativa</span>
                 </TabsTrigger>
@@ -197,15 +197,15 @@ export default function ShipmentDetailsDialog({
               </>
             ) : clientView ? (
               <>
-                <TabsTrigger value="tracking">
+                <TabsTrigger value="tracking" className="tab-underline">
                   <Package size={18} className="mr-2" />
                   <span className="hidden sm:inline">Tracking</span>
                 </TabsTrigger>
-                <TabsTrigger value="logistics">
+                <TabsTrigger value="logistics" className="tab-underline">
                   <Truck size={18} className="mr-2" />
                   <span className="hidden sm:inline">Logística</span>
                 </TabsTrigger>
-                <TabsTrigger value="reports" className="relative">
+                <TabsTrigger value="reports" className="tab-underline relative">
                   <FileText size={18} className="mr-2" />
                   <span className="hidden sm:inline">Informes</span>
                   {(() => {
@@ -218,7 +218,7 @@ export default function ShipmentDetailsDialog({
                     )
                   })()}
                 </TabsTrigger>
-                <TabsTrigger value="photos" className="relative">
+                <TabsTrigger value="photos" className="tab-underline relative">
                   <Package size={18} className="mr-2" />
                   <span className="hidden sm:inline">Fotos</span>
                   {(() => {
@@ -234,23 +234,23 @@ export default function ShipmentDetailsDialog({
               </>
             ) : (
               <>
-                <TabsTrigger value="general">
+                <TabsTrigger value="general" className="tab-underline">
                   <Info size={18} className="mr-2" />
                   <span className="hidden sm:inline">General</span>
                 </TabsTrigger>
-                <TabsTrigger value="operativa">
+                <TabsTrigger value="operativa" className="tab-underline">
                   <Truck size={18} className="mr-2" />
                   <span className="hidden sm:inline">Operativa</span>
                 </TabsTrigger>
-                <TabsTrigger value="costs">
+                <TabsTrigger value="costs" className="tab-underline">
                   <CurrencyDollar size={18} className="mr-2" />
                   <span className="hidden sm:inline">Costos</span>
                 </TabsTrigger>
-                <TabsTrigger value="status">
+                <TabsTrigger value="status" className="tab-underline">
                   <CheckCircle size={18} className="mr-2" />
                   <span className="hidden sm:inline">Estado</span>
                 </TabsTrigger>
-                <TabsTrigger value="photos" className="relative">
+                <TabsTrigger value="photos" className="tab-underline relative">
                   <Package size={18} className="mr-2" />
                   <span className="hidden sm:inline">Fotos</span>
                   {(() => {
@@ -263,9 +263,11 @@ export default function ShipmentDetailsDialog({
             )}
           </TabsList>
 
+          <div className="flex-1 overflow-y-auto px-6 py-5">
+
           {clientView && (
             <>
-            <TabsContent value="tracking" className="space-y-4 mt-4">
+            <TabsContent value="tracking" className="space-y-4 mt-0">
               {/* ── Visual Status Timeline ── */}
               {(() => {
                 const status = getShipmentStatus(editedShipment)
@@ -1282,9 +1284,10 @@ export default function ShipmentDetailsDialog({
               />
             </TabsContent>
           )}
+          </div>
         </Tabs>
 
-        <DialogFooter>
+        <DialogFooter className="px-6 py-4 border-t shrink-0 bg-background">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             {clientView ? 'Cerrar' : 'Cancelar'}
           </Button>
