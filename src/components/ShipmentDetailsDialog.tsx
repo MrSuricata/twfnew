@@ -932,19 +932,22 @@ export default function ShipmentDetailsDialog({
                 placeholder="MSCU1234567, MSCU2345678, ..."
               />
               {editedShipment.containers.length > 0 && (
-                <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                <div
+                  className="mt-2 grid gap-2"
+                  style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}
+                >
                   {editedShipment.containers.map((container, index) => {
                     const totals = containerTotals.get(container.number)
                     return (
                       <div
                         key={index}
-                        className={`rounded-md border px-3 py-2 text-sm transition-colors ${
+                        className={`rounded-md border px-3 py-2.5 text-sm transition-colors ${
                           container.valid
                             ? 'border-border bg-card hover:border-accent/40'
                             : 'border-destructive/40 bg-destructive/5'
                         }`}
                       >
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
                           {container.valid ? (
                             <CheckCircle size={14} className="text-green-600 shrink-0" weight="fill" />
                           ) : (
@@ -954,26 +957,22 @@ export default function ShipmentDetailsDialog({
                             type="button"
                             title="Click para copiar"
                             onClick={() => copyToClipboard(container.number, 'CNTR')}
-                            className="font-mono font-semibold text-xs hover:text-accent transition-colors truncate"
+                            className="font-mono font-semibold text-xs hover:text-accent transition-colors truncate flex-1 text-left"
                           >
                             {container.number}
                           </button>
                           {totals?.tipo && (
-                            <span className="ml-auto text-[10px] font-semibold px-1.5 py-0.5 rounded bg-muted text-muted-foreground shrink-0">
+                            <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-muted text-muted-foreground shrink-0 tabular-nums">
                               {totals.tipo}
                             </span>
                           )}
                         </div>
                         {totals ? (
-                          <div className="mt-1 flex items-center gap-3 text-[11px] text-muted-foreground">
-                            <span><span className="font-medium text-foreground">{fmtNum(totals.pkgs)}</span> btos</span>
-                            <span>·</span>
-                            <span><span className="font-medium text-foreground">{fmtNum(totals.kg, totals.kg % 1 === 0 ? 0 : 1)}</span> kg</span>
+                          <div className="mt-1.5 flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-[11px] text-muted-foreground">
+                            <span className="whitespace-nowrap"><span className="font-semibold text-foreground tabular-nums">{fmtNum(totals.pkgs)}</span> btos</span>
+                            <span className="whitespace-nowrap"><span className="font-semibold text-foreground tabular-nums">{fmtNum(totals.kg, totals.kg % 1 === 0 ? 0 : 1)}</span> kg</span>
                             {totals.m3 > 0 && (
-                              <>
-                                <span>·</span>
-                                <span><span className="font-medium text-foreground">{fmtNum(totals.m3, 1)}</span> m³</span>
-                              </>
+                              <span className="whitespace-nowrap"><span className="font-semibold text-foreground tabular-nums">{fmtNum(totals.m3, 1)}</span> m³</span>
                             )}
                           </div>
                         ) : (

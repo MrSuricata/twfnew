@@ -84,60 +84,59 @@ export default function AgendaToolbar({
   onTogglePendingSidebar
 }: AgendaToolbarProps) {
   return (
-    <div className="bg-card border border-border rounded-xl p-4 shadow-sm space-y-3">
+    <div className="bg-card border rounded-xl px-4 py-3 space-y-3">
       {/* Top row: navigation + period + view selector */}
       <div className="flex items-center justify-between gap-4">
-        {/* Navigation buttons */}
-        <div className="flex items-center gap-1">
-          <Button
-            variant="outline"
-            size="sm"
+        {/* Navigation button group */}
+        <div className="inline-flex items-center rounded-md border bg-background overflow-hidden">
+          <button
             onClick={() => onNavigate('prev')}
-            className="h-8 w-8 p-0"
+            className="h-8 w-8 flex items-center justify-center hover:bg-muted transition-colors"
+            title="Anterior"
           >
-            <CaretLeft size={16} weight="bold" />
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
+            <CaretLeft size={15} weight="bold" />
+          </button>
+          <div className="h-4 w-px bg-border" />
+          <button
             onClick={() => onNavigate('today')}
-            className="h-8 px-3 text-xs font-medium"
+            className="h-8 px-3 text-xs font-semibold hover:bg-muted transition-colors"
           >
             Hoy
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
+          </button>
+          <div className="h-4 w-px bg-border" />
+          <button
             onClick={() => onNavigate('next')}
-            className="h-8 w-8 p-0"
+            className="h-8 w-8 flex items-center justify-center hover:bg-muted transition-colors"
+            title="Siguiente"
           >
-            <CaretRight size={16} weight="bold" />
-          </Button>
+            <CaretRight size={15} weight="bold" />
+          </button>
         </div>
 
         {/* Period label */}
-        <div className="flex-1 text-center">
-          <h2 className="text-lg font-semibold text-foreground">
+        <div className="flex-1 text-center min-w-0">
+          <h2 className="text-lg font-semibold text-foreground tracking-tight truncate capitalize">
             {getPeriodLabel(view, currentDate)}
           </h2>
-          <p className="text-xs text-muted-foreground">
-            {eventCount} operacion{eventCount !== 1 ? 'es' : ''}
+          <p className="text-[11px] text-muted-foreground">
+            <span className="tabular-nums font-medium">{eventCount}</span> operacion{eventCount !== 1 ? 'es' : ''}
             {alertCount > 0 && (
-              <span className="ml-2 text-orange-600">
-                · {alertCount} alerta{alertCount !== 1 ? 's' : ''}
+              <span className="ml-1.5 inline-flex items-center gap-1 text-orange-600">
+                <Warning size={10} weight="fill" />
+                <span className="tabular-nums font-medium">{alertCount}</span> alerta{alertCount !== 1 ? 's' : ''}
               </span>
             )}
           </p>
         </div>
 
         {/* View selector + pending button */}
-        <div className="flex items-center gap-2">
-          <div className="flex items-center bg-muted rounded-lg p-0.5">
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="inline-flex items-center bg-muted/70 rounded-md p-0.5">
             {(Object.keys(VIEW_LABELS) as AgendaView[]).map(v => (
               <button
                 key={v}
                 onClick={() => onViewChange(v)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${
+                className={`px-2.5 py-1 text-[11px] font-semibold rounded transition-all ${
                   view === v
                     ? 'bg-background text-foreground shadow-sm'
                     : 'text-muted-foreground hover:text-foreground'
@@ -151,16 +150,16 @@ export default function AgendaToolbar({
           {onTogglePendingSidebar && (
             <button
               onClick={onTogglePendingSidebar}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border transition-all ${
+              className={`flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold rounded-md border transition-all ${
                 showPendingSidebar
                   ? 'bg-amber-50 text-amber-700 border-amber-300'
-                  : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted hover:text-foreground'
+                  : 'bg-background text-muted-foreground hover:bg-muted hover:text-foreground'
               }`}
             >
-              <Warning size={14} weight={showPendingSidebar ? 'fill' : 'regular'} />
+              <Warning size={12} weight={showPendingSidebar ? 'fill' : 'regular'} />
               Pendientes
               {pendingCount > 0 && (
-                <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${
+                <span className={`text-[10px] tabular-nums px-1.5 rounded-full ${
                   showPendingSidebar
                     ? 'bg-amber-200 text-amber-800'
                     : 'bg-muted text-muted-foreground'
@@ -173,81 +172,86 @@ export default function AgendaToolbar({
         </div>
       </div>
 
-      {/* Depot filter row */}
-      {availableDepots.length > 0 && (
-        <div className="flex items-start gap-2 flex-wrap border-t border-border/60 pt-3">
-          <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
-            <Funnel size={12} className="text-muted-foreground" weight="fill" />
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Depósito
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5 flex-wrap flex-1">
-            {availableDepots.map(depot => {
-              const isActive = activeDepots.has(depot)
-              return (
-                <button
-                  key={depot}
-                  onClick={() => onToggleDepot?.(depot)}
-                  className={`px-2.5 py-1 text-[11px] font-medium rounded-full border transition-all ${
-                    isActive
-                      ? 'bg-primary text-primary-foreground border-primary shadow-sm'
-                      : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted hover:text-foreground'
-                  }`}
-                >
-                  {depot}
-                </button>
-              )
-            })}
-            {activeDepots.size > 0 && (
-              <button
-                onClick={onClearDepots}
-                className="px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
-              >
-                <X size={10} weight="bold" />
-                Limpiar
-              </button>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Filter rows — only rendered if there is something to filter */}
+      {(availableDepots.length > 0 || availableTransports.length > 0) && (
+        <div className="border-t pt-3 space-y-2">
+          {/* Depot filter row */}
+          {availableDepots.length > 0 && (
+            <div className="flex items-start gap-3">
+              <div className="flex items-center gap-1.5 shrink-0 pt-1 w-24">
+                <Funnel size={11} className="text-muted-foreground" weight="fill" />
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Depósito
+                </span>
+              </div>
+              <div className="flex items-center gap-1 flex-wrap flex-1">
+                {availableDepots.map(depot => {
+                  const isActive = activeDepots.has(depot)
+                  return (
+                    <button
+                      key={depot}
+                      onClick={() => onToggleDepot?.(depot)}
+                      className={`px-2.5 h-7 text-[11px] font-semibold rounded-full border transition-all ${
+                        isActive
+                          ? 'bg-primary text-primary-foreground border-primary'
+                          : 'bg-background text-muted-foreground border-border/80 hover:border-border hover:bg-muted hover:text-foreground'
+                      }`}
+                    >
+                      {depot}
+                    </button>
+                  )
+                })}
+                {activeDepots.size > 0 && (
+                  <button
+                    onClick={onClearDepots}
+                    className="h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+                  >
+                    <X size={10} weight="bold" />
+                    Limpiar
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
-      {/* Transport filter row */}
-      {availableTransports.length > 0 && (
-        <div className="flex items-start gap-2 flex-wrap">
-          <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
-            <Truck size={12} className="text-muted-foreground" weight="fill" />
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Transporte
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5 flex-wrap flex-1">
-            {availableTransports.map(transport => {
-              const isActive = activeTransports.has(transport)
-              return (
-                <button
-                  key={transport}
-                  onClick={() => onToggleTransport?.(transport)}
-                  className={`px-2.5 py-1 text-[11px] font-medium rounded-full border transition-all ${
-                    isActive
-                      ? 'bg-accent text-accent-foreground border-accent shadow-sm'
-                      : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted hover:text-foreground'
-                  }`}
-                >
-                  {transport}
-                </button>
-              )
-            })}
-            {activeTransports.size > 0 && (
-              <button
-                onClick={onClearTransports}
-                className="px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
-              >
-                <X size={10} weight="bold" />
-                Limpiar
-              </button>
-            )}
-          </div>
+          {/* Transport filter row */}
+          {availableTransports.length > 0 && (
+            <div className="flex items-start gap-3">
+              <div className="flex items-center gap-1.5 shrink-0 pt-1 w-24">
+                <Truck size={11} className="text-muted-foreground" weight="fill" />
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Transporte
+                </span>
+              </div>
+              <div className="flex items-center gap-1 flex-wrap flex-1">
+                {availableTransports.map(transport => {
+                  const isActive = activeTransports.has(transport)
+                  return (
+                    <button
+                      key={transport}
+                      onClick={() => onToggleTransport?.(transport)}
+                      className={`px-2.5 h-7 text-[11px] font-semibold rounded-full border transition-all ${
+                        isActive
+                          ? 'bg-accent text-accent-foreground border-accent'
+                          : 'bg-background text-muted-foreground border-border/80 hover:border-border hover:bg-muted hover:text-foreground'
+                      }`}
+                    >
+                      {transport}
+                    </button>
+                  )
+                })}
+                {activeTransports.size > 0 && (
+                  <button
+                    onClick={onClearTransports}
+                    className="h-7 px-2 text-[11px] text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1"
+                  >
+                    <X size={10} weight="bold" />
+                    Limpiar
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
