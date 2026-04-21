@@ -178,6 +178,10 @@ html {
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
   overflow-x: auto;
+  scrollbar-width: none;
+}
+.tabs-list-underline::-webkit-scrollbar {
+  display: none;
 }
 .tab-underline {
   background: transparent !important;

@@ -105,20 +105,22 @@ export default function ShipmentDetailsDialog({
     setEditedShipment(prev => prev ? { ...prev, [field]: value } : null)
   }
 
-  const getDaysUntilFree = (libreHasta: string): number => {
-    if (!libreHasta) return 999
+  const getDaysUntilFree = (libreHasta: string): number | null => {
+    if (!libreHasta || libreHasta.trim() === '' || libreHasta.trim() === '—') return null
     try {
       const parts = libreHasta.split('-')
       const freeDate = parts.length === 3
         ? new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]))
         : new Date(libreHasta)
+      if (isNaN(freeDate.getTime())) return null
       const today = new Date()
       today.setHours(0, 0, 0, 0)
       freeDate.setHours(0, 0, 0, 0)
       const diff = Math.floor((freeDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+      if (isNaN(diff)) return null
       return diff
     } catch {
-      return 999
+      return null
     }
   }
 
@@ -137,7 +139,8 @@ export default function ShipmentDetailsDialog({
     try { return parseLocal(dateStr).getTime() < todayMidnight.getTime() } catch { return false }
   }
 
-  const getUrgencyBadge = (days: number) => {
+  const getUrgencyBadge = (days: number | null) => {
+    if (days === null || isNaN(days)) return null
     if (days < 0) {
       return <Badge className="bg-red-500">Vencido ({Math.abs(days)} días)</Badge>
     } else if (days <= 2) {
@@ -149,6 +152,26 @@ export default function ShipmentDetailsDialog({
   }
 
   const daysUntilFree = getDaysUntilFree(editedShipment.LIBRE_HASTA)
+
+  // Lookup map: container number → aggregated totals from operativas[]
+  const containerTotals = (() => {
+    const map = new Map<string, { pkgs: number; kg: number; m3: number; tipo: string; count: number }>()
+    for (const op of editedShipment.operativas || []) {
+      const cntr = (op.CNTR_OP || '').trim()
+      if (!cntr) continue
+      const existing = map.get(cntr) || { pkgs: 0, kg: 0, m3: 0, tipo: '', count: 0 }
+      existing.pkgs += op.PKGS || 0
+      existing.kg += op.KG || 0
+      existing.m3 += op.M3 || 0
+      existing.tipo = existing.tipo || op.TIPO || ''
+      existing.count += 1
+      map.set(cntr, existing)
+    }
+    return map
+  })()
+
+  const fmtNum = (n: number, decimals = 0) =>
+    n.toLocaleString('es-UY', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
 
   return (
     <Dialog open={open} onOpenChange={handleOpen}>
@@ -449,7 +472,7 @@ export default function ShipmentDetailsDialog({
               {/* Libre hasta warning */}
               {editedShipment.LIBRE_HASTA && (() => {
                 const days = getDaysUntilFree(editedShipment.LIBRE_HASTA)
-                if (days > 5) return null
+                if (days === null || days > 5) return null
                 return (
                   <div className={`rounded-lg p-4 border-l-4 ${
                     days < 0 ? 'bg-red-50 border-l-red-500' :
@@ -508,9 +531,10 @@ export default function ShipmentDetailsDialog({
                               <div className="text-sm font-semibold">{fmtDate(editedShipment.ETA)}</div>
                             </div>
                             <div className={`rounded-lg px-3 py-2 ${
-                              editedShipment.LIBRE_HASTA && getDaysUntilFree(editedShipment.LIBRE_HASTA) <= 2
-                                ? 'bg-red-50 border border-red-200'
-                                : 'bg-muted/50'
+                              (() => {
+                                const d = editedShipment.LIBRE_HASTA ? getDaysUntilFree(editedShipment.LIBRE_HASTA) : null
+                                return d !== null && d <= 2 ? 'bg-red-50 border border-red-200' : 'bg-muted/50'
+                              })()
                             }`}>
                               <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Libre Hasta</div>
                               <div className="text-sm font-semibold">{fmtDate(editedShipment.LIBRE_HASTA)}</div>
@@ -908,21 +932,56 @@ export default function ShipmentDetailsDialog({
                 placeholder="MSCU1234567, MSCU2345678, ..."
               />
               {editedShipment.containers.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {editedShipment.containers.map((container, index) => (
-                    <Badge 
-                      key={index}
-                      variant={container.valid ? "default" : "destructive"}
-                      className="font-mono text-xs"
-                    >
-                      {container.valid ? (
-                        <CheckCircle size={14} className="mr-1" weight="fill" />
-                      ) : (
-                        <XIcon size={14} className="mr-1" weight="bold" />
-                      )}
-                      {container.number}
-                    </Badge>
-                  ))}
+                <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                  {editedShipment.containers.map((container, index) => {
+                    const totals = containerTotals.get(container.number)
+                    return (
+                      <div
+                        key={index}
+                        className={`rounded-md border px-3 py-2 text-sm transition-colors ${
+                          container.valid
+                            ? 'border-border bg-card hover:border-accent/40'
+                            : 'border-destructive/40 bg-destructive/5'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          {container.valid ? (
+                            <CheckCircle size={14} className="text-green-600 shrink-0" weight="fill" />
+                          ) : (
+                            <XIcon size={14} className="text-destructive shrink-0" weight="bold" />
+                          )}
+                          <button
+                            type="button"
+                            title="Click para copiar"
+                            onClick={() => copyToClipboard(container.number, 'CNTR')}
+                            className="font-mono font-semibold text-xs hover:text-accent transition-colors truncate"
+                          >
+                            {container.number}
+                          </button>
+                          {totals?.tipo && (
+                            <span className="ml-auto text-[10px] font-semibold px-1.5 py-0.5 rounded bg-muted text-muted-foreground shrink-0">
+                              {totals.tipo}
+                            </span>
+                          )}
+                        </div>
+                        {totals ? (
+                          <div className="mt-1 flex items-center gap-3 text-[11px] text-muted-foreground">
+                            <span><span className="font-medium text-foreground">{fmtNum(totals.pkgs)}</span> btos</span>
+                            <span>·</span>
+                            <span><span className="font-medium text-foreground">{fmtNum(totals.kg, totals.kg % 1 === 0 ? 0 : 1)}</span> kg</span>
+                            {totals.m3 > 0 && (
+                              <>
+                                <span>·</span>
+                                <span><span className="font-medium text-foreground">{fmtNum(totals.m3, 1)}</span> m³</span>
+                              </>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="mt-1 text-[11px] text-muted-foreground italic">Sin datos operativos</div>
+                        )}
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </div>
