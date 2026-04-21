@@ -26,8 +26,8 @@ export default function AgendaEventCard({ event, compact = true, onClick }: Agen
     const cardButton = (
       <button
         onClick={onClick}
-        className={`w-full text-left rounded-lg border border-border/60 overflow-hidden
-          hover:shadow-md hover:border-border transition-all cursor-pointer group ${opColor.bg}`}
+        className={`w-full text-left rounded-md border border-border/50 overflow-hidden
+          hover:shadow-sm hover:border-border hover:-translate-y-0.5 transition-all cursor-pointer group ${opColor.bg}`}
       >
         {/* Color strip */}
         <div className={`h-1 ${opColor.color}`} />

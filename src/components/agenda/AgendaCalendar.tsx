@@ -242,12 +242,12 @@ export default function AgendaCalendar({
         onToggleTransport={toggleTransport}
         onClearTransports={() => setActiveTransports(new Set())}
         pendingCount={pendingCount}
-        showPendingSidebar={showPendingSidebar}
+        showPendingSidebar={false}
         // Pending-sidebar toggle is admin-only (makes no sense for a single partner/client).
-        onTogglePendingSidebar={partnerView || clientView ? undefined : () => setShowPendingSidebar(prev => !prev)}
+        onTogglePendingSidebar={undefined}
       />
 
-      <div className="flex gap-0 overflow-hidden rounded-xl border border-border bg-card">
+      <div className="flex overflow-hidden rounded-xl border bg-card shadow-sm">
         {/* Main calendar area */}
         <div className={`flex-1 min-w-0 transition-all ${showPendingSidebar ? '' : ''}`}>
           {view === 'day' && (
