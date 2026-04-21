@@ -234,8 +234,19 @@ function TodayCard({ title, subtitle, icon, iconBg, barColor, matches, emptyLabe
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2 mb-0.5">
-                    <span className="font-mono text-sm font-bold tracking-tight">{shipment.REF}</span>
-                    <span className="text-[11px] font-medium text-foreground/80 truncate max-w-[55%]">
+                    <span className="font-mono text-sm font-bold tracking-tight flex items-center gap-1.5 min-w-0">
+                      <span>{shipment.REF}</span>
+                      {op.CNTR_OP && (
+                        <>
+                          <span className="text-muted-foreground/60 font-normal">·</span>
+                          <span className="text-[11px] font-semibold text-muted-foreground truncate">
+                            {op.CNTR_OP}
+                            {op.TIPO && <span className="ml-1 opacity-70">[{op.TIPO}]</span>}
+                          </span>
+                        </>
+                      )}
+                    </span>
+                    <span className="text-[11px] font-medium text-foreground/80 truncate max-w-[40%] shrink-0">
                       {op.CLIENTE_OP || shipment.CLIENTE || '—'}
                     </span>
                   </div>
