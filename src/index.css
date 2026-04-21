@@ -229,3 +229,48 @@ html {
 button[data-slot="button"]:not(:disabled):active {
   transform: scale(0.97);
 }
+
+/* ── UX polish: top accent bar + subtle hover translate for row buttons ── */
+.accent-top {
+  position: relative;
+  overflow: hidden;
+}
+.accent-top::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  border-top-left-radius: inherit;
+  border-top-right-radius: inherit;
+  background: var(--bar-color, var(--accent));
+  opacity: 0.9;
+}
+
+/* ── UX polish: pulsing dot/icon for alert headers ── */
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.65; transform: scale(1.08); }
+}
+.pulse-soft {
+  animation: pulse-soft 1.8s ease-in-out infinite;
+}
+
+/* ── UX polish: row hover — reveal caret + subtle shift ── */
+.row-hover {
+  position: relative;
+  transition: background-color 150ms ease-out, padding 150ms ease-out;
+}
+.row-hover:hover {
+  padding-left: calc(var(--row-pad, 0.5rem) + 4px);
+}
+.row-hover .row-caret {
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: opacity 150ms ease-out, transform 150ms ease-out;
+}
+.row-hover:hover .row-caret {
+  opacity: 1;
+  transform: translateX(0);
+}
