@@ -46,6 +46,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { ParsedShipment, getShipmentStatus, ShipmentStatusCode } from '@/lib/shipmentTypes'
+import { buildTodaySnapshot } from '@/lib/todayFilters'
 import { statusColorToClass, statusColorDotClass } from '@/lib/statusColors'
 import { OperativeReport, OriginPhoto, PhotoLocation } from '@/lib/quotationTypes'
 import { saveReportWithFile, deleteReport as deleteReportFromDB, saveOriginPhoto } from '@/lib/dataClient'
@@ -90,6 +91,7 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
   const [currentPage, setCurrentPage] = useState(1)
   const [sortColumn, setSortColumn] = useState<SortColumn>('LIBRE_HASTA')
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
+  const [todayFilter, setTodayFilter] = useState(false)
 
   // ── Shipment detail dialog ──
   const [selectedShipment, setSelectedShipment] = useState<ParsedShipment | null>(null)
@@ -348,9 +350,26 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
       : <CaretDown size={12} className="text-accent ml-1" />
   }
 
+  // "Today" active shipments — REFs with a departure / border / fiscal arrival
+  // happening today (same snapshot as the HOY dashboard). Declared here so both
+  // the filter useMemo below and the stats useMemo further down can use it.
+  const todayRefs = useMemo(() => {
+    const snap = buildTodaySnapshot(shipmentRecords || [])
+    const refs = new Set<string>()
+    snap.salientes.forEach(m => refs.add(m.shipment.REF))
+    snap.frontera.forEach(m => refs.add(m.shipment.REF))
+    snap.llegandoFiscal.forEach(m => refs.add(m.shipment.REF))
+    return refs
+  }, [shipmentRecords])
+
   // ── Filtering + Search + Sort ──
   const filteredRecords = useMemo(() => {
     let records = shipmentRecords || []
+
+    // "Activos HOY" super-filter: only REFs with departure/border/fiscal today
+    if (todayFilter) {
+      records = records.filter(r => todayRefs.has(r.REF))
+    }
 
     // Status filter
     if (statusFilter !== 'all') {
@@ -414,7 +433,7 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
     })
 
     return records
-  }, [shipmentRecords, statusFilter, libreFilter, searchText, sortColumn, sortDirection])
+  }, [shipmentRecords, statusFilter, libreFilter, searchText, sortColumn, sortDirection, todayFilter, todayRefs])
 
   // ── Pagination ──
   const totalPages = Math.max(1, Math.ceil(filteredRecords.length / ITEMS_PER_PAGE))
@@ -428,6 +447,7 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
     setStatusFilter('all')
     setLibreFilter('all')
     setSearchText('')
+    setTodayFilter(false)
     setCurrentPage(1)
   }
 
@@ -441,17 +461,32 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
     setDetailOpen(true)
   }
 
-  // Quick stats
+  // Quick stats — counts for every chip shown in the filter row.
   const stats = useMemo(() => {
     const all = shipmentRecords || []
     const vencidos = all.filter(r => { const d = getDaysUntilFree(r.LIBRE_HASTA); return d < 0 && d !== 999 }).length
     const urgentes = all.filter(r => { const d = getDaysUntilFree(r.LIBRE_HASTA); return d >= 0 && d <= 2 }).length
-    const enTransito = all.filter(r => getShipmentStatus(r).code === 'en_transito').length
-    const enFiscal = all.filter(r => getShipmentStatus(r).code === 'llego_fiscal').length
-    return { total: all.length, vencidos, urgentes, enTransito, enFiscal }
-  }, [shipmentRecords])
+    const proximos = all.filter(r => { const d = getDaysUntilFree(r.LIBRE_HASTA); return d >= 3 && d <= 5 }).length
+    const byStatus: Record<string, number> = {
+      en_transito: 0, en_puerto: 0, salio_montevideo: 0, en_frontera: 0, llego_fiscal: 0, devuelto: 0,
+    }
+    all.forEach(r => { byStatus[getShipmentStatus(r).code] = (byStatus[getShipmentStatus(r).code] || 0) + 1 })
+    return {
+      total: all.length,
+      activosHoy: todayRefs.size,
+      vencidos,
+      urgentes,
+      proximos,
+      enTransito: byStatus.en_transito,
+      enPuerto: byStatus.en_puerto,
+      saliendo: byStatus.salio_montevideo,
+      enFrontera: byStatus.en_frontera,
+      enFiscal: byStatus.llego_fiscal,
+      devueltos: byStatus.devuelto,
+    }
+  }, [shipmentRecords, todayRefs])
 
-  const hasActiveFilters = statusFilter !== 'all' || libreFilter !== 'all' || searchText.trim() !== ''
+  const hasActiveFilters = statusFilter !== 'all' || libreFilter !== 'all' || searchText.trim() !== '' || todayFilter
 
   return (
     <div className="space-y-4">
@@ -463,49 +498,113 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
         </div>
       </div>
 
-      {/* ── Quick Stats Row (clickable filters) ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
-        {[
-          { label: 'Total', value: stats.total, tone: 'neutral' as const, filterAction: () => { setStatusFilter('all'); setLibreFilter('all'); setSearchText(''); setCurrentPage(1) } },
-          { label: 'Vencidos', value: stats.vencidos, tone: 'destructive' as const, filterAction: () => { setStatusFilter('all'); setLibreFilter('vencido'); setSearchText(''); setCurrentPage(1) } },
-          { label: 'Urgentes', value: stats.urgentes, tone: 'warning' as const, filterAction: () => { setStatusFilter('all'); setLibreFilter('urgente'); setSearchText(''); setCurrentPage(1) } },
-          { label: 'En Tránsito', value: stats.enTransito, tone: 'info' as const, filterAction: () => { setLibreFilter('all'); setStatusFilter('en_transito'); setSearchText(''); setCurrentPage(1) } },
-          { label: 'En Fiscal', value: stats.enFiscal, tone: 'success' as const, filterAction: () => { setLibreFilter('all'); setStatusFilter('llego_fiscal'); setSearchText(''); setCurrentPage(1) } },
-        ].map((s, i) => {
-          const isActive = (
-            (s.label === 'Total' && statusFilter === 'all' && libreFilter === 'all' && !searchText) ||
-            (s.label === 'Vencidos' && libreFilter === 'vencido') ||
-            (s.label === 'Urgentes' && libreFilter === 'urgente') ||
-            (s.label === 'En Tránsito' && statusFilter === 'en_transito') ||
-            (s.label === 'En Fiscal' && statusFilter === 'llego_fiscal')
-          )
-          const isAlert = (s.tone === 'destructive' || s.tone === 'warning') && s.value > 0
-          const numClasses = {
-            neutral: 'text-foreground',
-            destructive: s.value > 0 ? 'text-destructive' : 'text-muted-foreground/60',
-            warning: s.value > 0 ? 'text-orange-600' : 'text-muted-foreground/60',
-            info: 'text-blue-600',
-            success: 'text-green-600',
-          }[s.tone]
-          const bgClasses = {
-            neutral: 'bg-card border-border',
-            destructive: isAlert ? 'bg-destructive/[0.04] border-destructive/30' : 'bg-card border-border',
-            warning: isAlert ? 'bg-orange-50 border-orange-200' : 'bg-card border-border',
-            info: 'bg-card border-border',
-            success: 'bg-card border-border',
-          }[s.tone]
+      {/* ── Filter chips: two rows. Row 1 is the "urgency" view (Total + Activos HOY + urgencias). Row 2 is the "estado" view. Clicking a chip sets the right filters and clears the others so the table shows exactly that slice. ── */}
+      {(() => {
+        // Helpers — activate ONE filter at a time.
+        const activate = (opts: { status?: ShipmentStatusCode | 'all'; libre?: string; today?: boolean }) => {
+          setStatusFilter(opts.status ?? 'all')
+          setLibreFilter(opts.libre ?? 'all')
+          setTodayFilter(!!opts.today)
+          setSearchText('')
+          setCurrentPage(1)
+        }
+        const clearAll = () => {
+          setStatusFilter('all'); setLibreFilter('all'); setTodayFilter(false); setSearchText(''); setCurrentPage(1)
+        }
+
+        type ChipTone = 'neutral' | 'accent' | 'destructive' | 'warning' | 'caution' | 'info' | 'success' | 'muted'
+        interface Chip {
+          label: string
+          value: number
+          tone: ChipTone
+          isActive: boolean
+          onClick: () => void
+        }
+
+        const row1: Chip[] = [
+          {
+            label: 'Total',
+            value: stats.total,
+            tone: 'neutral',
+            isActive: !hasActiveFilters,
+            onClick: clearAll,
+          },
+          {
+            label: '⚡ Activos HOY',
+            value: stats.activosHoy,
+            tone: 'accent',
+            isActive: todayFilter,
+            onClick: () => activate({ today: true }),
+          },
+          {
+            label: 'Vencidos',
+            value: stats.vencidos,
+            tone: 'destructive',
+            isActive: libreFilter === 'vencido',
+            onClick: () => activate({ libre: 'vencido' }),
+          },
+          {
+            label: 'Urgentes',
+            value: stats.urgentes,
+            tone: 'warning',
+            isActive: libreFilter === 'urgente',
+            onClick: () => activate({ libre: 'urgente' }),
+          },
+          {
+            label: 'Próximos',
+            value: stats.proximos,
+            tone: 'caution',
+            isActive: libreFilter === 'proximo',
+            onClick: () => activate({ libre: 'proximo' }),
+          },
+        ]
+
+        const row2: Chip[] = [
+          { label: 'En Tránsito', value: stats.enTransito, tone: 'info', isActive: statusFilter === 'en_transito', onClick: () => activate({ status: 'en_transito' }) },
+          { label: 'En Puerto', value: stats.enPuerto, tone: 'caution', isActive: statusFilter === 'en_puerto', onClick: () => activate({ status: 'en_puerto' }) },
+          { label: 'Saliendo', value: stats.saliendo, tone: 'info', isActive: statusFilter === 'salio_montevideo', onClick: () => activate({ status: 'salio_montevideo' }) },
+          { label: 'En Frontera', value: stats.enFrontera, tone: 'warning', isActive: statusFilter === 'en_frontera', onClick: () => activate({ status: 'en_frontera' }) },
+          { label: 'En Fiscal', value: stats.enFiscal, tone: 'success', isActive: statusFilter === 'llego_fiscal', onClick: () => activate({ status: 'llego_fiscal' }) },
+          { label: 'Devueltos', value: stats.devueltos, tone: 'muted', isActive: statusFilter === 'devuelto', onClick: () => activate({ status: 'devuelto' }) },
+        ]
+
+        const toneStyles: Record<ChipTone, { num: string; bgActive: string; bgIdle: string }> = {
+          neutral:     { num: 'text-foreground',               bgActive: 'bg-foreground/5 border-foreground/30',  bgIdle: 'bg-card border-border' },
+          accent:      { num: 'text-accent',                   bgActive: 'bg-accent/10 border-accent/50',         bgIdle: 'bg-accent/[0.04] border-accent/20' },
+          destructive: { num: 'text-destructive',              bgActive: 'bg-destructive/10 border-destructive/40', bgIdle: 'bg-card border-border' },
+          warning:     { num: 'text-orange-600',               bgActive: 'bg-orange-50 border-orange-300',        bgIdle: 'bg-card border-border' },
+          caution:     { num: 'text-yellow-700',               bgActive: 'bg-yellow-50 border-yellow-300',        bgIdle: 'bg-card border-border' },
+          info:        { num: 'text-blue-600',                 bgActive: 'bg-blue-50 border-blue-300',            bgIdle: 'bg-card border-border' },
+          success:     { num: 'text-green-600',                bgActive: 'bg-green-50 border-green-300',          bgIdle: 'bg-card border-border' },
+          muted:       { num: 'text-muted-foreground',         bgActive: 'bg-muted border-muted-foreground/30',   bgIdle: 'bg-card border-border' },
+        }
+
+        const Chip = ({ c }: { c: Chip }) => {
+          const t = toneStyles[c.tone]
+          const bg = c.isActive ? t.bgActive : t.bgIdle
+          const numDim = !c.isActive && c.value === 0 ? 'text-muted-foreground/50' : t.num
           return (
             <button
-              key={i}
-              onClick={s.filterAction}
-              className={`rounded-lg px-3 py-2.5 text-left border transition-all hover:shadow-md hover:-translate-y-0.5 cursor-pointer ${bgClasses} ${isActive ? 'ring-2 ring-accent ring-offset-1 shadow-sm' : ''}`}
+              onClick={c.onClick}
+              className={`group flex-1 min-w-[110px] rounded-lg px-3 py-2 text-left border transition-all hover:shadow-sm hover:-translate-y-0.5 cursor-pointer ${bg}`}
             >
-              <div className={`text-xl font-bold leading-tight tabular-nums ${numClasses}`}>{s.value}</div>
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">{s.label}</div>
+              <div className={`text-lg font-bold leading-tight tabular-nums ${numDim}`}>{c.value.toLocaleString('es-UY')}</div>
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5 truncate">{c.label}</div>
             </button>
           )
-        })}
-      </div>
+        }
+
+        return (
+          <div className="space-y-2">
+            <div className="flex flex-wrap gap-2">
+              {row1.map((c, i) => <Chip key={`r1-${i}`} c={c} />)}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {row2.map((c, i) => <Chip key={`r2-${i}`} c={c} />)}
+            </div>
+          </div>
+        )
+      })()}
 
       {/* ── Filters + Search Bar ── */}
       <Card>
