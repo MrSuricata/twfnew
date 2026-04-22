@@ -298,20 +298,36 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
 
   const getReportsForShipment = (ref: string) => reports.filter(r => r.shipmentRef === ref)
 
-  // Parse date as local to avoid timezone issues
-  const parseLocal = (s: string) => {
+  // Parse date as local to avoid timezone issues. Returns null when the input
+  // isn't a parseable date (e.g. literal strings like "DEVUELTO" that sometimes
+  // sneak into the LIBRE_HASTA column from the planilla).
+  const parseLocal = (s: string): Date | null => {
     if (!s) return null
     const parts = s.split('-')
-    if (parts.length === 3) return new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]))
-    const d = new Date(s); d.setHours(0, 0, 0, 0); return d
+    let d: Date
+    if (parts.length === 3) {
+      const y = parseInt(parts[0])
+      const m = parseInt(parts[1])
+      const dd = parseInt(parts[2])
+      if (isNaN(y) || isNaN(m) || isNaN(dd)) return null
+      d = new Date(y, m - 1, dd)
+    } else {
+      d = new Date(s)
+    }
+    if (isNaN(d.getTime())) return null
+    d.setHours(0, 0, 0, 0)
+    return d
   }
 
+  // 999 = "no parseable date / blank". Used as sentinel so sort can push these
+  // rows to the end without them polluting the Vencidos / Urgentes counts.
   const getDaysUntilFree = (libreHasta: string): number => {
     if (!libreHasta) return 999
     const freeDate = parseLocal(libreHasta)
     if (!freeDate) return 999
     const today = new Date(); today.setHours(0, 0, 0, 0)
-    return Math.floor((freeDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+    const diff = Math.floor((freeDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+    return isNaN(diff) ? 999 : diff
   }
 
   // ── Sorting handler ──
@@ -439,16 +455,23 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
 
   return (
     <div className="space-y-4">
+      {/* ── Header row ── */}
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight">Cargas</h2>
+          <p className="text-sm text-muted-foreground">{stats.total.toLocaleString('es-UY')} operaciones registradas</p>
+        </div>
+      </div>
+
       {/* ── Quick Stats Row (clickable filters) ── */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
         {[
-          { label: 'Total', value: stats.total, color: 'text-foreground', bg: 'bg-muted/50', filterAction: () => { setStatusFilter('all'); setLibreFilter('all'); setSearchText(''); setCurrentPage(1) } },
-          { label: 'Vencidos', value: stats.vencidos, color: 'text-red-600', bg: stats.vencidos > 0 ? 'bg-red-50 border border-red-200' : 'bg-muted/50', filterAction: () => { setStatusFilter('all'); setLibreFilter('vencido'); setSearchText(''); setCurrentPage(1) } },
-          { label: 'Urgentes', value: stats.urgentes, color: 'text-orange-600', bg: stats.urgentes > 0 ? 'bg-orange-50 border border-orange-200' : 'bg-muted/50', filterAction: () => { setStatusFilter('all'); setLibreFilter('urgente'); setSearchText(''); setCurrentPage(1) } },
-          { label: 'En Tránsito', value: stats.enTransito, color: 'text-blue-600', bg: 'bg-muted/50', filterAction: () => { setLibreFilter('all'); setStatusFilter('en_transito'); setSearchText(''); setCurrentPage(1) } },
-          { label: 'En Fiscal', value: stats.enFiscal, color: 'text-green-600', bg: 'bg-muted/50', filterAction: () => { setLibreFilter('all'); setStatusFilter('llego_fiscal'); setSearchText(''); setCurrentPage(1) } },
+          { label: 'Total', value: stats.total, tone: 'neutral' as const, filterAction: () => { setStatusFilter('all'); setLibreFilter('all'); setSearchText(''); setCurrentPage(1) } },
+          { label: 'Vencidos', value: stats.vencidos, tone: 'destructive' as const, filterAction: () => { setStatusFilter('all'); setLibreFilter('vencido'); setSearchText(''); setCurrentPage(1) } },
+          { label: 'Urgentes', value: stats.urgentes, tone: 'warning' as const, filterAction: () => { setStatusFilter('all'); setLibreFilter('urgente'); setSearchText(''); setCurrentPage(1) } },
+          { label: 'En Tránsito', value: stats.enTransito, tone: 'info' as const, filterAction: () => { setLibreFilter('all'); setStatusFilter('en_transito'); setSearchText(''); setCurrentPage(1) } },
+          { label: 'En Fiscal', value: stats.enFiscal, tone: 'success' as const, filterAction: () => { setLibreFilter('all'); setStatusFilter('llego_fiscal'); setSearchText(''); setCurrentPage(1) } },
         ].map((s, i) => {
-          // Determine if this card's filter is currently active
           const isActive = (
             (s.label === 'Total' && statusFilter === 'all' && libreFilter === 'all' && !searchText) ||
             (s.label === 'Vencidos' && libreFilter === 'vencido') ||
@@ -456,14 +479,29 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
             (s.label === 'En Tránsito' && statusFilter === 'en_transito') ||
             (s.label === 'En Fiscal' && statusFilter === 'llego_fiscal')
           )
+          const isAlert = (s.tone === 'destructive' || s.tone === 'warning') && s.value > 0
+          const numClasses = {
+            neutral: 'text-foreground',
+            destructive: s.value > 0 ? 'text-destructive' : 'text-muted-foreground/60',
+            warning: s.value > 0 ? 'text-orange-600' : 'text-muted-foreground/60',
+            info: 'text-blue-600',
+            success: 'text-green-600',
+          }[s.tone]
+          const bgClasses = {
+            neutral: 'bg-card border-border',
+            destructive: isAlert ? 'bg-destructive/[0.04] border-destructive/30' : 'bg-card border-border',
+            warning: isAlert ? 'bg-orange-50 border-orange-200' : 'bg-card border-border',
+            info: 'bg-card border-border',
+            success: 'bg-card border-border',
+          }[s.tone]
           return (
             <button
               key={i}
               onClick={s.filterAction}
-              className={`rounded-lg px-3 py-2 text-left transition-all hover:scale-[1.03] hover:shadow-md cursor-pointer ${s.bg} ${isActive ? 'ring-2 ring-accent ring-offset-1 shadow-sm' : ''}`}
+              className={`rounded-lg px-3 py-2.5 text-left border transition-all hover:shadow-md hover:-translate-y-0.5 cursor-pointer ${bgClasses} ${isActive ? 'ring-2 ring-accent ring-offset-1 shadow-sm' : ''}`}
             >
-              <div className={`text-lg font-bold leading-tight ${s.color}`}>{s.value}</div>
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">{s.label}</div>
+              <div className={`text-xl font-bold leading-tight tabular-nums ${numClasses}`}>{s.value}</div>
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground mt-0.5">{s.label}</div>
             </button>
           )
         })}
@@ -615,7 +653,7 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
                       return (
                         <TableRow
                           key={index}
-                          className="cursor-pointer hover:bg-muted/50 transition-colors group"
+                          className="cursor-pointer hover:bg-muted/50 transition-colors group [&>td]:py-3"
                           onClick={() => handleRowClick(record)}
                         >
                           {/* Status dot */}
@@ -641,24 +679,27 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
                             {record.LIBRE_HASTA ? (
                               <div className="flex items-center gap-1.5">
                                 <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                                  daysUntilFree < 0 ? 'bg-red-500' :
+                                  daysUntilFree === 999 ? 'bg-muted-foreground/40' :
+                                  daysUntilFree < 0 ? 'bg-destructive' :
                                   daysUntilFree <= 2 ? 'bg-orange-500' :
                                   daysUntilFree <= 5 ? 'bg-yellow-500' :
                                   'bg-green-500'
                                 }`} />
                                 <div className="flex flex-col">
-                                  <span className="text-xs whitespace-nowrap">{record.LIBRE_HASTA}</span>
-                                  <span className={`text-[10px] font-semibold ${
-                                    daysUntilFree < 0 ? 'text-red-600' :
-                                    daysUntilFree <= 2 ? 'text-orange-600' :
-                                    daysUntilFree <= 5 ? 'text-yellow-600' :
-                                    'text-green-600'
-                                  }`}>
-                                    {daysUntilFree < 0
-                                      ? `Vencido ${Math.abs(daysUntilFree)}d`
-                                      : daysUntilFree === 0 ? 'Vence HOY'
-                                      : `${daysUntilFree}d restantes`}
-                                  </span>
+                                  <span className="text-xs whitespace-nowrap font-medium">{record.LIBRE_HASTA}</span>
+                                  {daysUntilFree !== 999 && (
+                                    <span className={`text-[10px] font-semibold ${
+                                      daysUntilFree < 0 ? 'text-destructive' :
+                                      daysUntilFree <= 2 ? 'text-orange-600' :
+                                      daysUntilFree <= 5 ? 'text-yellow-700' :
+                                      'text-green-700'
+                                    }`}>
+                                      {daysUntilFree < 0
+                                        ? `Vencido hace ${Math.abs(daysUntilFree)}d`
+                                        : daysUntilFree === 0 ? 'Vence HOY'
+                                        : `${daysUntilFree}d restantes`}
+                                    </span>
+                                  )}
                                 </div>
                               </div>
                             ) : (
