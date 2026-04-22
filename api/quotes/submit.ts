@@ -31,6 +31,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     tsParams.set('response', turnstileToken)
     tsParams.set('remoteip', ip)
     let tsOk = false
+    let tsErrorCodes: string[] = []
+    let tsHostname: string | undefined
     try {
       const tsRes = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
         method: 'POST',
@@ -38,10 +40,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       })
       const tsData: any = await tsRes.json().catch(() => ({}))
       tsOk = tsData?.success === true
+      tsErrorCodes = Array.isArray(tsData?.['error-codes']) ? tsData['error-codes'] : []
+      tsHostname = tsData?.hostname
+      // Always log verify outcome for diagnostics. success case: ok + hostname.
+      // failure: error codes — usual suspects are 'timeout-or-duplicate',
+      // 'hostname-not-allowed', 'invalid-input-response', 'invalid-input-secret'.
+      console.warn('[quotes/submit] Turnstile verify result:', JSON.stringify({
+        ok: tsOk,
+        errorCodes: tsErrorCodes,
+        hostname: tsHostname,
+        ip,
+      }))
     } catch (e) {
-      console.error('[quotes/submit] Turnstile verify failed:', e)
+      console.error('[quotes/submit] Turnstile verify fetch failed:', e)
     }
-    if (!tsOk) return res.status(400).json({ error: 'Captcha inválido' })
+    if (!tsOk) {
+      return res.status(400).json({
+        error: 'Captcha inválido',
+        errorCodes: tsErrorCodes,
+      })
+    }
 
     // ── Rate limit: 3 submits / hour / IP, block 24h on breach ──
     const { limited } = await checkRateLimitWithConfig(`quote:${ip}`, 3, 60 * 60_000, 24 * 60 * 60_000)
