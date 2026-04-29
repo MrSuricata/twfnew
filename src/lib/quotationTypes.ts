@@ -1,10 +1,24 @@
 export type QuoteStatus = 'pending' | 'responded' | 'won' | 'lost' | 'spam'
 
+export type QuoteNoteKind = 'note' | 'conversion'
+
 export interface QuoteNote {
   id: string
   text: string
   createdAt: number
   createdBy: string
+  /** Optional. Defaults to 'note'. 'conversion' = audit-trail entry recording
+   * that this quote was converted into a shipment with a specific REF. */
+  kind?: QuoteNoteKind
+}
+
+/** Helper: extract the last REF that this quote was converted into, if any. */
+export function getConvertedRef(notes: QuoteNote[] | undefined): string | null {
+  if (!notes || notes.length === 0) return null
+  for (let i = notes.length - 1; i >= 0; i--) {
+    if (notes[i].kind === 'conversion' && notes[i].text) return notes[i].text
+  }
+  return null
 }
 
 export interface QuoteFormData {

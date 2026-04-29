@@ -44,6 +44,18 @@ import {
 import { toast } from 'sonner'
 import { copyToClipboard } from '@/lib/clipboard'
 import type { QuoteFormData, QuoteStatus, QuoteNote } from '@/lib/quotationTypes'
+import { getConvertedRef } from '@/lib/quotationTypes'
+import { buildMailtoLink } from '@/lib/quoteTemplates'
+import { downloadQuotesCsv } from '@/lib/quoteExport'
+import { DownloadSimple, ArrowsClockwise } from '@phosphor-icons/react'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
 
 interface QuotesManagementProps {
   quotes: QuoteFormData[]
@@ -111,6 +123,9 @@ export default function QuotesManagement({ quotes, onUpdateQuotes }: QuotesManag
   const [newNote, setNewNote] = useState('')
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
   const [showListMobile, setShowListMobile] = useState(true)
+  // "Convertir en operación" dialog state
+  const [convertOpen, setConvertOpen] = useState(false)
+  const [convertRef, setConvertRef] = useState('')
 
   // Sort newest first
   const sorted = useMemo(
@@ -225,19 +240,63 @@ export default function QuotesManagement({ quotes, onUpdateQuotes }: QuotesManag
   }
 
   const handleReplyEmail = (q: QuoteFormData) => {
-    const subject = encodeURIComponent(`Re: Cotización TWF — ${q.cargoType}`)
-    const greeting = q.language === 'en' ? 'Hi' : q.language === 'pt' ? 'Olá' : 'Hola'
-    const body = encodeURIComponent(
-      `${greeting} ${q.name},\n\nGracias por tu consulta. Adjunto la cotización para:\n\n` +
-      `• Tipo: ${q.cargoType}\n` +
-      `• Origen: ${q.origin || '-'}\n` +
-      `• Destino: ${q.destination || '-'}\n\n` +
-      `Cualquier consulta a la orden.\n\nSaludos,\nTransit World Forwarding`
-    )
-    window.location.href = `mailto:${q.email}?subject=${subject}&body=${body}`
+    // Open mail client with pre-filled subject + body in client's language.
+    // Template lives in src/lib/quoteTemplates.ts.
+    window.location.href = buildMailtoLink(q)
     if (q.status === 'pending') {
       updateQuote(q.id, { status: 'responded' })
     }
+  }
+
+  const handleExportCsv = () => {
+    const list = filtered.length > 0 ? filtered : quotes
+    if (list.length === 0) {
+      toast.error('No hay cotizaciones para exportar')
+      return
+    }
+    const filterTag = filter === 'all' ? '' : `-${filter}`
+    const date = new Date().toISOString().slice(0, 10)
+    downloadQuotesCsv(list, `cotizaciones-twf${filterTag}-${date}.csv`)
+    toast.success(`Exportadas ${list.length} cotizaciones`)
+  }
+
+  const openConvertDialog = (q: QuoteFormData) => {
+    // Suggest a REF based on the highest A-number across recent quotes that
+    // were already converted. Falls back to A0001 if none.
+    let maxN = 0
+    quotes.forEach(item => {
+      const r = getConvertedRef(item.notes) || ''
+      const m = r.match(/^A(\d{3,5})/i)
+      if (m) {
+        const n = parseInt(m[1], 10)
+        if (n > maxN) maxN = n
+      }
+    })
+    const suggested = `A${String(maxN + 1).padStart(4, '0')}`
+    setConvertRef(suggested)
+    setConvertOpen(true)
+  }
+
+  const handleConvertConfirm = () => {
+    if (!selected) return
+    const ref = convertRef.trim().toUpperCase()
+    if (!ref) {
+      toast.error('Ingresá un REF válido')
+      return
+    }
+    const note: QuoteNote = {
+      id: `n-${Date.now()}`,
+      text: ref,
+      createdAt: Date.now(),
+      createdBy: 'admin',
+      kind: 'conversion',
+    }
+    updateQuote(selected.id, {
+      status: 'won',
+      notes: [...(selected.notes || []), note],
+    })
+    setConvertOpen(false)
+    toast.success(`Cotización convertida en operación ${ref}`)
   }
 
   return (
@@ -255,6 +314,17 @@ export default function QuotesManagement({ quotes, onUpdateQuotes }: QuotesManag
             )}
           </p>
         </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleExportCsv}
+          className="gap-1.5 h-9"
+          disabled={quotes.length === 0}
+          title="Descargar la lista filtrada como CSV"
+        >
+          <DownloadSimple size={16} weight="bold" />
+          Exportar
+        </Button>
       </div>
 
       {/* ── Stats chips ── */}
@@ -384,6 +454,7 @@ export default function QuotesManagement({ quotes, onUpdateQuotes }: QuotesManag
                 onStatusChange={s => handleStatusChange(selected.id, s)}
                 onReply={() => handleReplyEmail(selected)}
                 onDelete={() => setConfirmDelete(selected.id)}
+                onConvert={() => openConvertDialog(selected)}
                 newNote={newNote}
                 setNewNote={setNewNote}
                 onAddNote={handleAddNote}
@@ -400,6 +471,50 @@ export default function QuotesManagement({ quotes, onUpdateQuotes }: QuotesManag
           </div>
         </div>
       )}
+
+      {/* Convert to operation */}
+      <Dialog open={convertOpen} onOpenChange={setConvertOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Convertir en operación</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <p className="text-sm text-muted-foreground">
+              Asigná un REF a esta cotización ganada. Se registra como nota
+              de conversión (audit trail) y la cotización queda marcada como
+              "Ganada" si todavía no lo está.
+            </p>
+            <div className="space-y-1.5">
+              <Label htmlFor="convert-ref">REF de la operación</Label>
+              <Input
+                id="convert-ref"
+                value={convertRef}
+                onChange={e => setConvertRef(e.target.value)}
+                placeholder="Ej: A7700"
+                className="font-mono"
+                autoFocus
+              />
+              <p className="text-xs text-muted-foreground">
+                Esto NO crea la operación en la planilla — eso lo hacés vos
+                en el Excel/Sheets como siempre. Esta acción solo deja el
+                vínculo en la cotización para historial y reportes.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConvertOpen(false)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleConvertConfirm}
+              className="bg-accent text-accent-foreground hover:bg-accent/90 gap-1.5"
+            >
+              <ArrowsClockwise size={14} />
+              Convertir
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Delete confirm */}
       <AlertDialog open={!!confirmDelete} onOpenChange={open => { if (!open) setConfirmDelete(null) }}>
@@ -544,14 +659,16 @@ interface QuoteDetailProps {
   onStatusChange: (s: QuoteStatus) => void
   onReply: () => void
   onDelete: () => void
+  onConvert: () => void
   newNote: string
   setNewNote: (v: string) => void
   onAddNote: () => void
   onBackMobile: () => void
 }
 
-function QuoteDetail({ quote, onStatusChange, onReply, onDelete, newNote, setNewNote, onAddNote, onBackMobile }: QuoteDetailProps) {
+function QuoteDetail({ quote, onStatusChange, onReply, onDelete, onConvert, newNote, setNewNote, onAddNote, onBackMobile }: QuoteDetailProps) {
   const Icon = getCargoIcon(quote.cargoType)
+  const convertedRef = getConvertedRef(quote.notes)
   return (
     <Card className="h-full overflow-y-auto">
       <CardContent className="p-5 space-y-5">
@@ -574,6 +691,11 @@ function QuoteDetail({ quote, onStatusChange, onReply, onDelete, newNote, setNew
             <Badge variant="outline" className={`text-[10px] h-5 ${statusBadgeClasses(quote.status)}`}>
               {STATUS_LABELS[quote.status]}
             </Badge>
+            {convertedRef && (
+              <Badge variant="outline" className="text-[10px] h-5 ml-1 bg-green-50 text-green-700 border-green-200 font-mono">
+                → {convertedRef}
+              </Badge>
+            )}
             <span className="text-xs text-muted-foreground ml-2">
               · {fmtFullDate(quote.timestamp)}
             </span>
@@ -690,6 +812,18 @@ function QuoteDetail({ quote, onStatusChange, onReply, onDelete, newNote, setNew
             >
               <Prohibit size={14} />
               Spam
+            </Button>
+          )}
+          {!convertedRef && quote.status !== 'lost' && quote.status !== 'spam' && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onConvert}
+              className="h-8 gap-1.5 border-accent/40 text-accent hover:bg-accent/5"
+              title="Asignar un REF de operación a esta cotización ganada"
+            >
+              <ArrowsClockwise size={14} />
+              Convertir en op
             </Button>
           )}
           <Button

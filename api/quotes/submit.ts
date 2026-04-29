@@ -149,6 +149,43 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       console.warn('EmailJS not configured for quotes')
     }
 
+    // ── Telegram instant alert (best-effort) ──
+    // Optional. Set TELEGRAM_BOT_TOKEN + TELEGRAM_QUOTE_CHAT_ID in Vercel env
+    // to enable. Failures here never block the response — the quote is already
+    // saved + emailed by this point.
+    const tgToken = process.env.TELEGRAM_BOT_TOKEN
+    const tgChatId = process.env.TELEGRAM_QUOTE_CHAT_ID
+    if (tgToken && tgChatId) {
+      const tgText = [
+        '🆕 *Nueva cotización TWF*',
+        '',
+        `*${name}* (${email})`,
+        phone ? `📲 ${phone}` : null,
+        '',
+        `🚢 ${cargoType}`,
+        origin ? `📍 ${origin} → ${destination || '?'}` : (destination ? `📍 → ${destination}` : null),
+        details ? '' : null,
+        details ? `_${details.slice(0, 400)}${details.length > 400 ? '…' : ''}_` : null,
+        '',
+        `↗️ Ver: https://transitworldforwarding.vercel.app/admin (tab Cotizaciones)`,
+      ].filter(Boolean).join('\n')
+
+      fetch(`https://api.telegram.org/bot${tgToken}/sendMessage`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: tgChatId,
+          text: tgText,
+          parse_mode: 'Markdown',
+          disable_web_page_preview: true,
+        }),
+      })
+        .then(r => {
+          if (!r.ok) console.warn('[quotes/submit] Telegram alert failed:', r.status)
+        })
+        .catch(err => console.warn('[quotes/submit] Telegram alert error:', err))
+    }
+
     return res.status(200).json({
       sent: emailSent,
       saved: dbSaved,
