@@ -508,12 +508,14 @@ function App() {
           documents={documents}
           reports={reports}
           originPhotos={originPhotos}
+          quotes={quotes}
           dbSyncError={dbSyncError}
           onUpdateShipments={handleUpdateShipments}
           onUpdateClients={handleUpdateClients}
           onUpdateDocuments={handleUpdateDocuments}
           onUpdateReports={handleUpdateReports}
           onUpdateOriginPhotos={handleUpdateOriginPhotos}
+          onUpdateQuotes={handleUpdateQuotes}
         />
       </>
     )
