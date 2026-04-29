@@ -1,4 +1,4 @@
-export type QuoteStatus = 'pending' | 'responded' | 'won' | 'lost'
+export type QuoteStatus = 'pending' | 'responded' | 'won' | 'lost' | 'spam'
 
 export interface QuoteNote {
   id: string

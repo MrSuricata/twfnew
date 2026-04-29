@@ -37,6 +37,7 @@ const TABS: Array<{ id: string; label: string; icon: typeof Package; shortcut?: 
   { id: 'agenda', label: 'Agenda', icon: CalendarBlank, shortcut: 'G A' },
   { id: 'analytics', label: 'Analíticas', icon: ChartBar },
   { id: 'tracking', label: 'Cargas', icon: Package, shortcut: 'G C' },
+  { id: 'quotes', label: 'Cotizaciones', icon: ChatCircleText, shortcut: 'G Q' },
   { id: 'clients', label: 'Clientes', icon: UsersThree, shortcut: 'G L' },
   { id: 'partners', label: 'Partners', icon: Truck, shortcut: 'G P' },
   { id: 'excel-import', label: 'Importar Datos', icon: Database },

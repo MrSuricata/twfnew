@@ -12,6 +12,7 @@ import {
   Package,
   Warning,
   Lightning,
+  Envelope,
 } from '@phosphor-icons/react'
 
 import TodayDashboard from './TodayDashboard'
@@ -23,9 +24,10 @@ import TestimonialsEditor from './TestimonialsEditor'
 import AnalyticsDashboard from './AnalyticsDashboard'
 import ClientManager from './ClientManager'
 import PartnerManager from './PartnerManager'
+import QuotesManagement from './QuotesManagement'
 import CommandPalette from './CommandPalette'
 import { ParsedShipment } from '@/lib/shipmentTypes'
-import { ClientAccount, ShipmentDocument, OperativeReport, OriginPhoto } from '@/lib/quotationTypes'
+import { ClientAccount, ShipmentDocument, OperativeReport, OriginPhoto, QuoteFormData } from '@/lib/quotationTypes'
 import Breadcrumbs from './Breadcrumbs'
 
 interface DashboardEnhancedProps {
@@ -35,16 +37,26 @@ interface DashboardEnhancedProps {
   documents?: ShipmentDocument[]
   reports?: OperativeReport[]
   originPhotos?: OriginPhoto[]
+  quotes?: QuoteFormData[]
   dbSyncError?: string | null
   onUpdateShipments?: (shipments: ParsedShipment[]) => void
   onUpdateClients?: (clients: ClientAccount[]) => void
   onUpdateDocuments?: (docs: ShipmentDocument[]) => void
   onUpdateReports?: (reports: OperativeReport[]) => void
   onUpdateOriginPhotos?: (photos: OriginPhoto[]) => void
+  onUpdateQuotes?: (quotes: QuoteFormData[]) => void
 }
 
-export default function DashboardEnhanced({ onLogout, clients = [], shipments = [], documents = [], reports = [], originPhotos = [], dbSyncError = null, onUpdateShipments, onUpdateClients, onUpdateDocuments, onUpdateReports, onUpdateOriginPhotos }: DashboardEnhancedProps) {
+const ONE_DAY_MS = 86_400_000
+
+export default function DashboardEnhanced({ onLogout, clients = [], shipments = [], documents = [], reports = [], originPhotos = [], quotes = [], dbSyncError = null, onUpdateShipments, onUpdateClients, onUpdateDocuments, onUpdateReports, onUpdateOriginPhotos, onUpdateQuotes }: DashboardEnhancedProps) {
   const [activeTab, setActiveTab] = useState('hoy')
+
+  // Pending-quotes badge — counts quotes that need attention.
+  const pendingQuotesCount = quotes.filter(q => q.status === 'pending').length
+  const overdueQuotesCount = quotes.filter(
+    q => q.status === 'pending' && Date.now() - q.timestamp > ONE_DAY_MS
+  ).length
 
   const getBreadcrumbs = () => {
     const breadcrumbMap: Record<string, string> = {
@@ -57,7 +69,8 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
       testimonials: 'Testimonios',
       tracking: 'Tracking',
       clients: 'Clientes',
-      partners: 'Partners'
+      partners: 'Partners',
+      quotes: 'Cotizaciones',
     }
 
     return [{ label: breadcrumbMap[activeTab] || 'Dashboard' }]
@@ -119,7 +132,7 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
         />
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-3 lg:grid-cols-9 max-w-5xl">
+          <TabsList className="grid w-full grid-cols-3 lg:grid-cols-10 max-w-5xl">
             <TabsTrigger value="hoy">
               <Lightning size={20} className="mr-2" weight="fill" />
               <span className="hidden sm:inline">Hoy</span>
@@ -135,6 +148,17 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
             <TabsTrigger value="tracking">
               <Package size={20} className="mr-2" />
               <span className="hidden sm:inline">Cargas</span>
+            </TabsTrigger>
+            <TabsTrigger value="quotes" className="relative">
+              <Envelope size={20} className="mr-2" />
+              <span className="hidden sm:inline">Cotizaciones</span>
+              {pendingQuotesCount > 0 && (
+                <span className={`ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold rounded-full text-white ${
+                  overdueQuotesCount > 0 ? 'bg-destructive' : 'bg-orange-500'
+                }`}>
+                  {pendingQuotesCount}
+                </span>
+              )}
             </TabsTrigger>
             <TabsTrigger value="excel-import">
               <Database size={20} className="mr-2" />
@@ -187,6 +211,15 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
               }}
               onUpdateOriginPhotos={(updated) => {
                 if (onUpdateOriginPhotos) onUpdateOriginPhotos(updated)
+              }}
+            />
+          </TabsContent>
+
+          <TabsContent value="quotes">
+            <QuotesManagement
+              quotes={quotes}
+              onUpdateQuotes={(updated) => {
+                if (onUpdateQuotes) onUpdateQuotes(updated)
               }}
             />
           </TabsContent>
