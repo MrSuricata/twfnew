@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 500" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="bg1" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1a1a17"/>
+      <stop offset="100%" stop-color="#0a0a0a"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="500" fill="url(#bg1)"/>
+  <!-- silueta -->
+  <g fill="#2a2a25">
+    <circle cx="200" cy="180" r="80"/>
+    <path d="M70 500 Q 70 360 200 320 Q 330 360 330 500 Z"/>
+  </g>
+  <!-- pelo -->
+  <path d="M120 160 Q 130 90 200 90 Q 270 90 280 160 Q 280 130 230 120 Q 200 116 170 124 Q 130 134 120 160 Z" fill="#0e0e0a"/>
+  <!-- detalle tinta línea ocre -->
+  <g fill="none" stroke="#c9a66b" stroke-width="1" opacity="0.7">
+    <path d="M30 420 Q 200 460 370 420"/>
+  </g>
+  <!-- inicial -->
+  <text x="50%" y="92%" text-anchor="middle" font-family="Bebas Neue, Impact, sans-serif" font-size="24" fill="#f2efe9" opacity="0.5" letter-spacing="0.2em">ARTIST · 01</text>
+</svg>

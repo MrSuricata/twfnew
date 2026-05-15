@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#050505"/>
+      <stop offset="55%" stop-color="#0e0e0e"/>
+      <stop offset="100%" stop-color="#1c1c18"/>
+    </linearGradient>
+    <radialGradient id="spot" cx="0.32" cy="0.42" r="0.55">
+      <stop offset="0%" stop-color="#c9a66b" stop-opacity="0.22"/>
+      <stop offset="60%" stop-color="#c9a66b" stop-opacity="0.04"/>
+      <stop offset="100%" stop-color="#c9a66b" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="line" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#f2efe9" stop-opacity="0.85"/>
+      <stop offset="100%" stop-color="#f2efe9" stop-opacity="0.25"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1600" height="1000" fill="url(#bg)"/>
+  <rect width="1600" height="1000" fill="url(#spot)"/>
+
+  <!-- grano sutil -->
+  <g opacity="0.06" fill="#f2efe9">
+    <circle cx="120" cy="220" r="1"/>
+    <circle cx="380" cy="80" r="1"/>
+    <circle cx="640" cy="320" r="1"/>
+    <circle cx="900" cy="160" r="1"/>
+    <circle cx="1180" cy="420" r="1"/>
+    <circle cx="1380" cy="240" r="1"/>
+    <circle cx="220" cy="620" r="1"/>
+    <circle cx="520" cy="780" r="1"/>
+    <circle cx="820" cy="900" r="1"/>
+    <circle cx="1120" cy="700" r="1"/>
+    <circle cx="1440" cy="820" r="1"/>
+  </g>
+
+  <!-- árbol/silueta fineline grande -->
+  <g transform="translate(1050,180)" fill="none" stroke="url(#line)" stroke-width="2.2" stroke-linecap="round">
+    <path d="M200 0 L200 720"/>
+    <path d="M200 120 C160 90 110 80 70 110"/>
+    <path d="M200 120 C240 90 290 80 330 110"/>
+    <path d="M200 220 C140 200 80 220 40 270"/>
+    <path d="M200 220 C260 200 320 220 360 270"/>
+    <path d="M200 340 C120 330 60 360 30 420"/>
+    <path d="M200 340 C280 330 340 360 370 420"/>
+    <path d="M200 460 C140 460 90 490 70 540"/>
+    <path d="M200 460 C260 460 310 490 330 540"/>
+    <!-- hojitas finas -->
+    <path d="M80 110 q -10 -16 6 -22" />
+    <path d="M324 112 q 10 -16 -6 -22" />
+    <path d="M40 270 q -12 -10 -2 -22" />
+    <path d="M360 270 q 12 -10 2 -22" />
+    <path d="M28 420 q -14 -8 -4 -22" />
+    <path d="M372 420 q 14 -8 4 -22" />
+  </g>
+
+  <!-- líneas decorativas finas -->
+  <g fill="none" stroke="#7a8c5f" stroke-opacity="0.35" stroke-width="1">
+    <path d="M0 880 Q400 840 800 880 T1600 880"/>
+    <path d="M0 910 Q400 870 800 910 T1600 910"/>
+  </g>
+
+  <!-- marca tipográfica desplazada -->
+  <text x="90" y="520" font-family="Bebas Neue, Impact, sans-serif" font-size="240" fill="#f2efe9" letter-spacing="0.08em" opacity="0.95">BOSQUE</text>
+  <text x="96" y="580" font-family="Inter, sans-serif" font-size="22" fill="#c9a66b" letter-spacing="0.35em" opacity="0.85">TATTOO · CIUDAD VIEJA · MVD</text>
+
+  <!-- línea ocre -->
+  <rect x="90" y="610" width="220" height="2" fill="#c9a66b"/>
+</svg>

@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">
+  <defs>
+    <linearGradient id="g1" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1a1a17"/>
+      <stop offset="100%" stop-color="#0a0a0a"/>
+    </linearGradient>
+  </defs>
+  <rect width="600" height="600" fill="url(#g1)"/>
+  <!-- ramita fineline -->
+  <g fill="none" stroke="#f2efe9" stroke-width="1.4" stroke-linecap="round">
+    <path d="M300 80 C 300 200 300 380 300 520"/>
+    <path d="M300 160 C 250 150 220 130 200 100"/>
+    <path d="M300 160 C 350 150 380 130 400 100"/>
+    <path d="M300 220 C 230 230 190 220 160 180"/>
+    <path d="M300 220 C 370 230 410 220 440 180"/>
+    <path d="M300 300 C 220 320 170 300 130 250"/>
+    <path d="M300 300 C 380 320 430 300 470 250"/>
+    <path d="M300 380 C 230 400 180 390 150 350"/>
+    <path d="M300 380 C 370 400 420 390 450 350"/>
+    <!-- hojas -->
+    <ellipse cx="195" cy="100" rx="14" ry="6" transform="rotate(-30 195 100)"/>
+    <ellipse cx="405" cy="100" rx="14" ry="6" transform="rotate(30 405 100)"/>
+    <ellipse cx="158" cy="178" rx="16" ry="7" transform="rotate(-20 158 178)"/>
+    <ellipse cx="442" cy="178" rx="16" ry="7" transform="rotate(20 442 178)"/>
+    <ellipse cx="128" cy="248" rx="18" ry="8" transform="rotate(-15 128 248)"/>
+    <ellipse cx="472" cy="248" rx="18" ry="8" transform="rotate(15 472 248)"/>
+    <ellipse cx="148" cy="348" rx="16" ry="7" transform="rotate(-10 148 348)"/>
+    <ellipse cx="452" cy="348" rx="16" ry="7" transform="rotate(10 452 348)"/>
+  </g>
+  <text x="50%" y="94%" text-anchor="middle" fill="#c9a66b" font-family="Inter, sans-serif" font-size="14" letter-spacing="0.3em" opacity="0.7">FINELINE · BOTÁNICO</text>
+</svg>

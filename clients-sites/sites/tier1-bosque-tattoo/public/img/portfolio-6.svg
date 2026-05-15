@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">
+  <rect width="600" height="600" fill="#0b0b09"/>
+  <!-- serpiente blackwork -->
+  <g fill="none" stroke="#f2efe9" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M120 460 q 60 -80 160 -60 q 110 22 60 110 q -30 50 -90 30 q -50 -16 -30 -60 q 14 -30 50 -22 q 24 6 16 28"/>
+    <!-- cabeza -->
+    <path d="M104 462 q -10 -10 -2 -22 q 10 -14 30 -10 l 2 -8 l 12 14 l -14 6 q 6 6 -2 14 q -10 10 -26 6 z"/>
+    <!-- ojo -->
+    <circle cx="120" cy="450" r="2.5" fill="#c9a66b" stroke="#c9a66b"/>
+    <!-- lengua -->
+    <path d="M84 460 l -16 -2 l 18 -6 l -18 -4" stroke="#c9a66b"/>
+    <!-- escamas -->
+    <g stroke-opacity="0.6">
+      <path d="M180 410 q 8 -10 16 0" />
+      <path d="M210 392 q 8 -10 16 0" />
+      <path d="M240 380 q 8 -10 16 0" />
+      <path d="M270 376 q 8 -10 16 0" />
+      <path d="M300 380 q 8 -10 16 0" />
+    </g>
+  </g>
+  <!-- ramas verde musgo -->
+  <g fill="none" stroke="#7a8c5f" stroke-width="1" opacity="0.55">
+    <path d="M420 120 q -40 80 -10 160"/>
+    <path d="M438 140 q -20 -10 -30 -28"/>
+    <path d="M428 200 q -20 -2 -32 -16"/>
+    <path d="M414 264 q -22 4 -36 -8"/>
+  </g>
+  <text x="50%" y="94%" text-anchor="middle" fill="#c9a66b" font-family="Inter, sans-serif" font-size="14" letter-spacing="0.3em" opacity="0.7">BLACKWORK · SERPIENTE</text>
+</svg>
