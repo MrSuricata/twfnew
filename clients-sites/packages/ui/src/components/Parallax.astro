@@ -1,0 +1,86 @@
+---
+/**
+ * Parallax discreto. Usa scroll-driven animations cuando hay soporte; en el resto, transform on rAF.
+ * intensity: 0-1 (cuánto se desplaza relativo al scroll del viewport).
+ */
+interface Props {
+  intensity?: number;
+  direction?: 'up' | 'down';
+  class?: string;
+  as?: string;
+}
+const { intensity = 0.3, direction = 'up', class: className = '', as: Tag = 'div' } = Astro.props;
+---
+
+<Tag
+  class={`parallax ${className}`}
+  data-parallax
+  data-parallax-intensity={intensity}
+  data-parallax-direction={direction}
+>
+  <div class="parallax__inner"><slot /></div>
+</Tag>
+
+<style>
+  .parallax {
+    overflow: hidden;
+  }
+  .parallax__inner {
+    will-change: transform;
+    transform: translate3d(0, 0, 0);
+  }
+  @supports (animation-timeline: view()) {
+    .parallax__inner {
+      animation: parallax-shift linear both;
+      animation-timeline: view();
+      animation-range: cover 0% cover 100%;
+    }
+    .parallax[data-parallax-direction='down'] .parallax__inner {
+      animation-direction: reverse;
+    }
+    @keyframes parallax-shift {
+      from { transform: translate3d(0, calc(var(--parallax-amount, 60px) * -1), 0); }
+      to { transform: translate3d(0, var(--parallax-amount, 60px), 0); }
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .parallax__inner { animation: none !important; transform: none !important; }
+  }
+</style>
+
+<script is:inline>
+  (function () {
+    if (typeof window === 'undefined') return;
+    if (CSS.supports && CSS.supports('animation-timeline', 'view()')) return;
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const init = () => {
+      const items = Array.from(document.querySelectorAll('[data-parallax]:not([data-parallax-ready])'));
+      if (items.length === 0) return;
+      items.forEach((el) => el.setAttribute('data-parallax-ready', 'true'));
+      let frame = 0;
+      const update = () => {
+        items.forEach((el) => {
+          const intensity = parseFloat(el.getAttribute('data-parallax-intensity') || '0.3');
+          const direction = el.getAttribute('data-parallax-direction') === 'down' ? -1 : 1;
+          const rect = el.getBoundingClientRect();
+          const viewport = window.innerHeight || document.documentElement.clientHeight;
+          const center = rect.top + rect.height / 2 - viewport / 2;
+          const offset = -center * intensity * 0.15 * direction;
+          const inner = el.querySelector('.parallax__inner');
+          if (inner) inner.style.transform = `translate3d(0, ${offset.toFixed(1)}px, 0)`;
+        });
+        frame = 0;
+      };
+      const onScroll = () => {
+        if (frame) return;
+        frame = window.requestAnimationFrame(update);
+      };
+      window.addEventListener('scroll', onScroll, { passive: true });
+      window.addEventListener('resize', onScroll);
+      update();
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+    else init();
+    document.addEventListener('astro:page-load', init);
+  })();
+</script>

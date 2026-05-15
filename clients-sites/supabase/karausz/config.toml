@@ -1,0 +1,25 @@
+project_id = "karausz"
+
+[api]
+enabled = true
+port = 54421
+
+[db]
+port = 54422
+shadow_port = 54420
+major_version = 15
+
+[studio]
+enabled = true
+port = 54423
+
+[storage]
+enabled = true
+file_size_limit = "50MiB"
+
+[auth]
+enabled = true
+site_url = "http://localhost:4322"
+additional_redirect_urls = ["http://localhost:4322/admin"]
+jwt_expiry = 3600
+enable_signup = false

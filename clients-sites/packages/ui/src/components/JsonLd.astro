@@ -1,0 +1,12 @@
+---
+interface Props {
+  data: unknown;
+}
+const { data } = Astro.props;
+const json = JSON.stringify(data, (_k, v) => (v === undefined ? undefined : v)).replace(
+  /</g,
+  '\\u003c',
+);
+---
+
+<script is:inline type="application/ld+json" set:html={json}></script>

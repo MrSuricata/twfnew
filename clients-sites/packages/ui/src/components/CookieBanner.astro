@@ -1,0 +1,69 @@
+---
+interface Props {
+  policyHref?: string;
+  storageKey?: string;
+  acceptLabel?: string;
+  rejectLabel?: string;
+  text?: string;
+}
+const {
+  policyHref = '/legal/cookies',
+  storageKey = 'cookies-consent-v1',
+  acceptLabel = 'Aceptar',
+  rejectLabel = 'Sólo necesarias',
+  text = 'Usamos cookies para mejorar tu experiencia y analizar el tráfico de forma anónima.',
+} = Astro.props;
+---
+
+<div
+  id="cookie-banner"
+  class="fixed bottom-0 inset-x-0 z-[1600] hidden"
+  data-cookie-banner
+  data-storage-key={storageKey}
+  role="region"
+  aria-label="Consentimiento de cookies"
+>
+  <div class="mx-auto max-w-3xl m-3 sm:m-4 p-4 sm:p-5 rounded-xl bg-white shadow-2xl border border-black/5 flex flex-col sm:flex-row gap-4 sm:items-center justify-between">
+    <p class="text-sm">
+      {text} <a href={policyHref} class="underline">Más información</a>.
+    </p>
+    <div class="flex gap-2 shrink-0">
+      <button
+        type="button"
+        class="text-sm rounded-md px-3 py-2 border border-black/15 hover:bg-black/5"
+        data-cookie-reject
+      >{rejectLabel}</button>
+      <button
+        type="button"
+        class="text-sm rounded-md px-3 py-2 bg-[var(--color-primary)] text-[var(--color-primary-contrast,white)] hover:opacity-90"
+        data-cookie-accept
+      >{acceptLabel}</button>
+    </div>
+  </div>
+</div>
+
+<script is:inline>
+  (function () {
+    const init = () => {
+      const banner = document.querySelector('[data-cookie-banner]');
+      if (!banner) return;
+      const key = banner.dataset.storageKey || 'cookies-consent-v1';
+      try {
+        if (localStorage.getItem(key)) return;
+      } catch (_) { /* private mode */ }
+      banner.classList.remove('hidden');
+      const close = (value) => {
+        try { localStorage.setItem(key, value); } catch (_) {}
+        banner.classList.add('hidden');
+        if (value === 'accepted') {
+          document.dispatchEvent(new CustomEvent('cookies:accepted'));
+        }
+      };
+      banner.querySelector('[data-cookie-accept]')?.addEventListener('click', () => close('accepted'));
+      banner.querySelector('[data-cookie-reject]')?.addEventListener('click', () => close('rejected'));
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+    else init();
+    document.addEventListener('astro:page-load', init);
+  })();
+</script>

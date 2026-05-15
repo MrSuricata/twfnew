@@ -1,0 +1,25 @@
+project_id = "posada-al-sur"
+
+[api]
+enabled = true
+port = 54521
+
+[db]
+port = 54522
+shadow_port = 54520
+major_version = 15
+
+[studio]
+enabled = true
+port = 54523
+
+[storage]
+enabled = true
+file_size_limit = "50MiB"
+
+[auth]
+enabled = true
+site_url = "http://localhost:4323"
+additional_redirect_urls = ["http://localhost:4323/admin"]
+jwt_expiry = 3600
+enable_signup = false

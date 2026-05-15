@@ -1,0 +1,134 @@
+---
+interface Image {
+  src: string;
+  alt: string;
+  caption?: string;
+}
+interface Props {
+  images: Image[];
+  columns?: 2 | 3 | 4;
+  aspect?: 'square' | 'portrait' | 'landscape' | 'auto';
+  class?: string;
+  lightbox?: boolean;
+}
+const { images, columns = 3, aspect = 'square', class: className = '', lightbox = true } = Astro.props;
+const cols = { 2: 'sm:grid-cols-2', 3: 'sm:grid-cols-2 lg:grid-cols-3', 4: 'sm:grid-cols-2 lg:grid-cols-4' };
+const aspects = {
+  square: 'aspect-square',
+  portrait: 'aspect-[3/4]',
+  landscape: 'aspect-[4/3]',
+  auto: '',
+};
+---
+
+<div class={`grid grid-cols-1 gap-3 ${cols[columns]} ${className}`} data-gallery={lightbox ? 'true' : 'false'}>
+  {images.map((img, i) => (
+    <figure class={`relative overflow-hidden rounded-lg group ${aspects[aspect]}`}>
+      <button
+        type="button"
+        class="w-full h-full block focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
+        data-lightbox-trigger
+        data-src={img.src}
+        data-alt={img.alt}
+        data-caption={img.caption || ''}
+        data-index={i}
+        aria-label={`Ampliar imagen: ${img.alt}`}
+      >
+        <img
+          src={img.src}
+          alt={img.alt}
+          loading="lazy"
+          decoding="async"
+          class="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-105"
+        />
+      </button>
+      {img.caption && (
+        <figcaption class="absolute bottom-0 left-0 right-0 p-3 text-white text-sm bg-gradient-to-t from-black/70 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+          {img.caption}
+        </figcaption>
+      )}
+    </figure>
+  ))}
+</div>
+
+{lightbox && (
+  <div
+    class="fixed inset-0 z-[1400] hidden items-center justify-center bg-black/90 backdrop-blur-sm"
+    data-lightbox
+    role="dialog"
+    aria-modal="true"
+    aria-label="Vista ampliada"
+  >
+    <button
+      type="button"
+      class="absolute top-4 right-4 text-white w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center"
+      data-lightbox-close
+      aria-label="Cerrar"
+    >✕</button>
+    <button
+      type="button"
+      class="absolute left-4 top-1/2 -translate-y-1/2 text-white w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center"
+      data-lightbox-prev
+      aria-label="Anterior"
+    >←</button>
+    <button
+      type="button"
+      class="absolute right-4 top-1/2 -translate-y-1/2 text-white w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center"
+      data-lightbox-next
+      aria-label="Siguiente"
+    >→</button>
+    <figure class="max-w-5xl max-h-[90vh] p-6">
+      <img data-lightbox-img class="max-h-[80vh] w-auto mx-auto rounded-md" alt="" />
+      <figcaption data-lightbox-caption class="mt-3 text-center text-white/80 text-sm"></figcaption>
+    </figure>
+  </div>
+)}
+
+<script is:inline>
+  (function () {
+    const init = () => {
+      document.querySelectorAll('[data-gallery="true"]:not([data-gallery-ready])').forEach((gallery) => {
+        gallery.setAttribute('data-gallery-ready', 'true');
+        const triggers = Array.from(gallery.querySelectorAll('[data-lightbox-trigger]'));
+        const root = gallery.parentElement || document.body;
+        const lb = root.querySelector('[data-lightbox]') || document.querySelector('[data-lightbox]');
+        if (!lb) return;
+        const img = lb.querySelector('[data-lightbox-img]');
+        const cap = lb.querySelector('[data-lightbox-caption]');
+        let current = 0;
+        const show = (i) => {
+          current = (i + triggers.length) % triggers.length;
+          const t = triggers[current];
+          img.src = t.dataset.src;
+          img.alt = t.dataset.alt || '';
+          cap.textContent = t.dataset.caption || '';
+        };
+        const open = (i) => {
+          show(i);
+          lb.classList.remove('hidden');
+          lb.classList.add('flex');
+          document.body.style.overflow = 'hidden';
+        };
+        const close = () => {
+          lb.classList.add('hidden');
+          lb.classList.remove('flex');
+          document.body.style.overflow = '';
+        };
+        triggers.forEach((t, i) => t.addEventListener('click', () => open(i)));
+        lb.querySelector('[data-lightbox-close]')?.addEventListener('click', close);
+        lb.querySelector('[data-lightbox-prev]')?.addEventListener('click', () => show(current - 1));
+        lb.querySelector('[data-lightbox-next]')?.addEventListener('click', () => show(current + 1));
+        lb.addEventListener('click', (e) => { if (e.target === lb) close(); });
+        document.addEventListener('keydown', (e) => {
+          if (lb.classList.contains('hidden')) return;
+          if (e.key === 'Escape') close();
+          if (e.key === 'ArrowLeft') show(current - 1);
+          if (e.key === 'ArrowRight') show(current + 1);
+        });
+      });
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+    else init();
+    document.addEventListener('astro:page-load', init);
+  })();
+</script>

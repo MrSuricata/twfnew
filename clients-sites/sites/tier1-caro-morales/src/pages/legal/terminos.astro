@@ -1,0 +1,25 @@
+---
+
+export const prerender = true;
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import { Container, Section, Footer } from '@twf/ui';
+---
+
+<BaseLayout title="Términos y condiciones · Caro Morales" description="Condiciones de uso del sitio." pathname="/legal/terminos">
+  <Section spacing="lg">
+    <Container size="md">
+      <h1 class="font-display text-4xl mb-4">Términos y condiciones</h1>
+      <p class="opacity-70 mb-8">Última actualización: 2026.</p>
+      <article class="prose max-w-none space-y-4">
+        <p>El acceso y uso de este sitio implica la aceptación de estos términos. Si no estás de acuerdo, te pedimos que no continúes navegando.</p>
+        <h2 class="font-display text-2xl pt-4">Contenido</h2>
+        <p>Todos los contenidos del sitio (textos, fotos, logos) son propiedad del establecimiento o de sus respectivos titulares y se publican con autorización.</p>
+        <h2 class="font-display text-2xl pt-4">Turnos</h2>
+        <p>La reserva por WhatsApp queda confirmada cuando recibís nuestra respuesta. Por cortesía, avisanos si necesitás cancelar con al menos 4 horas de anticipación.</p>
+        <h2 class="font-display text-2xl pt-4">Responsabilidad</h2>
+        <p>El sitio se ofrece "tal cual está". Hacemos lo posible por mantener la información actualizada pero no garantizamos disponibilidad continua.</p>
+      </article>
+    </Container>
+  </Section>
+  <Footer brand="Caro Morales" />
+</BaseLayout>

@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#e9d8c4"/>
+      <stop offset="60%" stop-color="#c58a9e"/>
+      <stop offset="100%" stop-color="#3d2b2f"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="0.3" cy="0.3" r="0.7">
+      <stop offset="0%" stop-color="#faf6f2" stop-opacity="0.7"/>
+      <stop offset="100%" stop-color="#faf6f2" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="900" fill="url(#bg)"/>
+  <circle cx="400" cy="300" r="400" fill="url(#halo)"/>
+  <g opacity="0.85" fill="none" stroke="#faf6f2" stroke-width="3">
+    <circle cx="900" cy="300" r="120"/>
+    <circle cx="900" cy="300" r="200" stroke-opacity="0.4"/>
+    <path d="M880 220 Q900 180 920 220 T960 250" stroke-width="2"/>
+    <path d="M820 460 L820 700 M780 460 L780 700 M860 460 L860 700" stroke-width="6" stroke-linecap="round"/>
+    <rect x="760" y="430" width="120" height="30" rx="6"/>
+    <rect x="740" y="700" width="160" height="60" rx="6"/>
+  </g>
+  <text x="80" y="820" font-family="Cormorant Garamond, serif" font-size="32" fill="#faf6f2" opacity="0.7" letter-spacing="0.04em">CORDÓN · MONTEVIDEO</text>
+</svg>

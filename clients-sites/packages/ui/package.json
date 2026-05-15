@@ -1,0 +1,17 @@
+{
+  "name": "@twf/ui",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./components/*": "./src/components/*",
+    "./components/*.astro": "./src/components/*.astro"
+  },
+  "peerDependencies": {
+    "astro": "^5.0.0"
+  },
+  "dependencies": {
+    "@twf/lib": "workspace:*"
+  }
+}

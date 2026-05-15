@@ -1,0 +1,94 @@
+---
+interface Props {
+  eyebrow?: string;
+  title: string;
+  subtitle?: string;
+  imageUrl?: string;
+  imageAlt?: string;
+  variant?: 'image-bg' | 'split' | 'minimal';
+  align?: 'left' | 'center';
+  class?: string;
+}
+const {
+  eyebrow,
+  title,
+  subtitle,
+  imageUrl,
+  imageAlt = '',
+  variant = 'image-bg',
+  align = 'left',
+  class: className = '',
+} = Astro.props;
+
+const alignClass = align === 'center' ? 'text-center items-center' : 'text-left items-start';
+---
+
+{
+  variant === 'image-bg' && (
+    <header class={`relative isolate overflow-hidden ${className}`}>
+      {imageUrl && (
+        <img
+          src={imageUrl}
+          alt={imageAlt}
+          class="absolute inset-0 h-full w-full object-cover -z-10"
+          loading="eager"
+          decoding="async"
+        />
+      )}
+      <div class="absolute inset-0 -z-10 bg-gradient-to-b from-black/30 via-black/40 to-black/60" />
+      <div class={`mx-auto max-w-6xl px-5 sm:px-6 lg:px-8 py-24 sm:py-32 lg:py-40 flex flex-col gap-5 ${alignClass}`}>
+        {eyebrow && (
+          <p class="text-sm uppercase tracking-widest text-white/80">{eyebrow}</p>
+        )}
+        <h1 class="font-display text-4xl sm:text-5xl lg:text-6xl leading-tight text-white max-w-3xl">
+          {title}
+        </h1>
+        {subtitle && (
+          <p class="text-lg sm:text-xl text-white/90 max-w-2xl">{subtitle}</p>
+        )}
+        <div class="mt-4 flex flex-wrap gap-3"><slot /></div>
+      </div>
+    </header>
+  )
+}
+
+{
+  variant === 'split' && (
+    <header class={`bg-[var(--color-neutral-bg)] text-[var(--color-neutral-text)] ${className}`}>
+      <div class="mx-auto max-w-7xl px-5 sm:px-6 lg:px-8 py-16 sm:py-20 grid lg:grid-cols-2 gap-10 items-center">
+        <div class={`flex flex-col gap-5 ${alignClass}`}>
+          {eyebrow && (
+            <p class="text-sm uppercase tracking-widest text-[var(--color-primary)]">{eyebrow}</p>
+          )}
+          <h1 class="font-display text-4xl sm:text-5xl lg:text-6xl leading-tight">{title}</h1>
+          {subtitle && <p class="text-lg sm:text-xl opacity-80 max-w-xl">{subtitle}</p>}
+          <div class="mt-4 flex flex-wrap gap-3"><slot /></div>
+        </div>
+        {imageUrl && (
+          <img
+            src={imageUrl}
+            alt={imageAlt}
+            class="w-full h-full max-h-[560px] object-cover rounded-2xl shadow-lg"
+            loading="eager"
+            decoding="async"
+          />
+        )}
+      </div>
+    </header>
+  )
+}
+
+{
+  variant === 'minimal' && (
+    <header class={`bg-[var(--color-neutral-bg)] text-[var(--color-neutral-text)] ${className}`}>
+      <div class={`mx-auto max-w-4xl px-5 sm:px-6 lg:px-8 py-20 sm:py-28 flex flex-col gap-4 ${alignClass}`}>
+        {eyebrow && (
+          <p class="text-sm uppercase tracking-widest text-[var(--color-primary)]">{eyebrow}</p>
+        )}
+        <h1 class="font-display text-4xl sm:text-5xl lg:text-6xl leading-tight">{title}</h1>
+        {subtitle && <p class="text-lg sm:text-xl opacity-80">{subtitle}</p>}
+        <div class="mt-4 flex flex-wrap gap-3"><slot /></div>
+      </div>
+    </header>
+  )
+}

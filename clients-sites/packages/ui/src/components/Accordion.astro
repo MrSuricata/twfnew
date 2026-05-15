@@ -1,0 +1,25 @@
+---
+interface Item {
+  question: string;
+  answer: string;
+}
+interface Props {
+  items: Item[];
+  class?: string;
+}
+const { items, class: className = '' } = Astro.props;
+---
+
+<div class={`divide-y divide-black/10 ${className}`}>
+  {items.map((item, i) => (
+    <details class="group py-4">
+      <summary class="flex justify-between items-start gap-4 cursor-pointer list-none">
+        <span class="font-medium text-lg">{item.question}</span>
+        <span class="text-2xl leading-none mt-0.5 transition-transform duration-200 group-open:rotate-45 select-none" aria-hidden="true">+</span>
+      </summary>
+      <div class="pt-3 pr-8 text-[var(--color-neutral-text)]/80 leading-relaxed">
+        {item.answer}
+      </div>
+    </details>
+  ))}
+</div>

@@ -1,0 +1,30 @@
+{
+  "name": "twf-clients-sites",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Monorepo de 9 sitios web para negocios de Montevideo (Ciudad Vieja / Centro / Cordón).",
+  "license": "UNLICENSED",
+  "scripts": {
+    "build": "pnpm -r --filter \"./sites/*\" build",
+    "dev": "pnpm -r --parallel --filter \"./sites/*\" dev",
+    "check": "pnpm -r --filter \"./sites/*\" check",
+    "typecheck": "pnpm -r --filter \"./sites/*\" typecheck",
+    "lint": "eslint . --ext .ts,.tsx,.astro --max-warnings 0 || true",
+    "format": "prettier --write \"**/*.{ts,tsx,astro,md,json,yaml,yml}\"",
+    "clean": "pnpm -r exec rm -rf dist .astro node_modules/.astro"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.2",
+    "prettier": "^3.4.2",
+    "prettier-plugin-astro": "^0.14.1"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@10.33.0",
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild", "sharp"]
+  }
+}

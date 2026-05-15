@@ -1,0 +1,15 @@
+{
+  "name": "@twf/config",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./index.ts",
+  "exports": {
+    ".": "./index.ts",
+    "./tailwind": "./tailwind.preset.ts",
+    "./tsconfig": "./tsconfig.base.json"
+  },
+  "dependencies": {
+    "tailwindcss": "^4.0.0"
+  }
+}

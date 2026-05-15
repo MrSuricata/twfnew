@@ -1,0 +1,220 @@
+---
+export const prerender = true;
+
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import {
+  Nav,
+  Footer,
+  Hero,
+  Section,
+  Container,
+  Button,
+  Card,
+  MapEmbed,
+  WhatsAppFloat,
+  JsonLd,
+  Reveal,
+  ScrollProgress,
+  Marquee,
+  Tilt,
+  Magnetic,
+  ContactForm,
+  Gallery,
+} from '@twf/ui';
+import { healthAndBeauty } from '@twf/lib/schema';
+import { buildWhatsAppLink } from '@twf/lib/whatsapp';
+
+const WHATSAPP = import.meta.env.PUBLIC_WHATSAPP_NUMBER || '59898911302';
+const WHATSAPP_MSG = import.meta.env.PUBLIC_WHATSAPP_DEFAULT_MSG || 'Hola Caro!';
+const SITE_URL = import.meta.env.PUBLIC_SITE_URL || 'https://caromorales.uy';
+const waLink = buildWhatsAppLink({ number: WHATSAPP, message: WHATSAPP_MSG });
+
+const services = [
+  { name: 'Corte de pelo (mujer)', priceLabel: 'desde $750', desc: 'Lavado, corte y peinado.' },
+  { name: 'Corte (hombre)', priceLabel: 'desde $550', desc: 'Tijera o máquina, terminación a navaja.' },
+  { name: 'Barba', priceLabel: 'desde $450', desc: 'Diseño + toalla caliente + balm.' },
+  { name: 'Color y reflejos', priceLabel: 'desde $2.500', desc: 'Balayage, mechas, californianas.' },
+  { name: 'Alisado', priceLabel: 'consultar', desc: 'Brasilero, japonés o progresiva.' },
+  { name: 'Peinado de evento', priceLabel: 'desde $1.800', desc: 'Recogidos, ondas, semirecogidos.' },
+];
+
+const galleryImages = [
+  { src: '/img/work-1.svg', alt: 'Corte y color en tonos cobrizos sobre cabello largo' },
+  { src: '/img/work-2.svg', alt: 'Fade clásico con barba prolija' },
+  { src: '/img/work-3.svg', alt: 'Balayage rubio sobre castaño' },
+  { src: '/img/work-4.svg', alt: 'Corte bob asimétrico' },
+  { src: '/img/work-5.svg', alt: 'Barba con diseño y línea marcada' },
+  { src: '/img/work-6.svg', alt: 'Ondas suaves y peinado de evento' },
+];
+
+const schema = healthAndBeauty({
+  name: 'Centro Estético Carolina Morales',
+  url: SITE_URL,
+  description: 'Peluquería y barbería unisex en el barrio Cordón, Montevideo.',
+  telephone: '+59898911302',
+  image: `${SITE_URL}/og.svg`,
+  address: {
+    streetAddress: 'Coronel Brandzen 2011',
+    addressLocality: 'Montevideo',
+    addressRegion: 'Cordón',
+    addressCountry: 'UY',
+  },
+  priceRange: '$$',
+  openingHours: [
+    { dayOfWeek: ['Tuesday', 'Wednesday', 'Thursday', 'Friday'], opens: '09:00', closes: '20:00' },
+    { dayOfWeek: 'Saturday', opens: '09:00', closes: '17:00' },
+  ],
+  sameAs: ['https://www.instagram.com/caromoralespeluybarberia/'],
+});
+
+const navLinks = [
+  { href: '#servicios', label: 'Servicios' },
+  { href: '#galeria', label: 'Galería' },
+  { href: '#horarios', label: 'Horarios' },
+  { href: '#contacto', label: 'Contacto' },
+];
+---
+
+<BaseLayout
+  title="Caro Morales · Peluquería y Barbería en Cordón, Montevideo"
+  description="Cortes, color, alisados y barbería en Cordón. Atendemos hombres y mujeres con productos profesionales. Reservá tu turno por WhatsApp."
+>
+  <ScrollProgress />
+  <Nav
+    brand="Caro Morales"
+    links={navLinks}
+    cta={{ href: waLink, label: 'Reservar turno' }}
+  />
+
+  <main id="main">
+    <!-- HERO -->
+    <Hero
+      eyebrow="Cordón, Montevideo"
+      title="Tu peluquería y barbería sobre Brandzen."
+      subtitle="Cortes, color, alisados y barbería con técnicas actualizadas y producto profesional. Mujeres y hombres."
+      variant="split"
+      imageUrl="/img/hero.svg"
+      imageAlt="Interior cálido del salón con sillón de barbero"
+    >
+      <Magnetic strength={0.18}>
+        <Button as="a" href={waLink} variant="primary" size="lg">Reservar por WhatsApp</Button>
+      </Magnetic>
+      <Button as="a" href="#servicios" variant="outline" size="lg">Ver servicios</Button>
+    </Hero>
+
+    <!-- MARQUEE -->
+    <Marquee
+      items={['Cortes', 'Color', 'Balayage', 'Barbería', 'Alisados', 'Peinados', 'Brandzen 2011']}
+      speed={45}
+      variant="outline"
+    />
+
+    <!-- SERVICIOS -->
+    <Section id="servicios" spacing="lg">
+      <Container>
+        <Reveal effect="fade-up">
+          <p class="text-sm uppercase tracking-widest text-[var(--color-primary)] mb-2">Servicios</p>
+          <h2 class="font-display text-3xl sm:text-4xl lg:text-5xl mb-4 max-w-2xl">
+            Todo lo que necesita tu pelo y tu barba.
+          </h2>
+          <p class="max-w-2xl text-lg opacity-80 mb-10">
+            Trabajamos con balayage, mechas californianas, fade, barba con toalla caliente y técnicas
+            actualizadas. Promos los martes y miércoles — consultanos.
+          </p>
+        </Reveal>
+        <Reveal effect="fade-up" stagger>
+          <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {services.map((s) => (
+              <Tilt intensity={4}>
+                <Card variant="elevated" padding="md" class="h-full">
+                  <h3 class="font-display text-xl mb-1">{s.name}</h3>
+                  <p class="text-sm opacity-70 mb-3">{s.desc}</p>
+                  <p class="font-medium text-[var(--color-primary)]">{s.priceLabel}</p>
+                </Card>
+              </Tilt>
+            ))}
+          </div>
+        </Reveal>
+      </Container>
+    </Section>
+
+    <!-- GALERIA -->
+    <Section id="galeria" spacing="lg" background="muted">
+      <Container>
+        <Reveal effect="fade-up">
+          <p class="text-sm uppercase tracking-widest text-[var(--color-primary)] mb-2">Trabajos</p>
+          <h2 class="font-display text-3xl sm:text-4xl lg:text-5xl mb-10 max-w-2xl">
+            Lo último que pasó por la silla.
+          </h2>
+        </Reveal>
+        <Reveal effect="fade-up">
+          <Gallery images={galleryImages} columns={3} aspect="square" />
+        </Reveal>
+      </Container>
+    </Section>
+
+    <!-- HORARIOS + UBICACION -->
+    <Section id="horarios" spacing="lg">
+      <Container>
+        <div class="grid lg:grid-cols-2 gap-10">
+          <Reveal effect="fade-right">
+            <p class="text-sm uppercase tracking-widest text-[var(--color-primary)] mb-2">Visitanos</p>
+            <h2 class="font-display text-3xl sm:text-4xl mb-6">Coronel Brandzen 2011, Cordón.</h2>
+            <dl class="space-y-3 mb-8">
+              <div class="flex justify-between border-b border-black/10 pb-2">
+                <dt class="font-medium">Martes a viernes</dt>
+                <dd class="opacity-80">09:00 – 20:00</dd>
+              </div>
+              <div class="flex justify-between border-b border-black/10 pb-2">
+                <dt class="font-medium">Sábados</dt>
+                <dd class="opacity-80">09:00 – 17:00</dd>
+              </div>
+              <div class="flex justify-between border-b border-black/10 pb-2">
+                <dt class="font-medium">Domingos y lunes</dt>
+                <dd class="opacity-80">Cerrado</dd>
+              </div>
+            </dl>
+            <p class="text-sm opacity-70 mb-6">
+              A una cuadra de 18 de Julio, fácil llegada en bondi o caminando.
+            </p>
+            <Button as="a" href={waLink} variant="primary" size="lg">Reservar turno</Button>
+          </Reveal>
+          <Reveal effect="fade-left">
+            <MapEmbed query="Coronel Brandzen 2011, Montevideo, Uruguay" height={420} />
+          </Reveal>
+        </div>
+      </Container>
+    </Section>
+
+    <!-- CONTACTO -->
+    <Section id="contacto" spacing="lg" background="accent">
+      <Container size="md">
+        <Reveal effect="fade-up">
+          <p class="text-sm uppercase tracking-widest text-[var(--color-primary)] mb-2">Contacto</p>
+          <h2 class="font-display text-3xl sm:text-4xl mb-2">¿Preguntas o coordinás un evento?</h2>
+          <p class="opacity-80 mb-8">Escribinos por WhatsApp o por este formulario y respondemos en el día.</p>
+        </Reveal>
+        <Reveal effect="fade-up">
+          <ContactForm withPhone />
+        </Reveal>
+      </Container>
+    </Section>
+  </main>
+
+  <Footer
+    brand="Caro Morales"
+    tagline="Peluquería y barbería en el corazón de Cordón."
+    address="Coronel Brandzen 2011, Cordón, Montevideo"
+    phone="+598 98 911 302"
+    email="caro@caromorales.uy"
+    social={[{ href: 'https://www.instagram.com/caromoralespeluybarberia/', label: 'Instagram' }]}
+    legal={[
+      { href: '/legal/privacidad', label: 'Privacidad' },
+      { href: '/legal/terminos', label: 'Términos' },
+      { href: '/legal/cookies', label: 'Cookies' },
+    ]}
+  />
+
+  <WhatsAppFloat number={WHATSAPP} message={WHATSAPP_MSG} />
+  <JsonLd data={schema} />
+</BaseLayout>
