@@ -62,7 +62,207 @@ importers:
         specifier: ^5.0.0
         version: 5.18.1(@types/node@24.12.4)(jiti@2.7.0)(lightningcss@1.32.0)(rollup@4.60.4)(typescript@5.9.3)(yaml@2.9.0)
 
+  sites/tier1-bosque-tattoo:
+    dependencies:
+      '@astrojs/node':
+        specifier: ^9.0.0
+        version: 9.5.5(astro@5.18.1(@types/node@24.12.4)(jiti@2.7.0)(lightningcss@1.32.0)(rollup@4.60.4)(typescript@5.9.3)(yaml@2.9.0))
+      '@astrojs/sitemap':
+        specifier: ^3.2.1
+        version: 3.7.2
+      '@tailwindcss/vite':
+        specifier: ^4.0.0
+        version: 4.3.0(vite@6.4.2(@types/node@24.12.4)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))
+      '@twf/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@twf/content':
+        specifier: workspace:*
+        version: link:../../packages/content
+      '@twf/lib':
+        specifier: workspace:*
+        version: link:../../packages/lib
+      '@twf/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+      astro:
+        specifier: ^5.1.0
+        version: 5.18.1(@types/node@24.12.4)(jiti@2.7.0)(lightningcss@1.32.0)(rollup@4.60.4)(typescript@5.9.3)(yaml@2.9.0)
+      tailwindcss:
+        specifier: ^4.0.0
+        version: 4.3.0
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+    devDependencies:
+      '@astrojs/check':
+        specifier: ^0.9.4
+        version: 0.9.9(prettier-plugin-astro@0.14.1)(prettier@3.8.3)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
   sites/tier1-caro-morales:
+    dependencies:
+      '@astrojs/node':
+        specifier: ^9.0.0
+        version: 9.5.5(astro@5.18.1(@types/node@24.12.4)(jiti@2.7.0)(lightningcss@1.32.0)(rollup@4.60.4)(typescript@5.9.3)(yaml@2.9.0))
+      '@astrojs/sitemap':
+        specifier: ^3.2.1
+        version: 3.7.2
+      '@tailwindcss/vite':
+        specifier: ^4.0.0
+        version: 4.3.0(vite@6.4.2(@types/node@24.12.4)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))
+      '@twf/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@twf/content':
+        specifier: workspace:*
+        version: link:../../packages/content
+      '@twf/lib':
+        specifier: workspace:*
+        version: link:../../packages/lib
+      '@twf/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+      astro:
+        specifier: ^5.1.0
+        version: 5.18.1(@types/node@24.12.4)(jiti@2.7.0)(lightningcss@1.32.0)(rollup@4.60.4)(typescript@5.9.3)(yaml@2.9.0)
+      tailwindcss:
+        specifier: ^4.0.0
+        version: 4.3.0
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+    devDependencies:
+      '@astrojs/check':
+        specifier: ^0.9.4
+        version: 0.9.9(prettier-plugin-astro@0.14.1)(prettier@3.8.3)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
+  sites/tier1-diana-saravia:
+    dependencies:
+      '@astrojs/node':
+        specifier: ^9.0.0
+        version: 9.5.5(astro@5.18.1(@types/node@24.12.4)(jiti@2.7.0)(lightningcss@1.32.0)(rollup@4.60.4)(typescript@5.9.3)(yaml@2.9.0))
+      '@astrojs/sitemap':
+        specifier: ^3.2.1
+        version: 3.7.2
+      '@tailwindcss/vite':
+        specifier: ^4.0.0
+        version: 4.3.0(vite@6.4.2(@types/node@24.12.4)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))
+      '@twf/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@twf/content':
+        specifier: workspace:*
+        version: link:../../packages/content
+      '@twf/lib':
+        specifier: workspace:*
+        version: link:../../packages/lib
+      '@twf/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+      astro:
+        specifier: ^5.1.0
+        version: 5.18.1(@types/node@24.12.4)(jiti@2.7.0)(lightningcss@1.32.0)(rollup@4.60.4)(typescript@5.9.3)(yaml@2.9.0)
+      tailwindcss:
+        specifier: ^4.0.0
+        version: 4.3.0
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+    devDependencies:
+      '@astrojs/check':
+        specifier: ^0.9.4
+        version: 0.9.9(prettier-plugin-astro@0.14.1)(prettier@3.8.3)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
+  sites/tier2-babilonia-libros:
+    dependencies:
+      '@astrojs/node':
+        specifier: ^9.0.0
+        version: 9.5.5(astro@5.18.1(@types/node@24.12.4)(jiti@2.7.0)(lightningcss@1.32.0)(rollup@4.60.4)(typescript@5.9.3)(yaml@2.9.0))
+      '@astrojs/sitemap':
+        specifier: ^3.2.1
+        version: 3.7.2
+      '@tailwindcss/vite':
+        specifier: ^4.0.0
+        version: 4.3.0(vite@6.4.2(@types/node@24.12.4)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))
+      '@twf/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@twf/content':
+        specifier: workspace:*
+        version: link:../../packages/content
+      '@twf/lib':
+        specifier: workspace:*
+        version: link:../../packages/lib
+      '@twf/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+      astro:
+        specifier: ^5.1.0
+        version: 5.18.1(@types/node@24.12.4)(jiti@2.7.0)(lightningcss@1.32.0)(rollup@4.60.4)(typescript@5.9.3)(yaml@2.9.0)
+      tailwindcss:
+        specifier: ^4.0.0
+        version: 4.3.0
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+    devDependencies:
+      '@astrojs/check':
+        specifier: ^0.9.4
+        version: 0.9.9(prettier-plugin-astro@0.14.1)(prettier@3.8.3)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
+  sites/tier2-bar-hispano:
+    dependencies:
+      '@astrojs/node':
+        specifier: ^9.0.0
+        version: 9.5.5(astro@5.18.1(@types/node@24.12.4)(jiti@2.7.0)(lightningcss@1.32.0)(rollup@4.60.4)(typescript@5.9.3)(yaml@2.9.0))
+      '@astrojs/sitemap':
+        specifier: ^3.2.1
+        version: 3.7.2
+      '@tailwindcss/vite':
+        specifier: ^4.0.0
+        version: 4.3.0(vite@6.4.2(@types/node@24.12.4)(jiti@2.7.0)(lightningcss@1.32.0)(yaml@2.9.0))
+      '@twf/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@twf/content':
+        specifier: workspace:*
+        version: link:../../packages/content
+      '@twf/lib':
+        specifier: workspace:*
+        version: link:../../packages/lib
+      '@twf/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+      astro:
+        specifier: ^5.1.0
+        version: 5.18.1(@types/node@24.12.4)(jiti@2.7.0)(lightningcss@1.32.0)(rollup@4.60.4)(typescript@5.9.3)(yaml@2.9.0)
+      tailwindcss:
+        specifier: ^4.0.0
+        version: 4.3.0
+      zod:
+        specifier: ^3.24.1
+        version: 3.25.76
+    devDependencies:
+      '@astrojs/check':
+        specifier: ^0.9.4
+        version: 0.9.9(prettier-plugin-astro@0.14.1)(prettier@3.8.3)(typescript@5.9.3)
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
+  sites/tier2-bar-tasende:
     dependencies:
       '@astrojs/node':
         specifier: ^9.0.0
