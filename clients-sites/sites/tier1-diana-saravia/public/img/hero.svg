@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 900" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="wall" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#f4eee5"/>
+    </linearGradient>
+    <linearGradient id="canvasA" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#d4a574"/>
+      <stop offset="50%" stop-color="#8b7355"/>
+      <stop offset="100%" stop-color="#1a1a1a"/>
+    </linearGradient>
+    <linearGradient id="canvasB" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0%" stop-color="#f4eee5"/>
+      <stop offset="100%" stop-color="#d4a574"/>
+    </linearGradient>
+    <radialGradient id="light" cx="0.65" cy="0.2" r="0.7">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <!-- Pared blanca galería -->
+  <rect width="1200" height="900" fill="url(#wall)"/>
+  <rect width="1200" height="900" fill="url(#light)"/>
+  <!-- Piso -->
+  <rect x="0" y="720" width="1200" height="180" fill="#1a1a1a" opacity="0.08"/>
+  <line x1="0" y1="720" x2="1200" y2="720" stroke="#1a1a1a" stroke-opacity="0.18" stroke-width="1"/>
+  <!-- Obra principal -->
+  <g transform="translate(180 140)">
+    <rect x="-12" y="-12" width="464" height="584" fill="#ffffff"/>
+    <rect x="0" y="0" width="440" height="560" fill="url(#canvasA)"/>
+    <!-- mancha abstracta -->
+    <path d="M70 380 C 120 220, 260 180, 340 270 S 380 480, 270 510 S 80 500, 70 380 Z" fill="#1a1a1a" opacity="0.55"/>
+    <circle cx="310" cy="180" r="60" fill="#d4a574" opacity="0.85"/>
+    <rect x="40" y="40" width="80" height="8" fill="#ffffff" opacity="0.7"/>
+  </g>
+  <!-- Obra secundaria -->
+  <g transform="translate(720 220)">
+    <rect x="-10" y="-10" width="340" height="420" fill="#ffffff"/>
+    <rect x="0" y="0" width="320" height="400" fill="url(#canvasB)"/>
+    <rect x="40" y="60" width="240" height="60" fill="#1a1a1a" opacity="0.7"/>
+    <rect x="40" y="160" width="160" height="40" fill="#8b7355" opacity="0.85"/>
+    <rect x="40" y="220" width="200" height="20" fill="#1a1a1a" opacity="0.4"/>
+    <circle cx="240" cy="310" r="50" fill="#1a1a1a" opacity="0.7"/>
+  </g>
+  <!-- Pedestal mínimo -->
+  <rect x="540" y="640" width="100" height="80" fill="#1a1a1a" opacity="0.85"/>
+  <text x="80" y="850" font-family="Playfair Display, serif" font-size="22" fill="#1a1a1a" opacity="0.55" letter-spacing="0.08em">CIUDAD VIEJA · MONTEVIDEO</text>
+</svg>
