@@ -125,6 +125,79 @@ CREATE TABLE IF NOT EXISTS origin_photos (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 11.A Trucks (consolidated truck builder)
+CREATE TABLE IF NOT EXISTS trucks (
+  id TEXT PRIMARY KEY,
+  code TEXT UNIQUE NOT NULL,                  -- C430, C431, ...
+  status TEXT NOT NULL DEFAULT 'planning',    -- planning | loaded | in_transit | delivered
+  is_sider BOOLEAN NOT NULL DEFAULT false,
+  transport TEXT DEFAULT '',                  -- Olaverry, PCS, Wildengold, Transcal...
+  driver TEXT DEFAULT '',
+  plate TEXT DEFAULT '',
+  load_date DATE,
+  departure_date DATE,
+  arrival_date DATE,
+  notes TEXT DEFAULT '',
+  created_at_ts BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
+  updated_at_ts BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 11.B Truck loads (refs inside each truck)
+CREATE TABLE IF NOT EXISTS truck_loads (
+  id TEXT PRIMARY KEY,
+  truck_id TEXT NOT NULL REFERENCES trucks(id) ON DELETE CASCADE,
+  source_type TEXT NOT NULL DEFAULT 'fcl',    -- fcl | lcl | air
+  source_ref TEXT NOT NULL,                   -- A7611, LCL-0042, AIR-0001
+  client TEXT DEFAULT '',
+  fiscal TEXT DEFAULT '',
+  kg NUMERIC(12,2) DEFAULT 0,
+  m3 NUMERIC(10,3) DEFAULT 0,
+  pkgs INTEGER DEFAULT 0,
+  description TEXT DEFAULT '',
+  mvd_arrival DATE,
+  desconsol_date DATE,
+  overrides JSONB DEFAULT '{}'::JSONB,        -- which fields were manually edited (vs synced)
+  position INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 11.C LCL / Air shipments (refs not in shipments planilla)
+CREATE TABLE IF NOT EXISTS lcl_air_shipments (
+  id TEXT PRIMARY KEY,
+  ref TEXT UNIQUE NOT NULL,                   -- LCL-0001, AIR-0001
+  modality TEXT NOT NULL DEFAULT 'lcl',       -- lcl | air
+  client TEXT DEFAULT '',
+  origin TEXT DEFAULT '',
+  mbl_hbl TEXT DEFAULT '',
+  eta_mvd DATE,
+  desconsol_date DATE,
+  pkgs INTEGER DEFAULT 0,
+  kg NUMERIC(12,2) DEFAULT 0,
+  m3 NUMERIC(10,3) DEFAULT 0,
+  fiscal TEXT DEFAULT '',
+  description TEXT DEFAULT '',
+  wood BOOLEAN NOT NULL DEFAULT false,
+  status TEXT NOT NULL DEFAULT 'en_origen',   -- en_origen | en_transito | arribado | desconsolidado | despachado
+  notes TEXT DEFAULT '',
+  created_at_ts BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 11.D Truck code counter (singleton per prefix)
+CREATE TABLE IF NOT EXISTS truck_counter (
+  prefix TEXT PRIMARY KEY,
+  last_number INTEGER NOT NULL DEFAULT 0
+);
+-- Bootstrap C-counter at 429 so the first generated code is C430
+INSERT INTO truck_counter (prefix, last_number) VALUES ('C', 429)
+  ON CONFLICT (prefix) DO NOTHING;
+-- Bootstrap LCL / AIR counters
+INSERT INTO truck_counter (prefix, last_number) VALUES ('LCL', 0)
+  ON CONFLICT (prefix) DO NOTHING;
+INSERT INTO truck_counter (prefix, last_number) VALUES ('AIR', 0)
+  ON CONFLICT (prefix) DO NOTHING;
+
 -- 11. Notification tasks (new — missing from previous schema)
 CREATE TABLE IF NOT EXISTS notification_tasks (
   id TEXT PRIMARY KEY,
@@ -159,6 +232,12 @@ CREATE INDEX IF NOT EXISTS idx_clients_email ON clients(email);
 CREATE INDEX IF NOT EXISTS idx_partner_email ON partner_users(email);
 CREATE INDEX IF NOT EXISTS idx_origin_photos_shipment_ref ON origin_photos(shipment_ref);
 CREATE INDEX IF NOT EXISTS idx_notif_tasks_due_status ON notification_tasks(due_date, status);
+CREATE INDEX IF NOT EXISTS idx_trucks_status ON trucks(status);
+CREATE INDEX IF NOT EXISTS idx_trucks_code ON trucks(code);
+CREATE INDEX IF NOT EXISTS idx_truck_loads_truck_id ON truck_loads(truck_id);
+CREATE INDEX IF NOT EXISTS idx_truck_loads_source_ref ON truck_loads(source_ref);
+CREATE INDEX IF NOT EXISTS idx_lcl_air_ref ON lcl_air_shipments(ref);
+CREATE INDEX IF NOT EXISTS idx_lcl_air_status ON lcl_air_shipments(status);
 CREATE INDEX IF NOT EXISTS idx_otp_expires ON otp_codes(expires_at);
 CREATE INDEX IF NOT EXISTS idx_rate_limits_blocked ON rate_limits(blocked_until);
 
@@ -174,6 +253,10 @@ ALTER TABLE otp_codes          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE rate_limits        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE origin_photos      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE notification_tasks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE trucks             ENABLE ROW LEVEL SECURITY;
+ALTER TABLE truck_loads        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE lcl_air_shipments  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE truck_counter      ENABLE ROW LEVEL SECURITY;
 
 -- ─── RLS policies: deny anon, allow service_role ───
 -- anon role (what a leaked ANON key would have): deny everything
@@ -184,7 +267,8 @@ DECLARE t TEXT;
 BEGIN
   FOR t IN SELECT unnest(ARRAY[
     'quotes','documents','reports','settings','shipments_cache','clients',
-    'partner_users','otp_codes','rate_limits','origin_photos','notification_tasks'
+    'partner_users','otp_codes','rate_limits','origin_photos','notification_tasks',
+    'trucks','truck_loads','lcl_air_shipments','truck_counter'
   ]) LOOP
     EXECUTE format('DROP POLICY IF EXISTS "deny_anon" ON %I', t);
     EXECUTE format('CREATE POLICY "deny_anon" ON %I FOR ALL TO anon USING (false) WITH CHECK (false)', t);

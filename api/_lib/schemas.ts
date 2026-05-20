@@ -186,6 +186,83 @@ export const NotificationTaskPatchSchema = z.object({
   notes: z.string().max(2000).optional(),
 })
 
+/** Truck row (consolidated truck) */
+export const TruckRowSchema = z.object({
+  id: z.string().min(1).max(100),
+  code: z.string().min(1).max(40).optional(),
+  status: z.enum(['planning', 'loaded', 'in_transit', 'delivered']).optional(),
+  isSider: z.boolean().optional(),
+  is_sider: z.boolean().optional(),
+  transport: z.string().max(200).optional().default(''),
+  driver: z.string().max(200).optional().default(''),
+  plate: z.string().max(50).optional().default(''),
+  loadDate: z.string().max(20).optional().nullable(),
+  load_date: z.string().max(20).optional().nullable(),
+  departureDate: z.string().max(20).optional().nullable(),
+  departure_date: z.string().max(20).optional().nullable(),
+  arrivalDate: z.string().max(20).optional().nullable(),
+  arrival_date: z.string().max(20).optional().nullable(),
+  notes: z.string().max(4000).optional().default(''),
+  createdAt: z.number().int().optional(),
+  created_at_ts: z.number().int().optional(),
+  updatedAt: z.number().int().optional(),
+  updated_at_ts: z.number().int().optional(),
+})
+
+/** Truck load row (a ref inside a truck) */
+export const TruckLoadRowSchema = z.object({
+  id: z.string().min(1).max(100),
+  truckId: z.string().min(1).max(100).optional(),
+  truck_id: z.string().min(1).max(100).optional(),
+  sourceType: z.enum(['fcl', 'lcl', 'air']).optional(),
+  source_type: z.enum(['fcl', 'lcl', 'air']).optional(),
+  sourceRef: z.string().min(1).max(100).optional(),
+  source_ref: z.string().min(1).max(100).optional(),
+  client: z.string().max(200).optional().default(''),
+  fiscal: z.string().max(200).optional().default(''),
+  kg: z.number().nonnegative().optional().default(0),
+  m3: z.number().nonnegative().optional().default(0),
+  pkgs: z.number().int().nonnegative().optional().default(0),
+  description: z.string().max(1000).optional().default(''),
+  mvdArrival: z.string().max(20).optional().nullable(),
+  mvd_arrival: z.string().max(20).optional().nullable(),
+  desconsolDate: z.string().max(20).optional().nullable(),
+  desconsol_date: z.string().max(20).optional().nullable(),
+  overrides: z.record(z.boolean()).optional(),
+  position: z.number().int().optional().default(0),
+}).refine(l => l.truckId || l.truck_id, { message: 'truckId required' })
+  .refine(l => l.sourceRef || l.source_ref, { message: 'sourceRef required' })
+
+/** LCL / Air shipment row */
+export const LclAirRowSchema = z.object({
+  id: z.string().min(1).max(100),
+  ref: z.string().min(1).max(100),
+  modality: z.enum(['lcl', 'air']),
+  client: z.string().max(200).optional().default(''),
+  origin: z.string().max(200).optional().default(''),
+  mblHbl: z.string().max(200).optional().default(''),
+  mbl_hbl: z.string().max(200).optional(),
+  etaMvd: z.string().max(20).optional().nullable(),
+  eta_mvd: z.string().max(20).optional().nullable(),
+  desconsolDate: z.string().max(20).optional().nullable(),
+  desconsol_date: z.string().max(20).optional().nullable(),
+  pkgs: z.number().int().nonnegative().optional().default(0),
+  kg: z.number().nonnegative().optional().default(0),
+  m3: z.number().nonnegative().optional().default(0),
+  fiscal: z.string().max(200).optional().default(''),
+  description: z.string().max(1000).optional().default(''),
+  wood: z.boolean().optional().default(false),
+  status: z.enum(['en_origen', 'en_transito', 'arribado', 'desconsolidado', 'despachado']).optional(),
+  notes: z.string().max(2000).optional().default(''),
+  createdAt: z.number().int().optional(),
+  created_at_ts: z.number().int().optional(),
+})
+
+/** Counter increment request */
+export const TruckCounterRequestSchema = z.object({
+  prefix: z.enum(['C', 'LCL', 'AIR']),
+})
+
 /** Admin login body */
 export const AdminLoginSchema = z.object({
   username: z.string().min(1).max(200),

@@ -17,6 +17,10 @@ import {
   OriginPhotoRowSchema,
   NotificationTaskRowSchema,
   NotificationTaskPatchSchema,
+  TruckRowSchema,
+  TruckLoadRowSchema,
+  LclAirRowSchema,
+  TruckCounterRequestSchema,
 } from '../_lib/schemas.js'
 import { z } from 'zod'
 
@@ -79,6 +83,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return handleShipmentsCache(req, res, db)
       case 'partner-users':
         return handlePartnerUsers(req, res, db)
+      case 'trucks':
+        return handleTrucks(req, res, db)
+      case 'truck-loads':
+        return handleTruckLoads(req, res, db)
+      case 'lcl-air':
+        return handleLclAir(req, res, db)
+      case 'truck-counter':
+        return handleTruckCounter(req, res, db)
       default:
         return res.status(404).json({ error: `Unknown entity: ${entity}` })
     }
@@ -778,4 +790,262 @@ async function handlePartnerUsers(req: VercelRequest, res: VercelResponse, db: a
   }
 
   return res.status(405).json({ error: 'Method not allowed' })
+}
+
+// ── Trucks ─────────────────────────────────────────────────────────
+
+function mapTruckRowToApi(t: any) {
+  return {
+    id: t.id,
+    code: t.code,
+    status: t.status,
+    isSider: t.is_sider,
+    transport: t.transport || '',
+    driver: t.driver || '',
+    plate: t.plate || '',
+    loadDate: t.load_date || '',
+    departureDate: t.departure_date || '',
+    arrivalDate: t.arrival_date || '',
+    notes: t.notes || '',
+    createdAt: t.created_at_ts,
+    updatedAt: t.updated_at_ts,
+  }
+}
+
+async function handleTrucks(req: VercelRequest, res: VercelResponse, db: any) {
+  if (req.method === 'GET') {
+    const id = req.query.id as string
+    if (id) {
+      const { data, error } = await db.from('trucks').select('*').eq('id', id).single()
+      if (error && error.code !== 'PGRST116') throw error
+      if (!data) return res.status(404).json({ error: 'Truck not found' })
+      return res.status(200).json({ truck: mapTruckRowToApi(data) })
+    }
+    const { data, error } = await db
+      .from('trucks')
+      .select('*')
+      .order('updated_at_ts', { ascending: false })
+      .limit(1000)
+    if (error) throw error
+    return res.status(200).json({ trucks: (data || []).map(mapTruckRowToApi) })
+  }
+
+  if (req.method === 'POST') {
+    const v = validateBatch(TruckRowSchema, req.body)
+    if (!v.ok) return res.status(400).json({ error: v.error })
+    const now = Date.now()
+    const rows = v.items.map((t) => {
+      const code = t.code || ''
+      const isSider = t.isSider ?? t.is_sider ?? false
+      return {
+        id: t.id,
+        code,
+        status: t.status || 'planning',
+        is_sider: isSider,
+        transport: t.transport || '',
+        driver: t.driver || '',
+        plate: t.plate || '',
+        load_date: t.loadDate || t.load_date || null,
+        departure_date: t.departureDate || t.departure_date || null,
+        arrival_date: t.arrivalDate || t.arrival_date || null,
+        notes: t.notes || '',
+        created_at_ts: t.createdAt || t.created_at_ts || now,
+        updated_at_ts: now,
+      }
+    })
+    const { error } = await db.from('trucks').upsert(rows, { onConflict: 'id' })
+    if (error) throw error
+    return res.status(200).json({ saved: true, count: rows.length })
+  }
+
+  if (req.method === 'DELETE') {
+    const id = req.query.id as string
+    if (!id) return res.status(400).json({ error: 'id required' })
+    // truck_loads have ON DELETE CASCADE
+    const { error } = await db.from('trucks').delete().eq('id', id)
+    if (error) throw error
+    return res.status(200).json({ deleted: true })
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' })
+}
+
+// ── Truck Loads ────────────────────────────────────────────────────
+
+function mapTruckLoadRowToApi(l: any) {
+  return {
+    id: l.id,
+    truckId: l.truck_id,
+    sourceType: l.source_type,
+    sourceRef: l.source_ref,
+    client: l.client || '',
+    fiscal: l.fiscal || '',
+    kg: Number(l.kg) || 0,
+    m3: Number(l.m3) || 0,
+    pkgs: Number(l.pkgs) || 0,
+    description: l.description || '',
+    mvdArrival: l.mvd_arrival || '',
+    desconsolDate: l.desconsol_date || '',
+    overrides: l.overrides || {},
+    position: l.position || 0,
+  }
+}
+
+async function handleTruckLoads(req: VercelRequest, res: VercelResponse, db: any) {
+  if (req.method === 'GET') {
+    const truckId = req.query.truckId as string
+    let query = db.from('truck_loads').select('*').order('position', { ascending: true }).limit(5000)
+    if (truckId) query = query.eq('truck_id', truckId)
+    const { data, error } = await query
+    if (error) throw error
+    return res.status(200).json({ loads: (data || []).map(mapTruckLoadRowToApi) })
+  }
+
+  if (req.method === 'POST') {
+    const v = validateBatch(TruckLoadRowSchema, req.body)
+    if (!v.ok) return res.status(400).json({ error: v.error })
+    const rows = v.items.map((l) => ({
+      id: l.id,
+      truck_id: l.truckId || l.truck_id,
+      source_type: l.sourceType || l.source_type || 'fcl',
+      source_ref: l.sourceRef || l.source_ref,
+      client: l.client || '',
+      fiscal: l.fiscal || '',
+      kg: l.kg ?? 0,
+      m3: l.m3 ?? 0,
+      pkgs: l.pkgs ?? 0,
+      description: l.description || '',
+      mvd_arrival: l.mvdArrival || l.mvd_arrival || null,
+      desconsol_date: l.desconsolDate || l.desconsol_date || null,
+      overrides: l.overrides || {},
+      position: l.position ?? 0,
+    }))
+    const { error } = await db.from('truck_loads').upsert(rows, { onConflict: 'id' })
+    if (error) throw error
+    return res.status(200).json({ saved: true, count: rows.length })
+  }
+
+  if (req.method === 'DELETE') {
+    const id = req.query.id as string
+    const truckId = req.query.truckId as string
+    if (id) {
+      const { error } = await db.from('truck_loads').delete().eq('id', id)
+      if (error) throw error
+      return res.status(200).json({ deleted: true })
+    }
+    if (truckId) {
+      const { error } = await db.from('truck_loads').delete().eq('truck_id', truckId)
+      if (error) throw error
+      return res.status(200).json({ deleted: true })
+    }
+    return res.status(400).json({ error: 'id or truckId required' })
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' })
+}
+
+// ── LCL / Air shipments ────────────────────────────────────────────
+
+function mapLclAirRowToApi(s: any) {
+  return {
+    id: s.id,
+    ref: s.ref,
+    modality: s.modality,
+    client: s.client || '',
+    origin: s.origin || '',
+    mblHbl: s.mbl_hbl || '',
+    etaMvd: s.eta_mvd || '',
+    desconsolDate: s.desconsol_date || '',
+    pkgs: Number(s.pkgs) || 0,
+    kg: Number(s.kg) || 0,
+    m3: Number(s.m3) || 0,
+    fiscal: s.fiscal || '',
+    description: s.description || '',
+    wood: !!s.wood,
+    status: s.status || 'en_origen',
+    notes: s.notes || '',
+    createdAt: s.created_at_ts,
+  }
+}
+
+async function handleLclAir(req: VercelRequest, res: VercelResponse, db: any) {
+  if (req.method === 'GET') {
+    const { data, error } = await db
+      .from('lcl_air_shipments')
+      .select('*')
+      .order('created_at_ts', { ascending: false })
+      .limit(2000)
+    if (error) throw error
+    return res.status(200).json({ shipments: (data || []).map(mapLclAirRowToApi) })
+  }
+
+  if (req.method === 'POST') {
+    const v = validateBatch(LclAirRowSchema, req.body)
+    if (!v.ok) return res.status(400).json({ error: v.error })
+    const now = Date.now()
+    const rows = v.items.map((s) => ({
+      id: s.id,
+      ref: s.ref,
+      modality: s.modality,
+      client: s.client || '',
+      origin: s.origin || '',
+      mbl_hbl: s.mblHbl || s.mbl_hbl || '',
+      eta_mvd: s.etaMvd || s.eta_mvd || null,
+      desconsol_date: s.desconsolDate || s.desconsol_date || null,
+      pkgs: s.pkgs ?? 0,
+      kg: s.kg ?? 0,
+      m3: s.m3 ?? 0,
+      fiscal: s.fiscal || '',
+      description: s.description || '',
+      wood: !!s.wood,
+      status: s.status || 'en_origen',
+      notes: s.notes || '',
+      created_at_ts: s.createdAt || s.created_at_ts || now,
+    }))
+    const { error } = await db.from('lcl_air_shipments').upsert(rows, { onConflict: 'id' })
+    if (error) throw error
+    return res.status(200).json({ saved: true, count: rows.length })
+  }
+
+  if (req.method === 'DELETE') {
+    const id = req.query.id as string
+    if (!id) return res.status(400).json({ error: 'id required' })
+    const { error } = await db.from('lcl_air_shipments').delete().eq('id', id)
+    if (error) throw error
+    return res.status(200).json({ deleted: true })
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' })
+}
+
+// ── Truck counter (atomic increment via RPC fallback) ──────────────
+// POST /api/data/truck-counter  body { prefix: 'C' | 'LCL' | 'AIR' }
+// Returns { code: 'C430' } — also persists the new last_number.
+
+async function handleTruckCounter(req: VercelRequest, res: VercelResponse, db: any) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+  const v = validate(TruckCounterRequestSchema, req.body)
+  if (!v.ok) return res.status(400).json({ error: v.error })
+  const { prefix } = v.data
+
+  // Read current value, increment, write back. Service-role bypasses RLS.
+  // For low write contention (1 admin) this is fine without a transaction.
+  const { data: current, error: readErr } = await db
+    .from('truck_counter')
+    .select('last_number')
+    .eq('prefix', prefix)
+    .single()
+  if (readErr && readErr.code !== 'PGRST116') throw readErr
+
+  const next = ((current?.last_number as number | undefined) ?? 0) + 1
+  const { error: upErr } = await db
+    .from('truck_counter')
+    .upsert({ prefix, last_number: next }, { onConflict: 'prefix' })
+  if (upErr) throw upErr
+
+  // Format code: C430, LCL-0001, AIR-0001
+  const code = prefix === 'C'
+    ? `C${next}`
+    : `${prefix}-${String(next).padStart(4, '0')}`
+  return res.status(200).json({ code, number: next, prefix })
 }

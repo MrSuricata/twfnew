@@ -7,6 +7,7 @@
 import { authFetch } from './authClient'
 import type { QuoteFormData, ClientAccount, ShipmentDocument, OperativeReport, OriginPhoto } from './quotationTypes'
 import type { ParsedShipment } from './shipmentTypes'
+import type { Truck, TruckLoad, LclAirShipment } from './truckTypes'
 import { matchesPattern } from './clientMatching'
 
 // ── Shipments (cached from Google Sheets sync) ──
@@ -315,6 +316,120 @@ export async function saveSetting(key: string, value: unknown): Promise<void> {
   }
 }
 
+// ── Trucks (consolidated truck builder) ──
+
+export async function fetchTrucks(): Promise<Truck[]> {
+  const res = await authFetch('/api/data/trucks')
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const data = await res.json()
+  return data.trucks || []
+}
+
+export async function saveTrucks(trucks: Truck[]): Promise<void> {
+  const res = await authFetch('/api/data/trucks', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(trucks),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
+}
+
+export async function deleteTruck(id: string): Promise<void> {
+  const res = await authFetch(`/api/data/trucks?id=${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
+}
+
+// ── Truck loads ──
+
+export async function fetchTruckLoads(truckId?: string): Promise<TruckLoad[]> {
+  const url = truckId
+    ? `/api/data/truck-loads?truckId=${encodeURIComponent(truckId)}`
+    : '/api/data/truck-loads'
+  const res = await authFetch(url)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const data = await res.json()
+  return data.loads || []
+}
+
+export async function saveTruckLoads(loads: TruckLoad[]): Promise<void> {
+  if (loads.length === 0) return
+  const res = await authFetch('/api/data/truck-loads', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(loads),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
+}
+
+export async function deleteTruckLoad(id: string): Promise<void> {
+  const res = await authFetch(`/api/data/truck-loads?id=${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
+}
+
+// ── LCL / Air shipments ──
+
+export async function fetchLclAir(): Promise<LclAirShipment[]> {
+  const res = await authFetch('/api/data/lcl-air')
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const data = await res.json()
+  return data.shipments || []
+}
+
+export async function saveLclAir(shipments: LclAirShipment[]): Promise<void> {
+  if (shipments.length === 0) return
+  const res = await authFetch('/api/data/lcl-air', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(shipments),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
+}
+
+export async function deleteLclAir(id: string): Promise<void> {
+  const res = await authFetch(`/api/data/lcl-air?id=${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
+}
+
+/** Atomically increment and return the next code for the given prefix.
+ *  C → "C430"; LCL → "LCL-0001"; AIR → "AIR-0001". */
+export async function nextTruckCode(prefix: 'C' | 'LCL' | 'AIR'): Promise<string> {
+  const res = await authFetch('/api/data/truck-counter', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prefix }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
+  const data = await res.json()
+  return data.code as string
+}
+
 // ── Bulk Load (load all admin data in parallel) ──
 
 export interface AdminData {
@@ -324,17 +439,33 @@ export interface AdminData {
   reports: OperativeReport[]
   originPhotos: OriginPhoto[]
   clients: ClientAccount[]
+  trucks: Truck[]
+  truckLoads: TruckLoad[]
+  lclAir: LclAirShipment[]
   syncedAt: string | null
 }
 
+/** Resolve to [] if the tables don't exist yet (deployed before the migration). */
+async function softFetch<T>(fn: () => Promise<T[]>, label: string): Promise<T[]> {
+  try {
+    return await fn()
+  } catch (err) {
+    console.warn(`[loadAdminData] ${label} unavailable:`, err)
+    return []
+  }
+}
+
 export async function loadAdminData(): Promise<AdminData> {
-  const [shipmentsRes, quotes, documents, reports, originPhotos, clients] = await Promise.all([
+  const [shipmentsRes, quotes, documents, reports, originPhotos, clients, trucks, truckLoads, lclAir] = await Promise.all([
     fetchShipmentsFromDB(),
     fetchQuotes(),
     fetchDocuments(),
     fetchReports(),
     fetchOriginPhotos(),
     fetchClients(),
+    softFetch(fetchTrucks, 'trucks'),
+    softFetch(() => fetchTruckLoads(), 'truck-loads'),
+    softFetch(fetchLclAir, 'lcl-air'),
   ])
 
   return {
@@ -344,6 +475,9 @@ export async function loadAdminData(): Promise<AdminData> {
     reports,
     originPhotos,
     clients,
+    trucks,
+    truckLoads,
+    lclAir,
     syncedAt: shipmentsRes.syncedAt,
   }
 }

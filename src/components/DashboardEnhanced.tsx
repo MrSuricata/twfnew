@@ -14,6 +14,7 @@ import {
   Lightning,
   Envelope,
   ArrowsClockwise,
+  Truck as TruckIcon,
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import { authFetch } from '@/lib/authClient'
@@ -29,8 +30,10 @@ import ClientManager from './ClientManager'
 import PartnerManager from './PartnerManager'
 import QuotesManagement from './QuotesManagement'
 import CommandPalette from './CommandPalette'
+import TrucksManagement from './trucks/TrucksManagement'
 import { ParsedShipment } from '@/lib/shipmentTypes'
 import { ClientAccount, ShipmentDocument, OperativeReport, OriginPhoto, QuoteFormData } from '@/lib/quotationTypes'
+import { Truck, TruckLoad, LclAirShipment } from '@/lib/truckTypes'
 import Breadcrumbs from './Breadcrumbs'
 
 interface DashboardEnhancedProps {
@@ -41,6 +44,9 @@ interface DashboardEnhancedProps {
   reports?: OperativeReport[]
   originPhotos?: OriginPhoto[]
   quotes?: QuoteFormData[]
+  trucks?: Truck[]
+  truckLoads?: TruckLoad[]
+  lclAir?: LclAirShipment[]
   dbSyncError?: string | null
   onUpdateShipments?: (shipments: ParsedShipment[]) => void
   onUpdateClients?: (clients: ClientAccount[]) => void
@@ -48,11 +54,17 @@ interface DashboardEnhancedProps {
   onUpdateReports?: (reports: OperativeReport[]) => void
   onUpdateOriginPhotos?: (photos: OriginPhoto[]) => void
   onUpdateQuotes?: (quotes: QuoteFormData[]) => void
+  onUpdateTrucks?: (trucks: Truck[]) => void
+  onDeleteTruck?: (id: string) => void
+  onUpdateTruckLoads?: (loads: TruckLoad[]) => void
+  onDeleteTruckLoad?: (id: string) => void
+  onUpdateLclAir?: (shipments: LclAirShipment[]) => void
+  onDeleteLclAir?: (id: string) => void
 }
 
 const ONE_DAY_MS = 86_400_000
 
-export default function DashboardEnhanced({ onLogout, clients = [], shipments = [], documents = [], reports = [], originPhotos = [], quotes = [], dbSyncError = null, onUpdateShipments, onUpdateClients, onUpdateDocuments, onUpdateReports, onUpdateOriginPhotos, onUpdateQuotes }: DashboardEnhancedProps) {
+export default function DashboardEnhanced({ onLogout, clients = [], shipments = [], documents = [], reports = [], originPhotos = [], quotes = [], trucks = [], truckLoads = [], lclAir = [], dbSyncError = null, onUpdateShipments, onUpdateClients, onUpdateDocuments, onUpdateReports, onUpdateOriginPhotos, onUpdateQuotes, onUpdateTrucks, onDeleteTruck, onUpdateTruckLoads, onDeleteTruckLoad, onUpdateLclAir, onDeleteLclAir }: DashboardEnhancedProps) {
   const [activeTab, setActiveTab] = useState('hoy')
   const [isRefreshing, setIsRefreshing] = useState(false)
 
@@ -101,6 +113,7 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
       clients: 'Clientes',
       partners: 'Partners',
       quotes: 'Cotizaciones',
+      trucks: 'Camiones',
     }
 
     return [{ label: breadcrumbMap[activeTab] || 'Dashboard' }]
@@ -193,6 +206,15 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
               <Package size={16} className="mr-1.5" />
               <span className="hidden sm:inline">Cargas</span>
             </TabsTrigger>
+            <TabsTrigger value="trucks" className="tab-underline">
+              <TruckIcon size={16} className="mr-1.5" weight="fill" />
+              <span className="hidden sm:inline">Camiones</span>
+              {trucks.filter(t => t.status === 'planning' || t.status === 'loaded').length > 0 && (
+                <span className="ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold rounded-full text-white shrink-0 bg-primary">
+                  {trucks.filter(t => t.status === 'planning' || t.status === 'loaded').length}
+                </span>
+              )}
+            </TabsTrigger>
             <TabsTrigger value="quotes" className="tab-underline">
               <Envelope size={16} className="mr-1.5" />
               <span className="hidden sm:inline">Cotizaciones</span>
@@ -256,6 +278,21 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
               onUpdateOriginPhotos={(updated) => {
                 if (onUpdateOriginPhotos) onUpdateOriginPhotos(updated)
               }}
+            />
+          </TabsContent>
+
+          <TabsContent value="trucks">
+            <TrucksManagement
+              trucks={trucks}
+              truckLoads={truckLoads}
+              lclAir={lclAir}
+              shipments={shipments || []}
+              onUpdateTrucks={(t) => { if (onUpdateTrucks) onUpdateTrucks(t) }}
+              onDeleteTruck={(id) => { if (onDeleteTruck) onDeleteTruck(id) }}
+              onUpdateTruckLoads={(l) => { if (onUpdateTruckLoads) onUpdateTruckLoads(l) }}
+              onDeleteTruckLoad={(id) => { if (onDeleteTruckLoad) onDeleteTruckLoad(id) }}
+              onUpdateLclAir={(s) => { if (onUpdateLclAir) onUpdateLclAir(s) }}
+              onDeleteLclAir={(id) => { if (onDeleteLclAir) onDeleteLclAir(id) }}
             />
           </TabsContent>
 

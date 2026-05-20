@@ -3,10 +3,11 @@ import { Toaster, toast } from 'sonner'
 import { Language, getStoredLanguage, setStoredLanguage } from '@/lib/i18n'
 import { QuoteFormData, ClientAccount, ShipmentDocument, OperativeReport, OriginPhoto } from '@/lib/quotationTypes'
 import { ParsedShipment } from '@/lib/shipmentTypes'
+import { Truck, TruckLoad, LclAirShipment } from '@/lib/truckTypes'
 import { getDemoShipments } from '@/lib/demoShipments'
 import { filterShipments } from '@/lib/sheetsSync'
 import { verifySession, clearAuth, authFetch } from '@/lib/authClient'
-import { loadAdminData, saveQuotes, saveDocuments, saveReports, saveReportWithFile, deleteReport, saveClients, saveOriginPhoto, deleteOriginPhoto } from '@/lib/dataClient'
+import { loadAdminData, saveQuotes, saveDocuments, saveReports, saveReportWithFile, deleteReport, saveClients, saveOriginPhoto, deleteOriginPhoto, saveTrucks, saveTruckLoads, saveLclAir, deleteTruck as apiDeleteTruck, deleteTruckLoad as apiDeleteTruckLoad, deleteLclAir as apiDeleteLclAir } from '@/lib/dataClient'
 
 import Login from './components/Login'
 import ClientLogin from './components/ClientLogin'
@@ -79,6 +80,9 @@ function App() {
   const [reports, setReports] = useState<OperativeReport[]>(() => loadFromStorage('twf-reports', []))
   const [shipments, setShipments] = useState<ParsedShipment[]>(() => filterShipments(loadFromStorage('twf-shipments', [])))
   const [originPhotos, setOriginPhotos] = useState<OriginPhoto[]>(() => loadFromStorage('twf-origin-photos', []))
+  const [trucks, setTrucks] = useState<Truck[]>(() => loadFromStorage('twf-trucks', []))
+  const [truckLoads, setTruckLoads] = useState<TruckLoad[]>(() => loadFromStorage('twf-truck-loads', []))
+  const [lclAir, setLclAir] = useState<LclAirShipment[]>(() => loadFromStorage('twf-lcl-air', []))
 
   // Track whether fresh data has loaded from Supabase
   const [isDataLoading, setIsDataLoading] = useState(false)
@@ -95,6 +99,9 @@ function App() {
   const pendingDocumentsWritesRef = useRef(0)
   const pendingReportsWritesRef = useRef(0)
   const pendingQuotesWritesRef = useRef(0)
+  const pendingTrucksWritesRef = useRef(0)
+  const pendingTruckLoadsWritesRef = useRef(0)
+  const pendingLclAirWritesRef = useRef(0)
 
   // ── Load data from Supabase when admin logs in ──
   const loadDataFromDB = useCallback(async () => {
@@ -137,6 +144,21 @@ function App() {
       if (data.originPhotos.length >= 0) {
         setOriginPhotos(data.originPhotos)
         saveToStorage('twf-origin-photos', data.originPhotos)
+      }
+
+      if (pendingTrucksWritesRef.current === 0) {
+        setTrucks(data.trucks)
+        saveToStorage('twf-trucks', data.trucks)
+      }
+
+      if (pendingTruckLoadsWritesRef.current === 0) {
+        setTruckLoads(data.truckLoads)
+        saveToStorage('twf-truck-loads', data.truckLoads)
+      }
+
+      if (pendingLclAirWritesRef.current === 0) {
+        setLclAir(data.lclAir)
+        saveToStorage('twf-lcl-air', data.lclAir)
       }
 
       setDataFresh(true)
@@ -341,6 +363,91 @@ function App() {
     // This handler is for local state sync only
   }
 
+  const handleUpdateTrucks = (updated: Truck[]) => {
+    setTrucks(updated)
+    saveToStorage('twf-trucks', updated)
+    if (isAdminLoggedIn && updated.length > 0) {
+      pendingTrucksWritesRef.current += 1
+      saveTrucks(updated)
+        .catch(err => {
+          console.warn('[DB] Failed to save trucks:', err)
+          toast.warning('Error al sincronizar camiones', { duration: 4000 })
+        })
+        .finally(() => {
+          pendingTrucksWritesRef.current = Math.max(0, pendingTrucksWritesRef.current - 1)
+        })
+    }
+  }
+
+  const handleDeleteTruck = async (id: string) => {
+    const next = trucks.filter(t => t.id !== id)
+    const nextLoads = truckLoads.filter(l => l.truckId !== id)
+    setTrucks(next)
+    setTruckLoads(nextLoads)
+    saveToStorage('twf-trucks', next)
+    saveToStorage('twf-truck-loads', nextLoads)
+    if (isAdminLoggedIn) {
+      try {
+        await apiDeleteTruck(id)
+      } catch (err) {
+        console.warn('[DB] Failed to delete truck:', err)
+        toast.warning('Error al borrar camión en la base de datos', { duration: 4000 })
+      }
+    }
+  }
+
+  const handleUpdateTruckLoads = (updated: TruckLoad[]) => {
+    setTruckLoads(updated)
+    saveToStorage('twf-truck-loads', updated)
+    if (isAdminLoggedIn && updated.length > 0) {
+      pendingTruckLoadsWritesRef.current += 1
+      saveTruckLoads(updated)
+        .catch(err => console.warn('[DB] Failed to save truck loads:', err))
+        .finally(() => {
+          pendingTruckLoadsWritesRef.current = Math.max(0, pendingTruckLoadsWritesRef.current - 1)
+        })
+    }
+  }
+
+  const handleDeleteTruckLoad = async (id: string) => {
+    const next = truckLoads.filter(l => l.id !== id)
+    setTruckLoads(next)
+    saveToStorage('twf-truck-loads', next)
+    if (isAdminLoggedIn) {
+      try {
+        await apiDeleteTruckLoad(id)
+      } catch (err) {
+        console.warn('[DB] Failed to delete truck load:', err)
+      }
+    }
+  }
+
+  const handleUpdateLclAir = (updated: LclAirShipment[]) => {
+    setLclAir(updated)
+    saveToStorage('twf-lcl-air', updated)
+    if (isAdminLoggedIn && updated.length > 0) {
+      pendingLclAirWritesRef.current += 1
+      saveLclAir(updated)
+        .catch(err => console.warn('[DB] Failed to save LCL/Air:', err))
+        .finally(() => {
+          pendingLclAirWritesRef.current = Math.max(0, pendingLclAirWritesRef.current - 1)
+        })
+    }
+  }
+
+  const handleDeleteLclAir = async (id: string) => {
+    const next = lclAir.filter(l => l.id !== id)
+    setLclAir(next)
+    saveToStorage('twf-lcl-air', next)
+    if (isAdminLoggedIn) {
+      try {
+        await apiDeleteLclAir(id)
+      } catch (err) {
+        console.warn('[DB] Failed to delete LCL/Air:', err)
+      }
+    }
+  }
+
   const handleUpdateQuotes = (updated: QuoteFormData[]) => {
     setQuotes(updated)
     saveToStorage('twf-quotes', updated)
@@ -509,6 +616,9 @@ function App() {
           reports={reports}
           originPhotos={originPhotos}
           quotes={quotes}
+          trucks={trucks}
+          truckLoads={truckLoads}
+          lclAir={lclAir}
           dbSyncError={dbSyncError}
           onUpdateShipments={handleUpdateShipments}
           onUpdateClients={handleUpdateClients}
@@ -516,6 +626,12 @@ function App() {
           onUpdateReports={handleUpdateReports}
           onUpdateOriginPhotos={handleUpdateOriginPhotos}
           onUpdateQuotes={handleUpdateQuotes}
+          onUpdateTrucks={handleUpdateTrucks}
+          onDeleteTruck={handleDeleteTruck}
+          onUpdateTruckLoads={handleUpdateTruckLoads}
+          onDeleteTruckLoad={handleDeleteTruckLoad}
+          onUpdateLclAir={handleUpdateLclAir}
+          onDeleteLclAir={handleDeleteLclAir}
         />
       </>
     )

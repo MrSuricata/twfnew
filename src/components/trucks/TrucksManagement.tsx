@@ -1,0 +1,89 @@
+import { useState } from 'react'
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
+import { Truck as TruckIcon, Boat } from '@phosphor-icons/react'
+import type { Truck, TruckLoad, LclAirShipment } from '@/lib/truckTypes'
+import type { ParsedShipment } from '@/lib/shipmentTypes'
+import TrucksList from './TrucksList'
+import TruckBuilder from './TruckBuilder'
+import LclAirManager from './LclAirManager'
+
+interface TrucksManagementProps {
+  trucks: Truck[]
+  truckLoads: TruckLoad[]
+  lclAir: LclAirShipment[]
+  shipments: ParsedShipment[]
+  onUpdateTrucks: (trucks: Truck[]) => void
+  onDeleteTruck: (id: string) => void
+  onUpdateTruckLoads: (loads: TruckLoad[]) => void
+  onDeleteTruckLoad: (id: string) => void
+  onUpdateLclAir: (shipments: LclAirShipment[]) => void
+  onDeleteLclAir: (id: string) => void
+}
+
+export default function TrucksManagement(props: TrucksManagementProps) {
+  const [subTab, setSubTab] = useState<'trucks' | 'lcl-air'>('trucks')
+  const [selectedTruckId, setSelectedTruckId] = useState<string | null>(null)
+
+  const selectedTruck = selectedTruckId
+    ? props.trucks.find(t => t.id === selectedTruckId) || null
+    : null
+
+  // ── Builder view (a truck is selected) ──
+  if (selectedTruck) {
+    return (
+      <TruckBuilder
+        truck={selectedTruck}
+        trucks={props.trucks}
+        truckLoads={props.truckLoads}
+        lclAir={props.lclAir}
+        shipments={props.shipments}
+        onBack={() => setSelectedTruckId(null)}
+        onUpdateTrucks={props.onUpdateTrucks}
+        onUpdateTruckLoads={props.onUpdateTruckLoads}
+        onDeleteTruckLoad={props.onDeleteTruckLoad}
+      />
+    )
+  }
+
+  // ── List view (sub-tabs) ──
+  return (
+    <div className="space-y-4">
+      <Tabs value={subTab} onValueChange={v => setSubTab(v as 'trucks' | 'lcl-air')} className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="trucks" className="gap-1.5">
+            <TruckIcon size={16} weight="fill" />
+            Camiones
+            {props.trucks.length > 0 && (
+              <span className="ml-1 text-xs text-muted-foreground">({props.trucks.length})</span>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="lcl-air" className="gap-1.5">
+            <Boat size={16} weight="fill" />
+            LCL / Aéreos
+            {props.lclAir.length > 0 && (
+              <span className="ml-1 text-xs text-muted-foreground">({props.lclAir.length})</span>
+            )}
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="trucks">
+          <TrucksList
+            trucks={props.trucks}
+            truckLoads={props.truckLoads}
+            onUpdateTrucks={props.onUpdateTrucks}
+            onDeleteTruck={props.onDeleteTruck}
+            onOpenBuilder={(id) => setSelectedTruckId(id)}
+          />
+        </TabsContent>
+
+        <TabsContent value="lcl-air">
+          <LclAirManager
+            lclAir={props.lclAir}
+            onUpdateLclAir={props.onUpdateLclAir}
+            onDeleteLclAir={props.onDeleteLclAir}
+          />
+        </TabsContent>
+      </Tabs>
+    </div>
+  )
+}
