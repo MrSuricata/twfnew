@@ -21,6 +21,7 @@ import {
   TruckLoadRowSchema,
   LclAirRowSchema,
   TruckCounterRequestSchema,
+  BillingRowSchema,
 } from '../_lib/schemas.js'
 import { z } from 'zod'
 
@@ -91,6 +92,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return handleLclAir(req, res, db)
       case 'truck-counter':
         return handleTruckCounter(req, res, db)
+      case 'billing':
+        return handleBilling(req, res, db)
       default:
         return res.status(404).json({ error: `Unknown entity: ${entity}` })
     }
@@ -1048,4 +1051,64 @@ async function handleTruckCounter(req: VercelRequest, res: VercelResponse, db: a
     ? `C${next}`
     : `${prefix}-${String(next).padStart(4, '0')}`
   return res.status(200).json({ code, number: next, prefix })
+}
+
+// ── Billing overlay (pendiente / facturada / no_aplica per ref) ────
+// GET    /api/data/billing            → all overlay rows
+// POST   /api/data/billing            → upsert one/many rows
+// DELETE /api/data/billing?ref=xxx    → remove the overlay (back to derived state)
+
+function mapBillingRowToApi(b: any) {
+  return {
+    ref: b.ref,
+    status: b.status,
+    invoiceNumber: b.invoice_number || '',
+    invoicedAt: b.invoiced_at || null,
+    invoicedBy: b.invoiced_by || '',
+    updatedAt: b.updated_at || '',
+  }
+}
+
+async function handleBilling(req: VercelRequest, res: VercelResponse, db: any) {
+  if (req.method === 'GET') {
+    const { data, error } = await db
+      .from('shipment_billing')
+      .select('*')
+      .order('updated_at', { ascending: false })
+      .limit(5000)
+    if (error) throw error
+    return res.status(200).json({ billing: (data || []).map(mapBillingRowToApi) })
+  }
+
+  if (req.method === 'POST') {
+    const v = validateBatch(BillingRowSchema, req.body)
+    if (!v.ok) return res.status(400).json({ error: v.error })
+    const nowIso = new Date().toISOString()
+    const rows = v.items.map((b) => ({
+      ref: b.ref,
+      status: b.status,
+      invoice_number: b.invoiceNumber || b.invoice_number || '',
+      // Only stamp invoiced_at/by when status=facturada; clear otherwise.
+      invoiced_at: b.status === 'facturada'
+        ? (b.invoicedAt || b.invoiced_at || nowIso)
+        : null,
+      invoiced_by: b.status === 'facturada'
+        ? (b.invoicedBy || b.invoiced_by || '')
+        : '',
+      updated_at: nowIso,
+    }))
+    const { error } = await db.from('shipment_billing').upsert(rows, { onConflict: 'ref' })
+    if (error) throw error
+    return res.status(200).json({ saved: true, count: rows.length })
+  }
+
+  if (req.method === 'DELETE') {
+    const ref = req.query.ref as string
+    if (!ref) return res.status(400).json({ error: 'ref query parameter required' })
+    const { error } = await db.from('shipment_billing').delete().eq('ref', ref)
+    if (error) throw error
+    return res.status(200).json({ deleted: true })
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' })
 }

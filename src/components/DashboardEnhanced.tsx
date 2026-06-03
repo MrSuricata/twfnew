@@ -15,6 +15,7 @@ import {
   Envelope,
   ArrowsClockwise,
   Truck as TruckIcon,
+  Receipt,
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import { authFetch } from '@/lib/authClient'
@@ -31,9 +32,11 @@ import PartnerManager from './PartnerManager'
 import QuotesManagement from './QuotesManagement'
 import CommandPalette from './CommandPalette'
 import TrucksManagement from './trucks/TrucksManagement'
+import BillingManagement from './BillingManagement'
 import { ParsedShipment } from '@/lib/shipmentTypes'
 import { ClientAccount, ShipmentDocument, OperativeReport, OriginPhoto, QuoteFormData } from '@/lib/quotationTypes'
 import { Truck, TruckLoad, LclAirShipment } from '@/lib/truckTypes'
+import { BillingRecord, getBillingState, indexBilling } from '@/lib/billingTypes'
 import Breadcrumbs from './Breadcrumbs'
 
 interface DashboardEnhancedProps {
@@ -47,6 +50,7 @@ interface DashboardEnhancedProps {
   trucks?: Truck[]
   truckLoads?: TruckLoad[]
   lclAir?: LclAirShipment[]
+  billing?: BillingRecord[]
   dbSyncError?: string | null
   onUpdateShipments?: (shipments: ParsedShipment[]) => void
   onUpdateClients?: (clients: ClientAccount[]) => void
@@ -60,11 +64,13 @@ interface DashboardEnhancedProps {
   onDeleteTruckLoad?: (id: string) => void
   onUpdateLclAir?: (shipments: LclAirShipment[]) => void
   onDeleteLclAir?: (id: string) => void
+  onUpdateBilling?: (row: BillingRecord) => void
+  onClearBilling?: (ref: string) => void
 }
 
 const ONE_DAY_MS = 86_400_000
 
-export default function DashboardEnhanced({ onLogout, clients = [], shipments = [], documents = [], reports = [], originPhotos = [], quotes = [], trucks = [], truckLoads = [], lclAir = [], dbSyncError = null, onUpdateShipments, onUpdateClients, onUpdateDocuments, onUpdateReports, onUpdateOriginPhotos, onUpdateQuotes, onUpdateTrucks, onDeleteTruck, onUpdateTruckLoads, onDeleteTruckLoad, onUpdateLclAir, onDeleteLclAir }: DashboardEnhancedProps) {
+export default function DashboardEnhanced({ onLogout, clients = [], shipments = [], documents = [], reports = [], originPhotos = [], quotes = [], trucks = [], truckLoads = [], lclAir = [], billing = [], dbSyncError = null, onUpdateShipments, onUpdateClients, onUpdateDocuments, onUpdateReports, onUpdateOriginPhotos, onUpdateQuotes, onUpdateTrucks, onDeleteTruck, onUpdateTruckLoads, onDeleteTruckLoad, onUpdateLclAir, onDeleteLclAir, onUpdateBilling, onClearBilling }: DashboardEnhancedProps) {
   const [activeTab, setActiveTab] = useState('hoy')
   const [isRefreshing, setIsRefreshing] = useState(false)
 
@@ -96,6 +102,12 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
 
   // Pending-quotes badge — counts quotes that need attention.
   const pendingQuotesCount = quotes.filter(q => q.status === 'pending').length
+
+  // Pending-billing badge — refs that reached fiscal and aren't facturada/no_aplica.
+  const billingMap = indexBilling(billing)
+  const pendingBillingCount = (shipments || []).filter(
+    s => getBillingState(s, billingMap) === 'pendiente'
+  ).length
   const overdueQuotesCount = quotes.filter(
     q => q.status === 'pending' && Date.now() - q.timestamp > ONE_DAY_MS
   ).length
@@ -114,6 +126,7 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
       partners: 'Partners',
       quotes: 'Cotizaciones',
       trucks: 'Camiones',
+      billing: 'Facturación',
     }
 
     return [{ label: breadcrumbMap[activeTab] || 'Dashboard' }]
@@ -226,6 +239,15 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
                 </span>
               )}
             </TabsTrigger>
+            <TabsTrigger value="billing" className="tab-underline">
+              <Receipt size={16} className="mr-1.5" weight="fill" />
+              <span className="hidden sm:inline">Facturación</span>
+              {pendingBillingCount > 0 && (
+                <span className="ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold rounded-full text-white shrink-0 bg-amber-500">
+                  {pendingBillingCount}
+                </span>
+              )}
+            </TabsTrigger>
             <TabsTrigger value="excel-import" className="tab-underline">
               <Database size={16} className="mr-1.5" />
               <span className="hidden sm:inline">Importar</span>
@@ -272,12 +294,15 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
               shipmentRecords={shipments}
               reports={reports}
               originPhotos={originPhotos}
+              billing={billing}
               onUpdateReports={(updated) => {
                 if (onUpdateReports) onUpdateReports(updated)
               }}
               onUpdateOriginPhotos={(updated) => {
                 if (onUpdateOriginPhotos) onUpdateOriginPhotos(updated)
               }}
+              onUpdateBilling={onUpdateBilling}
+              onClearBilling={onClearBilling}
             />
           </TabsContent>
 
@@ -302,6 +327,15 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
               onUpdateQuotes={(updated) => {
                 if (onUpdateQuotes) onUpdateQuotes(updated)
               }}
+            />
+          </TabsContent>
+
+          <TabsContent value="billing">
+            <BillingManagement
+              shipments={shipments || []}
+              billing={billing}
+              onUpdateBilling={onUpdateBilling}
+              onClearBilling={onClearBilling}
             />
           </TabsContent>
 

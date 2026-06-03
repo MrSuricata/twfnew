@@ -4,10 +4,11 @@ import { Language, getStoredLanguage, setStoredLanguage } from '@/lib/i18n'
 import { QuoteFormData, ClientAccount, ShipmentDocument, OperativeReport, OriginPhoto } from '@/lib/quotationTypes'
 import { ParsedShipment } from '@/lib/shipmentTypes'
 import { Truck, TruckLoad, LclAirShipment } from '@/lib/truckTypes'
+import { BillingRecord } from '@/lib/billingTypes'
 import { getDemoShipments } from '@/lib/demoShipments'
 import { filterShipments } from '@/lib/sheetsSync'
 import { verifySession, clearAuth, authFetch } from '@/lib/authClient'
-import { loadAdminData, saveQuotes, saveDocuments, saveReports, saveReportWithFile, deleteReport, saveClients, saveOriginPhoto, deleteOriginPhoto, saveTrucks, saveTruckLoads, saveLclAir, deleteTruck as apiDeleteTruck, deleteTruckLoad as apiDeleteTruckLoad, deleteLclAir as apiDeleteLclAir } from '@/lib/dataClient'
+import { loadAdminData, saveQuotes, saveDocuments, saveReports, saveReportWithFile, deleteReport, saveClients, saveOriginPhoto, deleteOriginPhoto, saveTrucks, saveTruckLoads, saveLclAir, deleteTruck as apiDeleteTruck, deleteTruckLoad as apiDeleteTruckLoad, deleteLclAir as apiDeleteLclAir, saveBilling, deleteBilling as apiDeleteBilling } from '@/lib/dataClient'
 
 import Login from './components/Login'
 import ClientLogin from './components/ClientLogin'
@@ -83,6 +84,7 @@ function App() {
   const [trucks, setTrucks] = useState<Truck[]>(() => loadFromStorage('twf-trucks', []))
   const [truckLoads, setTruckLoads] = useState<TruckLoad[]>(() => loadFromStorage('twf-truck-loads', []))
   const [lclAir, setLclAir] = useState<LclAirShipment[]>(() => loadFromStorage('twf-lcl-air', []))
+  const [billing, setBilling] = useState<BillingRecord[]>(() => loadFromStorage('twf-billing', []))
 
   // Track whether fresh data has loaded from Supabase
   const [isDataLoading, setIsDataLoading] = useState(false)
@@ -102,6 +104,7 @@ function App() {
   const pendingTrucksWritesRef = useRef(0)
   const pendingTruckLoadsWritesRef = useRef(0)
   const pendingLclAirWritesRef = useRef(0)
+  const pendingBillingWritesRef = useRef(0)
 
   // ── Load data from Supabase when admin logs in ──
   const loadDataFromDB = useCallback(async () => {
@@ -159,6 +162,11 @@ function App() {
       if (pendingLclAirWritesRef.current === 0) {
         setLclAir(data.lclAir)
         saveToStorage('twf-lcl-air', data.lclAir)
+      }
+
+      if (pendingBillingWritesRef.current === 0) {
+        setBilling(data.billing)
+        saveToStorage('twf-billing', data.billing)
       }
 
       setDataFresh(true)
@@ -448,6 +456,50 @@ function App() {
     }
   }
 
+  // ── Billing overlay ──
+  // upsert one ref's billing row (mark facturada / pendiente / no_aplica).
+  // Reversible: marking facturada stamps invoiced_at/by; any other status
+  // clears them server-side. Passing status=undefined deletes the overlay
+  // (back to derived "pendiente" when applicable).
+  const handleUpdateBilling = (row: BillingRecord) => {
+    const next = (() => {
+      const existing = billing.findIndex(b => b.ref === row.ref)
+      if (existing >= 0) {
+        const copy = [...billing]
+        copy[existing] = row
+        return copy
+      }
+      return [...billing, row]
+    })()
+    setBilling(next)
+    saveToStorage('twf-billing', next)
+    if (isAdminLoggedIn) {
+      pendingBillingWritesRef.current += 1
+      saveBilling([row])
+        .catch(err => {
+          console.warn('[DB] Failed to save billing:', err)
+          toast.warning('Error al sincronizar facturación', { duration: 4000 })
+        })
+        .finally(() => {
+          pendingBillingWritesRef.current = Math.max(0, pendingBillingWritesRef.current - 1)
+        })
+    }
+  }
+
+  // Remove the overlay row entirely → ref returns to its derived state.
+  const handleClearBilling = async (ref: string) => {
+    const next = billing.filter(b => b.ref !== ref)
+    setBilling(next)
+    saveToStorage('twf-billing', next)
+    if (isAdminLoggedIn) {
+      try {
+        await apiDeleteBilling(ref)
+      } catch (err) {
+        console.warn('[DB] Failed to delete billing:', err)
+      }
+    }
+  }
+
   const handleUpdateQuotes = (updated: QuoteFormData[]) => {
     setQuotes(updated)
     saveToStorage('twf-quotes', updated)
@@ -619,6 +671,7 @@ function App() {
           trucks={trucks}
           truckLoads={truckLoads}
           lclAir={lclAir}
+          billing={billing}
           dbSyncError={dbSyncError}
           onUpdateShipments={handleUpdateShipments}
           onUpdateClients={handleUpdateClients}
@@ -632,6 +685,8 @@ function App() {
           onDeleteTruckLoad={handleDeleteTruckLoad}
           onUpdateLclAir={handleUpdateLclAir}
           onDeleteLclAir={handleDeleteLclAir}
+          onUpdateBilling={handleUpdateBilling}
+          onClearBilling={handleClearBilling}
         />
       </>
     )

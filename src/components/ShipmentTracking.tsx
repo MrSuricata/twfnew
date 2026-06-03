@@ -35,6 +35,11 @@ import {
   SortAscending,
   Camera,
   ImageSquare,
+  Receipt,
+  CheckCircle,
+  Prohibit,
+  Warning,
+  CaretDown as CaretDownIcon,
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import { copyToClipboard } from '@/lib/clipboard'
@@ -50,6 +55,8 @@ import { buildTodaySnapshot } from '@/lib/todayFilters'
 import { statusColorToClass, statusColorDotClass } from '@/lib/statusColors'
 import { OperativeReport, OriginPhoto, PhotoLocation } from '@/lib/quotationTypes'
 import { saveReportWithFile, deleteReport as deleteReportFromDB, saveOriginPhoto } from '@/lib/dataClient'
+import type { BillingRecord } from '@/lib/billingTypes'
+import { getBillingState, getDaysPending, getFiscalArrivalDate, indexBilling, AGING_THRESHOLD_DAYS } from '@/lib/billingTypes'
 import { processPhoto } from '@/lib/imageUtils'
 import ShipmentDetailsDialog from './ShipmentDetailsDialog'
 
@@ -57,8 +64,11 @@ interface ShipmentTrackingProps {
   shipmentRecords?: ParsedShipment[]
   reports?: OperativeReport[]
   originPhotos?: OriginPhoto[]
+  billing?: BillingRecord[]
   onUpdateReports?: (reports: OperativeReport[]) => void
   onUpdateOriginPhotos?: (photos: OriginPhoto[]) => void
+  onUpdateBilling?: (row: BillingRecord) => void
+  onClearBilling?: (ref: string) => void
 }
 
 const ITEMS_PER_PAGE = 25
@@ -84,7 +94,14 @@ const LIBRE_FILTERS = [
   { value: 'ok', label: '🟢 A tiempo' },
 ]
 
-export default function ShipmentTracking({ shipmentRecords = [], reports = [], originPhotos = [], onUpdateReports, onUpdateOriginPhotos }: ShipmentTrackingProps) {
+/** Format a Date as dd/mm/yyyy. */
+function fmtShortDate(d: Date): string {
+  const day = String(d.getDate()).padStart(2, '0')
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  return `${day}/${m}/${d.getFullYear()}`
+}
+
+export default function ShipmentTracking({ shipmentRecords = [], reports = [], originPhotos = [], billing = [], onUpdateReports, onUpdateOriginPhotos, onUpdateBilling, onClearBilling }: ShipmentTrackingProps) {
   const [statusFilter, setStatusFilter] = useState('all')
   const [libreFilter, setLibreFilter] = useState('all')
   const [searchText, setSearchText] = useState('')
@@ -92,6 +109,7 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
   const [sortColumn, setSortColumn] = useState<SortColumn>('LIBRE_HASTA')
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc')
   const [todayFilter, setTodayFilter] = useState(false)
+  const [billingSectionOpen, setBillingSectionOpen] = useState(true)
 
   // ── Shipment detail dialog ──
   const [selectedShipment, setSelectedShipment] = useState<ParsedShipment | null>(null)
@@ -487,6 +505,44 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
   }, [shipmentRecords, todayRefs])
 
   const hasActiveFilters = statusFilter !== 'all' || libreFilter !== 'all' || searchText.trim() !== '' || todayFilter
+
+  // ── Billing: refs that reached fiscal and are still pendientes de facturar ──
+  const billingMap = useMemo(() => indexBilling(billing), [billing])
+  const pendientesFacturar = useMemo(() => {
+    return (shipmentRecords || [])
+      .filter(s => getBillingState(s, billingMap) === 'pendiente')
+      .sort((a, b) => getDaysPending(b) - getDaysPending(a)) // most aged first
+  }, [shipmentRecords, billingMap])
+
+  const markFacturada = (s: ParsedShipment) => {
+    if (!onUpdateBilling) return
+    onUpdateBilling({
+      ref: s.REF,
+      status: 'facturada',
+      invoiceNumber: '',
+      invoicedAt: new Date().toISOString(),
+      invoicedBy: 'admin',
+      updatedAt: new Date().toISOString(),
+    })
+    toast.success(`${s.REF} marcada como facturada`, {
+      action: onClearBilling ? { label: 'Deshacer', onClick: () => onClearBilling(s.REF) } : undefined,
+    })
+  }
+
+  const markNoAplica = (s: ParsedShipment) => {
+    if (!onUpdateBilling) return
+    onUpdateBilling({
+      ref: s.REF,
+      status: 'no_aplica',
+      invoiceNumber: '',
+      invoicedAt: null,
+      invoicedBy: '',
+      updatedAt: new Date().toISOString(),
+    })
+    toast.success(`${s.REF} marcada como "no aplica"`, {
+      action: onClearBilling ? { label: 'Deshacer', onClick: () => onClearBilling(s.REF) } : undefined,
+    })
+  }
 
   return (
     <div className="space-y-4">
@@ -942,6 +998,79 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
           )}
         </CardContent>
       </Card>
+
+      {/* ── 🧾 Pendientes de facturar ── */}
+      {pendientesFacturar.length > 0 && (
+        <Card className="border-amber-200">
+          <button
+            type="button"
+            onClick={() => setBillingSectionOpen(o => !o)}
+            className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-amber-50/50 transition-colors rounded-t-lg"
+          >
+            <Receipt size={18} weight="fill" className="text-amber-500" />
+            <span className="font-semibold">Pendientes de facturar</span>
+            <span className="inline-flex items-center justify-center min-w-[22px] h-[22px] px-1.5 text-xs font-bold rounded-full text-white bg-amber-500">
+              {pendientesFacturar.length}
+            </span>
+            <span className="text-xs text-muted-foreground ml-1">cargas arribadas a fiscal sin facturar</span>
+            <CaretDownIcon
+              size={16}
+              className={`ml-auto text-muted-foreground transition-transform ${billingSectionOpen ? 'rotate-180' : ''}`}
+            />
+          </button>
+
+          {billingSectionOpen && (
+            <CardContent className="p-0 border-t border-amber-100">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="text-xs pl-4">REF</TableHead>
+                      <TableHead className="text-xs">Cliente</TableHead>
+                      <TableHead className="text-xs hidden md:table-cell">Arribo fiscal</TableHead>
+                      <TableHead className="text-xs">Aging</TableHead>
+                      <TableHead className="text-xs text-right pr-4">Acciones</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {pendientesFacturar.map(s => {
+                      const arrival = getFiscalArrivalDate(s)
+                      const days = getDaysPending(s)
+                      const aged = days >= AGING_THRESHOLD_DAYS
+                      return (
+                        <TableRow key={s.REF} className="hover:bg-amber-50/40">
+                          <TableCell className="font-medium pl-4">{s.REF}</TableCell>
+                          <TableCell className="text-sm">{s.CLIENTE || '—'}</TableCell>
+                          <TableCell className="text-sm text-muted-foreground hidden md:table-cell">
+                            {arrival ? fmtShortDate(arrival) : '—'}
+                          </TableCell>
+                          <TableCell>
+                            <span className={`inline-flex items-center gap-1 text-xs font-medium ${aged ? 'text-destructive' : 'text-muted-foreground'}`}>
+                              {aged ? <Warning size={12} weight="fill" /> : null}
+                              {days}d
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-right pr-4">
+                            <div className="flex items-center gap-1 justify-end">
+                              <Button size="sm" className="h-7 bg-amber-500 hover:bg-amber-600" onClick={() => markFacturada(s)}>
+                                <CheckCircle size={14} className="mr-1" weight="fill" />
+                                Facturada
+                              </Button>
+                              <Button size="sm" variant="ghost" className="h-7 text-muted-foreground" onClick={() => markNoAplica(s)} title="No se factura">
+                                <Prohibit size={14} />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          )}
+        </Card>
+      )}
 
       {/* Shipment Details Modal */}
       <ShipmentDetailsDialog
