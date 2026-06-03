@@ -71,14 +71,14 @@ export const BRANDS: Record<BrandId, Brand> = {
     displayName: 'Mediterránea Carghas',
     legalName: 'Mediterránea Carghas',
     tagline: 'Logística internacional sin fronteras',
-    domains: ['mediterraneacarghas.com', 'mediterraneacarghas.com.ar', 'mediterranea.vercel.app'],
+    domains: ['mediterraneacarghas.com.ar', 'mediterraneacarghas.com', 'mediterranea.vercel.app'],
     logo: {
       full: '/images/med-logo-dark.svg',
       white: '/images/med-logo-white.svg',
       icon: '/images/med-logo-dark.svg',
       iconWhite: '/images/med-logo-white.svg',
     },
-    contact: { email: 'info@mediterraneacarghas.com', site: 'mediterraneacarghas.com' },
+    contact: { email: 'info@mediterraneacarghas.com.ar', site: 'mediterraneacarghas.com.ar' },
     capabilities: { publicLanding: true, contentAdmin: true, opsAdmin: true, portals: true },
     font: 'Jost',
   },
@@ -92,12 +92,25 @@ function isBrandId(v: unknown): v is BrandId {
 
 /** Resolve the active brand id: build-time env first, hostname fallback. */
 export function resolveBrandId(): BrandId {
+  const meta = (import.meta as { env?: Record<string, string | boolean> }).env
+
   // 1) Build-time env, set per Vercel project (VITE_BRAND=med | twf).
-  const env = (import.meta as { env?: Record<string, string> }).env?.VITE_BRAND
+  const env = meta?.VITE_BRAND
   if (isBrandId(env)) return env
 
-  // 2) Runtime hostname match.
   if (typeof window !== 'undefined') {
+    // 2) DEV-only manual override for previewing the other brand:
+    //    ?brand=med (sticky via localStorage). Ignored in production builds.
+    if (meta?.DEV) {
+      try {
+        const q = new URLSearchParams(window.location.search).get('brand')
+        if (isBrandId(q)) { localStorage.setItem('twf-brand-override', q); return q }
+        const stored = localStorage.getItem('twf-brand-override')
+        if (isBrandId(stored)) return stored
+      } catch { /* ignore */ }
+    }
+
+    // 3) Runtime hostname match.
     const host = window.location.hostname.toLowerCase()
     for (const b of Object.values(BRANDS)) {
       if (b.domains.some(d => host === d || host.endsWith('.' + d))) return b.id
