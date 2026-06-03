@@ -8,6 +8,7 @@ import { authFetch } from './authClient'
 import type { QuoteFormData, ClientAccount, ShipmentDocument, OperativeReport, OriginPhoto } from './quotationTypes'
 import type { ParsedShipment } from './shipmentTypes'
 import type { Truck, TruckLoad, LclAirShipment } from './truckTypes'
+import type { BillingRecord } from './billingTypes'
 import { matchesPattern } from './clientMatching'
 
 // ── Shipments (cached from Google Sheets sync) ──
@@ -414,6 +415,38 @@ export async function deleteLclAir(id: string): Promise<void> {
   }
 }
 
+// ── Billing overlay ──
+
+export async function fetchBilling(): Promise<BillingRecord[]> {
+  const res = await authFetch('/api/data/billing')
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const data = await res.json()
+  return data.billing || []
+}
+
+export async function saveBilling(rows: BillingRecord[]): Promise<void> {
+  if (rows.length === 0) return
+  const res = await authFetch('/api/data/billing', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(rows),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
+}
+
+export async function deleteBilling(ref: string): Promise<void> {
+  const res = await authFetch(`/api/data/billing?ref=${encodeURIComponent(ref)}`, {
+    method: 'DELETE',
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
+}
+
 /** Atomically increment and return the next code for the given prefix.
  *  C → "C430"; LCL → "LCL-0001"; AIR → "AIR-0001". */
 export async function nextTruckCode(prefix: 'C' | 'LCL' | 'AIR'): Promise<string> {
@@ -442,6 +475,7 @@ export interface AdminData {
   trucks: Truck[]
   truckLoads: TruckLoad[]
   lclAir: LclAirShipment[]
+  billing: BillingRecord[]
   syncedAt: string | null
 }
 
@@ -456,7 +490,7 @@ async function softFetch<T>(fn: () => Promise<T[]>, label: string): Promise<T[]>
 }
 
 export async function loadAdminData(): Promise<AdminData> {
-  const [shipmentsRes, quotes, documents, reports, originPhotos, clients, trucks, truckLoads, lclAir] = await Promise.all([
+  const [shipmentsRes, quotes, documents, reports, originPhotos, clients, trucks, truckLoads, lclAir, billing] = await Promise.all([
     fetchShipmentsFromDB(),
     fetchQuotes(),
     fetchDocuments(),
@@ -466,6 +500,7 @@ export async function loadAdminData(): Promise<AdminData> {
     softFetch(fetchTrucks, 'trucks'),
     softFetch(() => fetchTruckLoads(), 'truck-loads'),
     softFetch(fetchLclAir, 'lcl-air'),
+    softFetch(fetchBilling, 'billing'),
   ])
 
   return {
@@ -478,6 +513,7 @@ export async function loadAdminData(): Promise<AdminData> {
     trucks,
     truckLoads,
     lclAir,
+    billing,
     syncedAt: shipmentsRes.syncedAt,
   }
 }
