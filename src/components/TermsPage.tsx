@@ -1,20 +1,23 @@
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { ArrowLeft } from '@phosphor-icons/react'
+import BrandLogo from './BrandLogo'
+import { useBrand } from '@/lib/brand'
 
 interface TermsPageProps {
   onBack?: () => void
 }
 
 export default function TermsPage({ onBack }: TermsPageProps) {
+  const brand = useBrand()
   return (
     <div className="min-h-screen bg-background">
       {/* Header minimal con logo */}
       <header className="border-b bg-white sticky top-0 z-40">
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center justify-between">
           <a href="/" className="flex items-center gap-3">
-            <img src="/images/twf-icon-dark.png" alt="TWF" className="h-9 w-auto" />
-            <span className="font-bold text-primary">Transit World Forwarding</span>
+            <BrandLogo variant="icon" className="h-9 w-auto" />
+            <span className="font-bold text-primary">{brand.displayName}</span>
           </a>
           <Button
             variant="ghost"

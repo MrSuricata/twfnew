@@ -7,6 +7,7 @@ import { LockKey, ArrowLeft, ShieldCheck, CircleNotch } from '@phosphor-icons/re
 import { toast } from 'sonner'
 import { loginAdmin } from '@/lib/authClient'
 import { useTranslation, getStoredLanguage } from '@/lib/i18n'
+import { useBrand } from '@/lib/brand'
 
 interface LoginProps {
   onLogin: () => void
@@ -18,6 +19,7 @@ export default function Login({ onLogin, onBack }: LoginProps) {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const t = useTranslation(getStoredLanguage())
+  const brand = useBrand()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -56,7 +58,7 @@ export default function Login({ onLogin, onBack }: LoginProps) {
             </div>
             <CardTitle className="text-2xl">Panel Administrativo</CardTitle>
             <p className="text-muted-foreground text-sm">
-              Acceso restringido — Transit World Forwarding
+              Acceso restringido — {brand.displayName}
             </p>
           </CardHeader>
           <CardContent>

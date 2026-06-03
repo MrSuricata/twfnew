@@ -7,6 +7,8 @@ import { SignIn, Envelope, Lock, Warehouse, Truck } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import { loginPartner } from '@/lib/authClient'
 import { useTranslation, getStoredLanguage } from '@/lib/i18n'
+import BrandLogo from './BrandLogo'
+import { useBrand } from '@/lib/brand'
 
 interface PartnerLoginProps {
   onLogin: (token: string, role: string, userData: any) => void
@@ -18,6 +20,7 @@ export default function PartnerLogin({ onLogin, onBack }: PartnerLoginProps) {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const t = useTranslation(getStoredLanguage())
+  const brand = useBrand()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -47,11 +50,11 @@ export default function PartnerLogin({ onLogin, onBack }: PartnerLoginProps) {
         <Card>
           <CardHeader className="text-center">
             <div className="flex justify-center mb-4">
-              <img src="/images/twf-logo-full-new.png" alt="TWF" className="h-12 w-auto" />
+              <BrandLogo variant="full" className="h-12 w-auto" />
             </div>
             <CardTitle className="text-2xl">Acceso Partners</CardTitle>
             <p className="text-muted-foreground text-sm">
-              Depósitos y Transportes — Transit World Forwarding
+              Depósitos y Transportes — {brand.displayName}
             </p>
             <div className="flex justify-center gap-4 mt-3">
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">

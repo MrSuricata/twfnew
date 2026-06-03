@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { SignOut, User, House } from '@phosphor-icons/react'
+import BrandLogo from './BrandLogo'
 
 interface PartnerDashboardShellProps {
   /** Decorative icon shown on the left (e.g. <Warehouse ... /> or <Truck ... />). */
@@ -47,7 +48,7 @@ export default function PartnerDashboardShell({
               title="Volver al inicio"
               className="hidden md:block shrink-0 rounded-md focus:outline-none focus:ring-2 focus:ring-ring"
             >
-              <img src="/images/twf-logo-full-new.png" alt="TWF" className="h-6 w-auto opacity-50 hover:opacity-90 transition-opacity" />
+              <BrandLogo variant="full" className="h-6 w-auto opacity-50 hover:opacity-90 transition-opacity" />
             </a>
             <Button variant="outline" size="sm" className="h-8" asChild>
               <a href="/">

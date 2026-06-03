@@ -32,6 +32,8 @@ import PartnerManager from './PartnerManager'
 import QuotesManagement from './QuotesManagement'
 import CommandPalette from './CommandPalette'
 import TrucksManagement from './trucks/TrucksManagement'
+import BrandLogo from './BrandLogo'
+import { useBrand } from '@/lib/brand'
 import BillingManagement from './BillingManagement'
 import { ParsedShipment } from '@/lib/shipmentTypes'
 import { ClientAccount, ShipmentDocument, OperativeReport, OriginPhoto, QuoteFormData } from '@/lib/quotationTypes'
@@ -71,7 +73,10 @@ interface DashboardEnhancedProps {
 const ONE_DAY_MS = 86_400_000
 
 export default function DashboardEnhanced({ onLogout, clients = [], shipments = [], documents = [], reports = [], originPhotos = [], quotes = [], trucks = [], truckLoads = [], lclAir = [], billing = [], dbSyncError = null, onUpdateShipments, onUpdateClients, onUpdateDocuments, onUpdateReports, onUpdateOriginPhotos, onUpdateQuotes, onUpdateTrucks, onDeleteTruck, onUpdateTruckLoads, onDeleteTruckLoad, onUpdateLclAir, onDeleteLclAir, onUpdateBilling, onClearBilling }: DashboardEnhancedProps) {
-  const [activeTab, setActiveTab] = useState('hoy')
+  const brand = useBrand()
+  const ops = brand.capabilities.opsAdmin
+  // TWF brand has no ops tabs → land on the first content tab.
+  const [activeTab, setActiveTab] = useState(ops ? 'hoy' : 'case-studies')
   const [isRefreshing, setIsRefreshing] = useState(false)
 
   // Manual refresh from the navbar — pulls fresh data from Google Sheets via
@@ -145,10 +150,11 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
         <div className="max-w-7xl mx-auto px-4 md:px-6">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-3">
-              <img src="/images/twf-logo-white.png" alt="TWF" className="h-8 w-auto" />
+              <BrandLogo variant="white" className="h-8 w-auto" />
               <span className="text-xl font-bold">Admin</span>
             </div>
             <div className="flex items-center gap-2">
+              {ops && (
               <button
                 type="button"
                 onClick={handleRefresh}
@@ -163,6 +169,7 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
                 />
                 <span className="hidden sm:inline">{isRefreshing ? 'Sincronizando…' : 'Refrescar'}</span>
               </button>
+              )}
               <button
                 type="button"
                 onClick={() => {
@@ -198,11 +205,12 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-8">
         <Breadcrumbs
           items={getBreadcrumbs()}
-          onHomeClick={activeTab !== 'hoy' ? () => setActiveTab('hoy') : undefined}
+          onHomeClick={activeTab !== (ops ? 'hoy' : 'case-studies') ? () => setActiveTab(ops ? 'hoy' : 'case-studies') : undefined}
         />
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="tabs-list-underline">
+            {ops && (<>
             <TabsTrigger value="hoy" className="tab-underline">
               <Lightning size={16} className="mr-1.5" weight="fill" />
               <span className="hidden sm:inline">Hoy</span>
@@ -252,6 +260,7 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
               <Database size={16} className="mr-1.5" />
               <span className="hidden sm:inline">Importar</span>
             </TabsTrigger>
+            </>)}
             <TabsTrigger value="case-studies" className="tab-underline">
               <Star size={16} className="mr-1.5" />
               <span className="hidden sm:inline">Casos</span>
@@ -260,6 +269,7 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
               <ChatCircleText size={16} className="mr-1.5" />
               <span className="hidden sm:inline">Testimonios</span>
             </TabsTrigger>
+            {ops && (<>
             <TabsTrigger value="clients" className="tab-underline">
               <UsersThree size={16} className="mr-1.5" />
               <span className="hidden sm:inline">Clientes</span>
@@ -268,6 +278,7 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
               <UsersThree size={16} className="mr-1.5" />
               <span className="hidden sm:inline">Partners</span>
             </TabsTrigger>
+            </>)}
           </TabsList>
 
           <TabsContent value="hoy">
