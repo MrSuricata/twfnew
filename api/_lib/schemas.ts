@@ -263,6 +263,18 @@ export const TruckCounterRequestSchema = z.object({
   prefix: z.enum(['C', 'LCL', 'AIR']),
 })
 
+/** Billing overlay row (POST upsert). One row per ref. */
+export const BillingRowSchema = z.object({
+  ref: z.string().min(1).max(100),
+  status: z.enum(['pendiente', 'facturada', 'no_aplica']),
+  invoiceNumber: z.string().max(100).optional().default(''),
+  invoice_number: z.string().max(100).optional(),
+  invoicedAt: z.string().max(40).optional().nullable(),
+  invoiced_at: z.string().max(40).optional().nullable(),
+  invoicedBy: z.string().max(200).optional().default(''),
+  invoiced_by: z.string().max(200).optional(),
+})
+
 /** Admin login body */
 export const AdminLoginSchema = z.object({
   username: z.string().min(1).max(200),
