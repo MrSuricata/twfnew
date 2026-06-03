@@ -74,12 +74,13 @@ interface DashboardEnhancedProps {
   onUpdateBilling?: (row: BillingRecord) => void
   onClearBilling?: (ref: string) => void
   onUpdateOperators?: (operators: Operator[]) => void
+  onDeleteOperator?: (id: string) => void
   onAssignOperator?: (ref: string, operatorId: string | null) => void
 }
 
 const ONE_DAY_MS = 86_400_000
 
-export default function DashboardEnhanced({ onLogout, clients = [], shipments = [], documents = [], reports = [], originPhotos = [], quotes = [], trucks = [], truckLoads = [], lclAir = [], billing = [], operators = [], assignments = [], dbSyncError = null, onUpdateShipments, onUpdateClients, onUpdateDocuments, onUpdateReports, onUpdateOriginPhotos, onUpdateQuotes, onUpdateTrucks, onDeleteTruck, onUpdateTruckLoads, onDeleteTruckLoad, onUpdateLclAir, onDeleteLclAir, onUpdateBilling, onClearBilling, onUpdateOperators, onAssignOperator }: DashboardEnhancedProps) {
+export default function DashboardEnhanced({ onLogout, clients = [], shipments = [], documents = [], reports = [], originPhotos = [], quotes = [], trucks = [], truckLoads = [], lclAir = [], billing = [], operators = [], assignments = [], dbSyncError = null, onUpdateShipments, onUpdateClients, onUpdateDocuments, onUpdateReports, onUpdateOriginPhotos, onUpdateQuotes, onUpdateTrucks, onDeleteTruck, onUpdateTruckLoads, onDeleteTruckLoad, onUpdateLclAir, onDeleteLclAir, onUpdateBilling, onClearBilling, onUpdateOperators, onDeleteOperator, onAssignOperator }: DashboardEnhancedProps) {
   const brand = useBrand()
   const ops = brand.capabilities.opsAdmin
   // TWF brand has no ops tabs → land on the first content tab.
@@ -369,6 +370,8 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
               operators={operators}
               assignments={assignments}
               onAssignOperator={(ref, opId) => { if (onAssignOperator) onAssignOperator(ref, opId) }}
+              onUpdateOperators={(o) => { if (onUpdateOperators) onUpdateOperators(o) }}
+              onDeleteOperator={(id) => { if (onDeleteOperator) onDeleteOperator(id) }}
             />
           </TabsContent>
 

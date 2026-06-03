@@ -15,7 +15,11 @@ import {
   Airplane,
   Truck as TruckIcon,
   Stack,
+  UsersThree,
+  MagicWand,
 } from '@phosphor-icons/react'
+import { toast } from 'sonner'
+import OperatorsManager from './OperatorsManager'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
 import type { LclAirShipment } from '@/lib/truckTypes'
 import type { Operator, OperatorAssignment, Modality, UnifiedOperation } from '@/lib/operationsTypes'
@@ -34,6 +38,8 @@ interface OperationsGridProps {
   operators: Operator[]
   assignments: OperatorAssignment[]
   onAssignOperator: (ref: string, operatorId: string | null) => void
+  onUpdateOperators: (operators: Operator[]) => void
+  onDeleteOperator: (id: string) => void
 }
 
 type ModeFilter = 'all' | Modality
@@ -50,10 +56,13 @@ export default function OperationsGrid({
   operators,
   assignments,
   onAssignOperator,
+  onUpdateOperators,
+  onDeleteOperator,
 }: OperationsGridProps) {
   const [search, setSearch] = useState('')
   const [modeFilter, setModeFilter] = useState<ModeFilter>('all')
   const [operatorFilter, setOperatorFilter] = useState<string>('all')
+  const [managerOpen, setManagerOpen] = useState(false)
 
   // Per-user visible columns (localStorage). Default from column defs.
   const [visibleCols, setVisibleCols] = useState<Set<string>>(() => {
@@ -78,6 +87,21 @@ export default function OperationsGrid({
     for (const o of operations) c[o.mode] = (c[o.mode] || 0) + 1
     return c
   }, [operations])
+
+  // Auto-assign: for unassigned refs whose mode has exactly ONE eligible
+  // operator, assign it (e.g. aéreo/terrestre → Fabián). FCL/LCL have many
+  // operators → skipped (no way to guess which).
+  const handleAutoAssign = () => {
+    let count = 0
+    for (const op of operations) {
+      if (op.operatorId) continue
+      const eligible = operatorsForMode(operators, op.mode)
+      if (eligible.length === 1) { onAssignOperator(op.ref, eligible[0].id); count++ }
+    }
+    toast[count > 0 ? 'success' : 'info'](
+      count > 0 ? `${count} carga${count === 1 ? '' : 's'} auto-asignada${count === 1 ? '' : 's'}` : 'No hay cargas auto-asignables (modos con un solo operativo)'
+    )
+  }
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim()
@@ -152,6 +176,16 @@ export default function OperationsGrid({
           {operators.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
         </select>
 
+        {/* Auto-assign by mode */}
+        <Button variant="outline" size="sm" className="h-9" onClick={handleAutoAssign} title="Asigna automáticamente los modos con un solo operativo (aéreo/terrestre)">
+          <MagicWand size={16} className="mr-1.5" /> Auto-asignar
+        </Button>
+
+        {/* Manage operators */}
+        <Button variant="outline" size="sm" className="h-9" onClick={() => setManagerOpen(true)}>
+          <UsersThree size={16} className="mr-1.5" /> Operativos
+        </Button>
+
         {/* Column picker */}
         <Popover>
           <PopoverTrigger asChild>
@@ -218,6 +252,14 @@ export default function OperationsGrid({
       <p className="text-xs text-muted-foreground flex items-center gap-1.5">
         <LockSimple size={12} /> Las FCL son espejo de la planilla (read-only) hasta la migración. LCL/aéreo/terrestre se editan desde su módulo. El operativo se asigna acá para todas.
       </p>
+
+      <OperatorsManager
+        open={managerOpen}
+        onOpenChange={setManagerOpen}
+        operators={operators}
+        onUpdateOperators={onUpdateOperators}
+        onDeleteOperator={onDeleteOperator}
+      />
     </div>
   )
 }
