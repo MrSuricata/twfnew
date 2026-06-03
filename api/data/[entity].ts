@@ -22,6 +22,8 @@ import {
   LclAirRowSchema,
   TruckCounterRequestSchema,
   BillingRowSchema,
+  OperatorRowSchema,
+  OperatorAssignmentRowSchema,
 } from '../_lib/schemas.js'
 import { z } from 'zod'
 
@@ -94,6 +96,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return handleTruckCounter(req, res, db)
       case 'billing':
         return handleBilling(req, res, db)
+      case 'operators':
+        return handleOperators(req, res, db)
+      case 'operator-assignments':
+        return handleOperatorAssignments(req, res, db)
       default:
         return res.status(404).json({ error: `Unknown entity: ${entity}` })
     }
@@ -1106,6 +1112,95 @@ async function handleBilling(req: VercelRequest, res: VercelResponse, db: any) {
     const ref = req.query.ref as string
     if (!ref) return res.status(400).json({ error: 'ref query parameter required' })
     const { error } = await db.from('shipment_billing').delete().eq('ref', ref)
+    if (error) throw error
+    return res.status(200).json({ deleted: true })
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' })
+}
+
+// ── Operators (lista editable de operativos) ───────────────────────
+// GET /api/data/operators · POST upsert · DELETE ?id=
+
+function mapOperatorRowToApi(o: any) {
+  return {
+    id: o.id,
+    name: o.name,
+    modes: o.modes || [],
+    color: o.color || '',
+    active: o.active ?? true,
+    createdAt: o.created_at_ts,
+  }
+}
+
+async function handleOperators(req: VercelRequest, res: VercelResponse, db: any) {
+  if (req.method === 'GET') {
+    const { data, error } = await db.from('operators').select('*').order('name', { ascending: true }).limit(500)
+    if (error) throw error
+    return res.status(200).json({ operators: (data || []).map(mapOperatorRowToApi) })
+  }
+
+  if (req.method === 'POST') {
+    const v = validateBatch(OperatorRowSchema, req.body)
+    if (!v.ok) return res.status(400).json({ error: v.error })
+    const now = Date.now()
+    const rows = v.items.map((o) => ({
+      id: o.id,
+      name: o.name,
+      modes: o.modes || [],
+      color: o.color || '',
+      active: o.active ?? true,
+      created_at_ts: o.createdAt || o.created_at_ts || now,
+    }))
+    const { error } = await db.from('operators').upsert(rows, { onConflict: 'id' })
+    if (error) throw error
+    return res.status(200).json({ saved: true, count: rows.length })
+  }
+
+  if (req.method === 'DELETE') {
+    const id = req.query.id as string
+    if (!id) return res.status(400).json({ error: 'id required' })
+    const { error } = await db.from('operators').delete().eq('id', id)
+    if (error) throw error
+    return res.status(200).json({ deleted: true })
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' })
+}
+
+// ── Operator assignments (overlay ref → operativo) ─────────────────
+// GET /api/data/operator-assignments · POST upsert · DELETE ?ref=
+
+async function handleOperatorAssignments(req: VercelRequest, res: VercelResponse, db: any) {
+  if (req.method === 'GET') {
+    const { data, error } = await db.from('operator_assignments').select('*').limit(5000)
+    if (error) throw error
+    const rows = (data || []).map((a: any) => ({
+      ref: a.ref,
+      operatorId: a.operator_id ?? null,
+      updatedAt: a.updated_at || '',
+    }))
+    return res.status(200).json({ assignments: rows })
+  }
+
+  if (req.method === 'POST') {
+    const v = validateBatch(OperatorAssignmentRowSchema, req.body)
+    if (!v.ok) return res.status(400).json({ error: v.error })
+    const nowIso = new Date().toISOString()
+    const rows = v.items.map((a) => ({
+      ref: a.ref,
+      operator_id: a.operatorId ?? a.operator_id ?? null,
+      updated_at: nowIso,
+    }))
+    const { error } = await db.from('operator_assignments').upsert(rows, { onConflict: 'ref' })
+    if (error) throw error
+    return res.status(200).json({ saved: true, count: rows.length })
+  }
+
+  if (req.method === 'DELETE') {
+    const ref = req.query.ref as string
+    if (!ref) return res.status(400).json({ error: 'ref required' })
+    const { error } = await db.from('operator_assignments').delete().eq('ref', ref)
     if (error) throw error
     return res.status(200).json({ deleted: true })
   }
