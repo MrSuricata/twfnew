@@ -16,6 +16,7 @@ import {
   ArrowsClockwise,
   Truck as TruckIcon,
   Receipt,
+  Table as TableIcon,
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import { authFetch } from '@/lib/authClient'
@@ -35,10 +36,12 @@ import TrucksManagement from './trucks/TrucksManagement'
 import BrandLogo from './BrandLogo'
 import { useBrand } from '@/lib/brand'
 import BillingManagement from './BillingManagement'
+import OperationsGrid from './operations/OperationsGrid'
 import { ParsedShipment } from '@/lib/shipmentTypes'
 import { ClientAccount, ShipmentDocument, OperativeReport, OriginPhoto, QuoteFormData } from '@/lib/quotationTypes'
 import { Truck, TruckLoad, LclAirShipment } from '@/lib/truckTypes'
 import { BillingRecord, getBillingState, indexBilling } from '@/lib/billingTypes'
+import { Operator, OperatorAssignment } from '@/lib/operationsTypes'
 import Breadcrumbs from './Breadcrumbs'
 
 interface DashboardEnhancedProps {
@@ -53,6 +56,8 @@ interface DashboardEnhancedProps {
   truckLoads?: TruckLoad[]
   lclAir?: LclAirShipment[]
   billing?: BillingRecord[]
+  operators?: Operator[]
+  assignments?: OperatorAssignment[]
   dbSyncError?: string | null
   onUpdateShipments?: (shipments: ParsedShipment[]) => void
   onUpdateClients?: (clients: ClientAccount[]) => void
@@ -68,11 +73,13 @@ interface DashboardEnhancedProps {
   onDeleteLclAir?: (id: string) => void
   onUpdateBilling?: (row: BillingRecord) => void
   onClearBilling?: (ref: string) => void
+  onUpdateOperators?: (operators: Operator[]) => void
+  onAssignOperator?: (ref: string, operatorId: string | null) => void
 }
 
 const ONE_DAY_MS = 86_400_000
 
-export default function DashboardEnhanced({ onLogout, clients = [], shipments = [], documents = [], reports = [], originPhotos = [], quotes = [], trucks = [], truckLoads = [], lclAir = [], billing = [], dbSyncError = null, onUpdateShipments, onUpdateClients, onUpdateDocuments, onUpdateReports, onUpdateOriginPhotos, onUpdateQuotes, onUpdateTrucks, onDeleteTruck, onUpdateTruckLoads, onDeleteTruckLoad, onUpdateLclAir, onDeleteLclAir, onUpdateBilling, onClearBilling }: DashboardEnhancedProps) {
+export default function DashboardEnhanced({ onLogout, clients = [], shipments = [], documents = [], reports = [], originPhotos = [], quotes = [], trucks = [], truckLoads = [], lclAir = [], billing = [], operators = [], assignments = [], dbSyncError = null, onUpdateShipments, onUpdateClients, onUpdateDocuments, onUpdateReports, onUpdateOriginPhotos, onUpdateQuotes, onUpdateTrucks, onDeleteTruck, onUpdateTruckLoads, onDeleteTruckLoad, onUpdateLclAir, onDeleteLclAir, onUpdateBilling, onClearBilling, onUpdateOperators, onAssignOperator }: DashboardEnhancedProps) {
   const brand = useBrand()
   const ops = brand.capabilities.opsAdmin
   // TWF brand has no ops tabs → land on the first content tab.
@@ -132,6 +139,7 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
       quotes: 'Cotizaciones',
       trucks: 'Camiones',
       billing: 'Facturación',
+      operaciones: 'Operaciones',
     }
 
     return [{ label: breadcrumbMap[activeTab] || 'Dashboard' }]
@@ -226,6 +234,10 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
             <TabsTrigger value="tracking" className="tab-underline">
               <Package size={16} className="mr-1.5" />
               <span className="hidden sm:inline">Cargas</span>
+            </TabsTrigger>
+            <TabsTrigger value="operaciones" className="tab-underline">
+              <TableIcon size={16} className="mr-1.5" weight="fill" />
+              <span className="hidden sm:inline">Operaciones</span>
             </TabsTrigger>
             <TabsTrigger value="trucks" className="tab-underline">
               <TruckIcon size={16} className="mr-1.5" weight="fill" />
@@ -347,6 +359,16 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
               billing={billing}
               onUpdateBilling={onUpdateBilling}
               onClearBilling={onClearBilling}
+            />
+          </TabsContent>
+
+          <TabsContent value="operaciones">
+            <OperationsGrid
+              shipments={shipments || []}
+              lclAir={lclAir}
+              operators={operators}
+              assignments={assignments}
+              onAssignOperator={(ref, opId) => { if (onAssignOperator) onAssignOperator(ref, opId) }}
             />
           </TabsContent>
 

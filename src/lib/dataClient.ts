@@ -9,6 +9,7 @@ import type { QuoteFormData, ClientAccount, ShipmentDocument, OperativeReport, O
 import type { ParsedShipment } from './shipmentTypes'
 import type { Truck, TruckLoad, LclAirShipment } from './truckTypes'
 import type { BillingRecord } from './billingTypes'
+import type { Operator, OperatorAssignment } from './operationsTypes'
 import { matchesPattern } from './clientMatching'
 
 // ── Shipments (cached from Google Sheets sync) ──
@@ -463,6 +464,57 @@ export async function nextTruckCode(prefix: 'C' | 'LCL' | 'AIR'): Promise<string
   return data.code as string
 }
 
+// ── Operators (lista editable de operativos) ──
+
+export async function fetchOperators(): Promise<Operator[]> {
+  const res = await authFetch('/api/data/operators')
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const data = await res.json()
+  return data.operators || []
+}
+
+export async function saveOperators(operators: Operator[]): Promise<void> {
+  if (operators.length === 0) return
+  const res = await authFetch('/api/data/operators', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(operators),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
+}
+
+export async function deleteOperator(id: string): Promise<void> {
+  const res = await authFetch(`/api/data/operators?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
+}
+
+// ── Operator assignments (overlay ref → operativo) ──
+
+export async function fetchOperatorAssignments(): Promise<OperatorAssignment[]> {
+  const res = await authFetch('/api/data/operator-assignments')
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const data = await res.json()
+  return data.assignments || []
+}
+
+export async function saveOperatorAssignment(ref: string, operatorId: string | null): Promise<void> {
+  const res = await authFetch('/api/data/operator-assignments', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ref, operatorId }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
+}
+
 // ── Bulk Load (load all admin data in parallel) ──
 
 export interface AdminData {
@@ -476,6 +528,8 @@ export interface AdminData {
   truckLoads: TruckLoad[]
   lclAir: LclAirShipment[]
   billing: BillingRecord[]
+  operators: Operator[]
+  assignments: OperatorAssignment[]
   syncedAt: string | null
 }
 
@@ -503,6 +557,12 @@ export async function loadAdminData(): Promise<AdminData> {
     softFetch(fetchBilling, 'billing'),
   ])
 
+  // Operators + assignments — soft-loaded separately (non-fatal).
+  const [operators, assignments] = await Promise.all([
+    softFetch(fetchOperators, 'operators'),
+    softFetch(fetchOperatorAssignments, 'operator-assignments'),
+  ])
+
   return {
     shipments: shipmentsRes.shipments,
     quotes,
@@ -514,6 +574,8 @@ export async function loadAdminData(): Promise<AdminData> {
     truckLoads,
     lclAir,
     billing,
+    operators,
+    assignments,
     syncedAt: shipmentsRes.syncedAt,
   }
 }

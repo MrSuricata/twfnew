@@ -275,6 +275,24 @@ export const BillingRowSchema = z.object({
   invoiced_by: z.string().max(200).optional(),
 })
 
+/** Operator row (editable list of operativos) */
+export const OperatorRowSchema = z.object({
+  id: z.string().min(1).max(100),
+  name: z.string().min(1).max(120),
+  modes: z.array(z.enum(['fcl', 'lcl', 'air', 'land'])).optional().default([]),
+  color: z.string().max(20).optional().default(''),
+  active: z.boolean().optional().default(true),
+  createdAt: z.number().int().optional(),
+  created_at_ts: z.number().int().optional(),
+})
+
+/** Operator assignment row (ref → operator overlay) */
+export const OperatorAssignmentRowSchema = z.object({
+  ref: z.string().min(1).max(100),
+  operatorId: z.string().max(100).nullable().optional(),
+  operator_id: z.string().max(100).nullable().optional(),
+})
+
 /** Admin login body */
 export const AdminLoginSchema = z.object({
   username: z.string().min(1).max(200),

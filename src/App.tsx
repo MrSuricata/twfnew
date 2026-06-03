@@ -6,10 +6,11 @@ import { ParsedShipment } from '@/lib/shipmentTypes'
 import { Truck, TruckLoad, LclAirShipment } from '@/lib/truckTypes'
 import { getBrand } from '@/lib/brand'
 import { BillingRecord } from '@/lib/billingTypes'
+import { Operator, OperatorAssignment } from '@/lib/operationsTypes'
 import { getDemoShipments } from '@/lib/demoShipments'
 import { filterShipments } from '@/lib/sheetsSync'
 import { verifySession, clearAuth, authFetch } from '@/lib/authClient'
-import { loadAdminData, saveQuotes, saveDocuments, saveReports, saveReportWithFile, deleteReport, saveClients, saveOriginPhoto, deleteOriginPhoto, saveTrucks, saveTruckLoads, saveLclAir, deleteTruck as apiDeleteTruck, deleteTruckLoad as apiDeleteTruckLoad, deleteLclAir as apiDeleteLclAir, saveBilling, deleteBilling as apiDeleteBilling } from '@/lib/dataClient'
+import { loadAdminData, saveQuotes, saveDocuments, saveReports, saveReportWithFile, deleteReport, saveClients, saveOriginPhoto, deleteOriginPhoto, saveTrucks, saveTruckLoads, saveLclAir, deleteTruck as apiDeleteTruck, deleteTruckLoad as apiDeleteTruckLoad, deleteLclAir as apiDeleteLclAir, saveBilling, deleteBilling as apiDeleteBilling, saveOperators, saveOperatorAssignment } from '@/lib/dataClient'
 
 import Login from './components/Login'
 import ClientLogin from './components/ClientLogin'
@@ -90,6 +91,8 @@ function App() {
   const [truckLoads, setTruckLoads] = useState<TruckLoad[]>(() => loadFromStorage('twf-truck-loads', []))
   const [lclAir, setLclAir] = useState<LclAirShipment[]>(() => loadFromStorage('twf-lcl-air', []))
   const [billing, setBilling] = useState<BillingRecord[]>(() => loadFromStorage('twf-billing', []))
+  const [operators, setOperators] = useState<Operator[]>(() => loadFromStorage('twf-operators', []))
+  const [assignments, setAssignments] = useState<OperatorAssignment[]>(() => loadFromStorage('twf-operator-assignments', []))
 
   // Track whether fresh data has loaded from Supabase
   const [isDataLoading, setIsDataLoading] = useState(false)
@@ -173,6 +176,11 @@ function App() {
         setBilling(data.billing)
         saveToStorage('twf-billing', data.billing)
       }
+
+      setOperators(data.operators)
+      saveToStorage('twf-operators', data.operators)
+      setAssignments(data.assignments)
+      saveToStorage('twf-operator-assignments', data.assignments)
 
       setDataFresh(true)
       setDbSyncError(null)
@@ -505,6 +513,33 @@ function App() {
     }
   }
 
+  // ── Operators + assignments (TAREA C) ──
+  const handleUpdateOperators = (updated: Operator[]) => {
+    setOperators(updated)
+    saveToStorage('twf-operators', updated)
+    if (isAdminLoggedIn && updated.length > 0) {
+      saveOperators(updated).catch(err => {
+        console.warn('[DB] Failed to save operators:', err)
+        toast.warning('Error al sincronizar operativos', { duration: 4000 })
+      })
+    }
+  }
+
+  // Assign an operativo to a ref (overlay). operatorId=null clears it.
+  const handleAssignOperator = (ref: string, operatorId: string | null) => {
+    const next = (() => {
+      const i = assignments.findIndex(a => a.ref === ref)
+      const row: OperatorAssignment = { ref, operatorId, updatedAt: new Date().toISOString() }
+      if (i >= 0) { const c = [...assignments]; c[i] = row; return c }
+      return [...assignments, row]
+    })()
+    setAssignments(next)
+    saveToStorage('twf-operator-assignments', next)
+    if (isAdminLoggedIn) {
+      saveOperatorAssignment(ref, operatorId).catch(err => console.warn('[DB] Failed to save assignment:', err))
+    }
+  }
+
   const handleUpdateQuotes = (updated: QuoteFormData[]) => {
     setQuotes(updated)
     saveToStorage('twf-quotes', updated)
@@ -677,6 +712,8 @@ function App() {
           truckLoads={truckLoads}
           lclAir={lclAir}
           billing={billing}
+          operators={operators}
+          assignments={assignments}
           dbSyncError={dbSyncError}
           onUpdateShipments={handleUpdateShipments}
           onUpdateClients={handleUpdateClients}
@@ -692,6 +729,8 @@ function App() {
           onDeleteLclAir={handleDeleteLclAir}
           onUpdateBilling={handleUpdateBilling}
           onClearBilling={handleClearBilling}
+          onUpdateOperators={handleUpdateOperators}
+          onAssignOperator={handleAssignOperator}
         />
       </>
     )
