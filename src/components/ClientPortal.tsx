@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ShipmentTableSkeleton, StatCardSkeleton } from '@/components/SkeletonLoaders'
+import BrandLogo from './BrandLogo'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -286,7 +287,7 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
         <div className="max-w-7xl mx-auto px-4 md:px-6">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-2">
-              <img src="/images/twf-logo-white.png" alt="TWF" className="h-8 w-auto" />
+              <BrandLogo variant="white" className="h-8 w-auto" />
               <div>
                 <div className="text-xl font-bold">Portal de Cliente</div>
                 <div className="text-xs opacity-80">{currentClient?.company || currentClient?.name}</div>

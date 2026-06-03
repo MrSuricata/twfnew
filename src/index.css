@@ -55,6 +55,60 @@
   --sidebar-ring: oklch(0.68 0.18 45);
 }
 
+/* ─── Mediterránea Carghas brand theme ───────────────────────────────
+   Activated by <html data-brand="med"> (set at boot by applyBrand()).
+   Palette: violeta #49286b · indigos #352e6a/#261c79 · celestes #9bd1e5/#cefffff.
+   Higher specificity than :root so it wins when the attribute is present.   */
+:root[data-brand="med"] {
+  --background: #fbfbfe;
+  --foreground: #261c79;
+
+  --card: #ffffff;
+  --card-foreground: #261c79;
+
+  --popover: #ffffff;
+  --popover-foreground: #261c79;
+
+  --primary: #352e6a;
+  --primary-foreground: #ffffff;
+
+  --secondary: #49286b;
+  --secondary-foreground: #ffffff;
+
+  --muted: #eef0f8;
+  --muted-foreground: #5b5780;
+
+  --accent: #49286b;
+  --accent-foreground: #ffffff;
+
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: #ffffff;
+
+  --border: #e5e4f1;
+  --input: #e5e4f1;
+  --ring: #9bd1e5;
+
+  --chart-1: #49286b;
+  --chart-2: #352e6a;
+  --chart-3: #9bd1e5;
+  --chart-4: #261c79;
+  --chart-5: #7c6fb0;
+
+  --sidebar: #261c79;
+  --sidebar-foreground: #eef0f8;
+  --sidebar-primary: #9bd1e5;
+  --sidebar-primary-foreground: #261c79;
+  --sidebar-accent: #352e6a;
+  --sidebar-accent-foreground: #eef0f8;
+  --sidebar-border: #352e6a;
+  --sidebar-ring: #9bd1e5;
+}
+
+/* Brand fonts — Jost is a free geometric face close to Gotham. */
+:root[data-brand="med"] body {
+  font-family: 'Jost', 'Inter', sans-serif;
+}
+
 @theme {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

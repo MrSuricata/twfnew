@@ -4,6 +4,7 @@ import { Language, getStoredLanguage, setStoredLanguage } from '@/lib/i18n'
 import { QuoteFormData, ClientAccount, ShipmentDocument, OperativeReport, OriginPhoto } from '@/lib/quotationTypes'
 import { ParsedShipment } from '@/lib/shipmentTypes'
 import { Truck, TruckLoad, LclAirShipment } from '@/lib/truckTypes'
+import { getBrand } from '@/lib/brand'
 import { getDemoShipments } from '@/lib/demoShipments'
 import { filterShipments } from '@/lib/sheetsSync'
 import { verifySession, clearAuth, authFetch } from '@/lib/authClient'
@@ -56,9 +57,12 @@ function saveToStorage(key: string, data: unknown) {
 
 function getInitialView(): View {
   const path = window.location.pathname.toLowerCase()
+  const portalsEnabled = getBrand().capabilities.portals
   if (path === '/admin') return 'admin-login'
-  if (path === '/portal') return 'client-login'
-  if (path === '/depot' || path === '/transport' || path === '/partner') return 'partner-login'
+  if (portalsEnabled) {
+    if (path === '/portal') return 'client-login'
+    if (path === '/depot' || path === '/transport' || path === '/partner') return 'partner-login'
+  }
   if (path === '/terminos') return 'terms'
   if (path === '/privacidad') return 'privacy'
   if (path === '/') return 'public'
@@ -488,7 +492,7 @@ function App() {
       const path = window.location.pathname.toLowerCase()
       if (path === '/admin') {
         setCurrentView(isAdminLoggedIn ? 'admin-dashboard' : 'admin-login')
-      } else if (path === '/portal') {
+      } else if (path === '/portal' && getBrand().capabilities.portals) {
         setCurrentView(clientEmail ? 'client-portal' : 'client-login')
       } else if (path === '/terminos') {
         setCurrentView('terms')

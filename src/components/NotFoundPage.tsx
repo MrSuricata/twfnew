@@ -1,11 +1,14 @@
 import { Button } from '@/components/ui/button'
 import { Compass, House, EnvelopeSimple } from '@phosphor-icons/react'
+import BrandLogo from './BrandLogo'
+import { useBrand } from '@/lib/brand'
 
 interface NotFoundPageProps {
   onGoHome?: () => void
 }
 
 export default function NotFoundPage({ onGoHome }: NotFoundPageProps) {
+  const brand = useBrand()
   const handleGoHome = () => {
     if (onGoHome) onGoHome()
     else window.location.href = '/'
@@ -17,8 +20,8 @@ export default function NotFoundPage({ onGoHome }: NotFoundPageProps) {
       <header className="border-b bg-white">
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center">
           <a href="/" className="flex items-center gap-3">
-            <img src="/images/twf-icon-dark.png" alt="TWF" className="h-9 w-auto" />
-            <span className="font-bold text-primary">Transit World Forwarding</span>
+            <BrandLogo variant="icon" className="h-9 w-auto" />
+            <span className="font-bold text-primary">{brand.displayName}</span>
           </a>
         </div>
       </header>
