@@ -21,8 +21,7 @@ import {
 import { toast } from 'sonner'
 import OperatorsManager from './OperatorsManager'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
-import type { LclAirShipment } from '@/lib/truckTypes'
-import type { Operator, OperatorAssignment, Modality, UnifiedOperation } from '@/lib/operationsTypes'
+import type { Operator, OperatorAssignment, Modality, UnifiedOperation, DbShipment } from '@/lib/operationsTypes'
 import {
   buildOperations,
   indexAssignments,
@@ -34,10 +33,11 @@ import {
 
 interface OperationsGridProps {
   shipments: ParsedShipment[]
-  lclAir: LclAirShipment[]
+  dbShipments: DbShipment[]
   operators: Operator[]
   assignments: OperatorAssignment[]
   onAssignOperator: (ref: string, operatorId: string | null) => void
+  onPatchShipment: (id: string, fields: Record<string, unknown>) => void
   onUpdateOperators: (operators: Operator[]) => void
   onDeleteOperator: (id: string) => void
 }
@@ -52,10 +52,11 @@ const MODE_ICON: Record<Modality, typeof Boat> = { fcl: TruckIcon, lcl: Stack, a
 
 export default function OperationsGrid({
   shipments,
-  lclAir,
+  dbShipments,
   operators,
   assignments,
   onAssignOperator,
+  onPatchShipment,
   onUpdateOperators,
   onDeleteOperator,
 }: OperationsGridProps) {
@@ -78,9 +79,16 @@ export default function OperationsGrid({
 
   const assignMap = useMemo(() => indexAssignments(assignments), [assignments])
   const operations = useMemo(
-    () => buildOperations(shipments, lclAir, assignMap),
-    [shipments, lclAir, assignMap]
+    () => buildOperations(shipments, dbShipments, assignMap),
+    [shipments, dbShipments, assignMap]
   )
+
+  // Unified operator assignment: DB rows patch shipments.operator_id;
+  // FCL (cache) rows use the operator_assignments overlay by ref.
+  const assignOp = (op: UnifiedOperation, operatorId: string | null) => {
+    if (op.source === 'db' && op.dbId) onPatchShipment(op.dbId, { operator_id: operatorId })
+    else onAssignOperator(op.ref, operatorId)
+  }
 
   const counts = useMemo(() => {
     const c: Record<string, number> = { all: operations.length, fcl: 0, lcl: 0, air: 0, land: 0 }
@@ -96,7 +104,7 @@ export default function OperationsGrid({
     for (const op of operations) {
       if (op.operatorId) continue
       const eligible = operatorsForMode(operators, op.mode)
-      if (eligible.length === 1) { onAssignOperator(op.ref, eligible[0].id); count++ }
+      if (eligible.length === 1) { assignOp(op, eligible[0].id); count++ }
     }
     toast[count > 0 ? 'success' : 'info'](
       count > 0 ? `${count} carga${count === 1 ? '' : 's'} auto-asignada${count === 1 ? '' : 's'}` : 'No hay cargas auto-asignables (modos con un solo operativo)'
@@ -242,7 +250,7 @@ export default function OperationsGrid({
                 operators={operators}
                 operatorById={operatorById}
                 even={idx % 2 === 0}
-                onAssign={onAssignOperator}
+                onAssign={assignOp}
               />
             ))}
           </tbody>
@@ -250,7 +258,7 @@ export default function OperationsGrid({
       </div>
 
       <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-        <LockSimple size={12} /> Las FCL son espejo de la planilla (read-only) hasta la migración. LCL/aéreo/terrestre se editan desde su módulo. El operativo se asigna acá para todas.
+        <LockSimple size={12} /> Las FCL son espejo de la planilla (read-only) hasta la migración. LCL / aéreo / terrestre vienen de la base unificada. El operativo se asigna acá para todas.
       </p>
 
       <OperatorsManager
@@ -279,7 +287,7 @@ function OperationRow({
   operators: Operator[]
   operatorById: Map<string, Operator>
   even: boolean
-  onAssign: (ref: string, operatorId: string | null) => void
+  onAssign: (op: UnifiedOperation, operatorId: string | null) => void
 }) {
   const Icon = MODE_ICON[op.mode]
   const eligible = operatorsForMode(operators, op.mode)
@@ -300,7 +308,7 @@ function OperationRow({
         return (
           <select
             value={op.operatorId || ''}
-            onChange={e => onAssign(op.ref, e.target.value || null)}
+            onChange={e => onAssign(op, e.target.value || null)}
             className="h-6 max-w-[130px] text-xs rounded border border-transparent hover:border-border bg-transparent px-1 cursor-pointer focus:border-primary"
             style={assigned ? { color: assigned.color || undefined } : undefined}
           >

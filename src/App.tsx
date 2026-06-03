@@ -6,11 +6,11 @@ import { ParsedShipment } from '@/lib/shipmentTypes'
 import { Truck, TruckLoad, LclAirShipment } from '@/lib/truckTypes'
 import { getBrand } from '@/lib/brand'
 import { BillingRecord } from '@/lib/billingTypes'
-import { Operator, OperatorAssignment } from '@/lib/operationsTypes'
+import { Operator, OperatorAssignment, DbShipment } from '@/lib/operationsTypes'
 import { getDemoShipments } from '@/lib/demoShipments'
 import { filterShipments } from '@/lib/sheetsSync'
 import { verifySession, clearAuth, authFetch } from '@/lib/authClient'
-import { loadAdminData, saveQuotes, saveDocuments, saveReports, saveReportWithFile, deleteReport, saveClients, saveOriginPhoto, deleteOriginPhoto, saveTrucks, saveTruckLoads, saveLclAir, deleteTruck as apiDeleteTruck, deleteTruckLoad as apiDeleteTruckLoad, deleteLclAir as apiDeleteLclAir, saveBilling, deleteBilling as apiDeleteBilling, saveOperators, saveOperatorAssignment, deleteOperator as apiDeleteOperator } from '@/lib/dataClient'
+import { loadAdminData, saveQuotes, saveDocuments, saveReports, saveReportWithFile, deleteReport, saveClients, saveOriginPhoto, deleteOriginPhoto, saveTrucks, saveTruckLoads, saveLclAir, deleteTruck as apiDeleteTruck, deleteTruckLoad as apiDeleteTruckLoad, deleteLclAir as apiDeleteLclAir, saveBilling, deleteBilling as apiDeleteBilling, saveOperators, saveOperatorAssignment, deleteOperator as apiDeleteOperator, patchDbShipment } from '@/lib/dataClient'
 
 import Login from './components/Login'
 import ClientLogin from './components/ClientLogin'
@@ -93,6 +93,7 @@ function App() {
   const [billing, setBilling] = useState<BillingRecord[]>(() => loadFromStorage('twf-billing', []))
   const [operators, setOperators] = useState<Operator[]>(() => loadFromStorage('twf-operators', []))
   const [assignments, setAssignments] = useState<OperatorAssignment[]>(() => loadFromStorage('twf-operator-assignments', []))
+  const [dbShipments, setDbShipments] = useState<DbShipment[]>(() => loadFromStorage('twf-db-shipments', []))
 
   // Track whether fresh data has loaded from Supabase
   const [isDataLoading, setIsDataLoading] = useState(false)
@@ -181,6 +182,8 @@ function App() {
       saveToStorage('twf-operators', data.operators)
       setAssignments(data.assignments)
       saveToStorage('twf-operator-assignments', data.assignments)
+      setDbShipments(data.dbShipments)
+      saveToStorage('twf-db-shipments', data.dbShipments)
 
       setDataFresh(true)
       setDbSyncError(null)
@@ -535,6 +538,19 @@ function App() {
     }
   }
 
+  // Patch a DB shipment row (operator_id, or future inline cell edits).
+  const handlePatchShipment = (id: string, fields: Record<string, unknown>) => {
+    const next = dbShipments.map(s => s.id === id ? { ...s, ...fields } as DbShipment : s)
+    setDbShipments(next)
+    saveToStorage('twf-db-shipments', next)
+    if (isAdminLoggedIn) {
+      patchDbShipment(id, fields).catch(err => {
+        console.warn('[DB] Failed to patch shipment:', err)
+        toast.warning('Error al guardar el cambio', { duration: 4000 })
+      })
+    }
+  }
+
   // Assign an operativo to a ref (overlay). operatorId=null clears it.
   const handleAssignOperator = (ref: string, operatorId: string | null) => {
     const next = (() => {
@@ -724,6 +740,7 @@ function App() {
           billing={billing}
           operators={operators}
           assignments={assignments}
+          dbShipments={dbShipments}
           dbSyncError={dbSyncError}
           onUpdateShipments={handleUpdateShipments}
           onUpdateClients={handleUpdateClients}
@@ -742,6 +759,7 @@ function App() {
           onUpdateOperators={handleUpdateOperators}
           onDeleteOperator={handleDeleteOperator}
           onAssignOperator={handleAssignOperator}
+          onPatchShipment={handlePatchShipment}
         />
       </>
     )

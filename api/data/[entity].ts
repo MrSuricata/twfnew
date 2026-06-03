@@ -100,6 +100,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return handleOperators(req, res, db)
       case 'operator-assignments':
         return handleOperatorAssignments(req, res, db)
+      case 'shipments':
+        return handleShipments(req, res, db)
       default:
         return res.status(404).json({ error: `Unknown entity: ${entity}` })
     }
@@ -1161,6 +1163,67 @@ async function handleOperators(req: VercelRequest, res: VercelResponse, db: any)
     const id = req.query.id as string
     if (!id) return res.status(400).json({ error: 'id required' })
     const { error } = await db.from('operators').delete().eq('id', id)
+    if (error) throw error
+    return res.status(200).json({ deleted: true })
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' })
+}
+
+// ── Unified shipments (LCL/aéreo/terrestre + futuro FCL) ───────────
+// GET    /api/data/shipments            → lista
+// PATCH  /api/data/shipments?id=xxx     → update parcial (whitelist)
+// POST   /api/data/shipments            → upsert filas completas
+// DELETE /api/data/shipments?id=xxx     → borrar
+
+const SHIPMENT_COLS = new Set([
+  'ref','client_ref','mode','agente','cliente','shipper','incoterm','pkgs','kg','m3',
+  'doc_number','origin','etd','eta','seguimiento','contenedor','buque','linea','transbordo',
+  'seguro','certi','telex','impresa','despacho','deposito','fecha_consol','transporte','camion',
+  'dest_country','dest_port','fiscal','wood','ftl_ltl','costo_extra','observacion','status',
+  'operator_id','notes','archived',
+])
+
+async function handleShipments(req: VercelRequest, res: VercelResponse, db: any) {
+  if (req.method === 'GET') {
+    const { data, error } = await db.from('shipments').select('*').order('ref', { ascending: true }).limit(5000)
+    if (error) throw error
+    return res.status(200).json({ shipments: data || [] })
+  }
+
+  if (req.method === 'PATCH') {
+    const id = req.query.id as string
+    if (!id) return res.status(400).json({ error: 'id required' })
+    const body = (req.body || {}) as Record<string, unknown>
+    const updates: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(body)) {
+      if (SHIPMENT_COLS.has(k)) updates[k] = v
+    }
+    if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No valid fields' })
+    updates.updated_at_ts = Date.now()
+    const { error } = await db.from('shipments').update(updates).eq('id', id)
+    if (error) throw error
+    return res.status(200).json({ updated: true })
+  }
+
+  if (req.method === 'POST') {
+    const arr = Array.isArray(req.body) ? req.body : [req.body]
+    const now = Date.now()
+    const rows = arr.map((r: any) => {
+      const row: Record<string, unknown> = { id: r.id, updated_at_ts: now }
+      for (const k of SHIPMENT_COLS) if (r[k] !== undefined) row[k] = r[k]
+      if (!row.created_at_ts) row.created_at_ts = r.created_at_ts || now
+      return row
+    })
+    const { error } = await db.from('shipments').upsert(rows, { onConflict: 'id' })
+    if (error) throw error
+    return res.status(200).json({ saved: true, count: rows.length })
+  }
+
+  if (req.method === 'DELETE') {
+    const id = req.query.id as string
+    if (!id) return res.status(400).json({ error: 'id required' })
+    const { error } = await db.from('shipments').delete().eq('id', id)
     if (error) throw error
     return res.status(200).json({ deleted: true })
   }

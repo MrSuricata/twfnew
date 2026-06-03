@@ -7,7 +7,6 @@
 // ──────────────────────────────────────────────────────────────────────
 
 import type { ParsedShipment } from './shipmentTypes'
-import type { LclAirShipment } from './truckTypes'
 
 export type Modality = 'fcl' | 'lcl' | 'air' | 'land'
 
@@ -42,29 +41,87 @@ export interface OperatorAssignment {
   updatedAt: string
 }
 
+// ── Fila DB unificada (tabla shipments — LCL/aéreo/terrestre + futuro FCL) ──
+export interface DbShipment {
+  id: string
+  ref: string
+  client_ref: string
+  mode: Modality
+  agente: string
+  cliente: string
+  shipper: string
+  incoterm: string
+  pkgs: number
+  kg: number
+  m3: number
+  doc_number: string
+  origin: string
+  etd: string
+  eta: string
+  seguimiento: string
+  contenedor: string
+  buque: string
+  linea: string
+  transbordo: string
+  seguro: boolean
+  certi: boolean
+  telex: boolean
+  impresa: boolean
+  despacho: string
+  deposito: string
+  fecha_consol: string
+  transporte: string
+  camion: string
+  dest_country: string
+  dest_port: string
+  fiscal: string
+  wood: boolean
+  ftl_ltl: string
+  costo_extra: string
+  observacion: string
+  status: string
+  operator_id: string | null
+  notes: string
+  source: string
+  archived: boolean
+}
+
 // ── Fila unificada de la grilla ──
 export interface UnifiedOperation {
   ref: string
+  clientRef: string
   mode: Modality
-  source: 'fcl' | 'lcl_air'
+  source: 'fcl' | 'db'
+  dbId?: string                  // id en la tabla shipments (para editar/asignar)
   readOnly: boolean              // FCL = espejo de la Sheet (read-only) hasta C2
   operatorId: string | null
   cliente: string
+  shipper: string
+  agente: string
+  incoterm: string
   tlx: string
   deposito: string
-  eta: string                    // ETA MVD
+  origin: string
+  etd: string
+  eta: string                    // ETA MVD / arribo
   salida: string
   etaFisc: string
   libre: string
   operativa: string
   cntr: string
+  docNumber: string              // BL / MAWB-HAWB / CRT
+  buque: string
+  linea: string
+  camion: string
   pkgs: number
   kg: number
   m3: number
   descripcion: string
   fiscal: string
+  destPort: string
   descarga: string
   dev: string
+  despacho: string
   tipo: string
   wood: boolean
   transporte: string
@@ -75,6 +132,11 @@ const num = (v: unknown): number => {
   return isFinite(n) ? n : 0
 }
 
+const EMPTY = {
+  clientRef: '', shipper: '', agente: '', incoterm: '', origin: '', etd: '',
+  buque: '', linea: '', camion: '', docNumber: '', destPort: '', despacho: '',
+}
+
 /** Collapse a FCL ParsedShipment (1+ operativas) into a single unified row. */
 function fclToOperation(s: ParsedShipment, operatorId: string | null): UnifiedOperation {
   const ops = s.operativas || []
@@ -82,12 +144,17 @@ function fclToOperation(s: ParsedShipment, operatorId: string | null): UnifiedOp
     (ops.find(o => o[key])?.[key] as string) || ''
   const wood = ops.some(o => (o.WOOD || '').toUpperCase().startsWith('SI'))
   return {
+    ...EMPTY,
     ref: s.REF,
     mode: 'fcl',
     source: 'fcl',
     readOnly: true,
     operatorId,
     cliente: s.CLIENTE || firstWith('CLIENTE_OP'),
+    docNumber: s.MBL || '',
+    etd: s.ETD || '',
+    buque: s.BUQUE || '',
+    linea: s.LINEA || '',
     tlx: firstWith('TLX'),
     deposito: firstWith('DEPOSITO'),
     eta: s.ETA || firstWith('ETA_OP'),
@@ -109,40 +176,54 @@ function fclToOperation(s: ParsedShipment, operatorId: string | null): UnifiedOp
   }
 }
 
-/** Map an LCL/Air/Land shipment (DB-native, editable) into a unified row. */
-function lclAirToOperation(s: LclAirShipment, operatorId: string | null): UnifiedOperation {
+/** Map a DB shipment (LCL/aéreo/terrestre) into a unified grid row. */
+export function dbShipmentToOperation(s: DbShipment): UnifiedOperation {
   return {
     ref: s.ref,
-    mode: (s.modality as Modality) || 'lcl',
-    source: 'lcl_air',
+    clientRef: s.client_ref || '',
+    mode: s.mode,
+    source: 'db',
+    dbId: s.id,
     readOnly: false,
-    operatorId,
-    cliente: s.client,
-    tlx: '',
-    deposito: '',
-    eta: s.etaMvd,
+    operatorId: s.operator_id ?? null,
+    cliente: s.cliente || '',
+    shipper: s.shipper || '',
+    agente: s.agente || '',
+    incoterm: s.incoterm || '',
+    tlx: s.telex ? 'SI' : '',
+    deposito: s.deposito || '',
+    origin: s.origin || '',
+    etd: s.etd || '',
+    eta: s.eta || '',
     salida: '',
     etaFisc: '',
     libre: '',
     operativa: '',
-    cntr: '',
-    pkgs: s.pkgs,
-    kg: s.kg,
-    m3: s.m3,
-    descripcion: s.description,
-    fiscal: s.fiscal,
+    cntr: s.contenedor || '',
+    docNumber: s.doc_number || '',
+    buque: s.buque || '',
+    linea: s.linea || '',
+    camion: s.camion || '',
+    pkgs: s.pkgs || 0,
+    kg: s.kg || 0,
+    m3: s.m3 || 0,
+    descripcion: s.observacion || '',
+    fiscal: s.fiscal || '',
+    destPort: s.dest_port || '',
     descarga: '',
     dev: '',
-    tipo: MODALITY_LABELS[(s.modality as Modality) || 'lcl'],
-    wood: s.wood,
-    transporte: '',
+    despacho: s.despacho || '',
+    tipo: MODALITY_LABELS[s.mode] || '',
+    wood: !!s.wood,
+    transporte: s.transporte || '',
   }
 }
 
-/** Build the unified operations list from all current sources. */
+/** Build the unified operations list: FCL from the Sheet cache (operator via
+ *  overlay) + LCL/aéreo/terrestre from the DB shipments table. */
 export function buildOperations(
   shipments: ParsedShipment[],
-  lclAir: LclAirShipment[],
+  dbShipments: DbShipment[],
   assignments: Map<string, string | null>
 ): UnifiedOperation[] {
   const out: UnifiedOperation[] = []
@@ -150,8 +231,9 @@ export function buildOperations(
     if (!s.REF) continue
     out.push(fclToOperation(s, assignments.get(s.REF) ?? null))
   }
-  for (const s of lclAir) {
-    out.push(lclAirToOperation(s, assignments.get(s.ref) ?? null))
+  for (const s of dbShipments) {
+    if (s.archived) continue
+    out.push(dbShipmentToOperation(s))
   }
   return out
 }
@@ -178,21 +260,33 @@ export interface ColumnDef {
 
 export const OPERATION_COLUMNS: ColumnDef[] = [
   { key: 'ref', label: 'Ref', defaultOn: true, sticky: true },
+  { key: 'clientRef', label: 'Ref Cliente', defaultOn: false },
   { key: 'operator', label: 'Operativo', defaultOn: true },
-  { key: 'cliente', label: 'Cliente', defaultOn: true },
+  { key: 'cliente', label: 'Cliente / Cnee', defaultOn: true },
+  { key: 'shipper', label: 'Shipper', defaultOn: false },
+  { key: 'agente', label: 'Agente', defaultOn: false },
+  { key: 'incoterm', label: 'Incoterm', defaultOn: false },
+  { key: 'origin', label: 'Origen', defaultOn: true },
+  { key: 'docNumber', label: 'BL / MAWB / CRT', defaultOn: true },
   { key: 'tlx', label: 'TLX', defaultOn: false },
   { key: 'deposito', label: 'Depósito', defaultOn: true },
-  { key: 'eta', label: 'ETA MVD', defaultOn: true },
-  { key: 'salida', label: 'Salida', defaultOn: true },
-  { key: 'etaFisc', label: 'ETA Fisc', defaultOn: true },
-  { key: 'libre', label: 'Libre', defaultOn: true },
-  { key: 'operativa', label: 'Operativa', defaultOn: true },
+  { key: 'etd', label: 'ETD', defaultOn: false },
+  { key: 'eta', label: 'ETA', defaultOn: true },
+  { key: 'salida', label: 'Salida', defaultOn: false },
+  { key: 'etaFisc', label: 'ETA Fisc', defaultOn: false },
+  { key: 'libre', label: 'Libre', defaultOn: false },
+  { key: 'operativa', label: 'Operativa', defaultOn: false },
   { key: 'cntr', label: 'CNTR', defaultOn: true },
+  { key: 'buque', label: 'Buque', defaultOn: false },
+  { key: 'linea', label: 'Línea', defaultOn: false },
   { key: 'pkgs', label: 'Bultos', defaultOn: true, numeric: true },
   { key: 'kg', label: 'Kg', defaultOn: true, numeric: true },
   { key: 'm3', label: 'M³', defaultOn: true, numeric: true },
-  { key: 'descripcion', label: 'Descripción', defaultOn: true },
+  { key: 'descripcion', label: 'Descripción', defaultOn: false },
   { key: 'fiscal', label: 'Fiscal', defaultOn: true },
+  { key: 'destPort', label: 'Destino', defaultOn: true },
+  { key: 'camion', label: 'Camión', defaultOn: true },
+  { key: 'despacho', label: 'Despacho', defaultOn: false },
   { key: 'descarga', label: 'Descarga', defaultOn: false },
   { key: 'dev', label: 'DEV', defaultOn: false },
   { key: 'tipo', label: 'Tipo', defaultOn: true },
