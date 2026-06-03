@@ -10,7 +10,7 @@ import { Operator, OperatorAssignment } from '@/lib/operationsTypes'
 import { getDemoShipments } from '@/lib/demoShipments'
 import { filterShipments } from '@/lib/sheetsSync'
 import { verifySession, clearAuth, authFetch } from '@/lib/authClient'
-import { loadAdminData, saveQuotes, saveDocuments, saveReports, saveReportWithFile, deleteReport, saveClients, saveOriginPhoto, deleteOriginPhoto, saveTrucks, saveTruckLoads, saveLclAir, deleteTruck as apiDeleteTruck, deleteTruckLoad as apiDeleteTruckLoad, deleteLclAir as apiDeleteLclAir, saveBilling, deleteBilling as apiDeleteBilling, saveOperators, saveOperatorAssignment } from '@/lib/dataClient'
+import { loadAdminData, saveQuotes, saveDocuments, saveReports, saveReportWithFile, deleteReport, saveClients, saveOriginPhoto, deleteOriginPhoto, saveTrucks, saveTruckLoads, saveLclAir, deleteTruck as apiDeleteTruck, deleteTruckLoad as apiDeleteTruckLoad, deleteLclAir as apiDeleteLclAir, saveBilling, deleteBilling as apiDeleteBilling, saveOperators, saveOperatorAssignment, deleteOperator as apiDeleteOperator } from '@/lib/dataClient'
 
 import Login from './components/Login'
 import ClientLogin from './components/ClientLogin'
@@ -525,6 +525,16 @@ function App() {
     }
   }
 
+  const handleDeleteOperator = async (id: string) => {
+    const next = operators.filter(o => o.id !== id)
+    setOperators(next)
+    saveToStorage('twf-operators', next)
+    if (isAdminLoggedIn) {
+      try { await apiDeleteOperator(id) }
+      catch (err) { console.warn('[DB] Failed to delete operator:', err) }
+    }
+  }
+
   // Assign an operativo to a ref (overlay). operatorId=null clears it.
   const handleAssignOperator = (ref: string, operatorId: string | null) => {
     const next = (() => {
@@ -730,6 +740,7 @@ function App() {
           onUpdateBilling={handleUpdateBilling}
           onClearBilling={handleClearBilling}
           onUpdateOperators={handleUpdateOperators}
+          onDeleteOperator={handleDeleteOperator}
           onAssignOperator={handleAssignOperator}
         />
       </>
