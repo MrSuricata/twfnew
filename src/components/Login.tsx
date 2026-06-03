@@ -93,6 +93,18 @@ export default function Login({ onLogin, onBack }: LoginProps) {
                 {loading ? t.auth.verifying : t.auth.login}
               </Button>
             </form>
+
+            {/* DEV-only preview bypass — lets you see the dashboard locally
+                without the backend API. Never rendered in production builds. */}
+            {import.meta.env.DEV && (
+              <button
+                type="button"
+                onClick={onLogin}
+                className="mt-3 w-full text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+              >
+                Vista previa (dev) — entrar sin backend
+              </button>
+            )}
           </CardContent>
         </Card>
       </div>

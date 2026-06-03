@@ -19,6 +19,7 @@ import ClientPortal from './components/ClientPortal'
 import DepotDashboard from './components/DepotDashboard'
 import TransportDashboard from './components/TransportDashboard'
 import PublicSiteEnhanced from './components/PublicSiteEnhanced'
+import MediterraneaLanding from './components/MediterraneaLanding'
 import TermsPage from './components/TermsPage'
 import PrivacyPage from './components/PrivacyPage'
 import NotFoundPage from './components/NotFoundPage'
@@ -758,6 +759,16 @@ function App() {
 
   if (currentView === 'not-found') {
     return <NotFoundPage onGoHome={() => navigateTo('public')} />
+  }
+
+  // Mediterránea brand gets its own landing; TWF keeps PublicSiteEnhanced.
+  if (getBrand().id === 'med') {
+    return (
+      <>
+        <Toaster position="top-right" toastOptions={{ style: { zIndex: 99999 } }} style={{ zIndex: 99999 }} />
+        <MediterraneaLanding />
+      </>
+    )
   }
 
   return (
