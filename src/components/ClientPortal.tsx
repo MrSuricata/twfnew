@@ -287,8 +287,8 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
         <div className="max-w-7xl mx-auto px-4 md:px-6">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-2">
-              <BrandLogo variant="white" className="h-8 w-auto" />
-              <div>
+              <BrandLogo variant="nav" className="h-8 w-auto" />
+              <div className="border-l border-primary-foreground/20 pl-2">
                 <div className="text-xl font-bold">Portal de Cliente</div>
                 <div className="text-xs opacity-80">{currentClient?.company || currentClient?.name}</div>
               </div>

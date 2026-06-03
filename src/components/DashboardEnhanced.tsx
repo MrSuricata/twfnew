@@ -149,9 +149,9 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
       <nav className="bg-primary text-primary-foreground border-b border-border">
         <div className="max-w-7xl mx-auto px-4 md:px-6">
           <div className="flex items-center justify-between h-16">
-            <div className="flex items-center gap-3">
-              <BrandLogo variant="white" className="h-8 w-auto" />
-              <span className="text-xl font-bold">Admin</span>
+            <div className="flex items-center gap-3 min-w-0">
+              <BrandLogo variant="nav" className="h-8 w-auto" />
+              <span className="text-sm font-medium opacity-60 border-l border-primary-foreground/20 pl-3">Admin</span>
             </div>
             <div className="flex items-center gap-2">
               {ops && (
