@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect, useCallback, memo } from 'react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -155,10 +155,11 @@ export default function OperationsGrid({
 
   // Unified operator assignment: DB rows patch shipments.operator_id;
   // FCL (cache) rows use the operator_assignments overlay by ref.
-  const assignOp = (op: UnifiedOperation, operatorId: string | null) => {
+  // useCallback → stable ref so memoized rows don't re-render on sort/scroll.
+  const assignOp = useCallback((op: UnifiedOperation, operatorId: string | null) => {
     if (op.source === 'db' && op.dbId) onPatchShipment(op.dbId, { operator_id: operatorId })
     else onAssignOperator(op.ref, operatorId)
-  }
+  }, [onPatchShipment, onAssignOperator])
 
   const counts = useMemo(() => {
     const c: Record<string, number> = { all: operations.length, fcl: 0, lcl: 0, air: 0, land: 0 }
@@ -437,7 +438,7 @@ export default function OperationsGrid({
           <tbody className="divide-y">
             {sorted.length === 0 ? (
               <tr><td colSpan={cols.length} className="text-center py-12 text-muted-foreground">Sin operaciones para los filtros actuales.</td></tr>
-            ) : sorted.map((op, idx) => (
+            ) : sorted.map((op) => (
               <OperationRow
                 key={`${op.source}-${op.ref}`}
                 op={op}
@@ -445,7 +446,6 @@ export default function OperationsGrid({
                 operators={operators}
                 operatorById={operatorById}
                 truckStatus={truckByRef.get(op.ref)}
-                even={idx % 2 === 0}
                 onAssign={assignOp}
                 onPatch={onPatchShipment}
               />
@@ -512,13 +512,12 @@ export default function OperationsGrid({
 
 // ── Row ──
 
-function OperationRow({
+const OperationRow = memo(function OperationRow({
   op,
   cols,
   operators,
   operatorById,
   truckStatus,
-  even,
   onAssign,
   onPatch,
 }: {
@@ -527,13 +526,11 @@ function OperationRow({
   operators: Operator[]
   operatorById: Map<string, Operator>
   truckStatus?: TruckRefInfo
-  even: boolean
   onAssign: (op: UnifiedOperation, operatorId: string | null) => void
   onPatch: (id: string, fields: Record<string, unknown>) => void
 }) {
   const eligible = operatorsForMode(operators, op.mode)
   const assigned = op.operatorId ? operatorById.get(op.operatorId) : null
-  const bg = even ? 'bg-card' : 'bg-muted/30'
   // DB rows (LCL/aéreo/terrestre) are inline-editable; FCL is a read-only mirror.
   const editable = op.source === 'db' && !!op.dbId && !op.readOnly
 
@@ -577,10 +574,12 @@ function OperationRow({
   }
 
   return (
-    <tr className={`${bg} hover:bg-primary/5`}>
+    // Zebra via CSS (even:) instead of an index prop → rows don't re-render on
+    // sort/reorder, only the DOM nodes move (memo stays valid).
+    <tr className="bg-card even:bg-muted/30 hover:bg-primary/5">
       {cols.map((c) => {
         const ef = editable ? EDITABLE_FIELDS[c.key as keyof UnifiedOperation] : undefined
-        const tdClass = `px-2 py-1.5 align-top ${c.w || ''} ${c.numeric ? 'text-right tabular-nums' : ''} ${c.wrap ? 'whitespace-normal break-words' : 'whitespace-nowrap'} ${c.sticky ? `sticky left-0 ${even ? 'bg-card' : 'bg-muted/30'}` : ''}`
+        const tdClass = `px-2 py-1.5 align-top ${c.w || ''} ${c.numeric ? 'text-right tabular-nums' : ''} ${c.wrap ? 'whitespace-normal break-words' : 'whitespace-nowrap'} ${c.sticky ? 'sticky left-0 bg-inherit' : ''}`
 
         // Estado of a cargo loaded on a truck is driven by the truck (read-only).
         if (c.key === 'status' && truckStatus) {
@@ -619,7 +618,7 @@ function OperationRow({
       })}
     </tr>
   )
-}
+})
 
 // ── Mobile card (one cargo) — replaces the wide table on phones ──
 const CARD_FIELDS: { key: keyof UnifiedOperation; label: string }[] = [
@@ -635,7 +634,7 @@ const CARD_FIELDS: { key: keyof UnifiedOperation; label: string }[] = [
   { key: 'transporte', label: 'Transporte' },
 ]
 
-function OperationCard({
+const OperationCard = memo(function OperationCard({
   op,
   operators,
   operatorById,
@@ -719,7 +718,7 @@ function OperationCard({
       </div>
     </div>
   )
-}
+})
 
 // ── Inline-editable cell (DB rows only) ──
 // text/number → click to edit, Enter/blur saves, Esc cancels.
