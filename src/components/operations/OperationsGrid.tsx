@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react'
+import { useMemo, useState, useEffect, useCallback, memo } from 'react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -36,6 +36,7 @@ import {
   OPERATION_COLUMNS,
   EDITABLE_FIELDS,
   STATUS_LABEL,
+  STATUS_OPTIONS,
   MODALITY_LABELS,
   MODALITY_COLORS,
 } from '@/lib/operationsTypes'
@@ -154,10 +155,11 @@ export default function OperationsGrid({
 
   // Unified operator assignment: DB rows patch shipments.operator_id;
   // FCL (cache) rows use the operator_assignments overlay by ref.
-  const assignOp = (op: UnifiedOperation, operatorId: string | null) => {
+  // useCallback → stable ref so memoized rows don't re-render on sort/scroll.
+  const assignOp = useCallback((op: UnifiedOperation, operatorId: string | null) => {
     if (op.source === 'db' && op.dbId) onPatchShipment(op.dbId, { operator_id: operatorId })
     else onAssignOperator(op.ref, operatorId)
-  }
+  }, [onPatchShipment, onAssignOperator])
 
   const counts = useMemo(() => {
     const c: Record<string, number> = { all: operations.length, fcl: 0, lcl: 0, air: 0, land: 0 }
@@ -402,8 +404,8 @@ export default function OperationsGrid({
         </Popover>
       </div>
 
-      {/* Grid */}
-      <div className="border rounded-lg overflow-auto max-h-[68vh] bg-card">
+      {/* Grid — desktop table */}
+      <div className="hidden md:block border rounded-lg overflow-auto max-h-[68vh] bg-card">
         <table className="w-full text-xs">
           <thead className="sticky top-0 z-10">
             <tr className="bg-[#1e3a8a] text-white">
@@ -436,7 +438,7 @@ export default function OperationsGrid({
           <tbody className="divide-y">
             {sorted.length === 0 ? (
               <tr><td colSpan={cols.length} className="text-center py-12 text-muted-foreground">Sin operaciones para los filtros actuales.</td></tr>
-            ) : sorted.map((op, idx) => (
+            ) : sorted.map((op) => (
               <OperationRow
                 key={`${op.source}-${op.ref}`}
                 op={op}
@@ -444,13 +446,29 @@ export default function OperationsGrid({
                 operators={operators}
                 operatorById={operatorById}
                 truckStatus={truckByRef.get(op.ref)}
-                even={idx % 2 === 0}
                 onAssign={assignOp}
                 onPatch={onPatchShipment}
               />
             ))}
           </tbody>
         </table>
+      </div>
+
+      {/* Grid — mobile cards */}
+      <div className="md:hidden space-y-2">
+        {sorted.length === 0 ? (
+          <div className="text-center py-10 text-muted-foreground text-sm border rounded-lg bg-card">Sin operaciones para los filtros actuales.</div>
+        ) : sorted.map(op => (
+          <OperationCard
+            key={`${op.source}-${op.ref}`}
+            op={op}
+            operators={operators}
+            operatorById={operatorById}
+            truckStatus={truckByRef.get(op.ref)}
+            onAssign={assignOp}
+            onPatch={onPatchShipment}
+          />
+        ))}
       </div>
 
       {/* Totals for the current filter */}
@@ -494,13 +512,12 @@ export default function OperationsGrid({
 
 // ── Row ──
 
-function OperationRow({
+const OperationRow = memo(function OperationRow({
   op,
   cols,
   operators,
   operatorById,
   truckStatus,
-  even,
   onAssign,
   onPatch,
 }: {
@@ -509,13 +526,11 @@ function OperationRow({
   operators: Operator[]
   operatorById: Map<string, Operator>
   truckStatus?: TruckRefInfo
-  even: boolean
   onAssign: (op: UnifiedOperation, operatorId: string | null) => void
   onPatch: (id: string, fields: Record<string, unknown>) => void
 }) {
   const eligible = operatorsForMode(operators, op.mode)
   const assigned = op.operatorId ? operatorById.get(op.operatorId) : null
-  const bg = even ? 'bg-card' : 'bg-muted/30'
   // DB rows (LCL/aéreo/terrestre) are inline-editable; FCL is a read-only mirror.
   const editable = op.source === 'db' && !!op.dbId && !op.readOnly
 
@@ -559,10 +574,12 @@ function OperationRow({
   }
 
   return (
-    <tr className={`${bg} hover:bg-primary/5`}>
+    // Zebra via CSS (even:) instead of an index prop → rows don't re-render on
+    // sort/reorder, only the DOM nodes move (memo stays valid).
+    <tr className="bg-card even:bg-muted/30 hover:bg-primary/5">
       {cols.map((c) => {
         const ef = editable ? EDITABLE_FIELDS[c.key as keyof UnifiedOperation] : undefined
-        const tdClass = `px-2 py-1.5 align-top ${c.w || ''} ${c.numeric ? 'text-right tabular-nums' : ''} ${c.wrap ? 'whitespace-normal break-words' : 'whitespace-nowrap'} ${c.sticky ? `sticky left-0 ${even ? 'bg-card' : 'bg-muted/30'}` : ''}`
+        const tdClass = `px-2 py-1.5 align-top ${c.w || ''} ${c.numeric ? 'text-right tabular-nums' : ''} ${c.wrap ? 'whitespace-normal break-words' : 'whitespace-nowrap'} ${c.sticky ? 'sticky left-0 bg-inherit' : ''}`
 
         // Estado of a cargo loaded on a truck is driven by the truck (read-only).
         if (c.key === 'status' && truckStatus) {
@@ -601,7 +618,107 @@ function OperationRow({
       })}
     </tr>
   )
-}
+})
+
+// ── Mobile card (one cargo) — replaces the wide table on phones ──
+const CARD_FIELDS: { key: keyof UnifiedOperation; label: string }[] = [
+  { key: 'cliente', label: 'Cliente' },
+  { key: 'eta', label: 'ETA' },
+  { key: 'cntr', label: 'CNTR' },
+  { key: 'docNumber', label: 'BL / AWB' },
+  { key: 'fiscal', label: 'Fiscal' },
+  { key: 'destPort', label: 'Destino' },
+  { key: 'pkgs', label: 'Bultos' },
+  { key: 'kg', label: 'Kg' },
+  { key: 'm3', label: 'M³' },
+  { key: 'transporte', label: 'Transporte' },
+]
+
+const OperationCard = memo(function OperationCard({
+  op,
+  operators,
+  operatorById,
+  truckStatus,
+  onAssign,
+  onPatch,
+}: {
+  op: UnifiedOperation
+  operators: Operator[]
+  operatorById: Map<string, Operator>
+  truckStatus?: TruckRefInfo
+  onAssign: (op: UnifiedOperation, operatorId: string | null) => void
+  onPatch: (id: string, fields: Record<string, unknown>) => void
+}) {
+  const editable = op.source === 'db' && !!op.dbId && !op.readOnly
+  const eligible = operatorsForMode(operators, op.mode)
+  const assigned = op.operatorId ? operatorById.get(op.operatorId) : null
+
+  const renderVal = (key: keyof UnifiedOperation) => {
+    const ef = editable ? EDITABLE_FIELDS[key] : undefined
+    if (ef) {
+      return (
+        <EditableCell
+          value={(op as unknown as Record<string, unknown>)[key] as string | number | boolean}
+          type={ef.type}
+          options={ef.options}
+          onCommit={v => onPatch(op.dbId!, { [ef.col]: v })}
+        />
+      )
+    }
+    const num = key === 'pkgs' || key === 'kg' || key === 'm3'
+    const raw = (op as unknown as Record<string, unknown>)[key]
+    return <span>{num ? fmtNum(Number(raw) || 0) : (String(raw ?? '') || '—')}</span>
+  }
+
+  return (
+    <div className="rounded-lg border bg-card p-3 shadow-sm">
+      {/* Header: ref + estado */}
+      <div className="flex items-center justify-between gap-2">
+        <span className="inline-flex items-center gap-1.5 font-semibold text-sm">
+          <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: MODALITY_COLORS[op.mode] }} />
+          {op.ref || '—'}
+          {op.readOnly && <LockSimple size={12} className="text-muted-foreground" />}
+        </span>
+        {truckStatus ? (
+          <Badge variant="outline" className="text-[10px] gap-1"><TruckIcon size={11} weight="fill" className="text-primary" />{truckStatus.truckCode} · {STATUS_LABEL[truckStatus.status] || truckStatus.status}</Badge>
+        ) : editable ? (
+          <select
+            value={op.status || ''}
+            onChange={e => onPatch(op.dbId!, { status: e.target.value })}
+            className="h-7 max-w-[150px] text-xs rounded border border-border bg-card px-1.5"
+          >
+            {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        ) : (
+          op.status && <Badge variant="outline" className="text-[10px]">{op.status}</Badge>
+        )}
+      </div>
+
+      {/* Operativo */}
+      <div className="mt-2">
+        <select
+          value={op.operatorId || ''}
+          onChange={e => onAssign(op, e.target.value || null)}
+          className="w-full h-8 text-sm rounded-md border border-border bg-card px-2"
+          style={assigned ? { color: assigned.color || undefined } : undefined}
+        >
+          <option value="">— operativo sin asignar —</option>
+          {eligible.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+        </select>
+      </div>
+
+      {/* Fields */}
+      <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+        {CARD_FIELDS.map(f => (
+          <div key={f.key}>
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{f.label}</div>
+            <div className="text-foreground break-words">{renderVal(f.key)}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+})
 
 // ── Inline-editable cell (DB rows only) ──
 // text/number → click to edit, Enter/blur saves, Esc cancels.
