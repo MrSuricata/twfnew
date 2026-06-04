@@ -145,8 +145,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         !r.archived && (
           norm(r.ref) === q ||
           norm(r.client_ref) === q ||
-          cntrTokens(r.contenedor).includes(q) ||
-          docTokens(r.doc_number).includes(q)
+          docTokens(r.doc_number).includes(q) ||
+          // Container search is allowed only for NON-LCL: an LCL container is a
+          // shared consolidation holding several clients' cargo, so matching by
+          // container would leak another client's shipment. LCL is found by its
+          // own house BL / ref instead.
+          (r.mode !== 'lcl' && cntrTokens(r.contenedor).includes(q))
         )
       )
       dbResults = hits.map((r: any) => {
