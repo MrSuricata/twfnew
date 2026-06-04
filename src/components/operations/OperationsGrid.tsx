@@ -17,9 +17,11 @@ import {
   Stack,
   UsersThree,
   MagicWand,
+  ClipboardText,
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import OperatorsManager from './OperatorsManager'
+import PasteImportDialog from './PasteImportDialog'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
 import type { Operator, OperatorAssignment, Modality, UnifiedOperation, DbShipment } from '@/lib/operationsTypes'
 import {
@@ -65,6 +67,7 @@ export default function OperationsGrid({
   const [modeFilter, setModeFilter] = useState<ModeFilter>('all')
   const [operatorFilter, setOperatorFilter] = useState<string>('all')
   const [managerOpen, setManagerOpen] = useState(false)
+  const [pasteOpen, setPasteOpen] = useState(false)
 
   // Per-user visible columns (localStorage). Default from column defs.
   const [visibleCols, setVisibleCols] = useState<Set<string>>(() => {
@@ -195,6 +198,11 @@ export default function OperationsGrid({
           <UsersThree size={16} className="mr-1.5" /> Operativos
         </Button>
 
+        {/* Bulk paste from Excel */}
+        <Button variant="outline" size="sm" className="h-9" onClick={() => setPasteOpen(true)} title="Pegar un bloque desde Excel para actualizar varias cargas a la vez">
+          <ClipboardText size={16} className="mr-1.5" /> Pegar
+        </Button>
+
         {/* Column picker */}
         <Popover>
           <PopoverTrigger asChild>
@@ -269,6 +277,13 @@ export default function OperationsGrid({
         operators={operators}
         onUpdateOperators={onUpdateOperators}
         onDeleteOperator={onDeleteOperator}
+      />
+
+      <PasteImportDialog
+        open={pasteOpen}
+        onOpenChange={setPasteOpen}
+        dbShipments={dbShipments}
+        onPatch={onPatchShipment}
       />
     </div>
   )
