@@ -27,6 +27,7 @@ import {
   indexAssignments,
   operatorsForMode,
   OPERATION_COLUMNS,
+  EDITABLE_FIELDS,
   MODALITY_LABELS,
   MODALITY_COLORS,
 } from '@/lib/operationsTypes'
@@ -251,6 +252,7 @@ export default function OperationsGrid({
                 operatorById={operatorById}
                 even={idx % 2 === 0}
                 onAssign={assignOp}
+                onPatch={onPatchShipment}
               />
             ))}
           </tbody>
@@ -258,7 +260,7 @@ export default function OperationsGrid({
       </div>
 
       <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-        <LockSimple size={12} /> Las FCL son espejo de la planilla (read-only) hasta la migración. LCL / aéreo / terrestre vienen de la base unificada. El operativo se asigna acá para todas.
+        <LockSimple size={12} /> Las FCL son espejo de la planilla (read-only) 🔒. LCL / aéreo / terrestre se editan acá: <strong>click en una celda</strong> para cambiarla (Enter guarda · Esc cancela). El operativo se asigna para todas.
       </p>
 
       <OperatorsManager
@@ -281,6 +283,7 @@ function OperationRow({
   operatorById,
   even,
   onAssign,
+  onPatch,
 }: {
   op: UnifiedOperation
   cols: typeof OPERATION_COLUMNS
@@ -288,11 +291,13 @@ function OperationRow({
   operatorById: Map<string, Operator>
   even: boolean
   onAssign: (op: UnifiedOperation, operatorId: string | null) => void
+  onPatch: (id: string, fields: Record<string, unknown>) => void
 }) {
-  const Icon = MODE_ICON[op.mode]
   const eligible = operatorsForMode(operators, op.mode)
   const assigned = op.operatorId ? operatorById.get(op.operatorId) : null
   const bg = even ? 'bg-card' : 'bg-muted/30'
+  // DB rows (LCL/aéreo/terrestre) are inline-editable; FCL is a read-only mirror.
+  const editable = op.source === 'db' && !!op.dbId && !op.readOnly
 
   const cell = (key: string) => {
     switch (key) {
@@ -330,13 +335,26 @@ function OperationRow({
 
   return (
     <tr className={`${bg} hover:bg-primary/5`}>
-      {cols.map(c => {
+      {cols.map((c) => {
+        const ef = editable ? EDITABLE_FIELDS[c.key as keyof UnifiedOperation] : undefined
+        const tdClass = `px-2 py-1.5 align-top ${c.w || ''} ${c.numeric ? 'text-right tabular-nums' : ''} ${c.wrap ? 'whitespace-normal break-words' : 'whitespace-nowrap'} ${c.sticky ? `sticky left-0 ${even ? 'bg-card' : 'bg-muted/30'}` : ''}`
+
+        if (ef) {
+          return (
+            <td key={c.key} className={tdClass}>
+              <EditableCell
+                value={(op as unknown as Record<string, unknown>)[c.key] as string | number | boolean}
+                type={ef.type}
+                wrap={c.wrap}
+                onCommit={v => onPatch(op.dbId!, { [ef.col]: v })}
+              />
+            </td>
+          )
+        }
+
         const content = cell(c.key)
         return (
-          <td
-            key={c.key}
-            className={`px-2 py-1.5 align-top ${c.w || ''} ${c.numeric ? 'text-right tabular-nums' : ''} ${c.wrap ? 'whitespace-normal break-words' : 'whitespace-nowrap'} ${c.sticky ? `sticky left-0 ${even ? 'bg-card' : 'bg-muted/30'}` : ''}`}
-          >
+          <td key={c.key} className={tdClass}>
             {c.wrap
               ? <div className="line-clamp-2 leading-snug" title={typeof content === 'string' ? content : undefined}>{content}</div>
               : content}
@@ -344,5 +362,79 @@ function OperationRow({
         )
       })}
     </tr>
+  )
+}
+
+// ── Inline-editable cell (DB rows only) ──
+// text/number → click to edit, Enter/blur saves, Esc cancels.
+// bool → click toggles SI/— and saves immediately.
+function EditableCell({
+  value,
+  type,
+  wrap,
+  onCommit,
+}: {
+  value: string | number | boolean
+  type: 'text' | 'number' | 'bool'
+  wrap?: boolean
+  onCommit: (v: string | number | boolean | null) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+
+  if (type === 'bool') {
+    const on = value === 'SI' || value === true
+    return (
+      <button
+        type="button"
+        onClick={() => onCommit(!on)}
+        title="Click para cambiar"
+        className={`h-5 px-1.5 rounded text-[10px] font-semibold transition-colors ${on ? 'text-green-600 hover:bg-green-50' : 'text-muted-foreground/50 hover:bg-muted'}`}
+      >
+        {on ? 'SI' : '—'}
+      </button>
+    )
+  }
+
+  if (editing) {
+    const commit = () => {
+      setEditing(false)
+      const t = draft.trim()
+      if (type === 'number') {
+        if (t === '') { if (value !== 0 && value !== '') onCommit(null); return }
+        const n = parseFloat(t.replace(',', '.'))
+        if (isFinite(n) && n !== Number(value)) onCommit(n)
+      } else {
+        if (draft !== (value ?? '')) onCommit(draft)
+      }
+    }
+    return (
+      <input
+        autoFocus
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onFocus={e => e.target.select()}
+        onBlur={commit}
+        onKeyDown={e => {
+          if (e.key === 'Enter') { e.preventDefault(); commit() }
+          else if (e.key === 'Escape') { e.preventDefault(); setEditing(false) }
+        }}
+        inputMode={type === 'number' ? 'decimal' : undefined}
+        className="w-full h-6 px-1 rounded border border-primary bg-background text-xs outline-none"
+      />
+    )
+  }
+
+  const display = type === 'number'
+    ? (value === 0 || value === '' ? '' : fmtNum(Number(value)))
+    : ((value as string) || '')
+  return (
+    <div
+      onClick={() => { setDraft(value === 0 || value == null ? '' : String(value)); setEditing(true) }}
+      title="Click para editar"
+      className={`min-h-[20px] cursor-text rounded px-1 -mx-1 hover:bg-primary/10 ${wrap ? 'line-clamp-2 leading-snug' : ''}`}
+    >
+      {display || <span className="text-muted-foreground/30">—</span>}
+    </div>
   )
 }

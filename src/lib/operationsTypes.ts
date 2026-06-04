@@ -297,3 +297,39 @@ export const OPERATION_COLUMNS: ColumnDef[] = [
   { key: 'wood', label: 'Wood', defaultOn: true, w: 'max-w-[56px]' },
   { key: 'transporte', label: 'Transporte', defaultOn: true, wrap: true, w: 'max-w-[110px]' },
 ]
+
+// ── Inline edit: grid column → DB column + value type ──
+// Only DB rows (LCL/aéreo/terrestre) are editable; FCL stays read-only (mirror
+// of the Sheet). Columns NOT listed here (ref, operator, tipo, and the FCL-only
+// date fields salida/etaFisc/libre/operativa/descarga/dev) are not inline-editable.
+export interface EditableField {
+  col: string                      // column name in the `shipments` table (PATCH whitelist)
+  type: 'text' | 'number' | 'bool'
+}
+
+export const EDITABLE_FIELDS: Partial<Record<keyof UnifiedOperation, EditableField>> = {
+  cliente: { col: 'cliente', type: 'text' },
+  clientRef: { col: 'client_ref', type: 'text' },
+  shipper: { col: 'shipper', type: 'text' },
+  agente: { col: 'agente', type: 'text' },
+  incoterm: { col: 'incoterm', type: 'text' },
+  origin: { col: 'origin', type: 'text' },
+  docNumber: { col: 'doc_number', type: 'text' },
+  deposito: { col: 'deposito', type: 'text' },
+  etd: { col: 'etd', type: 'text' },
+  eta: { col: 'eta', type: 'text' },
+  cntr: { col: 'contenedor', type: 'text' },
+  buque: { col: 'buque', type: 'text' },
+  linea: { col: 'linea', type: 'text' },
+  pkgs: { col: 'pkgs', type: 'number' },
+  kg: { col: 'kg', type: 'number' },
+  m3: { col: 'm3', type: 'number' },
+  descripcion: { col: 'observacion', type: 'text' },
+  fiscal: { col: 'fiscal', type: 'text' },
+  destPort: { col: 'dest_port', type: 'text' },
+  camion: { col: 'camion', type: 'text' },
+  despacho: { col: 'despacho', type: 'text' },
+  transporte: { col: 'transporte', type: 'text' },
+  tlx: { col: 'telex', type: 'bool' },
+  wood: { col: 'wood', type: 'bool' },
+}
