@@ -1180,7 +1180,7 @@ const SHIPMENT_COLS = new Set([
   'ref','client_ref','mode','agente','cliente','shipper','incoterm','pkgs','kg','m3',
   'doc_number','origin','etd','eta','seguimiento','contenedor','buque','linea','transbordo',
   'seguro','certi','telex','impresa','despacho','deposito','fecha_consol','transporte','camion',
-  'dest_country','dest_port','fiscal','wood','ftl_ltl','costo_extra','observacion','status',
+  'dest_country','discharge_port','dest_port','fiscal','wood','no_apilable','ftl_ltl','costo_extra','observacion','status',
   'operator_id','notes','archived','source',
 ])
 
