@@ -229,11 +229,11 @@ export default function OperationsGrid({
 
       {/* Grid */}
       <div className="border rounded-lg overflow-auto max-h-[68vh] bg-card">
-        <table className="w-full text-xs whitespace-nowrap">
+        <table className="w-full text-xs">
           <thead className="sticky top-0 z-10">
             <tr className="bg-[#1e3a8a] text-white">
               {cols.map(c => (
-                <th key={c.key} className={`px-2.5 py-2 text-left font-semibold uppercase tracking-wide text-[10px] ${c.numeric ? 'text-right' : ''} ${c.sticky ? 'sticky left-0 bg-[#1e3a8a] z-20' : ''}`}>
+                <th key={c.key} className={`px-2 py-2 text-left font-semibold uppercase tracking-wide text-[10px] align-bottom ${c.w || ''} ${c.numeric ? 'text-right' : ''} ${c.sticky ? 'sticky left-0 bg-[#1e3a8a] z-20' : ''}`}>
                   {c.label}
                 </th>
               ))}
@@ -330,11 +330,19 @@ function OperationRow({
 
   return (
     <tr className={`${bg} hover:bg-primary/5`}>
-      {cols.map(c => (
-        <td key={c.key} className={`px-2.5 py-1.5 ${c.numeric ? 'text-right tabular-nums' : ''} ${c.sticky ? `sticky left-0 ${even ? 'bg-card' : 'bg-muted/30'}` : ''}`}>
-          {cell(c.key)}
-        </td>
-      ))}
+      {cols.map(c => {
+        const content = cell(c.key)
+        return (
+          <td
+            key={c.key}
+            className={`px-2 py-1.5 align-top ${c.w || ''} ${c.numeric ? 'text-right tabular-nums' : ''} ${c.wrap ? 'whitespace-normal break-words' : 'whitespace-nowrap'} ${c.sticky ? `sticky left-0 ${even ? 'bg-card' : 'bg-muted/30'}` : ''}`}
+          >
+            {c.wrap
+              ? <div className="line-clamp-2 leading-snug" title={typeof content === 'string' ? content : undefined}>{content}</div>
+              : content}
+          </td>
+        )
+      })}
     </tr>
   )
 }
