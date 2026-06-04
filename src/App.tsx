@@ -10,7 +10,7 @@ import { Operator, OperatorAssignment, DbShipment } from '@/lib/operationsTypes'
 import { getDemoShipments } from '@/lib/demoShipments'
 import { filterShipments } from '@/lib/sheetsSync'
 import { verifySession, clearAuth, authFetch } from '@/lib/authClient'
-import { loadAdminData, saveQuotes, saveDocuments, saveReports, saveReportWithFile, deleteReport, saveClients, saveOriginPhoto, deleteOriginPhoto, saveTrucks, saveTruckLoads, saveLclAir, deleteTruck as apiDeleteTruck, deleteTruckLoad as apiDeleteTruckLoad, deleteLclAir as apiDeleteLclAir, saveBilling, deleteBilling as apiDeleteBilling, saveOperators, saveOperatorAssignment, deleteOperator as apiDeleteOperator, patchDbShipment } from '@/lib/dataClient'
+import { loadAdminData, saveQuotes, saveDocuments, saveReports, saveReportWithFile, deleteReport, saveClients, saveOriginPhoto, deleteOriginPhoto, saveTrucks, saveTruckLoads, saveLclAir, deleteTruck as apiDeleteTruck, deleteTruckLoad as apiDeleteTruckLoad, deleteLclAir as apiDeleteLclAir, saveBilling, deleteBilling as apiDeleteBilling, saveOperators, saveOperatorAssignment, deleteOperator as apiDeleteOperator, patchDbShipment, createDbShipment } from '@/lib/dataClient'
 
 import Login from './components/Login'
 import ClientLogin from './components/ClientLogin'
@@ -551,6 +551,21 @@ function App() {
     }
   }
 
+  // Create a new DB shipment (LCL/aéreo/terrestre/FCL) from the web.
+  const handleCreateShipment = (row: DbShipment) => {
+    const next = [row, ...dbShipments]
+    setDbShipments(next)
+    saveToStorage('twf-db-shipments', next)
+    if (isAdminLoggedIn) {
+      createDbShipment(row)
+        .then(() => toast.success(`Carga ${row.ref || row.mode.toUpperCase()} creada`))
+        .catch(err => {
+          console.warn('[DB] Failed to create shipment:', err)
+          toast.warning('Error al crear la carga', { duration: 4000 })
+        })
+    }
+  }
+
   // Assign an operativo to a ref (overlay). operatorId=null clears it.
   const handleAssignOperator = (ref: string, operatorId: string | null) => {
     const next = (() => {
@@ -760,6 +775,7 @@ function App() {
           onDeleteOperator={handleDeleteOperator}
           onAssignOperator={handleAssignOperator}
           onPatchShipment={handlePatchShipment}
+          onCreateShipment={handleCreateShipment}
         />
       </>
     )

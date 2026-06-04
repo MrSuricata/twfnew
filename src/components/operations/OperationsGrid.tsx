@@ -19,10 +19,12 @@ import {
   MagicWand,
   ClipboardText,
   DownloadSimple,
+  Plus,
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import OperatorsManager from './OperatorsManager'
 import PasteImportDialog from './PasteImportDialog'
+import NewShipmentDialog from './NewShipmentDialog'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
 import type { Operator, OperatorAssignment, Modality, UnifiedOperation, DbShipment } from '@/lib/operationsTypes'
 import type { Truck, TruckLoad } from '@/lib/truckTypes'
@@ -50,6 +52,7 @@ interface OperationsGridProps {
   assignments: OperatorAssignment[]
   onAssignOperator: (ref: string, operatorId: string | null) => void
   onPatchShipment: (id: string, fields: Record<string, unknown>) => void
+  onCreateShipment?: (row: DbShipment) => void
   onUpdateOperators: (operators: Operator[]) => void
   onDeleteOperator: (id: string) => void
 }
@@ -71,6 +74,7 @@ export default function OperationsGrid({
   assignments,
   onAssignOperator,
   onPatchShipment,
+  onCreateShipment,
   onUpdateOperators,
   onDeleteOperator,
 }: OperationsGridProps) {
@@ -79,6 +83,7 @@ export default function OperationsGrid({
   const [operatorFilter, setOperatorFilter] = useState<string>('all')
   const [managerOpen, setManagerOpen] = useState(false)
   const [pasteOpen, setPasteOpen] = useState(false)
+  const [newOpen, setNewOpen] = useState(false)
 
   // Per-user visible columns (localStorage). Default from column defs.
   const [visibleCols, setVisibleCols] = useState<Set<string>>(() => {
@@ -218,6 +223,11 @@ export default function OperationsGrid({
           <h2 className="text-2xl font-bold tracking-tight">Operaciones</h2>
           <p className="text-sm text-muted-foreground">{counts.all.toLocaleString('es-UY')} cargas · vista unificada FCL · LCL · aéreo · terrestre</p>
         </div>
+        {onCreateShipment && (
+          <Button onClick={() => setNewOpen(true)} className="gap-1.5">
+            <Plus size={16} weight="bold" /> Nueva carga
+          </Button>
+        )}
       </div>
 
       {/* Mode chips */}
@@ -366,6 +376,15 @@ export default function OperationsGrid({
         dbShipments={dbShipments}
         onPatch={onPatchShipment}
       />
+
+      {onCreateShipment && (
+        <NewShipmentDialog
+          open={newOpen}
+          onOpenChange={setNewOpen}
+          operators={operators}
+          onCreate={onCreateShipment}
+        />
+      )}
     </div>
   )
 }

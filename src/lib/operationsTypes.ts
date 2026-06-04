@@ -379,3 +379,20 @@ export const EDITABLE_FIELDS: Partial<Record<keyof UnifiedOperation, EditableFie
   wood: { col: 'wood', type: 'bool' },
   status: { col: 'status', type: 'select', options: STATUS_OPTIONS },
 }
+
+// Build a new DB shipment row with sensible empty defaults. Only `mode` is
+// required; the rest is filled inline in the grid afterwards.
+export function newDbShipment(fields: Partial<DbShipment> & { mode: Modality }): DbShipment {
+  const rand = Math.random().toString(36).slice(2, 7)
+  return {
+    id: `shp-${fields.mode}-${Date.now()}-${rand}`,
+    ref: '', client_ref: '', agente: '', cliente: '', shipper: '',
+    incoterm: '', pkgs: 0, kg: 0, m3: 0, doc_number: '', origin: '', etd: '', eta: '',
+    seguimiento: '', contenedor: '', buque: '', linea: '', transbordo: '', seguro: false,
+    certi: false, telex: false, impresa: false, despacho: '', deposito: '', fecha_consol: '',
+    transporte: '', camion: '', dest_country: '', dest_port: '', fiscal: '', wood: false,
+    ftl_ltl: '', costo_extra: '', observacion: '', status: 'en_origen', operator_id: null,
+    notes: '', source: 'web', archived: false,
+    ...fields,
+  }
+}
