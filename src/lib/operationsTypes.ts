@@ -7,8 +7,26 @@
 // ──────────────────────────────────────────────────────────────────────
 
 import type { ParsedShipment } from './shipmentTypes'
+import { getShipmentStatus } from './shipmentTypes'
 
 export type Modality = 'fcl' | 'lcl' | 'air' | 'land'
+
+// Canonical operational status (LCL/aéreo/terrestre — editable in the grid;
+// drives the public tracking card). FCL derives its status from the Sheet.
+export const STATUS_OPTIONS: { value: string; label: string }[] = [
+  { value: '', label: '—' },
+  { value: 'en_origen', label: 'En Origen' },
+  { value: 'embarcado', label: 'Embarcado' },
+  { value: 'en_transito', label: 'En Tránsito' },
+  { value: 'arribado', label: 'Arribado a Puerto' },
+  { value: 'saliendo', label: 'Sale Hoy' },
+  { value: 'en_frontera', label: 'En Frontera' },
+  { value: 'en_fiscal', label: 'En Depósito Fiscal' },
+  { value: 'devuelto', label: 'Entregado' },
+]
+export const STATUS_LABEL: Record<string, string> = Object.fromEntries(
+  STATUS_OPTIONS.filter(o => o.value).map(o => [o.value, o.label])
+)
 
 export const MODALITY_LABELS: Record<Modality, string> = {
   fcl: 'FCL',
@@ -125,6 +143,7 @@ export interface UnifiedOperation {
   tipo: string
   wood: boolean
   transporte: string
+  status: string                 // DB: código editable · FCL: label derivado de la planilla
 }
 
 const num = (v: unknown): number => {
@@ -173,6 +192,7 @@ function fclToOperation(s: ParsedShipment, operatorId: string | null): UnifiedOp
     tipo: firstWith('TIPO') || 'FCL',
     wood,
     transporte: firstWith('TRANSPORTE'),
+    status: getShipmentStatus(s).label,   // derivado de la planilla (read-only)
   }
 }
 
@@ -216,6 +236,7 @@ export function dbShipmentToOperation(s: DbShipment): UnifiedOperation {
     tipo: MODALITY_LABELS[s.mode] || '',
     wood: !!s.wood,
     transporte: s.transporte || '',
+    status: s.status || '',
   }
 }
 
@@ -294,6 +315,7 @@ export const OPERATION_COLUMNS: ColumnDef[] = [
   { key: 'descarga', label: 'Descarga', defaultOn: false, w: 'max-w-[84px]' },
   { key: 'dev', label: 'DEV', defaultOn: false, w: 'max-w-[90px]' },
   { key: 'tipo', label: 'Tipo', defaultOn: true },
+  { key: 'status', label: 'Estado', defaultOn: true, w: 'max-w-[130px]' },
   { key: 'wood', label: 'Wood', defaultOn: true, w: 'max-w-[56px]' },
   { key: 'transporte', label: 'Transporte', defaultOn: true, wrap: true, w: 'max-w-[110px]' },
 ]
@@ -304,7 +326,8 @@ export const OPERATION_COLUMNS: ColumnDef[] = [
 // date fields salida/etaFisc/libre/operativa/descarga/dev) are not inline-editable.
 export interface EditableField {
   col: string                      // column name in the `shipments` table (PATCH whitelist)
-  type: 'text' | 'number' | 'bool'
+  type: 'text' | 'number' | 'bool' | 'select'
+  options?: { value: string; label: string }[]   // for type 'select'
 }
 
 export const EDITABLE_FIELDS: Partial<Record<keyof UnifiedOperation, EditableField>> = {
@@ -332,4 +355,5 @@ export const EDITABLE_FIELDS: Partial<Record<keyof UnifiedOperation, EditableFie
   transporte: { col: 'transporte', type: 'text' },
   tlx: { col: 'telex', type: 'bool' },
   wood: { col: 'wood', type: 'bool' },
+  status: { col: 'status', type: 'select', options: STATUS_OPTIONS },
 }

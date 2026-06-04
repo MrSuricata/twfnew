@@ -30,6 +30,7 @@ import {
   operatorsForMode,
   OPERATION_COLUMNS,
   EDITABLE_FIELDS,
+  STATUS_LABEL,
   MODALITY_LABELS,
   MODALITY_COLORS,
 } from '@/lib/operationsTypes'
@@ -343,6 +344,11 @@ function OperationRow({
       case 'm3': return fmtNum(op.m3)
       case 'tipo':
         return <Badge variant="outline" className="h-5 text-[9px]">{op.tipo || MODALITY_LABELS[op.mode]}</Badge>
+      case 'status': {
+        // FCL: derived label (read-only). DB: code → label.
+        const label = op.source === 'fcl' ? op.status : (STATUS_LABEL[op.status] || op.status)
+        return label ? <Badge variant="outline" className="h-5 text-[9px] whitespace-nowrap">{label}</Badge> : ''
+      }
       default:
         return (op as unknown as Record<string, unknown>)[key] as string || ''
     }
@@ -360,6 +366,7 @@ function OperationRow({
               <EditableCell
                 value={(op as unknown as Record<string, unknown>)[c.key] as string | number | boolean}
                 type={ef.type}
+                options={ef.options}
                 wrap={c.wrap}
                 onCommit={v => onPatch(op.dbId!, { [ef.col]: v })}
               />
@@ -386,16 +393,31 @@ function OperationRow({
 function EditableCell({
   value,
   type,
+  options,
   wrap,
   onCommit,
 }: {
   value: string | number | boolean
-  type: 'text' | 'number' | 'bool'
+  type: 'text' | 'number' | 'bool' | 'select'
+  options?: { value: string; label: string }[]
   wrap?: boolean
   onCommit: (v: string | number | boolean | null) => void
 }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
+
+  if (type === 'select') {
+    const cur = String(value ?? '')
+    return (
+      <select
+        value={cur}
+        onChange={e => onCommit(e.target.value)}
+        className="h-6 w-full max-w-[128px] text-xs rounded border border-transparent hover:border-border bg-transparent px-1 cursor-pointer focus:border-primary"
+      >
+        {(options || []).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    )
+  }
 
   if (type === 'bool') {
     const on = value === 'SI' || value === true
