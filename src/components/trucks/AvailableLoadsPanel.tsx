@@ -14,16 +14,19 @@ import { Label } from '@/components/ui/label'
 import { Plus, MagnifyingGlass, Package, Boat, Airplane, Truck as TruckIcon } from '@phosphor-icons/react'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
 import type { LclAirShipment, Truck, TruckLoad, LoadSource } from '@/lib/truckTypes'
+import type { DbShipment } from '@/lib/operationsTypes'
 import { formatKg, formatM3, getAssignedRefs, isFclAvailable, isLclAirAvailable } from '@/lib/truckUtils'
 
 interface AvailableLoadsPanelProps {
   shipments: ParsedShipment[]
   lclAir: LclAirShipment[]
+  dbShipments?: DbShipment[]          // unified table (LCL/aéreo) — la fuente nueva
   trucks: Truck[]
   truckLoads: TruckLoad[]
   currentTruckId: string
   onAddFcl: (shipment: ParsedShipment) => void
   onAddLclAir: (shipment: LclAirShipment) => void
+  onAddDb?: (shipment: DbShipment) => void
 }
 
 type ModeFilter = 'all' | 'fcl' | 'lcl' | 'air'
@@ -40,16 +43,19 @@ interface AvailableRow {
   mvdArrival: string
   fcl?: ParsedShipment
   lclAir?: LclAirShipment
+  db?: DbShipment
 }
 
 export default function AvailableLoadsPanel({
   shipments,
   lclAir,
+  dbShipments,
   trucks,
   truckLoads,
   currentTruckId,
   onAddFcl,
   onAddLclAir,
+  onAddDb,
 }: AvailableLoadsPanelProps) {
   const [search, setSearch] = useState('')
   const [modeFilter, setModeFilter] = useState<ModeFilter>('all')
@@ -107,10 +113,40 @@ export default function AvailableLoadsPanel({
       }
     }
 
-    // LCL / Air from registry
+    // LCL / Air from the unified `shipments` table (the new source of truth).
+    const dbRefs = new Set<string>()
+    for (const s of (dbShipments || [])) {
+      if (s.mode !== 'lcl' && s.mode !== 'air') continue
+      dbRefs.add(s.ref)
+      if (modeFilter === 'fcl') continue
+      if (modeFilter !== 'all' && modeFilter !== s.mode) continue
+      if (inThisTruck.has(s.ref)) continue
+      if (assignedElsewhere.has(s.ref)) continue
+      if (!showArchived && s.archived) continue
+      if (onlyArrived && s.eta) {
+        const eta = new Date(s.eta)
+        if (!isNaN(eta.getTime()) && eta.getTime() > today.getTime()) continue
+      }
+      out.push({
+        ref: s.ref,
+        type: s.mode,
+        client: s.cliente || '',
+        fiscal: s.fiscal || '',
+        kg: Number(s.kg) || 0,
+        m3: Number(s.m3) || 0,
+        pkgs: Number(s.pkgs) || 0,
+        description: s.observacion || '',
+        mvdArrival: s.eta || '',
+        db: s,
+      })
+    }
+
+    // LCL / Air from the legacy registry (lcl_air_shipments) — skip any ref
+    // already provided by the DB above to avoid duplicates.
     for (const s of lclAir) {
       if (modeFilter === 'fcl') continue
       if (modeFilter !== 'all' && modeFilter !== s.modality) continue
+      if (dbRefs.has(s.ref)) continue
       if (inThisTruck.has(s.ref)) continue
       if (!isLclAirAvailable(s, assignedElsewhere, { showArchived })) continue
       if (onlyArrived && s.status === 'en_origen') continue
@@ -130,7 +166,7 @@ export default function AvailableLoadsPanel({
     }
 
     return out
-  }, [shipments, lclAir, modeFilter, assignedElsewhere, inThisTruck, showArchived, onlyArrived])
+  }, [shipments, lclAir, dbShipments, modeFilter, assignedElsewhere, inThisTruck, showArchived, onlyArrived])
 
   const fiscals = useMemo(() => {
     const set = new Set<string>()
@@ -231,6 +267,7 @@ export default function AvailableLoadsPanel({
               row={r}
               onAdd={() => {
                 if (r.fcl) onAddFcl(r.fcl)
+                else if (r.db) onAddDb?.(r.db)
                 else if (r.lclAir) onAddLclAir(r.lclAir)
               }}
             />
