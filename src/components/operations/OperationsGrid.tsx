@@ -58,7 +58,18 @@ interface OperationsGridProps {
 }
 
 type ModeFilter = 'all' | Modality
-const COLS_STORAGE_KEY = 'twf-ops-columns' // per-user (per-browser) column prefs
+const COLS_STORAGE_KEY = 'twf-ops-columns'     // per-user visible columns
+const COL_ORDER_KEY = 'twf-ops-col-order'      // per-user column order (drag & drop)
+
+// Column value typing for sorting.
+const NUMERIC_KEYS = new Set(['pkgs', 'kg', 'm3'])
+const DATE_KEYS = new Set(['etd', 'eta', 'salida', 'etaFisc', 'libre', 'descarga', 'dev'])
+const parseDateMs = (s: string): number => {
+  const p = String(s || '').split('-')
+  if (p.length !== 3) return NaN
+  const d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]))
+  return isNaN(d.getTime()) ? NaN : d.getTime()
+}
 
 const NUM_FMT = new Intl.NumberFormat('es-UY', { maximumFractionDigits: 2 })
 const fmtNum = (n: number) => (n === 0 ? '' : NUM_FMT.format(n))
@@ -96,6 +107,24 @@ export default function OperationsGrid({
   useEffect(() => {
     try { localStorage.setItem(COLS_STORAGE_KEY, JSON.stringify([...visibleCols])) } catch { /* ignore */ }
   }, [visibleCols])
+
+  // Column order (per-user, drag-and-drop). Defaults to the canonical order.
+  const [colOrder, setColOrder] = useState<string[]>(() => {
+    try {
+      const stored = localStorage.getItem(COL_ORDER_KEY)
+      if (stored) return JSON.parse(stored)
+    } catch { /* ignore */ }
+    return OPERATION_COLUMNS.map(c => c.key as string)
+  })
+  useEffect(() => {
+    try { localStorage.setItem(COL_ORDER_KEY, JSON.stringify(colOrder)) } catch { /* ignore */ }
+  }, [colOrder])
+
+  // Sort by a column (click header → asc → desc → none).
+  const [sort, setSort] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(null)
+  // Drag-and-drop reorder state.
+  const [dragKey, setDragKey] = useState<string | null>(null)
+  const [overKey, setOverKey] = useState<string | null>(null)
 
   const assignMap = useMemo(() => indexAssignments(assignments), [assignments])
   const operations = useMemo(
@@ -171,7 +200,17 @@ export default function OperationsGrid({
     return { count: filtered.length, pkgs, kg, m3 }
   }, [filtered])
 
-  const cols = OPERATION_COLUMNS.filter(c => visibleCols.has(c.key))
+  // Visible columns in the user's drag-and-drop order (sticky col pinned first).
+  const cols = useMemo(() => {
+    const byKey = new Map(OPERATION_COLUMNS.map(c => [c.key as string, c]))
+    const seen = new Set<string>()
+    const ordered: typeof OPERATION_COLUMNS = []
+    for (const k of colOrder) { const d = byKey.get(k); if (d) { ordered.push(d); seen.add(k) } }
+    for (const c of OPERATION_COLUMNS) if (!seen.has(c.key as string)) ordered.push(c)
+    const visible = ordered.filter(c => visibleCols.has(c.key))
+    return [...visible].sort((a, b) => (b.sticky ? 1 : 0) - (a.sticky ? 1 : 0))
+  }, [colOrder, visibleCols])
+
   const operatorById = useMemo(() => {
     const m = new Map<string, Operator>()
     for (const o of operators) m.set(o.id, o)
@@ -205,6 +244,51 @@ export default function OperationsGrid({
     a.click()
     URL.revokeObjectURL(url)
     toast.success(`${filtered.length} cargas exportadas a CSV`)
+  }
+
+  // ── Sorting ──
+  const sortValue = (op: UnifiedOperation, key: string): { empty: boolean; cmp: number | string } => {
+    if (NUMERIC_KEYS.has(key)) { const n = (op as unknown as Record<string, number>)[key] || 0; return { empty: n === 0, cmp: n } }
+    if (DATE_KEYS.has(key)) { const ms = parseDateMs((op as unknown as Record<string, string>)[key]); return { empty: isNaN(ms), cmp: isNaN(ms) ? 0 : ms } }
+    const s = cellText(op, key)
+    return { empty: !s, cmp: s.toLowerCase() }
+  }
+  const sorted = useMemo(() => {
+    if (!sort) return filtered
+    const sign = sort.dir === 'asc' ? 1 : -1
+    return [...filtered].sort((a, b) => {
+      const va = sortValue(a, sort.key), vb = sortValue(b, sort.key)
+      if (va.empty && vb.empty) return 0
+      if (va.empty) return 1          // empties always last, regardless of dir
+      if (vb.empty) return -1
+      const c = (typeof va.cmp === 'number' && typeof vb.cmp === 'number')
+        ? va.cmp - vb.cmp
+        : String(va.cmp).localeCompare(String(vb.cmp), 'es')
+      return c * sign
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filtered, sort, operatorById])
+
+  const toggleSort = (key: string) => {
+    setSort(prev => {
+      if (!prev || prev.key !== key) return { key, dir: 'asc' }
+      if (prev.dir === 'asc') return { key, dir: 'desc' }
+      return null
+    })
+  }
+
+  // ── Column drag-and-drop reorder ──
+  const dropReorder = (targetKey: string) => {
+    if (!dragKey || dragKey === targetKey) { setDragKey(null); setOverKey(null); return }
+    setColOrder(prev => {
+      const order = prev.length ? [...prev] : OPERATION_COLUMNS.map(c => c.key as string)
+      for (const c of OPERATION_COLUMNS) if (!order.includes(c.key as string)) order.push(c.key as string)
+      const from = order.indexOf(dragKey), to = order.indexOf(targetKey)
+      if (from < 0 || to < 0) return prev
+      order.splice(to, 0, order.splice(from, 1)[0])
+      return order
+    })
+    setDragKey(null); setOverKey(null)
   }
 
   const modeChips: { id: ModeFilter; label: string; color?: string }[] = [
@@ -323,17 +407,36 @@ export default function OperationsGrid({
         <table className="w-full text-xs">
           <thead className="sticky top-0 z-10">
             <tr className="bg-[#1e3a8a] text-white">
-              {cols.map(c => (
-                <th key={c.key} className={`px-2 py-2 text-left font-semibold uppercase tracking-wide text-[10px] align-bottom ${c.w || ''} ${c.numeric ? 'text-right' : ''} ${c.sticky ? 'sticky left-0 bg-[#1e3a8a] z-20' : ''}`}>
-                  {c.label}
-                </th>
-              ))}
+              {cols.map(c => {
+                const active = sort?.key === c.key
+                const arrow = active ? (sort!.dir === 'asc' ? '▲' : '▼') : ''
+                const draggable = !c.sticky
+                return (
+                  <th
+                    key={c.key}
+                    draggable={draggable}
+                    onDragStart={draggable ? () => setDragKey(c.key) : undefined}
+                    onDragOver={draggable ? (e) => { e.preventDefault(); if (overKey !== c.key) setOverKey(c.key) } : undefined}
+                    onDragLeave={draggable ? () => setOverKey(k => (k === c.key ? null : k)) : undefined}
+                    onDrop={draggable ? () => dropReorder(c.key) : undefined}
+                    onDragEnd={() => { setDragKey(null); setOverKey(null) }}
+                    onClick={() => toggleSort(c.key)}
+                    title="Click: ordenar · Arrastrá para reordenar"
+                    className={`px-2 py-2 text-left font-semibold uppercase tracking-wide text-[10px] align-bottom cursor-pointer select-none hover:bg-[#274aa3] ${c.w || ''} ${c.numeric ? 'text-right' : ''} ${c.sticky ? 'sticky left-0 bg-[#1e3a8a] z-20' : ''} ${overKey === c.key && dragKey ? 'border-l-2 border-[#9bd1e5]' : ''} ${dragKey === c.key ? 'opacity-50' : ''}`}
+                  >
+                    <span className={`inline-flex items-center gap-1 ${c.numeric ? 'flex-row-reverse' : ''}`}>
+                      {c.label}
+                      {arrow && <span className="text-[#9bd1e5] text-[8px]">{arrow}</span>}
+                    </span>
+                  </th>
+                )
+              })}
             </tr>
           </thead>
           <tbody className="divide-y">
-            {filtered.length === 0 ? (
+            {sorted.length === 0 ? (
               <tr><td colSpan={cols.length} className="text-center py-12 text-muted-foreground">Sin operaciones para los filtros actuales.</td></tr>
-            ) : filtered.map((op, idx) => (
+            ) : sorted.map((op, idx) => (
               <OperationRow
                 key={`${op.source}-${op.ref}`}
                 op={op}
