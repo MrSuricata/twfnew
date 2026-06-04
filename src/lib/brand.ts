@@ -103,16 +103,18 @@ export function resolveBrandId(): BrandId {
   if (isBrandId(env)) return env
 
   if (typeof window !== 'undefined') {
-    // 2) DEV-only manual override for previewing the other brand:
-    //    ?brand=med (sticky via localStorage). Ignored in production builds.
-    if (meta?.DEV) {
-      try {
-        const q = new URLSearchParams(window.location.search).get('brand')
-        if (isBrandId(q)) { localStorage.setItem('twf-brand-override', q); return q }
-        const stored = localStorage.getItem('twf-brand-override')
-        if (isBrandId(stored)) return stored
-      } catch { /* ignore */ }
-    }
+    // 2) Manual override for switching brand on a shared deployment:
+    //    ?brand=med (sticky via localStorage) / ?brand=twf to reset.
+    //    Interim mechanism so Brian can operate Mediterránea on the existing
+    //    Vercel project before its own domain is configured. Once
+    //    mediterraneacarghas.com.ar points at this project, hostname match
+    //    (step 3) resolves the brand automatically and this is unnecessary.
+    try {
+      const q = new URLSearchParams(window.location.search).get('brand')
+      if (isBrandId(q)) { localStorage.setItem('twf-brand-override', q); return q }
+      const stored = localStorage.getItem('twf-brand-override')
+      if (isBrandId(stored)) return stored
+    } catch { /* ignore */ }
 
     // 3) Runtime hostname match.
     const host = window.location.hostname.toLowerCase()
