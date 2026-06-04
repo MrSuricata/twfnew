@@ -1181,7 +1181,7 @@ const SHIPMENT_COLS = new Set([
   'doc_number','origin','etd','eta','seguimiento','contenedor','buque','linea','transbordo',
   'seguro','certi','telex','impresa','despacho','deposito','fecha_consol','transporte','camion',
   'dest_country','dest_port','fiscal','wood','ftl_ltl','costo_extra','observacion','status',
-  'operator_id','notes','archived',
+  'operator_id','notes','archived','source',
 ])
 
 async function handleShipments(req: VercelRequest, res: VercelResponse, db: any) {

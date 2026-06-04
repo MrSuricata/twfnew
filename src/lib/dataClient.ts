@@ -524,6 +524,19 @@ export async function fetchDbShipments(): Promise<DbShipment[]> {
   return data.shipments || []
 }
 
+/** Create (upsert) a full shipment row in the unified `shipments` table. */
+export async function createDbShipment(row: DbShipment): Promise<void> {
+  const res = await authFetch('/api/data/shipments', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(row),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
+}
+
 /** Partial update of a shipment row (e.g. operator_id, or inline cell edits). */
 export async function patchDbShipment(id: string, fields: Record<string, unknown>): Promise<void> {
   const res = await authFetch(`/api/data/shipments?id=${encodeURIComponent(id)}`, {
