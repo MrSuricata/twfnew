@@ -7,7 +7,29 @@
 // ──────────────────────────────────────────────────────────────────────
 
 import type { ParsedShipment } from './shipmentTypes'
-import { getShipmentStatus } from './shipmentTypes'
+import { getShipmentStatus, parseLocalDate } from './shipmentTypes'
+
+// ── Truck-driven status derivation (LCL/aéreo on a truck) ──────────────
+// The truck a cargo is loaded on is, for LCL/aéreo, what the Sheet's operativas
+// are for FCL: it carries the cargo through its mid/late lifecycle. We DERIVE
+// the cargo status from the truck's dates (precise) with the status enum as a
+// fallback — never copy it into the cargo, so there's a single source of truth.
+// IMPORTANT: keep this logic in sync with the inline copy in api/tracking.ts.
+export interface TruckLike {
+  status?: string
+  loadDate?: string
+  departureDate?: string
+  arrivalDate?: string
+}
+export function deriveTruckCargoStatus(t: TruckLike, today: Date): string | null {
+  const reached = (s?: string) => { if (!s) return false; const d = parseLocalDate(s); return d != null && d.getTime() <= today.getTime() }
+  const isToday = (s?: string) => { if (!s) return false; const d = parseLocalDate(s); return d != null && d.getTime() === today.getTime() }
+  if (reached(t.arrivalDate) || t.status === 'delivered') return 'en_fiscal'
+  if (isToday(t.departureDate)) return 'saliendo'
+  if (reached(t.departureDate) || t.status === 'in_transit') return 'en_frontera'
+  if (reached(t.loadDate) || t.status === 'loaded') return 'arribado'
+  return null // planning / no dates → cargo keeps its manual baseline status
+}
 
 export type Modality = 'fcl' | 'lcl' | 'air' | 'land'
 

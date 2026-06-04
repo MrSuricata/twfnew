@@ -25,10 +25,12 @@ import OperatorsManager from './OperatorsManager'
 import PasteImportDialog from './PasteImportDialog'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
 import type { Operator, OperatorAssignment, Modality, UnifiedOperation, DbShipment } from '@/lib/operationsTypes'
+import type { Truck, TruckLoad } from '@/lib/truckTypes'
 import {
   buildOperations,
   indexAssignments,
   operatorsForMode,
+  deriveTruckCargoStatus,
   OPERATION_COLUMNS,
   EDITABLE_FIELDS,
   STATUS_LABEL,
@@ -36,9 +38,14 @@ import {
   MODALITY_COLORS,
 } from '@/lib/operationsTypes'
 
+// Per-ref truck info for the Estado column (LCL/aéreo driven by their truck).
+interface TruckRefInfo { truckCode: string; status: string }
+
 interface OperationsGridProps {
   shipments: ParsedShipment[]
   dbShipments: DbShipment[]
+  trucks?: Truck[]
+  truckLoads?: TruckLoad[]
   operators: Operator[]
   assignments: OperatorAssignment[]
   onAssignOperator: (ref: string, operatorId: string | null) => void
@@ -58,6 +65,8 @@ const MODE_ICON: Record<Modality, typeof Boat> = { fcl: TruckIcon, lcl: Stack, a
 export default function OperationsGrid({
   shipments,
   dbShipments,
+  trucks,
+  truckLoads,
   operators,
   assignments,
   onAssignOperator,
@@ -88,6 +97,26 @@ export default function OperationsGrid({
     () => buildOperations(shipments, dbShipments, assignMap),
     [shipments, dbShipments, assignMap]
   )
+
+  // ref → { truckCode, derivedStatus } for cargas loaded on a truck. The truck
+  // drives the cargo's status (its dates are the source of truth), so the Estado
+  // cell becomes read-only for these. planning trucks (no advance) are skipped.
+  const truckByRef = useMemo(() => {
+    const m = new Map<string, TruckRefInfo>()
+    if (!trucks?.length || !truckLoads?.length) return m
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    const tById = new Map(trucks.map(t => [t.id, t]))
+    for (const l of truckLoads) {
+      const t = tById.get(l.truckId)
+      if (!t) continue
+      const status = deriveTruckCargoStatus(
+        { status: t.status, loadDate: t.loadDate, departureDate: t.departureDate, arrivalDate: t.arrivalDate },
+        today,
+      )
+      if (status) m.set(l.sourceRef, { truckCode: t.code, status })
+    }
+    return m
+  }, [trucks, truckLoads])
 
   // Unified operator assignment: DB rows patch shipments.operator_id;
   // FCL (cache) rows use the operator_assignments overlay by ref.
@@ -301,6 +330,7 @@ export default function OperationsGrid({
                 cols={cols}
                 operators={operators}
                 operatorById={operatorById}
+                truckStatus={truckByRef.get(op.ref)}
                 even={idx % 2 === 0}
                 onAssign={assignOp}
                 onPatch={onPatchShipment}
@@ -347,6 +377,7 @@ function OperationRow({
   cols,
   operators,
   operatorById,
+  truckStatus,
   even,
   onAssign,
   onPatch,
@@ -355,6 +386,7 @@ function OperationRow({
   cols: typeof OPERATION_COLUMNS
   operators: Operator[]
   operatorById: Map<string, Operator>
+  truckStatus?: TruckRefInfo
   even: boolean
   onAssign: (op: UnifiedOperation, operatorId: string | null) => void
   onPatch: (id: string, fields: Record<string, unknown>) => void
@@ -409,6 +441,18 @@ function OperationRow({
       {cols.map((c) => {
         const ef = editable ? EDITABLE_FIELDS[c.key as keyof UnifiedOperation] : undefined
         const tdClass = `px-2 py-1.5 align-top ${c.w || ''} ${c.numeric ? 'text-right tabular-nums' : ''} ${c.wrap ? 'whitespace-normal break-words' : 'whitespace-nowrap'} ${c.sticky ? `sticky left-0 ${even ? 'bg-card' : 'bg-muted/30'}` : ''}`
+
+        // Estado of a cargo loaded on a truck is driven by the truck (read-only).
+        if (c.key === 'status' && truckStatus) {
+          return (
+            <td key={c.key} className={tdClass}>
+              <Badge variant="outline" className="h-5 text-[9px] whitespace-nowrap gap-1" title={`Estado controlado por el camión ${truckStatus.truckCode}`}>
+                <TruckIcon size={10} weight="fill" className="text-primary" />
+                {truckStatus.truckCode} · {STATUS_LABEL[truckStatus.status] || truckStatus.status}
+              </Badge>
+            </td>
+          )
+        }
 
         if (ef) {
           return (

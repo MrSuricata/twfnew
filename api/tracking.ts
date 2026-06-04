@@ -180,6 +180,54 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     console.error('[tracking] shipments DB query failed:', dbError)
   }
 
+  // ── Truck-driven status for LCL/aéreo ──────────────────────────────
+  // A cargo loaded on a truck takes its status from the truck's dates (mirrors
+  // how FCL derives status from the Sheet's operativas). Keep this in sync with
+  // deriveTruckCargoStatus() in src/lib/operationsTypes.ts.
+  try {
+    const trackable = dbResults.filter((r: any) => r.mode === 'lcl' || r.mode === 'air')
+    if (trackable.length > 0) {
+      const db = getSupabase()
+      const refs = trackable.map((r: any) => r.REF)
+      const { data: loads } = await db.from('truck_loads').select('source_ref, truck_id').in('source_ref', refs)
+      if (loads && loads.length) {
+        const truckIds = [...new Set(loads.map((l: any) => l.truck_id))]
+        const { data: trucksData } = await db
+          .from('trucks')
+          .select('id, code, status, load_date, departure_date, arrival_date')
+          .in('id', truckIds)
+        const tById = new Map((trucksData || []).map((t: any) => [t.id, t]))
+        const truckByRef = new Map<string, any>()
+        for (const l of loads as any[]) { const t = tById.get(l.truck_id); if (t) truckByRef.set(l.source_ref, t) }
+
+        const today = new Date(); today.setHours(0, 0, 0, 0)
+        const parseLocal = (s: string) => {
+          const p = String(s || '').split('-')
+          if (p.length !== 3) return null
+          const d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]))
+          return isNaN(d.getTime()) ? null : d
+        }
+        const reached = (s: string) => { const d = parseLocal(s); return d != null && d.getTime() <= today.getTime() }
+        const isToday = (s: string) => { const d = parseLocal(s); return d != null && d.getTime() === today.getTime() }
+        const derive = (t: any): string | null => {
+          if (reached(t.arrival_date) || t.status === 'delivered') return 'en_fiscal'
+          if (isToday(t.departure_date)) return 'saliendo'
+          if (reached(t.departure_date) || t.status === 'in_transit') return 'en_frontera'
+          if (reached(t.load_date) || t.status === 'loaded') return 'arribado'
+          return null
+        }
+        for (const r of trackable as any[]) {
+          const t = truckByRef.get(r.REF)
+          if (!t) continue
+          const s = derive(t)
+          if (s) { r.status = s; r.truckCode = t.code }
+        }
+      }
+    }
+  } catch (e) {
+    console.error('[tracking] truck status derivation failed:', e)
+  }
+
   const results = [...fclResults, ...dbResults]
   const usedSources = [
     fclResults.length ? source : null,
