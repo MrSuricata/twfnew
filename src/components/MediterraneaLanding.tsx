@@ -21,6 +21,7 @@ import {
   CircleNotch,
   Package,
   MapPin,
+  CaretDown,
 } from '@phosphor-icons/react'
 import { useBrand } from '@/lib/brand'
 import { processShipmentRecord, getShipmentStatus } from '@/lib/shipmentTypes'
@@ -98,24 +99,46 @@ function Reveal({ children, delay = 0, className = '' }: { children: ReactNode; 
   )
 }
 
+// Friendly status for DB shipments (LCL/aéreo/terrestre), keyed by the `status`
+// column. FCL uses getShipmentStatus() (derived from the Sheet's operativas).
+const DB_STATUS: Record<string, { label: string; progress: number }> = {
+  en_origen: { label: 'En Origen', progress: 8 },
+  embarcado: { label: 'Embarcado', progress: 20 },
+  en_viaje: { label: 'En Tránsito', progress: 35 },
+  en_transito: { label: 'En Tránsito', progress: 35 },
+  arribado: { label: 'Arribado a Puerto', progress: 55 },
+  en_puerto: { label: 'En Puerto', progress: 55 },
+  saliendo: { label: 'Sale Hoy', progress: 65 },
+  salio: { label: 'En Frontera', progress: 72 },
+  en_frontera: { label: 'En Frontera', progress: 75 },
+  en_fiscal: { label: 'En Depósito Fiscal', progress: 90 },
+  llego_fiscal: { label: 'En Depósito Fiscal', progress: 90 },
+  devuelto: { label: 'Entregado', progress: 100 },
+  entregado: { label: 'Entregado', progress: 100 },
+}
+
 // ── Tracking card (calls the same /api/tracking endpoint TWF uses) ──
 function TrackingCard() {
   const [q, setQ] = useState('')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<ReturnType<typeof processShipmentRecord> | null>(null)
+  const [meta, setMeta] = useState<{ status?: string; mode?: string } | null>(null)
+  const [expanded, setExpanded] = useState(false)
   const [notFound, setNotFound] = useState(false)
 
   const search = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!q.trim()) return
-    setLoading(true); setNotFound(false); setResult(null)
+    setLoading(true); setNotFound(false); setResult(null); setMeta(null); setExpanded(false)
     try {
       const res = await fetch(`/api/tracking?q=${encodeURIComponent(q.trim())}`)
       if (res.ok) {
         const data = await res.json()
         const raw = (data.results || [])[0]
-        if (raw) setResult(processShipmentRecord(raw))
-        else setNotFound(true)
+        if (raw) {
+          setResult(processShipmentRecord(raw))
+          setMeta({ status: raw.status, mode: raw.mode })
+        } else setNotFound(true)
       } else setNotFound(true)
     } catch {
       setNotFound(true)
@@ -123,7 +146,29 @@ function TrackingCard() {
     setLoading(false)
   }
 
-  const status = result ? getShipmentStatus(result) : null
+  // FCL → status from operativas (rich); DB rows → from the `status` column.
+  const status = (() => {
+    if (!result) return null
+    if (meta?.mode && meta.mode !== 'fcl') {
+      return DB_STATUS[(meta.status || '').toLowerCase()] || { label: 'En proceso', progress: 30 }
+    }
+    return getShipmentStatus(result)
+  })()
+
+  const fmtDate = (s?: string) => {
+    if (!s) return ''
+    const p = s.split('-')
+    return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : s
+  }
+
+  const details: { label: string; value: string }[] = result ? [
+    { label: 'ETD (salida origen)', value: fmtDate(result.ETD) },
+    { label: 'ETA (puerto destino)', value: fmtDate(result.ETA) },
+    { label: 'Buque', value: result.BUQUE || '' },
+    { label: 'Línea', value: result.LINEA || '' },
+    { label: 'Terminal / destino', value: result.TERMINAL || '' },
+    { label: 'Contenedor', value: result.CNTR || '' },
+  ].filter(d => d.value) : []
 
   return (
     <div className="rounded-2xl bg-white shadow-2xl shadow-indigo-950/30 p-6 w-full max-w-md">
@@ -131,14 +176,14 @@ function TrackingCard() {
         <MapPin size={20} weight="duotone" className="text-[#49286b]" />
         <h3 className="font-semibold text-lg">Rastreá tu carga</h3>
       </div>
-      <p className="text-sm text-[#6b6688] mt-1">Ingresá tu referencia o número de contenedor.</p>
+      <p className="text-sm text-[#6b6688] mt-1">Ingresá tu referencia, contenedor o BL / AWB.</p>
       <form onSubmit={search} className="mt-4 flex gap-2">
         <div className="relative flex-1">
           <MagnifyingGlass size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#9a96b8]" />
           <input
             value={q}
             onChange={e => setQ(e.target.value)}
-            placeholder="Ej: A7762 o MEDU1234567"
+            placeholder="Ej: A7762, MEDU1234567 o BL"
             className="w-full h-11 pl-9 pr-3 rounded-xl border border-[#e5e4f1] bg-[#fbfbfe] text-sm focus:outline-none focus:border-[#9bd1e5] focus:ring-2 focus:ring-[#9bd1e5]/30"
           />
         </div>
@@ -150,14 +195,37 @@ function TrackingCard() {
 
       {status && result && (
         <div className="mt-4 rounded-xl border border-[#e5e4f1] p-4">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-2">
             <span className="font-semibold text-[#261c79]">{result.REF}</span>
-            <span className="text-xs px-2.5 py-1 rounded-full" style={{ background: '#eef0f8', color: '#352e6a' }}>{status.label}</span>
+            <span className="text-xs px-2.5 py-1 rounded-full whitespace-nowrap" style={{ background: '#eef0f8', color: '#352e6a' }}>{status.label}</span>
           </div>
           {result.CLIENTE && <div className="text-sm text-[#6b6688] mt-1">{result.CLIENTE}</div>}
           <div className="mt-3 h-1.5 rounded-full bg-[#eef0f8] overflow-hidden">
-            <div className="h-full rounded-full" style={{ width: `${status.progress}%`, background: 'linear-gradient(90deg,#49286b,#9bd1e5)' }} />
+            <div className="h-full rounded-full transition-all" style={{ width: `${status.progress}%`, background: 'linear-gradient(90deg,#49286b,#9bd1e5)' }} />
           </div>
+
+          {details.length > 0 && (
+            <>
+              <button
+                type="button"
+                onClick={() => setExpanded(v => !v)}
+                className="mt-3 flex items-center gap-1 text-xs font-medium text-[#49286b] hover:text-[#261c79]"
+              >
+                {expanded ? 'Ocultar detalles' : 'Ver detalles'}
+                <CaretDown size={13} className={`transition-transform ${expanded ? 'rotate-180' : ''}`} />
+              </button>
+              {expanded && (
+                <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2.5 border-t border-[#eef0f8] pt-3">
+                  {details.map(d => (
+                    <div key={d.label}>
+                      <div className="text-[10px] uppercase tracking-wide text-[#9a96b8]">{d.label}</div>
+                      <div className="text-sm text-[#261c79] font-medium mt-0.5 break-words">{d.value}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
         </div>
       )}
       {notFound && (
