@@ -140,11 +140,41 @@ export function useBrand(): Brand {
   return getBrand()
 }
 
-/** Apply brand to the document: data-brand attr (drives CSS theme) + title. */
+// Per-brand PWA assets (installable "Add to Home Screen"). Icons are generated
+// from the brand emblems by scripts/gen-pwa-icons.cjs.
+const PWA: Record<BrandId, { manifest: string; appleIcon: string; theme: string }> = {
+  twf: { manifest: '/site.webmanifest', appleIcon: '/apple-touch-icon.png', theme: '#0f172a' },
+  med: { manifest: '/med.webmanifest', appleIcon: '/med-apple-touch.png', theme: '#261c79' },
+}
+
+function setLink(rel: string, href: string): void {
+  let el = document.head.querySelector<HTMLLinkElement>(`link[rel="${rel}"]`)
+  if (!el) { el = document.createElement('link'); el.rel = rel; document.head.appendChild(el) }
+  el.href = href
+}
+function setMeta(name: string, content: string): void {
+  let el = document.head.querySelector<HTMLMetaElement>(`meta[name="${name}"]`)
+  if (!el) { el = document.createElement('meta'); el.name = name; document.head.appendChild(el) }
+  el.content = content
+}
+
+/** Apply brand to the document: data-brand attr (drives CSS theme) + title +
+ *  installable PWA manifest/icons/theme (per brand, so each domain installs as
+ *  its own app). Called once at boot from main.tsx, before any install prompt. */
 export function applyBrand(brand: Brand = getBrand()): void {
   if (typeof document === 'undefined') return
   document.documentElement.setAttribute('data-brand', brand.id)
   document.title = `${brand.displayName} — ${brand.tagline}`
+
+  const pwa = PWA[brand.id]
+  setLink('manifest', pwa.manifest)
+  setLink('apple-touch-icon', pwa.appleIcon)
+  setMeta('theme-color', pwa.theme)
+  setMeta('application-name', brand.displayName)
+  setMeta('apple-mobile-web-app-title', brand.name)
+  setMeta('apple-mobile-web-app-capable', 'yes')
+  setMeta('mobile-web-app-capable', 'yes')
+  setMeta('apple-mobile-web-app-status-bar-style', 'black-translucent')
 }
 
 /** Convenience: is the full operations webapp enabled for this brand? */
