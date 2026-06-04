@@ -17,23 +17,35 @@ import {
   Stack,
   UsersThree,
   MagicWand,
+  ClipboardText,
+  DownloadSimple,
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import OperatorsManager from './OperatorsManager'
+import PasteImportDialog from './PasteImportDialog'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
 import type { Operator, OperatorAssignment, Modality, UnifiedOperation, DbShipment } from '@/lib/operationsTypes'
+import type { Truck, TruckLoad } from '@/lib/truckTypes'
 import {
   buildOperations,
   indexAssignments,
   operatorsForMode,
+  deriveTruckCargoStatus,
   OPERATION_COLUMNS,
+  EDITABLE_FIELDS,
+  STATUS_LABEL,
   MODALITY_LABELS,
   MODALITY_COLORS,
 } from '@/lib/operationsTypes'
 
+// Per-ref truck info for the Estado column (LCL/aéreo driven by their truck).
+interface TruckRefInfo { truckCode: string; status: string }
+
 interface OperationsGridProps {
   shipments: ParsedShipment[]
   dbShipments: DbShipment[]
+  trucks?: Truck[]
+  truckLoads?: TruckLoad[]
   operators: Operator[]
   assignments: OperatorAssignment[]
   onAssignOperator: (ref: string, operatorId: string | null) => void
@@ -53,6 +65,8 @@ const MODE_ICON: Record<Modality, typeof Boat> = { fcl: TruckIcon, lcl: Stack, a
 export default function OperationsGrid({
   shipments,
   dbShipments,
+  trucks,
+  truckLoads,
   operators,
   assignments,
   onAssignOperator,
@@ -64,6 +78,7 @@ export default function OperationsGrid({
   const [modeFilter, setModeFilter] = useState<ModeFilter>('all')
   const [operatorFilter, setOperatorFilter] = useState<string>('all')
   const [managerOpen, setManagerOpen] = useState(false)
+  const [pasteOpen, setPasteOpen] = useState(false)
 
   // Per-user visible columns (localStorage). Default from column defs.
   const [visibleCols, setVisibleCols] = useState<Set<string>>(() => {
@@ -82,6 +97,26 @@ export default function OperationsGrid({
     () => buildOperations(shipments, dbShipments, assignMap),
     [shipments, dbShipments, assignMap]
   )
+
+  // ref → { truckCode, derivedStatus } for cargas loaded on a truck. The truck
+  // drives the cargo's status (its dates are the source of truth), so the Estado
+  // cell becomes read-only for these. planning trucks (no advance) are skipped.
+  const truckByRef = useMemo(() => {
+    const m = new Map<string, TruckRefInfo>()
+    if (!trucks?.length || !truckLoads?.length) return m
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    const tById = new Map(trucks.map(t => [t.id, t]))
+    for (const l of truckLoads) {
+      const t = tById.get(l.truckId)
+      if (!t) continue
+      const status = deriveTruckCargoStatus(
+        { status: t.status, loadDate: t.loadDate, departureDate: t.departureDate, arrivalDate: t.arrivalDate },
+        today,
+      )
+      if (status) m.set(l.sourceRef, { truckCode: t.code, status })
+    }
+    return m
+  }, [trucks, truckLoads])
 
   // Unified operator assignment: DB rows patch shipments.operator_id;
   // FCL (cache) rows use the operator_assignments overlay by ref.
@@ -117,12 +152,19 @@ export default function OperationsGrid({
       if (modeFilter !== 'all' && o.mode !== modeFilter) return false
       if (operatorFilter !== 'all' && (o.operatorId || '') !== operatorFilter) return false
       if (q) {
-        const blob = `${o.ref} ${o.cliente} ${o.cntr} ${o.fiscal} ${o.descripcion} ${o.transporte}`.toLowerCase()
+        const blob = `${o.ref} ${o.clientRef} ${o.cliente} ${o.cntr} ${o.docNumber} ${o.fiscal} ${o.descripcion} ${o.transporte}`.toLowerCase()
         if (!blob.includes(q)) return false
       }
       return true
     })
   }, [operations, modeFilter, operatorFilter, search])
+
+  // Totals for the current filter (planning at a glance).
+  const totals = useMemo(() => {
+    let pkgs = 0, kg = 0, m3 = 0
+    for (const o of filtered) { pkgs += o.pkgs || 0; kg += o.kg || 0; m3 += o.m3 || 0 }
+    return { count: filtered.length, pkgs, kg, m3 }
+  }, [filtered])
 
   const cols = OPERATION_COLUMNS.filter(c => visibleCols.has(c.key))
   const operatorById = useMemo(() => {
@@ -130,6 +172,35 @@ export default function OperationsGrid({
     for (const o of operators) m.set(o.id, o)
     return m
   }, [operators])
+
+  // Plain-text value of a cell (for CSV export).
+  const cellText = (op: UnifiedOperation, key: string): string => {
+    switch (key) {
+      case 'operator': return op.operatorId ? (operatorById.get(op.operatorId)?.name || '') : ''
+      case 'wood': return op.wood ? 'SI' : ''
+      case 'pkgs': return op.pkgs ? String(op.pkgs) : ''
+      case 'kg': return op.kg ? String(op.kg) : ''
+      case 'm3': return op.m3 ? String(op.m3) : ''
+      case 'status': return op.source === 'fcl' ? op.status : (STATUS_LABEL[op.status] || op.status)
+      default: return String((op as unknown as Record<string, unknown>)[key] ?? '')
+    }
+  }
+
+  // Export the currently filtered rows (visible columns) to CSV for Excel.
+  const exportCsv = () => {
+    const esc = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v)
+    const lines = [cols.map(c => esc(c.label)).join(',')]
+    for (const op of filtered) lines.push(cols.map(c => esc(cellText(op, c.key))).join(','))
+    const csv = '﻿' + lines.join('\r\n') // BOM → Excel reads UTF-8 + accents
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `operaciones_${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+    toast.success(`${filtered.length} cargas exportadas a CSV`)
+  }
 
   const modeChips: { id: ModeFilter; label: string; color?: string }[] = [
     { id: 'all', label: 'Todas' },
@@ -194,6 +265,16 @@ export default function OperationsGrid({
           <UsersThree size={16} className="mr-1.5" /> Operativos
         </Button>
 
+        {/* Bulk paste from Excel */}
+        <Button variant="outline" size="sm" className="h-9" onClick={() => setPasteOpen(true)} title="Pegar un bloque desde Excel para actualizar varias cargas a la vez">
+          <ClipboardText size={16} className="mr-1.5" /> Pegar
+        </Button>
+
+        {/* Export filtered rows to CSV */}
+        <Button variant="outline" size="sm" className="h-9" onClick={exportCsv} title="Exportar las cargas filtradas (columnas visibles) a CSV para Excel">
+          <DownloadSimple size={16} className="mr-1.5" /> CSV
+        </Button>
+
         {/* Column picker */}
         <Popover>
           <PopoverTrigger asChild>
@@ -229,11 +310,11 @@ export default function OperationsGrid({
 
       {/* Grid */}
       <div className="border rounded-lg overflow-auto max-h-[68vh] bg-card">
-        <table className="w-full text-xs whitespace-nowrap">
+        <table className="w-full text-xs">
           <thead className="sticky top-0 z-10">
             <tr className="bg-[#1e3a8a] text-white">
               {cols.map(c => (
-                <th key={c.key} className={`px-2.5 py-2 text-left font-semibold uppercase tracking-wide text-[10px] ${c.numeric ? 'text-right' : ''} ${c.sticky ? 'sticky left-0 bg-[#1e3a8a] z-20' : ''}`}>
+                <th key={c.key} className={`px-2 py-2 text-left font-semibold uppercase tracking-wide text-[10px] align-bottom ${c.w || ''} ${c.numeric ? 'text-right' : ''} ${c.sticky ? 'sticky left-0 bg-[#1e3a8a] z-20' : ''}`}>
                   {c.label}
                 </th>
               ))}
@@ -249,16 +330,26 @@ export default function OperationsGrid({
                 cols={cols}
                 operators={operators}
                 operatorById={operatorById}
+                truckStatus={truckByRef.get(op.ref)}
                 even={idx % 2 === 0}
                 onAssign={assignOp}
+                onPatch={onPatchShipment}
               />
             ))}
           </tbody>
         </table>
       </div>
 
+      {/* Totals for the current filter */}
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs">
+        <span className="font-semibold text-foreground">{totals.count.toLocaleString('es-UY')} cargas</span>
+        <span className="text-muted-foreground">Bultos: <strong className="text-foreground tabular-nums">{fmtNum(totals.pkgs) || 0}</strong></span>
+        <span className="text-muted-foreground">Kg: <strong className="text-foreground tabular-nums">{fmtNum(totals.kg) || 0}</strong></span>
+        <span className="text-muted-foreground">M³: <strong className="text-foreground tabular-nums">{fmtNum(totals.m3) || 0}</strong></span>
+      </div>
+
       <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-        <LockSimple size={12} /> Las FCL son espejo de la planilla (read-only) hasta la migración. LCL / aéreo / terrestre vienen de la base unificada. El operativo se asigna acá para todas.
+        <LockSimple size={12} /> Las FCL son espejo de la planilla (read-only) 🔒. LCL / aéreo / terrestre se editan acá: <strong>click en una celda</strong> para cambiarla (Enter guarda · Esc cancela). El operativo se asigna para todas.
       </p>
 
       <OperatorsManager
@@ -267,6 +358,13 @@ export default function OperationsGrid({
         operators={operators}
         onUpdateOperators={onUpdateOperators}
         onDeleteOperator={onDeleteOperator}
+      />
+
+      <PasteImportDialog
+        open={pasteOpen}
+        onOpenChange={setPasteOpen}
+        dbShipments={dbShipments}
+        onPatch={onPatchShipment}
       />
     </div>
   )
@@ -279,20 +377,25 @@ function OperationRow({
   cols,
   operators,
   operatorById,
+  truckStatus,
   even,
   onAssign,
+  onPatch,
 }: {
   op: UnifiedOperation
   cols: typeof OPERATION_COLUMNS
   operators: Operator[]
   operatorById: Map<string, Operator>
+  truckStatus?: TruckRefInfo
   even: boolean
   onAssign: (op: UnifiedOperation, operatorId: string | null) => void
+  onPatch: (id: string, fields: Record<string, unknown>) => void
 }) {
-  const Icon = MODE_ICON[op.mode]
   const eligible = operatorsForMode(operators, op.mode)
   const assigned = op.operatorId ? operatorById.get(op.operatorId) : null
   const bg = even ? 'bg-card' : 'bg-muted/30'
+  // DB rows (LCL/aéreo/terrestre) are inline-editable; FCL is a read-only mirror.
+  const editable = op.source === 'db' && !!op.dbId && !op.readOnly
 
   const cell = (key: string) => {
     switch (key) {
@@ -323,6 +426,11 @@ function OperationRow({
       case 'm3': return fmtNum(op.m3)
       case 'tipo':
         return <Badge variant="outline" className="h-5 text-[9px]">{op.tipo || MODALITY_LABELS[op.mode]}</Badge>
+      case 'status': {
+        // FCL: derived label (read-only). DB: code → label.
+        const label = op.source === 'fcl' ? op.status : (STATUS_LABEL[op.status] || op.status)
+        return label ? <Badge variant="outline" className="h-5 text-[9px] whitespace-nowrap">{label}</Badge> : ''
+      }
       default:
         return (op as unknown as Record<string, unknown>)[key] as string || ''
     }
@@ -330,11 +438,134 @@ function OperationRow({
 
   return (
     <tr className={`${bg} hover:bg-primary/5`}>
-      {cols.map(c => (
-        <td key={c.key} className={`px-2.5 py-1.5 ${c.numeric ? 'text-right tabular-nums' : ''} ${c.sticky ? `sticky left-0 ${even ? 'bg-card' : 'bg-muted/30'}` : ''}`}>
-          {cell(c.key)}
-        </td>
-      ))}
+      {cols.map((c) => {
+        const ef = editable ? EDITABLE_FIELDS[c.key as keyof UnifiedOperation] : undefined
+        const tdClass = `px-2 py-1.5 align-top ${c.w || ''} ${c.numeric ? 'text-right tabular-nums' : ''} ${c.wrap ? 'whitespace-normal break-words' : 'whitespace-nowrap'} ${c.sticky ? `sticky left-0 ${even ? 'bg-card' : 'bg-muted/30'}` : ''}`
+
+        // Estado of a cargo loaded on a truck is driven by the truck (read-only).
+        if (c.key === 'status' && truckStatus) {
+          return (
+            <td key={c.key} className={tdClass}>
+              <Badge variant="outline" className="h-5 text-[9px] whitespace-nowrap gap-1" title={`Estado controlado por el camión ${truckStatus.truckCode}`}>
+                <TruckIcon size={10} weight="fill" className="text-primary" />
+                {truckStatus.truckCode} · {STATUS_LABEL[truckStatus.status] || truckStatus.status}
+              </Badge>
+            </td>
+          )
+        }
+
+        if (ef) {
+          return (
+            <td key={c.key} className={tdClass}>
+              <EditableCell
+                value={(op as unknown as Record<string, unknown>)[c.key] as string | number | boolean}
+                type={ef.type}
+                options={ef.options}
+                wrap={c.wrap}
+                onCommit={v => onPatch(op.dbId!, { [ef.col]: v })}
+              />
+            </td>
+          )
+        }
+
+        const content = cell(c.key)
+        return (
+          <td key={c.key} className={tdClass}>
+            {c.wrap
+              ? <div className="line-clamp-2 leading-snug" title={typeof content === 'string' ? content : undefined}>{content}</div>
+              : content}
+          </td>
+        )
+      })}
     </tr>
+  )
+}
+
+// ── Inline-editable cell (DB rows only) ──
+// text/number → click to edit, Enter/blur saves, Esc cancels.
+// bool → click toggles SI/— and saves immediately.
+function EditableCell({
+  value,
+  type,
+  options,
+  wrap,
+  onCommit,
+}: {
+  value: string | number | boolean
+  type: 'text' | 'number' | 'bool' | 'select'
+  options?: { value: string; label: string }[]
+  wrap?: boolean
+  onCommit: (v: string | number | boolean | null) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+
+  if (type === 'select') {
+    const cur = String(value ?? '')
+    return (
+      <select
+        value={cur}
+        onChange={e => onCommit(e.target.value)}
+        className="h-6 w-full max-w-[128px] text-xs rounded border border-transparent hover:border-border bg-transparent px-1 cursor-pointer focus:border-primary"
+      >
+        {(options || []).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    )
+  }
+
+  if (type === 'bool') {
+    const on = value === 'SI' || value === true
+    return (
+      <button
+        type="button"
+        onClick={() => onCommit(!on)}
+        title="Click para cambiar"
+        className={`h-5 px-1.5 rounded text-[10px] font-semibold transition-colors ${on ? 'text-green-600 hover:bg-green-50' : 'text-muted-foreground/50 hover:bg-muted'}`}
+      >
+        {on ? 'SI' : '—'}
+      </button>
+    )
+  }
+
+  if (editing) {
+    const commit = () => {
+      setEditing(false)
+      const t = draft.trim()
+      if (type === 'number') {
+        if (t === '') { if (value !== 0 && value !== '') onCommit(null); return }
+        const n = parseFloat(t.replace(',', '.'))
+        if (isFinite(n) && n !== Number(value)) onCommit(n)
+      } else {
+        if (draft !== (value ?? '')) onCommit(draft)
+      }
+    }
+    return (
+      <input
+        autoFocus
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onFocus={e => e.target.select()}
+        onBlur={commit}
+        onKeyDown={e => {
+          if (e.key === 'Enter') { e.preventDefault(); commit() }
+          else if (e.key === 'Escape') { e.preventDefault(); setEditing(false) }
+        }}
+        inputMode={type === 'number' ? 'decimal' : undefined}
+        className="w-full h-6 px-1 rounded border border-primary bg-background text-xs outline-none"
+      />
+    )
+  }
+
+  const display = type === 'number'
+    ? (value === 0 || value === '' ? '' : fmtNum(Number(value)))
+    : ((value as string) || '')
+  return (
+    <div
+      onClick={() => { setDraft(value === 0 || value == null ? '' : String(value)); setEditing(true) }}
+      title="Click para editar"
+      className={`min-h-[20px] cursor-text rounded px-1 -mx-1 hover:bg-primary/10 ${wrap ? 'line-clamp-2 leading-snug' : ''}`}
+    >
+      {display || <span className="text-muted-foreground/30">—</span>}
+    </div>
   )
 }

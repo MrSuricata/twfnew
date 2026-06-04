@@ -369,6 +369,8 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
             <OperationsGrid
               shipments={shipments || []}
               dbShipments={dbShipments}
+              trucks={trucks}
+              truckLoads={truckLoads}
               operators={operators}
               assignments={assignments}
               onAssignOperator={(ref, opId) => { if (onAssignOperator) onAssignOperator(ref, opId) }}

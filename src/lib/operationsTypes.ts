@@ -7,8 +7,48 @@
 // ──────────────────────────────────────────────────────────────────────
 
 import type { ParsedShipment } from './shipmentTypes'
+import { getShipmentStatus, parseLocalDate } from './shipmentTypes'
+
+// ── Truck-driven status derivation (LCL/aéreo on a truck) ──────────────
+// The truck a cargo is loaded on is, for LCL/aéreo, what the Sheet's operativas
+// are for FCL: it carries the cargo through its mid/late lifecycle. We DERIVE
+// the cargo status from the truck's dates (precise) with the status enum as a
+// fallback — never copy it into the cargo, so there's a single source of truth.
+// IMPORTANT: keep this logic in sync with the inline copy in api/tracking.ts.
+export interface TruckLike {
+  status?: string
+  loadDate?: string
+  departureDate?: string
+  arrivalDate?: string
+}
+export function deriveTruckCargoStatus(t: TruckLike, today: Date): string | null {
+  const reached = (s?: string) => { if (!s) return false; const d = parseLocalDate(s); return d != null && d.getTime() <= today.getTime() }
+  const isToday = (s?: string) => { if (!s) return false; const d = parseLocalDate(s); return d != null && d.getTime() === today.getTime() }
+  if (reached(t.arrivalDate) || t.status === 'delivered') return 'en_fiscal'
+  if (isToday(t.departureDate)) return 'saliendo'
+  if (reached(t.departureDate) || t.status === 'in_transit') return 'en_frontera'
+  if (reached(t.loadDate) || t.status === 'loaded') return 'arribado'
+  return null // planning / no dates → cargo keeps its manual baseline status
+}
 
 export type Modality = 'fcl' | 'lcl' | 'air' | 'land'
+
+// Canonical operational status (LCL/aéreo/terrestre — editable in the grid;
+// drives the public tracking card). FCL derives its status from the Sheet.
+export const STATUS_OPTIONS: { value: string; label: string }[] = [
+  { value: '', label: '—' },
+  { value: 'en_origen', label: 'En Origen' },
+  { value: 'embarcado', label: 'Embarcado' },
+  { value: 'en_transito', label: 'En Tránsito' },
+  { value: 'arribado', label: 'Arribado a Puerto' },
+  { value: 'saliendo', label: 'Sale Hoy' },
+  { value: 'en_frontera', label: 'En Frontera' },
+  { value: 'en_fiscal', label: 'En Depósito Fiscal' },
+  { value: 'devuelto', label: 'Entregado' },
+]
+export const STATUS_LABEL: Record<string, string> = Object.fromEntries(
+  STATUS_OPTIONS.filter(o => o.value).map(o => [o.value, o.label])
+)
 
 export const MODALITY_LABELS: Record<Modality, string> = {
   fcl: 'FCL',
@@ -125,6 +165,7 @@ export interface UnifiedOperation {
   tipo: string
   wood: boolean
   transporte: string
+  status: string                 // DB: código editable · FCL: label derivado de la planilla
 }
 
 const num = (v: unknown): number => {
@@ -173,6 +214,7 @@ function fclToOperation(s: ParsedShipment, operatorId: string | null): UnifiedOp
     tipo: firstWith('TIPO') || 'FCL',
     wood,
     transporte: firstWith('TRANSPORTE'),
+    status: getShipmentStatus(s).label,   // derivado de la planilla (read-only)
   }
 }
 
@@ -216,6 +258,7 @@ export function dbShipmentToOperation(s: DbShipment): UnifiedOperation {
     tipo: MODALITY_LABELS[s.mode] || '',
     wood: !!s.wood,
     transporte: s.transporte || '',
+    status: s.status || '',
   }
 }
 
@@ -256,40 +299,83 @@ export interface ColumnDef {
   defaultOn: boolean
   numeric?: boolean
   sticky?: boolean
+  /** Allow the cell to wrap to (up to) 2 lines instead of one long line. */
+  wrap?: boolean
+  /** Tailwind max-width utility to keep the column narrow (caps horizontal scroll). */
+  w?: string
 }
 
 export const OPERATION_COLUMNS: ColumnDef[] = [
-  { key: 'ref', label: 'Ref', defaultOn: true, sticky: true },
-  { key: 'clientRef', label: 'Ref Cliente', defaultOn: false },
+  { key: 'ref', label: 'Ref', defaultOn: true, sticky: true, w: 'max-w-[92px]' },
+  { key: 'clientRef', label: 'Ref Cliente', defaultOn: false, w: 'max-w-[90px]' },
   { key: 'operator', label: 'Operativo', defaultOn: true },
-  { key: 'cliente', label: 'Cliente / Cnee', defaultOn: true },
-  { key: 'shipper', label: 'Shipper', defaultOn: false },
-  { key: 'agente', label: 'Agente', defaultOn: false },
-  { key: 'incoterm', label: 'Incoterm', defaultOn: false },
-  { key: 'origin', label: 'Origen', defaultOn: true },
-  { key: 'docNumber', label: 'BL / MAWB / CRT', defaultOn: true },
-  { key: 'tlx', label: 'TLX', defaultOn: false },
-  { key: 'deposito', label: 'Depósito', defaultOn: true },
-  { key: 'etd', label: 'ETD', defaultOn: false },
-  { key: 'eta', label: 'ETA', defaultOn: true },
-  { key: 'salida', label: 'Salida', defaultOn: false },
-  { key: 'etaFisc', label: 'ETA Fisc', defaultOn: false },
-  { key: 'libre', label: 'Libre', defaultOn: false },
-  { key: 'operativa', label: 'Operativa', defaultOn: false },
-  { key: 'cntr', label: 'CNTR', defaultOn: true },
-  { key: 'buque', label: 'Buque', defaultOn: false },
-  { key: 'linea', label: 'Línea', defaultOn: false },
+  { key: 'cliente', label: 'Cliente / Cnee', defaultOn: true, wrap: true, w: 'max-w-[130px]' },
+  { key: 'shipper', label: 'Shipper', defaultOn: false, wrap: true, w: 'max-w-[120px]' },
+  { key: 'agente', label: 'Agente', defaultOn: false, wrap: true, w: 'max-w-[110px]' },
+  { key: 'incoterm', label: 'Incoterm', defaultOn: false, w: 'max-w-[72px]' },
+  { key: 'origin', label: 'Origen', defaultOn: true, wrap: true, w: 'max-w-[100px]' },
+  { key: 'docNumber', label: 'BL / MAWB / CRT', defaultOn: true, wrap: true, w: 'max-w-[120px]' },
+  { key: 'tlx', label: 'TLX', defaultOn: false, w: 'max-w-[60px]' },
+  { key: 'deposito', label: 'Depósito', defaultOn: true, w: 'max-w-[92px]' },
+  { key: 'etd', label: 'ETD', defaultOn: false, w: 'max-w-[84px]' },
+  { key: 'eta', label: 'ETA', defaultOn: true, w: 'max-w-[84px]' },
+  { key: 'salida', label: 'Salida', defaultOn: false, w: 'max-w-[84px]' },
+  { key: 'etaFisc', label: 'ETA Fisc', defaultOn: false, w: 'max-w-[84px]' },
+  { key: 'libre', label: 'Libre', defaultOn: false, w: 'max-w-[84px]' },
+  { key: 'operativa', label: 'Operativa', defaultOn: false, wrap: true, w: 'max-w-[100px]' },
+  { key: 'cntr', label: 'CNTR', defaultOn: true, wrap: true, w: 'max-w-[120px]' },
+  { key: 'buque', label: 'Buque', defaultOn: false, wrap: true, w: 'max-w-[110px]' },
+  { key: 'linea', label: 'Línea', defaultOn: false, w: 'max-w-[90px]' },
   { key: 'pkgs', label: 'Bultos', defaultOn: true, numeric: true },
   { key: 'kg', label: 'Kg', defaultOn: true, numeric: true },
   { key: 'm3', label: 'M³', defaultOn: true, numeric: true },
-  { key: 'descripcion', label: 'Descripción', defaultOn: false },
-  { key: 'fiscal', label: 'Fiscal', defaultOn: true },
-  { key: 'destPort', label: 'Destino', defaultOn: true },
-  { key: 'camion', label: 'Camión', defaultOn: true },
-  { key: 'despacho', label: 'Despacho', defaultOn: false },
-  { key: 'descarga', label: 'Descarga', defaultOn: false },
-  { key: 'dev', label: 'DEV', defaultOn: false },
+  { key: 'descripcion', label: 'Descripción', defaultOn: false, wrap: true, w: 'max-w-[180px]' },
+  { key: 'fiscal', label: 'Fiscal', defaultOn: true, wrap: true, w: 'max-w-[110px]' },
+  { key: 'destPort', label: 'Destino', defaultOn: true, wrap: true, w: 'max-w-[100px]' },
+  { key: 'camion', label: 'Camión', defaultOn: true, w: 'max-w-[80px]' },
+  { key: 'despacho', label: 'Despacho', defaultOn: false, wrap: true, w: 'max-w-[100px]' },
+  { key: 'descarga', label: 'Descarga', defaultOn: false, w: 'max-w-[84px]' },
+  { key: 'dev', label: 'DEV', defaultOn: false, w: 'max-w-[90px]' },
   { key: 'tipo', label: 'Tipo', defaultOn: true },
-  { key: 'wood', label: 'Wood', defaultOn: true },
-  { key: 'transporte', label: 'Transporte', defaultOn: true },
+  { key: 'status', label: 'Estado', defaultOn: true, w: 'max-w-[130px]' },
+  { key: 'wood', label: 'Wood', defaultOn: true, w: 'max-w-[56px]' },
+  { key: 'transporte', label: 'Transporte', defaultOn: true, wrap: true, w: 'max-w-[110px]' },
 ]
+
+// ── Inline edit: grid column → DB column + value type ──
+// Only DB rows (LCL/aéreo/terrestre) are editable; FCL stays read-only (mirror
+// of the Sheet). Columns NOT listed here (ref, operator, tipo, and the FCL-only
+// date fields salida/etaFisc/libre/operativa/descarga/dev) are not inline-editable.
+export interface EditableField {
+  col: string                      // column name in the `shipments` table (PATCH whitelist)
+  type: 'text' | 'number' | 'bool' | 'select'
+  options?: { value: string; label: string }[]   // for type 'select'
+}
+
+export const EDITABLE_FIELDS: Partial<Record<keyof UnifiedOperation, EditableField>> = {
+  cliente: { col: 'cliente', type: 'text' },
+  clientRef: { col: 'client_ref', type: 'text' },
+  shipper: { col: 'shipper', type: 'text' },
+  agente: { col: 'agente', type: 'text' },
+  incoterm: { col: 'incoterm', type: 'text' },
+  origin: { col: 'origin', type: 'text' },
+  docNumber: { col: 'doc_number', type: 'text' },
+  deposito: { col: 'deposito', type: 'text' },
+  etd: { col: 'etd', type: 'text' },
+  eta: { col: 'eta', type: 'text' },
+  cntr: { col: 'contenedor', type: 'text' },
+  buque: { col: 'buque', type: 'text' },
+  linea: { col: 'linea', type: 'text' },
+  pkgs: { col: 'pkgs', type: 'number' },
+  kg: { col: 'kg', type: 'number' },
+  m3: { col: 'm3', type: 'number' },
+  descripcion: { col: 'observacion', type: 'text' },
+  fiscal: { col: 'fiscal', type: 'text' },
+  destPort: { col: 'dest_port', type: 'text' },
+  camion: { col: 'camion', type: 'text' },
+  despacho: { col: 'despacho', type: 'text' },
+  transporte: { col: 'transporte', type: 'text' },
+  tlx: { col: 'telex', type: 'bool' },
+  wood: { col: 'wood', type: 'bool' },
+  status: { col: 'status', type: 'select', options: STATUS_OPTIONS },
+}
