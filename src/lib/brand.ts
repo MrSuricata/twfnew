@@ -62,7 +62,11 @@ export const BRANDS: Record<BrandId, Brand> = {
       iconWhite: '/images/twf-icon-white.png',
     },
     contact: { email: 'info@twf.uy', whatsapp: '+59899511196', site: 'twf.uy' },
-    capabilities: { publicLanding: true, contentAdmin: true, opsAdmin: false, portals: false },
+    // TEMPORAL: TWF mantiene el admin operativo completo + portales hasta que
+    // Mediterránea Carghas esté deployada en su dominio. Cuando Med esté en
+    // producción y se decida bloquear TWF a solo-landing, volver opsAdmin y
+    // portals a false.
+    capabilities: { publicLanding: true, contentAdmin: true, opsAdmin: true, portals: true },
     font: 'Inter',
   },
   med: {
