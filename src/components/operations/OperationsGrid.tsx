@@ -18,6 +18,7 @@ import {
   UsersThree,
   MagicWand,
   ClipboardText,
+  DownloadSimple,
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import OperatorsManager from './OperatorsManager'
@@ -122,12 +123,19 @@ export default function OperationsGrid({
       if (modeFilter !== 'all' && o.mode !== modeFilter) return false
       if (operatorFilter !== 'all' && (o.operatorId || '') !== operatorFilter) return false
       if (q) {
-        const blob = `${o.ref} ${o.cliente} ${o.cntr} ${o.fiscal} ${o.descripcion} ${o.transporte}`.toLowerCase()
+        const blob = `${o.ref} ${o.clientRef} ${o.cliente} ${o.cntr} ${o.docNumber} ${o.fiscal} ${o.descripcion} ${o.transporte}`.toLowerCase()
         if (!blob.includes(q)) return false
       }
       return true
     })
   }, [operations, modeFilter, operatorFilter, search])
+
+  // Totals for the current filter (planning at a glance).
+  const totals = useMemo(() => {
+    let pkgs = 0, kg = 0, m3 = 0
+    for (const o of filtered) { pkgs += o.pkgs || 0; kg += o.kg || 0; m3 += o.m3 || 0 }
+    return { count: filtered.length, pkgs, kg, m3 }
+  }, [filtered])
 
   const cols = OPERATION_COLUMNS.filter(c => visibleCols.has(c.key))
   const operatorById = useMemo(() => {
@@ -135,6 +143,35 @@ export default function OperationsGrid({
     for (const o of operators) m.set(o.id, o)
     return m
   }, [operators])
+
+  // Plain-text value of a cell (for CSV export).
+  const cellText = (op: UnifiedOperation, key: string): string => {
+    switch (key) {
+      case 'operator': return op.operatorId ? (operatorById.get(op.operatorId)?.name || '') : ''
+      case 'wood': return op.wood ? 'SI' : ''
+      case 'pkgs': return op.pkgs ? String(op.pkgs) : ''
+      case 'kg': return op.kg ? String(op.kg) : ''
+      case 'm3': return op.m3 ? String(op.m3) : ''
+      case 'status': return op.source === 'fcl' ? op.status : (STATUS_LABEL[op.status] || op.status)
+      default: return String((op as unknown as Record<string, unknown>)[key] ?? '')
+    }
+  }
+
+  // Export the currently filtered rows (visible columns) to CSV for Excel.
+  const exportCsv = () => {
+    const esc = (v: string) => (/[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v)
+    const lines = [cols.map(c => esc(c.label)).join(',')]
+    for (const op of filtered) lines.push(cols.map(c => esc(cellText(op, c.key))).join(','))
+    const csv = '﻿' + lines.join('\r\n') // BOM → Excel reads UTF-8 + accents
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `operaciones_${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+    toast.success(`${filtered.length} cargas exportadas a CSV`)
+  }
 
   const modeChips: { id: ModeFilter; label: string; color?: string }[] = [
     { id: 'all', label: 'Todas' },
@@ -204,6 +241,11 @@ export default function OperationsGrid({
           <ClipboardText size={16} className="mr-1.5" /> Pegar
         </Button>
 
+        {/* Export filtered rows to CSV */}
+        <Button variant="outline" size="sm" className="h-9" onClick={exportCsv} title="Exportar las cargas filtradas (columnas visibles) a CSV para Excel">
+          <DownloadSimple size={16} className="mr-1.5" /> CSV
+        </Button>
+
         {/* Column picker */}
         <Popover>
           <PopoverTrigger asChild>
@@ -266,6 +308,14 @@ export default function OperationsGrid({
             ))}
           </tbody>
         </table>
+      </div>
+
+      {/* Totals for the current filter */}
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs">
+        <span className="font-semibold text-foreground">{totals.count.toLocaleString('es-UY')} cargas</span>
+        <span className="text-muted-foreground">Bultos: <strong className="text-foreground tabular-nums">{fmtNum(totals.pkgs) || 0}</strong></span>
+        <span className="text-muted-foreground">Kg: <strong className="text-foreground tabular-nums">{fmtNum(totals.kg) || 0}</strong></span>
+        <span className="text-muted-foreground">M³: <strong className="text-foreground tabular-nums">{fmtNum(totals.m3) || 0}</strong></span>
       </div>
 
       <p className="text-xs text-muted-foreground flex items-center gap-1.5">
