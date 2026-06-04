@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, Fragment } from 'react'
 import type { ReactNode } from 'react'
 import {
   List,
@@ -101,6 +101,19 @@ function Reveal({ children, delay = 0, className = '' }: { children: ReactNode; 
 
 // Friendly status for DB shipments (LCL/aéreo/terrestre), keyed by the `status`
 // column. FCL uses getShipmentStatus() (derived from the Sheet's operativas).
+// 5-stage journey for the tracking stepper. Maps any status label/code (FCL
+// derived label OR DB status) to a stage index by keyword — robust to both.
+const TRACK_STAGES = ['En origen', 'En tránsito', 'En puerto', 'En frontera', 'Entregado']
+function trackStage(s: string): number {
+  const t = (s || '').toLowerCase()
+  if (/devuelt|entregad/.test(t)) return 4
+  if (/fiscal|fronter/.test(t)) return 3
+  if (/sale hoy|sali|carga hoy|puerto|arribad|terminal/.test(t)) return 2
+  if (/tr[aá]nsito|viaje|embarcad/.test(t)) return 1
+  if (/origen/.test(t)) return 0
+  return 1
+}
+
 const DB_STATUS: Record<string, { label: string; progress: number }> = {
   en_origen: { label: 'En Origen', progress: 8 },
   embarcado: { label: 'Embarcado', progress: 20 },
@@ -200,9 +213,35 @@ function TrackingCard() {
             <span className="text-xs px-2.5 py-1 rounded-full whitespace-nowrap" style={{ background: '#eef0f8', color: '#352e6a' }}>{status.label}</span>
           </div>
           {result.CLIENTE && <div className="text-sm text-[#6b6688] mt-1">{result.CLIENTE}</div>}
-          <div className="mt-3 h-1.5 rounded-full bg-[#eef0f8] overflow-hidden">
-            <div className="h-full rounded-full transition-all" style={{ width: `${status.progress}%`, background: 'linear-gradient(90deg,#49286b,#9bd1e5)' }} />
-          </div>
+
+          {/* Journey stepper */}
+          {(() => {
+            const stage = trackStage(status.label)
+            return (
+              <div className="mt-4">
+                <div className="flex items-center">
+                  {TRACK_STAGES.map((_, i) => (
+                    <Fragment key={i}>
+                      <div
+                        className={`w-2.5 h-2.5 rounded-full shrink-0 transition-colors ${i <= stage ? 'bg-[#49286b]' : 'bg-[#e5e4f1]'}`}
+                        style={i === stage ? { boxShadow: '0 0 0 4px rgba(73,40,107,.15)' } : undefined}
+                      />
+                      {i < TRACK_STAGES.length - 1 && (
+                        <div className={`flex-1 h-0.5 transition-colors ${i < stage ? 'bg-[#49286b]' : 'bg-[#e5e4f1]'}`} />
+                      )}
+                    </Fragment>
+                  ))}
+                </div>
+                <div className="mt-1.5 flex justify-between">
+                  {TRACK_STAGES.map((label, i) => (
+                    <span key={i} className={`text-[9px] leading-tight text-center ${i === stage ? 'text-[#49286b] font-semibold' : 'text-[#9a96b8]'}`} style={{ width: '20%' }}>
+                      {label}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )
+          })()}
 
           {details.length > 0 && (
             <>
