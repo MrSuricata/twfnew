@@ -36,6 +36,7 @@ import {
   OPERATION_COLUMNS,
   EDITABLE_FIELDS,
   STATUS_LABEL,
+  STATUS_OPTIONS,
   MODALITY_LABELS,
   MODALITY_COLORS,
 } from '@/lib/operationsTypes'
@@ -402,8 +403,8 @@ export default function OperationsGrid({
         </Popover>
       </div>
 
-      {/* Grid */}
-      <div className="border rounded-lg overflow-auto max-h-[68vh] bg-card">
+      {/* Grid — desktop table */}
+      <div className="hidden md:block border rounded-lg overflow-auto max-h-[68vh] bg-card">
         <table className="w-full text-xs">
           <thead className="sticky top-0 z-10">
             <tr className="bg-[#1e3a8a] text-white">
@@ -451,6 +452,23 @@ export default function OperationsGrid({
             ))}
           </tbody>
         </table>
+      </div>
+
+      {/* Grid — mobile cards */}
+      <div className="md:hidden space-y-2">
+        {sorted.length === 0 ? (
+          <div className="text-center py-10 text-muted-foreground text-sm border rounded-lg bg-card">Sin operaciones para los filtros actuales.</div>
+        ) : sorted.map(op => (
+          <OperationCard
+            key={`${op.source}-${op.ref}`}
+            op={op}
+            operators={operators}
+            operatorById={operatorById}
+            truckStatus={truckByRef.get(op.ref)}
+            onAssign={assignOp}
+            onPatch={onPatchShipment}
+          />
+        ))}
       </div>
 
       {/* Totals for the current filter */}
@@ -600,6 +618,106 @@ function OperationRow({
         )
       })}
     </tr>
+  )
+}
+
+// ── Mobile card (one cargo) — replaces the wide table on phones ──
+const CARD_FIELDS: { key: keyof UnifiedOperation; label: string }[] = [
+  { key: 'cliente', label: 'Cliente' },
+  { key: 'eta', label: 'ETA' },
+  { key: 'cntr', label: 'CNTR' },
+  { key: 'docNumber', label: 'BL / AWB' },
+  { key: 'fiscal', label: 'Fiscal' },
+  { key: 'destPort', label: 'Destino' },
+  { key: 'pkgs', label: 'Bultos' },
+  { key: 'kg', label: 'Kg' },
+  { key: 'm3', label: 'M³' },
+  { key: 'transporte', label: 'Transporte' },
+]
+
+function OperationCard({
+  op,
+  operators,
+  operatorById,
+  truckStatus,
+  onAssign,
+  onPatch,
+}: {
+  op: UnifiedOperation
+  operators: Operator[]
+  operatorById: Map<string, Operator>
+  truckStatus?: TruckRefInfo
+  onAssign: (op: UnifiedOperation, operatorId: string | null) => void
+  onPatch: (id: string, fields: Record<string, unknown>) => void
+}) {
+  const editable = op.source === 'db' && !!op.dbId && !op.readOnly
+  const eligible = operatorsForMode(operators, op.mode)
+  const assigned = op.operatorId ? operatorById.get(op.operatorId) : null
+
+  const renderVal = (key: keyof UnifiedOperation) => {
+    const ef = editable ? EDITABLE_FIELDS[key] : undefined
+    if (ef) {
+      return (
+        <EditableCell
+          value={(op as unknown as Record<string, unknown>)[key] as string | number | boolean}
+          type={ef.type}
+          options={ef.options}
+          onCommit={v => onPatch(op.dbId!, { [ef.col]: v })}
+        />
+      )
+    }
+    const num = key === 'pkgs' || key === 'kg' || key === 'm3'
+    const raw = (op as unknown as Record<string, unknown>)[key]
+    return <span>{num ? fmtNum(Number(raw) || 0) : (String(raw ?? '') || '—')}</span>
+  }
+
+  return (
+    <div className="rounded-lg border bg-card p-3 shadow-sm">
+      {/* Header: ref + estado */}
+      <div className="flex items-center justify-between gap-2">
+        <span className="inline-flex items-center gap-1.5 font-semibold text-sm">
+          <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: MODALITY_COLORS[op.mode] }} />
+          {op.ref || '—'}
+          {op.readOnly && <LockSimple size={12} className="text-muted-foreground" />}
+        </span>
+        {truckStatus ? (
+          <Badge variant="outline" className="text-[10px] gap-1"><TruckIcon size={11} weight="fill" className="text-primary" />{truckStatus.truckCode} · {STATUS_LABEL[truckStatus.status] || truckStatus.status}</Badge>
+        ) : editable ? (
+          <select
+            value={op.status || ''}
+            onChange={e => onPatch(op.dbId!, { status: e.target.value })}
+            className="h-7 max-w-[150px] text-xs rounded border border-border bg-card px-1.5"
+          >
+            {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        ) : (
+          op.status && <Badge variant="outline" className="text-[10px]">{op.status}</Badge>
+        )}
+      </div>
+
+      {/* Operativo */}
+      <div className="mt-2">
+        <select
+          value={op.operatorId || ''}
+          onChange={e => onAssign(op, e.target.value || null)}
+          className="w-full h-8 text-sm rounded-md border border-border bg-card px-2"
+          style={assigned ? { color: assigned.color || undefined } : undefined}
+        >
+          <option value="">— operativo sin asignar —</option>
+          {eligible.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
+        </select>
+      </div>
+
+      {/* Fields */}
+      <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+        {CARD_FIELDS.map(f => (
+          <div key={f.key}>
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{f.label}</div>
+            <div className="text-foreground break-words">{renderVal(f.key)}</div>
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
 
