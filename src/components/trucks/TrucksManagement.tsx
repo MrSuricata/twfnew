@@ -3,6 +3,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Truck as TruckIcon, Boat } from '@phosphor-icons/react'
 import type { Truck, TruckLoad, LclAirShipment } from '@/lib/truckTypes'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
+import type { DbShipment } from '@/lib/operationsTypes'
 import TrucksList from './TrucksList'
 import TruckBuilder from './TruckBuilder'
 import LclAirManager from './LclAirManager'
@@ -11,6 +12,7 @@ interface TrucksManagementProps {
   trucks: Truck[]
   truckLoads: TruckLoad[]
   lclAir: LclAirShipment[]
+  dbShipments?: DbShipment[]
   shipments: ParsedShipment[]
   onUpdateTrucks: (trucks: Truck[]) => void
   onDeleteTruck: (id: string) => void
@@ -36,6 +38,7 @@ export default function TrucksManagement(props: TrucksManagementProps) {
         trucks={props.trucks}
         truckLoads={props.truckLoads}
         lclAir={props.lclAir}
+        dbShipments={props.dbShipments || []}
         shipments={props.shipments}
         onBack={() => setSelectedTruckId(null)}
         onUpdateTrucks={props.onUpdateTrucks}

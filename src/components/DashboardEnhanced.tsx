@@ -337,6 +337,7 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
               trucks={trucks}
               truckLoads={truckLoads}
               lclAir={lclAir}
+              dbShipments={dbShipments}
               shipments={shipments || []}
               onUpdateTrucks={(t) => { if (onUpdateTrucks) onUpdateTrucks(t) }}
               onDeleteTruck={(id) => { if (onDeleteTruck) onDeleteTruck(id) }}

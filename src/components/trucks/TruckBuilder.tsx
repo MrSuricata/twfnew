@@ -28,6 +28,7 @@ import {
 import { toast } from 'sonner'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
 import type { Truck, TruckLoad, LclAirShipment, TruckStatus } from '@/lib/truckTypes'
+import type { DbShipment } from '@/lib/operationsTypes'
 import {
   TRUCK_STATUS_LABELS,
   computeTruckTotals,
@@ -49,6 +50,7 @@ interface TruckBuilderProps {
   trucks: Truck[]
   truckLoads: TruckLoad[]
   lclAir: LclAirShipment[]
+  dbShipments: DbShipment[]
   shipments: ParsedShipment[]
   onBack: () => void
   onUpdateTrucks: (trucks: Truck[]) => void
@@ -57,7 +59,7 @@ interface TruckBuilderProps {
 }
 
 export default function TruckBuilder(props: TruckBuilderProps) {
-  const { truck, trucks, truckLoads, lclAir, shipments, onBack, onUpdateTrucks, onUpdateTruckLoads, onDeleteTruckLoad } = props
+  const { truck, trucks, truckLoads, lclAir, dbShipments, shipments, onBack, onUpdateTrucks, onUpdateTruckLoads, onDeleteTruckLoad } = props
 
   // Loads currently in this truck (sorted by position)
   const loads = useMemo(
@@ -124,6 +126,28 @@ export default function TruckBuilder(props: TruckBuilderProps) {
       description: s.description,
       mvdArrival: s.etaMvd,
       desconsolDate: s.desconsolDate,
+      overrides: {},
+      position: loads.length,
+    }
+    onUpdateTruckLoads([...truckLoads, load])
+    toast.success(`${s.ref} agregado al camión`)
+  }
+
+  // Add an LCL/aéreo load from the unified `shipments` table.
+  const addDb = (s: DbShipment) => {
+    const load: TruckLoad = {
+      id: newId('load'),
+      truckId: truck.id,
+      sourceType: (s.mode === 'air' ? 'air' : 'lcl'),
+      sourceRef: s.ref,
+      client: s.cliente || '',
+      fiscal: s.fiscal || '',
+      kg: Number(s.kg) || 0,
+      m3: Number(s.m3) || 0,
+      pkgs: Number(s.pkgs) || 0,
+      description: s.observacion || '',
+      mvdArrival: s.eta || '',
+      desconsolDate: s.fecha_consol || '',
       overrides: {},
       position: loads.length,
     }
@@ -361,11 +385,13 @@ export default function TruckBuilder(props: TruckBuilderProps) {
           <AvailableLoadsPanel
             shipments={shipments}
             lclAir={lclAir}
+            dbShipments={dbShipments}
             trucks={trucks}
             truckLoads={truckLoads}
             currentTruckId={truck.id}
             onAddFcl={addFcl}
             onAddLclAir={addLclAir}
+            onAddDb={addDb}
           />
         </Card>
       </div>
