@@ -106,7 +106,13 @@ La tabla se deja en un único lugar (constante exportada) para ampliar fácil.
 
 ## 9. Prerrequisitos / riesgos
 
-- **Acceso del servidor al SG nuevo:** el server baja el CSV vía `GOOGLE_SHEETS_CSV_URL`. La pestaña `gid=1606359155` **debe estar accesible** igual que la actual (publicada a la web o la planilla compartida de forma que el export funcione). El export directo hoy pide login → **verificar que el gid nuevo sea alcanzable por el server**; si no, Brian publica esa pestaña / ajustamos la URL. **Bloqueante de la Fase 1.**
+- **Acceso del servidor al SG nuevo: RESUELTO ✅.** La planilla está publicada a la web. Base pub:
+  `https://docs.google.com/spreadsheets/d/e/2PACX-1vR1L0gDUbrXqFW_33bLA-0Gsb73x2hItsyNwUFZTHdjTlGnxO0AuE8ojBrdrtvjp0frdl8v45xCGYFM/pub?output=csv`
+  - SG nuevo: `...&gid=1606359155` (devuelve el CSV enriquecido ✓)
+  - Operativas: `...&gid=1133111465` ✓
+  - El SG nuevo se lee apuntando el main al **gid 1606359155** (hoy el código usa la pestaña por defecto = SG viejo). Constante `SG_GID='1606359155'` análoga a `OPERATIVAS_GID`.
+- **Encabezado de Ref vacío:** en el SG nuevo la **primera columna (Ref) no tiene header** (`,CONSIGNEE,...`). El parser header-driven debe tratar la **columna 0 como REF** aunque su header esté vacío.
+- **Formato confirmado:** CSV separado por coma, números europeos (`"0,00"`), fechas `D/M/YYYY`, `#N/A` en celdas con fórmula (tratar como vacío).
 - **Estado de Chile/BA sin operativas:** quedan con estado en base a ETA (coarse). Se puede afinar después (ej. usar ESTADO del SG como fallback solo-lectura) si Brian lo pide.
 - **MBL ausente:** se usa BOOKING para rastrear. Si algún cliente busca por MBL viejo, no lo encontrará (aceptado).
 - **Validación de fila:** algunas cargas no-UY pueden no tener CLIENTE/CONSIGNEE; relajar el filtro para no perderlas.
