@@ -12,6 +12,7 @@ import {
   Package,
   Warning,
   Lightning,
+  ShieldCheck,
   Envelope,
   ArrowsClockwise,
   Truck as TruckIcon,
@@ -19,8 +20,9 @@ import {
   Table as TableIcon,
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
-import { authFetch } from '@/lib/authClient'
+import { authFetch, getAdminLevel } from '@/lib/authClient'
 import { fetchShipmentsFromDB } from '@/lib/dataClient'
+import TeamManager from './TeamManager'
 
 import TodayDashboard from './TodayDashboard'
 import AgendaCalendar from './agenda/AgendaCalendar'
@@ -91,6 +93,8 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
   const ops = brand.capabilities.opsAdmin
   // TWF brand has no ops tabs → land on the first content tab.
   const [activeTab, setActiveTab] = useState(ops ? 'hoy' : 'case-studies')
+  // Pestaña Equipo: solo el owner (Brian) — el backend re-valida igual.
+  const isOwner = getAdminLevel() === 'owner'
   const [isRefreshing, setIsRefreshing] = useState(false)
 
   // Manual refresh from the navbar — pulls fresh data from Google Sheets via
@@ -304,6 +308,12 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
               <UsersThree size={16} className="mr-1.5" />
               <span className="hidden sm:inline">Partners</span>
             </TabsTrigger>
+            {isOwner && (
+              <TabsTrigger value="equipo" className="tab-underline">
+                <ShieldCheck size={16} className="mr-1.5" weight="fill" />
+                <span className="hidden sm:inline">Equipo</span>
+              </TabsTrigger>
+            )}
             </>)}
           </TabsList>
 
@@ -431,6 +441,12 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
           <TabsContent value="partners">
             <PartnerManager />
           </TabsContent>
+
+          {isOwner && (
+            <TabsContent value="equipo">
+              <TeamManager />
+            </TabsContent>
+          )}
         </Tabs>
       </div>
     </div>
