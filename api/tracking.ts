@@ -128,6 +128,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { data: rows, error } = await db
       .from('shipments')
       .select('ref,client_ref,doc_number,contenedor,buque,linea,etd,eta,dest_port,status,mode,archived')
+      .neq('source', 'sheet') // filas espejo de la migración FCL: el tracking FCL sigue saliendo del cache
       .limit(5000)
     if (!error && rows && rows.length) {
       const norm = (v: unknown) => String(v ?? '').toUpperCase().trim()

@@ -1,20 +1,20 @@
-import { describe, it, expect } from 'vitest'
-import { matchesClientePattern, zonaFromPOD, parseMainSheetCSV, filterShipments } from './csvParser.js'
+﻿import { describe, it, expect } from 'vitest'
+import { matchesClientePattern, zonaFromPOD, parseMainSheetCSV, filterShipments, fclMirrorRows } from './csvParser.js'
 
 describe('zonaFromPOD', () => {
-  it('Montevideo → UY', () => { expect(zonaFromPOD('MONTEVIDEO ')).toBe('UY') })
-  it('Buenos Aires → AR', () => { expect(zonaFromPOD('Buenos Aires')).toBe('AR') })
-  it('puertos chilenos → CL', () => {
+  it('Montevideo â†’ UY', () => { expect(zonaFromPOD('MONTEVIDEO ')).toBe('UY') })
+  it('Buenos Aires â†’ AR', () => { expect(zonaFromPOD('Buenos Aires')).toBe('AR') })
+  it('puertos chilenos â†’ CL', () => {
     expect(zonaFromPOD('VALPARAISO')).toBe('CL')
     expect(zonaFromPOD('San Antonio')).toBe('CL')
   })
-  it('vacío/desconocido → OTRO', () => {
+  it('vacÃ­o/desconocido â†’ OTRO', () => {
     expect(zonaFromPOD('')).toBe('OTRO')
     expect(zonaFromPOD('LISBOA')).toBe('OTRO')
   })
 })
 
-describe('parseMainSheetCSV — SG nuevo', () => {
+describe('parseMainSheetCSV â€” SG nuevo', () => {
   const csv = [
     ',CONSIGNEE,NOTA,SEGUIMIENTO,BOOKING,LINEA,POL,POD,ETD,ETA,CONTS,N,TIPO,ESTADO,OPERATIVO,NOMBRE BUQUE,OPERATIVA,PUERTO,CTERMINAL,CDEV,LOCALES,FLETE,FORMA_PAGO,VTO,CR,BL,AD,AT',
     'A6644,TP SRL ADD,,15/08/2025,6416381990,COSCO ,YANTIAN,MONTEVIDEO ,5/09/2025,18/06/2025,MSCU1,1,40HQ,Puerto,DOR,EVER GIVEN,,TCP,"0,00","0,00","0,00","0,00",PROGRAMADO,1/01/2026,TRUE,TRUE,TRUE,TRUE',
@@ -22,7 +22,7 @@ describe('parseMainSheetCSV — SG nuevo', () => {
   ].join('\n')
   const rows = parseMainSheetCSV(csv)
   it('mapea Ref (col 0 sin header)', () => { expect(rows[0].REF).toBe('A6644') })
-  it('CONSIGNEE→CLIENTE, BOOKING→MBL, POL/POD, NOMBRE BUQUE→BUQUE, CONTS→CNTR, TIPO, PAIS', () => {
+  it('CONSIGNEEâ†’CLIENTE, BOOKINGâ†’MBL, POL/POD, NOMBRE BUQUEâ†’BUQUE, CONTSâ†’CNTR, TIPO, PAIS', () => {
     expect(rows[0].CLIENTE).toBe('TP SRL ADD')
     expect(rows[0].MBL).toBe('6416381990')
     expect(rows[0].POL).toBe('YANTIAN')
@@ -32,14 +32,14 @@ describe('parseMainSheetCSV — SG nuevo', () => {
     expect(rows[0].TIPO).toBe('40HQ')
     expect(rows[0].PAIS).toBe('UY')
   })
-  it('incluye carga Chile (POD Valparaíso → CL) aunque sin CLIENTE estricto', () => {
+  it('incluye carga Chile (POD ValparaÃ­so â†’ CL) aunque sin CLIENTE estricto', () => {
     const cl = rows.find(r => r.REF === 'A6700 CHILE')
     expect(cl).toBeTruthy()
     expect(cl!.PAIS).toBe('CL')
   })
 })
 
-describe('filterShipments — incluye Chile/BA', () => {
+describe('filterShipments â€” incluye Chile/BA', () => {
   const mk = (REF: string, PAIS: any, POD: string) => ({ REF, PAIS, POD, TERMINAL: POD, operativas: [] } as any)
   const out = filterShipments([mk('A1', 'CL', 'VALPARAISO'), mk('A2', 'AR', 'BUENOS AIRES'), mk('A3', 'UY', 'MONTEVIDEO')])
   it('mantiene las 3 zonas', () => { expect(out.map(s => s.REF).sort()).toEqual(['A1', 'A2', 'A3']) })
@@ -63,7 +63,7 @@ describe('matchesClientePattern (hardened)', () => {
   it('case-insensitive', () => {
     expect(matchesClientePattern('chiapero srl', 'CHIAPERO')).toBe(true)
   })
-  it('supports comma-separated patterns, each ≥5 chars', () => {
+  it('supports comma-separated patterns, each â‰¥5 chars', () => {
     expect(matchesClientePattern('MARTINEZ S.A.', 'CHIAPERO,MARTINEZ')).toBe(true)
     expect(matchesClientePattern('PEREZ S.A.', 'CHIAPERO,MARTINEZ')).toBe(false)
   })
@@ -77,5 +77,45 @@ describe('matchesClientePattern (hardened)', () => {
   it('drops short patterns but keeps long ones from a comma list', () => {
     expect(matchesClientePattern('CHIAPERO HNOS', 'SA,CHIAPERO')).toBe(true)
     expect(matchesClientePattern('SANTOS MARIA', 'SA,PEREZ')).toBe(false)
+  })
+})
+
+describe('fclMirrorRows - espejo FCL (Etapa 1 migracion)', () => {
+  const mk = (over: Record<string, unknown> = {}) => ({
+    REF: 'A6902', CLIENTE: 'CONTROL UNO', MBL: 'BK1', CNTR: 'TEMU1', BUQUE: 'EVER', LINEA: 'COSCO',
+    POL: 'YANTIAN', POD: 'MONTEVIDEO', PAIS: 'UY', SEGUIMIENTO: '15/08/2025', TIPO: '40HC',
+    ETD: '2025-09-01', ETA: '2025-10-09',
+    operativas: [{ PKGS: 10, KG: 100, M3: 5, DEPOSITO: 'GODILCO', FISCAL: 'CORDOBA', TRANSPORTE: 'TRANSCAL', DESCRIPCION: 'BICIS', WOOD: 'NO' }],
+    ...over,
+  }) as never
+
+  it('mapea campos y suma operativas; mode=fcl source=sheet', () => {
+    const rows = fclMirrorRows([mk()], 123)
+    expect(rows).toHaveLength(1)
+    const r = rows[0] as Record<string, unknown>
+    expect(r.mode).toBe('fcl')
+    expect(r.source).toBe('sheet')
+    expect(r.doc_number).toBe('BK1')
+    expect(r.origin).toBe('YANTIAN')
+    expect(r.discharge_port).toBe('MONTEVIDEO')
+    expect(r.dest_country).toBe('UY')
+    expect(r.tipo).toBe('40HC')
+    expect(r.kg).toBe(100)
+    expect(r.fiscal).toBe('CORDOBA')
+    expect(r.updated_at_ts).toBe(123)
+  })
+
+  it('refs duplicadas (2 clientes) -> 2 filas con id distinto y ESTABLE ante reorden', () => {
+    const a = mk()
+    const b = mk({ CLIENTE: 'TOOL SHOP SRL', MBL: 'BK2' })
+    const rows1 = fclMirrorRows([a, b], 1)
+    const rows2 = fclMirrorRows([b, a], 2)
+    expect(rows1).toHaveLength(2)
+    expect(rows1[0].id).not.toBe(rows1[1].id)
+    expect(new Set(rows1.map(r => r.id))).toEqual(new Set(rows2.map(r => r.id)))
+  })
+
+  it('fila identica repetida en la planilla -> una sola', () => {
+    expect(fclMirrorRows([mk(), mk()], 1)).toHaveLength(1)
   })
 })

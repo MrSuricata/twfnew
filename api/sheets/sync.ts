@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { authenticateRequest } from '../_lib/jwt.js'
-import { performServerSync } from '../_lib/csvParser.js'
+import { performServerSync, fclMirrorRows } from '../_lib/csvParser.js'
 import { getSupabase } from '../_lib/supabase.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -39,10 +39,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       // Non-fatal — sync still succeeds
     }
 
+    // Espejo FCL → tabla shipments (Etapa 1 migración): corre en paralelo;
+    // la app ignora estas filas (source='sheet') hasta el flip. Non-fatal.
+    let mirror: Record<string, unknown> = { upserted: 0 }
+    try {
+      const db = getSupabase()
+      const rows = fclMirrorRows(shipments, Date.now())
+      for (let i = 0; i < rows.length; i += 500) {
+        const { error } = await db.from('shipments').upsert(rows.slice(i, i + 500), { onConflict: 'id' })
+        if (error) throw error
+      }
+      mirror = { upserted: rows.length }
+    } catch (mirrorError: any) {
+      console.warn('FCL mirror upsert failed:', mirrorError?.message || mirrorError)
+      mirror = { error: mirrorError?.message || 'mirror failed' }
+    }
+
     return res.status(200).json({
       shipments,
       count: shipments.length,
       syncedAt,
+      mirror,
     })
   } catch (error) {
     console.error('Sheets sync error:', error)
