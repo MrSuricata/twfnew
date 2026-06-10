@@ -130,6 +130,7 @@ export interface DbShipment {
 
 // ── Fila unificada de la grilla ──
 export interface UnifiedOperation {
+  uid: string                    // clave única de fila: la planilla reutiliza refs (splits / 2 clientes) y sin esto colisionan las keys de React
   ref: string
   clientRef: string
   mode: Modality
@@ -161,6 +162,7 @@ export interface UnifiedOperation {
   descripcion: string
   fiscal: string
   dischargePort: string          // puerto de descarga
+  pais: string                   // zona derivada del POD (UY/AR/CL/OTRO) · DB: dest_country
   destPort: string
   descarga: string
   dev: string
@@ -184,27 +186,32 @@ const num = (v: unknown): number => {
 const EMPTY = {
   clientRef: '', shipper: '', agente: '', incoterm: '', origin: '', etd: '',
   buque: '', linea: '', camion: '', docNumber: '', destPort: '', despacho: '',
-  dischargePort: '', noApilable: false, seguimiento: '', seguro: false, certi: false, impresa: false,
+  dischargePort: '', pais: '', noApilable: false, seguimiento: '', seguro: false, certi: false, impresa: false,
 }
 
 /** Collapse a FCL ParsedShipment (1+ operativas) into a single unified row. */
-function fclToOperation(s: ParsedShipment, operatorId: string | null): UnifiedOperation {
+function fclToOperation(s: ParsedShipment, operatorId: string | null, uid: string): UnifiedOperation {
   const ops = s.operativas || []
   const firstWith = (key: keyof NonNullable<ParsedShipment['operativas']>[number]): string =>
     (ops.find(o => o[key])?.[key] as string) || ''
   const wood = ops.some(o => (o.WOOD || '').toUpperCase().startsWith('SI'))
   return {
     ...EMPTY,
+    uid,
     ref: s.REF,
     mode: 'fcl',
     source: 'fcl',
     readOnly: true,
     operatorId,
     cliente: s.CLIENTE || firstWith('CLIENTE_OP'),
-    docNumber: s.MBL || '',
+    docNumber: s.MBL || '',     // SG nuevo: booking
     etd: s.ETD || '',
     buque: s.BUQUE || '',
     linea: s.LINEA || '',
+    origin: s.POL || '',
+    dischargePort: s.POD || '',
+    pais: s.PAIS || 'OTRO',
+    seguimiento: s.SEGUIMIENTO || '',
     tlx: firstWith('TLX'),
     deposito: firstWith('DEPOSITO'),
     eta: s.ETA || firstWith('ETA_OP'),
@@ -220,7 +227,7 @@ function fclToOperation(s: ParsedShipment, operatorId: string | null): UnifiedOp
     fiscal: firstWith('FISCAL'),
     descarga: firstWith('DESCARGA'),
     dev: firstWith('DEV'),
-    tipo: firstWith('TIPO') || 'FCL',
+    tipo: s.TIPO || firstWith('TIPO') || 'FCL',
     wood,
     transporte: firstWith('TRANSPORTE'),
     status: getShipmentStatus(s).label,   // derivado de la planilla (read-only)
@@ -230,6 +237,7 @@ function fclToOperation(s: ParsedShipment, operatorId: string | null): UnifiedOp
 /** Map a DB shipment (LCL/aéreo/terrestre) into a unified grid row. */
 export function dbShipmentToOperation(s: DbShipment): UnifiedOperation {
   return {
+    uid: s.id,
     ref: s.ref,
     clientRef: s.client_ref || '',
     mode: s.mode,
@@ -261,6 +269,7 @@ export function dbShipmentToOperation(s: DbShipment): UnifiedOperation {
     descripcion: s.observacion || '',
     fiscal: s.fiscal || '',
     dischargePort: s.discharge_port || '',
+    pais: s.dest_country || '',
     destPort: s.dest_port || '',
     descarga: '',
     dev: '',
@@ -285,15 +294,44 @@ export function buildOperations(
   assignments: Map<string, string | null>
 ): UnifiedOperation[] {
   const out: UnifiedOperation[] = []
+  // La planilla reutiliza refs (split en 2 clientes, A/B): cada repetición es una
+  // operación real y se muestra, pero necesita un uid distinto para React.
+  const seen = new Map<string, number>()
   for (const s of shipments) {
     if (!s.REF) continue
-    out.push(fclToOperation(s, assignments.get(s.REF) ?? null))
+    const n = (seen.get(s.REF) || 0) + 1
+    seen.set(s.REF, n)
+    const uid = n === 1 ? `fcl-${s.REF}` : `fcl-${s.REF}#${n}`
+    out.push(fclToOperation(s, assignments.get(s.REF) ?? null, uid))
   }
   for (const s of dbShipments) {
     if (s.archived) continue
     out.push(dbShipmentToOperation(s))
   }
   return out
+}
+
+/** Criterio de Brian (10/06/2026): una carga deja de estar "activa" cuando el
+ *  contenedor se devolvió Y la carga llegó a fiscal; sin tramo fiscal cuenta
+ *  solo la devolución. FCL sin datos de operativa (Chile/BA, históricas): se
+ *  considera inactiva si la ETA pasó hace más de 60 días. DB (LCL/aéreo/
+ *  terrestre): estado terminal — en fiscal o entregado — derivado del camión
+ *  si está cargada en uno. */
+export function isOperationActive(op: UnifiedOperation, truckStatus: string | undefined, today: Date): boolean {
+  if (op.source === 'db') {
+    const eff = truckStatus || op.status
+    return eff !== 'en_fiscal' && eff !== 'devuelto'
+  }
+  const devuelta = (op.libre || '').toUpperCase().includes('DEVUELTO')
+  const hasOperativaData = !!(op.libre || op.salida || op.etaFisc)
+  if (hasOperativaData) {
+    const fiscalDate = parseLocalDate(op.etaFisc)
+    const enFiscal = op.etaFisc ? (fiscalDate != null && fiscalDate.getTime() <= today.getTime()) : true
+    return !(devuelta && enFiscal)
+  }
+  const eta = parseLocalDate(op.eta)
+  if (!eta) return true
+  return eta.getTime() >= today.getTime() - 60 * 86400000
 }
 
 export function indexAssignments(rows: OperatorAssignment[]): Map<string, string | null> {
@@ -330,6 +368,7 @@ export const OPERATION_COLUMNS: ColumnDef[] = [
   { key: 'incoterm', label: 'Incoterm', defaultOn: false, w: 'max-w-[72px]' },
   { key: 'origin', label: 'Origen', defaultOn: true, wrap: true, w: 'max-w-[100px]' },
   { key: 'dischargePort', label: 'Pto. Descarga', defaultOn: true, wrap: true, w: 'max-w-[100px]' },
+  { key: 'pais', label: 'País', defaultOn: true, w: 'max-w-[64px]' },
   { key: 'docNumber', label: 'BL / MAWB / CRT', defaultOn: true, wrap: true, w: 'max-w-[120px]' },
   { key: 'tlx', label: 'TLX', defaultOn: false, w: 'max-w-[60px]' },
   { key: 'deposito', label: 'Depósito', defaultOn: true, w: 'max-w-[92px]' },
