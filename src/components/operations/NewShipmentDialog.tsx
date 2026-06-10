@@ -50,12 +50,15 @@ export default function NewShipmentDialog({
   const [certi, setCerti] = useState(false)
   const [telex, setTelex] = useState(false)
   const [noApilable, setNoApilable] = useState(false)
+  const [oog, setOog] = useState(false)   // sobredimensionada — solo FCL
+  const [imo, setImo] = useState(false)   // mercancía peligrosa — FCL y LCL
 
   const reset = () => {
     setMode('lcl'); setRef(''); setCliente(''); setOperatorId('')
     setOrigin(''); setDischargePort(''); setDestPort(''); setDocNumber('')
     setLinea(''); setEta(''); setSeguimiento('')
     setImpresa(false); setSeguro(false); setCerti(false); setTelex(false); setNoApilable(false)
+    setOog(false); setImo(false)
   }
 
   const eligibleOps = operatorsForMode(operators, mode)
@@ -74,6 +77,8 @@ export default function NewShipmentDialog({
       eta: eta.trim(),
       seguimiento: seguimiento.trim(),
       impresa, seguro, certi, telex, no_apilable: noApilable,
+      oog: mode === 'fcl' ? oog : false,
+      imo: mode === 'fcl' || mode === 'lcl' ? imo : false,
     })
     onCreate(row)
     toast.success(`Carga ${row.ref || MODALITY_LABELS[mode]} agregada — completá el resto en la grilla`)
@@ -174,6 +179,9 @@ export default function NewShipmentDialog({
                 ['Certificada', certi, setCerti],
                 ['Telex', telex, setTelex],
                 ['No apilable', noApilable, setNoApilable],
+                // IMO: FCL y LCL · OOG (sobredimensionada): solo FCL
+                ...(mode === 'fcl' || mode === 'lcl' ? [['IMO', imo, setImo]] : []),
+                ...(mode === 'fcl' ? [['Sobredimensionada (OOG)', oog, setOog]] : []),
               ] as [string, boolean, (v: boolean) => void][]).map(([label, val, set]) => (
                 <label key={label} className="flex items-center gap-2 text-sm cursor-pointer select-none">
                   <input type="checkbox" checked={val} onChange={e => set(e.target.checked)} className="h-4 w-4 accent-primary" />

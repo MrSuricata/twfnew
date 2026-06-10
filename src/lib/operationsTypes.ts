@@ -118,6 +118,8 @@ export interface DbShipment {
   fiscal: string
   wood: boolean
   no_apilable: boolean
+  oog: boolean
+  imo: boolean
   ftl_ltl: string
   costo_extra: string
   observacion: string
@@ -170,6 +172,8 @@ export interface UnifiedOperation {
   tipo: string
   wood: boolean
   noApilable: boolean            // carga NO apilable
+  oog: boolean                   // sobredimensionada (out of gauge) — FCL
+  imo: boolean                   // mercancía peligrosa — FCL/LCL
   transporte: string
   seguimiento: string            // fecha de seguimiento
   seguro: boolean
@@ -187,7 +191,8 @@ const num = (v: unknown): number => {
 const EMPTY = {
   clientRef: '', shipper: '', agente: '', incoterm: '', origin: '', etd: '',
   buque: '', linea: '', camion: '', docNumber: '', destPort: '', despacho: '',
-  dischargePort: '', pais: '', noApilable: false, seguimiento: '', seguro: false, certi: false, impresa: false,
+  dischargePort: '', pais: '', noApilable: false, oog: false, imo: false,
+  seguimiento: '', seguro: false, certi: false, impresa: false,
   archived: false,
 }
 
@@ -279,6 +284,8 @@ export function dbShipmentToOperation(s: DbShipment): UnifiedOperation {
     tipo: MODALITY_LABELS[s.mode] || '',
     wood: !!s.wood,
     noApilable: !!s.no_apilable,
+    oog: !!s.oog,
+    imo: !!s.imo,
     transporte: s.transporte || '',
     seguimiento: s.seguimiento || '',
     seguro: !!s.seguro,
@@ -400,6 +407,8 @@ export const OPERATION_COLUMNS: ColumnDef[] = [
   { key: 'seguimiento', label: 'Seguimiento', defaultOn: false, w: 'max-w-[92px]' },
   { key: 'wood', label: 'Wood', defaultOn: true, w: 'max-w-[56px]' },
   { key: 'noApilable', label: 'No apilable', defaultOn: false, w: 'max-w-[64px]' },
+  { key: 'oog', label: 'OOG', defaultOn: false, w: 'max-w-[56px]' },
+  { key: 'imo', label: 'IMO', defaultOn: false, w: 'max-w-[56px]' },
   { key: 'seguro', label: 'Seguro', defaultOn: false, w: 'max-w-[56px]' },
   { key: 'certi', label: 'Certi', defaultOn: false, w: 'max-w-[56px]' },
   { key: 'impresa', label: 'Impresa', defaultOn: false, w: 'max-w-[60px]' },
@@ -444,6 +453,8 @@ export const EDITABLE_FIELDS: Partial<Record<keyof UnifiedOperation, EditableFie
   tlx: { col: 'telex', type: 'bool' },
   wood: { col: 'wood', type: 'bool' },
   noApilable: { col: 'no_apilable', type: 'bool' },
+  oog: { col: 'oog', type: 'bool' },
+  imo: { col: 'imo', type: 'bool' },
   seguro: { col: 'seguro', type: 'bool' },
   certi: { col: 'certi', type: 'bool' },
   impresa: { col: 'impresa', type: 'bool' },
@@ -461,7 +472,7 @@ export function newDbShipment(fields: Partial<DbShipment> & { mode: Modality }):
     seguimiento: '', contenedor: '', buque: '', linea: '', transbordo: '', seguro: false,
     certi: false, telex: false, impresa: false, despacho: '', deposito: '', fecha_consol: '',
     transporte: '', camion: '', dest_country: '', discharge_port: '', dest_port: '',
-    fiscal: '', wood: false, no_apilable: false,
+    fiscal: '', wood: false, no_apilable: false, oog: false, imo: false,
     ftl_ltl: '', costo_extra: '', observacion: '', status: 'en_origen', operator_id: null,
     notes: '', source: 'web', archived: false,
     ...fields,
