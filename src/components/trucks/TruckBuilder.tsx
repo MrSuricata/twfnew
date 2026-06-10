@@ -75,6 +75,21 @@ export default function TruckBuilder(props: TruckBuilderProps) {
   const limits = getTruckLimits(truck.isSider)
   const healthIssues = useMemo(() => getTruckHealthIssues(truck, loads), [truck, loads])
 
+  // Cargas especiales en ESTE camión: NO apilable (va arriba de todo) e IMO
+  // (mercancía peligrosa). Los flags viven en la carga (tabla shipments).
+  const specialLoads = useMemo(() => {
+    const byRef = new Map(dbShipments.map(s => [s.ref, s]))
+    const noApilables: string[] = []
+    const imos: string[] = []
+    for (const l of loads) {
+      const s = byRef.get(l.sourceRef)
+      if (!s) continue
+      if (s.no_apilable) noApilables.push(l.sourceRef)
+      if (s.imo) imos.push(l.sourceRef)
+    }
+    return { noApilables, imos }
+  }, [loads, dbShipments])
+
   // ── Truck-level update helpers ──
   const updateTruck = (patch: Partial<Truck>) => {
     const updated = { ...truck, ...patch, updatedAt: Date.now() }
@@ -171,6 +186,9 @@ export default function TruckBuilder(props: TruckBuilderProps) {
     }
     onUpdateTruckLoads([...truckLoads, load])
     toast.success(`${s.ref} agregado al camión`)
+    // Aviso inmediato al agregar una carga especial
+    if (s.no_apilable) toast.warning(`📦 ${s.ref} es NO APILABLE — va arriba de todo`, { duration: 6000 })
+    if (s.imo) toast.warning(`☢️ ${s.ref} lleva mercancía peligrosa (IMO)`, { duration: 6000 })
   }
 
   // ── Re-sync FCL load from current planilla data ──
@@ -233,8 +251,20 @@ export default function TruckBuilder(props: TruckBuilderProps) {
       </div>
 
       {/* Alerts */}
-      {(totals.overKg || totals.overM3 || totals.multifiscal || healthIssues.length > 0) && (
+      {(totals.overKg || totals.overM3 || totals.multifiscal || healthIssues.length > 0 || specialLoads.noApilables.length > 0 || specialLoads.imos.length > 0) && (
         <div className="space-y-2">
+          {specialLoads.noApilables.length > 0 && (
+            <AlertBanner kind="warning">
+              <Warning size={16} weight="fill" />
+              📦 Carga NO APILABLE en el camión: {specialLoads.noApilables.join(', ')} — tiene que ir ARRIBA de todo, avisar al depósito.
+            </AlertBanner>
+          )}
+          {specialLoads.imos.length > 0 && (
+            <AlertBanner kind="error">
+              <Warning size={16} weight="fill" />
+              ☢️ Mercancía PELIGROSA (IMO) en el camión: {specialLoads.imos.join(', ')} — verificar compatibilidad de cargas y documentación del transporte.
+            </AlertBanner>
+          )}
           {totals.overKg && (
             <AlertBanner kind="error">
               <Warning size={16} weight="fill" />

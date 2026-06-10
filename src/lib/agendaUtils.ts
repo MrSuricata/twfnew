@@ -342,9 +342,13 @@ export function trucksToEvents(trucks: Truck[], truckLoads: TruckLoad[]): Calend
     }
 
     // Como las FCL (que se agendan por SALIDA), el camión se agenda por su
-    // FECHA DE CARGA — es el día que hay que coordinar depósito/transporte.
-    const carga = make('carga', t.loadDate || '')
-    if (carga) events.push(carga)
+    // FECHA DE CARGA — el día a coordinar. Fallback si no la tiene todavía:
+    // salida, y si no, arribo — así el consolidado SIEMPRE aparece en la
+    // agenda apenas tiene alguna fecha.
+    const ev = make('carga', t.loadDate || '')
+      || make('salida', t.departureDate || '')
+      || make('eta_fisc', t.arrivalDate || '')
+    if (ev) events.push(ev)
   }
 
   return events
