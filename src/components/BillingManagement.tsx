@@ -58,6 +58,11 @@ export default function BillingManagement({ shipments, dbShipments = [], trucks 
   const [search, setSearch] = useState('')
   const [invoiceDialog, setInvoiceDialog] = useState<BillableItem | null>(null)
   const [invoiceNumber, setInvoiceNumber] = useState('')
+  // Orden por columna: 1er click ▼ (mayor→menor, ej: últimas arribadas), 2do ▲, 3ro limpia.
+  const [sort, setSort] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(null)
+  const toggleSort = (key: string) => setSort(prev =>
+    !prev || prev.key !== key ? { key, dir: 'desc' } : prev.dir === 'desc' ? { key, dir: 'asc' } : null
+  )
 
   const billingMap = useMemo(() => indexBilling(billing), [billing])
 
@@ -104,6 +109,38 @@ export default function BillingManagement({ shipments, dbShipments = [], trucks 
       return blob.includes(q)
     })
   }, [activeList, search, billingMap])
+
+  const sorted = useMemo(() => {
+    if (!sort) return filtered
+    const sign = sort.dir === 'asc' ? 1 : -1
+    const val = (it: BillableItem): number | string => {
+      switch (sort.key) {
+        case 'ref': return it.ref
+        case 'tipo': return it.mode
+        case 'cliente': return it.cliente
+        case 'arrival': return it.arrival ? it.arrival.getTime() : 0
+        case 'aging': return daysSince(it.arrival)
+        case 'factura': return billingMap.get(it.ref)?.invoiceNumber || ''
+        case 'facturada': return billingMap.get(it.ref)?.invoicedAt || ''
+        default: return ''
+      }
+    }
+    return [...filtered].sort((a, b) => {
+      const va = val(a), vb = val(b)
+      const c = typeof va === 'number' && typeof vb === 'number' ? va - vb : String(va).localeCompare(String(vb), 'es')
+      return c * sign
+    })
+  }, [filtered, sort, billingMap])
+
+  const Th = ({ k, children }: { k: string; children: React.ReactNode }) => (
+    <th
+      className="text-left px-3 py-2 cursor-pointer select-none hover:text-foreground"
+      onClick={() => toggleSort(k)}
+      title="Click para ordenar"
+    >
+      {children}{sort?.key === k ? (sort.dir === 'desc' ? ' ▼' : ' ▲') : ''}
+    </th>
+  )
 
   // ── Actions (por ref — vale para cualquier modalidad) ──
   const markFacturada = (item: BillableItem, invNumber: string) => {
@@ -223,18 +260,18 @@ export default function BillingManagement({ shipments, dbShipments = [], trucks 
             <table className="w-full text-sm">
               <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
                 <tr>
-                  <th className="text-left px-3 py-2">Ref</th>
-                  <th className="text-left px-3 py-2">Tipo</th>
-                  <th className="text-left px-3 py-2">Cliente</th>
-                  <th className="text-left px-3 py-2">Llegada</th>
-                  {subTab === 'pendientes' && <th className="text-left px-3 py-2">Aging</th>}
-                  {subTab === 'facturadas' && <th className="text-left px-3 py-2">Nº Factura</th>}
-                  {subTab === 'facturadas' && <th className="text-left px-3 py-2">Facturada</th>}
+                  <Th k="ref">Ref</Th>
+                  <Th k="tipo">Tipo</Th>
+                  <Th k="cliente">Cliente</Th>
+                  <Th k="arrival">Llegada</Th>
+                  {subTab === 'pendientes' && <Th k="aging">Aging</Th>}
+                  {subTab === 'facturadas' && <Th k="factura">Nº Factura</Th>}
+                  {subTab === 'facturadas' && <Th k="facturada">Facturada</Th>}
                   <th className="px-3 py-2 text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {filtered.map((item, i) => (
+                {sorted.map((item, i) => (
                   <BillingRow
                     key={`${item.mode}-${item.ref}-${i}`}
                     item={item}

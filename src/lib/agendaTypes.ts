@@ -4,7 +4,7 @@ import type { ParsedShipment, OperativasRecord } from './shipmentTypes'
 export type AgendaView = 'day' | 'week' | 'month' | 'annual'
 
 // ─── Event Types ──────────────────────────────────────────────────────
-export type EventType = 'salida' | 'eta_fisc' | 'libre' | 'descarga' | 'dev'
+export type EventType = 'salida' | 'eta_fisc' | 'libre' | 'descarga' | 'dev' | 'carga'
 
 // ─── Alert Emoji ──────────────────────────────────────────────────────
 export interface AlertEmoji {
@@ -48,6 +48,13 @@ export interface EventTypeConfig {
 }
 
 export const EVENT_TYPE_CONFIG: Record<EventType, EventTypeConfig> = {
+  carga: {
+    label: 'Carga camión',
+    color: 'bg-amber-500',
+    bg: 'bg-amber-50',
+    dot: '🟡',
+    textColor: 'text-amber-700'
+  },
   salida: {
     label: 'Salida MVD',
     color: 'bg-blue-500',

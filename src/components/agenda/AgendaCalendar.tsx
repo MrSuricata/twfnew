@@ -49,6 +49,8 @@ export default function AgendaCalendar({
   const [activeDepots, setActiveDepots] = useState<Set<string>>(new Set())
   const [activeTransports, setActiveTransports] = useState<Set<string>>(new Set())
   const [showPendingSidebar, setShowPendingSidebar] = useState(false)
+  // Filtro "Consolidados": ver SOLO los hitos de camiones 🚛 en el calendario.
+  const [onlyTrucks, setOnlyTrucks] = useState(false)
 
   // Transform all shipments into calendar events (+ hitos de camiones)
   const allEvents = useMemo(() => {
@@ -83,6 +85,9 @@ export default function AgendaCalendar({
   // Filter events by active depots + transports
   const filteredEvents = useMemo(() => {
     let list = allEvents
+    if (onlyTrucks) {
+      list = list.filter(e => e.id.startsWith('truck-'))
+    }
     if (activeDepots.size > 0) {
       list = list.filter(e => e.deposito && activeDepots.has(e.deposito.toUpperCase()))
     }
@@ -94,7 +99,7 @@ export default function AgendaCalendar({
       })
     }
     return list
-  }, [allEvents, activeDepots, activeTransports])
+  }, [allEvents, onlyTrucks, activeDepots, activeTransports])
 
   const toggleDepot = useCallback((depot: string) => {
     setActiveDepots(prev => {
@@ -254,6 +259,21 @@ export default function AgendaCalendar({
         // Pending-sidebar toggle is admin-only (makes no sense for a single partner/client).
         onTogglePendingSidebar={undefined}
       />
+
+      {/* Filtro Consolidados: solo los hitos de camiones 🚛 (visible si hay camiones en la agenda) */}
+      {trucks && trucks.length > 0 && (
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setOnlyTrucks(v => !v)}
+            title="Ver solo los camiones consolidados (carga programada)"
+            className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 border text-xs transition-all hover:shadow-sm ${
+              onlyTrucks ? 'bg-amber-50 border-amber-300 text-amber-800 font-medium' : 'bg-card border-border text-muted-foreground'
+            }`}
+          >
+            🚛 Consolidados{onlyTrucks ? ' · solo' : ''}
+          </button>
+        </div>
+      )}
 
       <div className="flex overflow-hidden rounded-xl border bg-card shadow-sm">
         {/* Main calendar area */}
