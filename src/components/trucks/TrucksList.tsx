@@ -178,9 +178,9 @@ export default function TrucksList({
           <SelectContent>
             <SelectItem value="all">Todos los estados</SelectItem>
             <SelectItem value="planning">Planificando</SelectItem>
-            <SelectItem value="loaded">Cargado</SelectItem>
-            <SelectItem value="in_transit">En Ruta</SelectItem>
-            <SelectItem value="delivered">Entregado</SelectItem>
+            <SelectItem value="loaded">Cargado / Carga HOY</SelectItem>
+            <SelectItem value="in_transit">En Ruta · Frontera · Sale HOY</SelectItem>
+            <SelectItem value="delivered">Entregado / Llega HOY</SelectItem>
           </SelectContent>
         </Select>
         <div className="ml-auto">

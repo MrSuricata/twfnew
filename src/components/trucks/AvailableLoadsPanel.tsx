@@ -41,6 +41,8 @@ interface AvailableRow {
   pkgs: number
   description: string
   mvdArrival: string
+  noApilable?: boolean   // ⚠️ va arriba de todo en el camión
+  imo?: boolean          // ☢️ mercancía peligrosa
   fcl?: ParsedShipment
   lclAir?: LclAirShipment
   db?: DbShipment
@@ -144,6 +146,8 @@ export default function AvailableLoadsPanel({
         pkgs: Number(s.pkgs) || 0,
         description: s.observacion || '',
         mvdArrival: s.eta || '',
+        noApilable: !!s.no_apilable,
+        imo: !!s.imo,
         db: s,
       })
     }
@@ -327,6 +331,8 @@ function AvailableRowCard({ row, onAdd }: { row: AvailableRow; onAdd: () => void
             <Icon size={14} className="text-primary shrink-0" weight="fill" />
             <span className="font-medium text-sm truncate">{row.ref}</span>
             <Badge variant="outline" className="h-4 text-[9px] uppercase">{row.type}</Badge>
+            {row.noApilable && <Badge variant="outline" className="h-4 text-[9px] text-amber-700 border-amber-400" title="Carga NO apilable — va arriba de todo">📦 NO APILABLE</Badge>}
+            {row.imo && <Badge variant="outline" className="h-4 text-[9px] text-red-700 border-red-400" title="Mercancía peligrosa IMO">☢️ IMO</Badge>}
           </div>
           {row.client && (
             <p className="text-xs text-muted-foreground truncate mt-0.5">{row.client}</p>
