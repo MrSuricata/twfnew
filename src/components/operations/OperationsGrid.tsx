@@ -43,6 +43,7 @@ import {
   buildOperations,
   indexAssignments,
   isOperationActive,
+  isSeguimientoVencido,
   operatorsForMode,
   deriveTruckCargoStatus,
   OPERATION_COLUMNS,
@@ -133,6 +134,8 @@ export default function OperationsGrid({
   const [managerOpen, setManagerOpen] = useState(false)
   const [pasteOpen, setPasteOpen] = useState(false)
   const [newOpen, setNewOpen] = useState(false)
+  // Filtro "Seguimiento vencido" (7+ días sin actualizar, solo cargas activas).
+  const [segFilter, setSegFilter] = useState(false)
   // "Ver archivadas" (OFF por defecto) + confirmación de eliminado definitivo.
   const [showArchived, setShowArchived] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<UnifiedOperation | null>(null)
@@ -262,6 +265,7 @@ export default function OperationsGrid({
     const q = search.toLowerCase().trim()
     const num = (s: string) => { const n = parseFloat(s.replace(',', '.')); return isFinite(n) ? n : null }
     const kMin = num(kgMin), kMax = num(kgMax), vMin = num(m3Min), vMax = num(m3Max)
+    const today = new Date(); today.setHours(0, 0, 0, 0)
     return visibleOps.filter(o => {
       if (modeFilter !== 'all' && o.mode !== modeFilter) return false
       if (zonaFilter !== 'all' && (o.pais || 'OTRO') !== zonaFilter) return false
@@ -271,6 +275,7 @@ export default function OperationsGrid({
       if (kMax !== null && (o.kg || 0) > kMax) return false
       if (vMin !== null && (o.m3 || 0) < vMin) return false
       if (vMax !== null && (o.m3 || 0) > vMax) return false
+      if (segFilter && !isSeguimientoVencido(o, truckByRef.get(o.ref)?.status, today)) return false
       if (operatorFilter !== 'all' && (o.operatorId || '') !== operatorFilter) return false
       if (q) {
         const blob = `${o.ref} ${o.clientRef} ${o.cliente} ${o.cntr} ${o.docNumber} ${o.fiscal} ${o.descripcion} ${o.transporte}`.toLowerCase()
@@ -278,9 +283,15 @@ export default function OperationsGrid({
       }
       return true
     })
-  }, [visibleOps, modeFilter, zonaFilter, originFilter, destFilter, kgMin, kgMax, m3Min, m3Max, operatorFilter, search])
+  }, [visibleOps, modeFilter, zonaFilter, originFilter, destFilter, kgMin, kgMax, m3Min, m3Max, segFilter, truckByRef, operatorFilter, search])
 
   const pesoVolActivo = !!(kgMin || kgMax || m3Min || m3Max)
+
+  // Seguimientos vencidos entre las visibles (alerta + filtro).
+  const segVencidos = useMemo(() => {
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    return visibleOps.filter(o => isSeguimientoVencido(o, truckByRef.get(o.ref)?.status, today)).length
+  }, [visibleOps, truckByRef])
 
   // Totals for the current filter (planning at a glance).
   const totals = useMemo(() => {
@@ -459,6 +470,18 @@ export default function OperationsGrid({
           <span className={`w-2 h-2 rounded-full ${activeOnly ? 'bg-green-500' : 'bg-muted-foreground/40'}`} />
           <span className="font-medium">Solo activas</span>
         </button>
+        {segVencidos > 0 && (
+          <button
+            onClick={() => setSegFilter(v => !v)}
+            title={`${segVencidos} carga(s) activas con seguimiento sin actualizar hace 7+ días — click para ver solo esas`}
+            className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 border text-xs transition-all hover:shadow-sm ${
+              segFilter ? 'bg-red-100 border-red-400 text-red-800 font-semibold' : 'bg-red-50 border-red-300 text-red-700'
+            }`}
+          >
+            ⏰ Seguimiento vencido
+            <span className="text-[10px] tabular-nums font-bold">{segVencidos}</span>
+          </button>
+        )}
         <button
           onClick={() => setShowArchived(v => !v)}
           title="Mostrar también las cargas archivadas (el número indica cuántas hay)"
@@ -470,6 +493,18 @@ export default function OperationsGrid({
           <span className="font-medium">Ver archivadas</span>
           <span className="text-[10px] tabular-nums">{archivedCount}</span>
         </button>
+        {segVencidos > 0 && (
+          <button
+            onClick={() => setSegFilter(v => !v)}
+            title="Cargas activas con 7+ días sin actualizar el seguimiento — click para ver solo esas"
+            className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 border text-xs transition-all hover:shadow-sm ${
+              segFilter ? 'bg-red-100 border-red-400 text-red-800 font-semibold' : 'bg-red-50 border-red-300 text-red-700'
+            }`}
+          >
+            ⏰ Seguimiento vencido
+            <span className="text-[10px] tabular-nums font-bold">{segVencidos}</span>
+          </button>
+        )}
       </div>
 
       {/* Toolbar */}
@@ -750,6 +785,9 @@ const OperationRow = memo(function OperationRow({
   const editable = op.source === 'db' && !!op.dbId && !op.readOnly
   // FCL espejo (Etapa 3): campos del nivel SG editables vía overlay web_edits.
   const fclEditable = op.source === 'fcl' && !!op.dbId && !!onPatchFcl
+  // Seguimiento vencido: 7+ días sin actualizar y la carga sigue activa.
+  const hoyRow = new Date(); hoyRow.setHours(0, 0, 0, 0)
+  const segVencido = isSeguimientoVencido(op, truckStatus?.status, hoyRow)
 
   const cell = (key: string) => {
     switch (key) {
@@ -802,7 +840,9 @@ const OperationRow = memo(function OperationRow({
     <tr className="bg-card even:bg-muted/30 hover:bg-primary/5">
       {cols.map((c) => {
         const ef = editable ? EDITABLE_FIELDS[c.key as keyof UnifiedOperation] : undefined
-        const tdClass = `px-2 py-1.5 align-top ${c.w || ''} ${c.numeric ? 'text-right tabular-nums' : ''} ${c.wrap ? 'whitespace-normal break-words' : 'whitespace-nowrap'} ${c.sticky ? 'sticky left-0 bg-inherit' : ''}`
+        // Seguimiento 7+ días sin actualizar (carga activa) → celda en rojo.
+        const segRojo = c.key === 'seguimiento' && segVencido
+        const tdClass = `px-2 py-1.5 align-top ${c.w || ''} ${c.numeric ? 'text-right tabular-nums' : ''} ${c.wrap ? 'whitespace-normal break-words' : 'whitespace-nowrap'} ${c.sticky ? 'sticky left-0 bg-inherit' : ''} ${segRojo ? 'bg-red-50 text-red-700 font-semibold' : ''}`
 
         // Estado of a cargo loaded on a truck is driven by the truck (read-only).
         if (c.key === 'status' && truckStatus) {

@@ -395,7 +395,9 @@ function App() {
       saveTrucks(updated)
         .catch(err => {
           console.warn('[DB] Failed to save trucks:', err)
-          toast.warning('Error al sincronizar camiones', { duration: 4000 })
+          // Mostrar el motivo REAL y fuerte: un guardado fallido silencioso
+          // hace que el camión "exista" en pantalla pero se pierda al recargar.
+          toast.error(`⚠️ El camión NO se guardó: ${err?.message || 'error de conexión'}. Reintentá o recargá la página.`, { duration: 10000 })
         })
         .finally(() => {
           pendingTrucksWritesRef.current = Math.max(0, pendingTrucksWritesRef.current - 1)
