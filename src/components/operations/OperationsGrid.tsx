@@ -23,6 +23,7 @@ import {
   Archive,
   ArrowCounterClockwise,
   Trash,
+  Scales,
 } from '@phosphor-icons/react'
 import {
   Dialog,
@@ -115,6 +116,11 @@ export default function OperationsGrid({
   const [zonaFilter, setZonaFilter] = useState<ZonaFilter>('all')
   const [originFilter, setOriginFilter] = useState('')
   const [destFilter, setDestFilter] = useState('')
+  // Rango de peso/volumen ("entre tantos kilos", "menos de X m³"...)
+  const [kgMin, setKgMin] = useState('')
+  const [kgMax, setKgMax] = useState('')
+  const [m3Min, setM3Min] = useState('')
+  const [m3Max, setM3Max] = useState('')
   const [operatorFilter, setOperatorFilter] = useState<string>('all')
   // "Solo activas" (ON por defecto): oculta devueltas+en fiscal / terminadas.
   const [activeOnly, setActiveOnly] = useState<boolean>(() => {
@@ -242,11 +248,17 @@ export default function OperationsGrid({
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim()
+    const num = (s: string) => { const n = parseFloat(s.replace(',', '.')); return isFinite(n) ? n : null }
+    const kMin = num(kgMin), kMax = num(kgMax), vMin = num(m3Min), vMax = num(m3Max)
     return visibleOps.filter(o => {
       if (modeFilter !== 'all' && o.mode !== modeFilter) return false
       if (zonaFilter !== 'all' && (o.pais || 'OTRO') !== zonaFilter) return false
       if (originFilter && !(o.origin || '').toLowerCase().includes(originFilter.toLowerCase())) return false
       if (destFilter && !(`${o.dischargePort} ${o.destPort}` || '').toLowerCase().includes(destFilter.toLowerCase())) return false
+      if (kMin !== null && (o.kg || 0) < kMin) return false
+      if (kMax !== null && (o.kg || 0) > kMax) return false
+      if (vMin !== null && (o.m3 || 0) < vMin) return false
+      if (vMax !== null && (o.m3 || 0) > vMax) return false
       if (operatorFilter !== 'all' && (o.operatorId || '') !== operatorFilter) return false
       if (q) {
         const blob = `${o.ref} ${o.clientRef} ${o.cliente} ${o.cntr} ${o.docNumber} ${o.fiscal} ${o.descripcion} ${o.transporte}`.toLowerCase()
@@ -254,7 +266,9 @@ export default function OperationsGrid({
       }
       return true
     })
-  }, [visibleOps, modeFilter, zonaFilter, originFilter, destFilter, operatorFilter, search])
+  }, [visibleOps, modeFilter, zonaFilter, originFilter, destFilter, kgMin, kgMax, m3Min, m3Max, operatorFilter, search])
+
+  const pesoVolActivo = !!(kgMin || kgMax || m3Min || m3Max)
 
   // Totals for the current filter (planning at a glance).
   const totals = useMemo(() => {
@@ -456,6 +470,33 @@ export default function OperationsGrid({
         {/* Origen / Destino (puerto) */}
         <Input value={originFilter} onChange={e => setOriginFilter(e.target.value)} placeholder="Origen…" className="h-9 w-28" />
         <Input value={destFilter} onChange={e => setDestFilter(e.target.value)} placeholder="Destino…" className="h-9 w-28" />
+
+        {/* Rango de peso / volumen */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm" className={`h-9 ${pesoVolActivo ? 'border-primary text-primary' : ''}`} title="Filtrar por rango de kilos y m³ (ej: entre 5.000 y 10.000 kg, o menos de 20 m³)">
+              <Scales size={16} className="mr-1.5" /> Peso/Vol{pesoVolActivo ? ' ●' : ''}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-64 p-3 space-y-2.5">
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Rango de kilos</div>
+            <div className="grid grid-cols-2 gap-2">
+              <Input value={kgMin} onChange={e => setKgMin(e.target.value)} placeholder="Desde (kg)" inputMode="decimal" className="h-8 text-sm" />
+              <Input value={kgMax} onChange={e => setKgMax(e.target.value)} placeholder="Hasta (kg)" inputMode="decimal" className="h-8 text-sm" />
+            </div>
+            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">Rango de m³</div>
+            <div className="grid grid-cols-2 gap-2">
+              <Input value={m3Min} onChange={e => setM3Min(e.target.value)} placeholder="Desde (m³)" inputMode="decimal" className="h-8 text-sm" />
+              <Input value={m3Max} onChange={e => setM3Max(e.target.value)} placeholder="Hasta (m³)" inputMode="decimal" className="h-8 text-sm" />
+            </div>
+            <p className="text-[10px] text-muted-foreground">Dejá vacío el que no uses: "hasta 5.000 kg" = solo el segundo campo. Para ordenar por kg/m³, click en el encabezado de la columna.</p>
+            {pesoVolActivo && (
+              <Button variant="ghost" size="sm" className="h-7 w-full text-xs" onClick={() => { setKgMin(''); setKgMax(''); setM3Min(''); setM3Max('') }}>
+                Limpiar filtro
+              </Button>
+            )}
+          </PopoverContent>
+        </Popover>
 
         {/* Operator filter */}
         <select

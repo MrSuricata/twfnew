@@ -62,6 +62,13 @@ export default function AvailableLoadsPanel({
   const [fiscalFilter, setFiscalFilter] = useState<string>('all')
   const [showArchived, setShowArchived] = useState(false)
   const [onlyArrived, setOnlyArrived] = useState(false)
+  // Rango de peso/volumen (para encontrar cargas que entren en lo que le
+  // queda al camión) + orden por kg/m³.
+  const [kgMin, setKgMin] = useState('')
+  const [kgMax, setKgMax] = useState('')
+  const [m3Min, setM3Min] = useState('')
+  const [m3Max, setM3Max] = useState('')
+  const [sortBy, setSortBy] = useState<'eta' | 'kg-desc' | 'kg-asc' | 'm3-desc' | 'm3-asc'>('eta')
 
   // Refs already used in any other active truck (excluding this one)
   const assignedElsewhere = useMemo(() => {
@@ -178,15 +185,27 @@ export default function AvailableLoadsPanel({
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim()
-    return rows.filter(r => {
+    const num = (s: string) => { const n = parseFloat(s.replace(',', '.')); return isFinite(n) ? n : null }
+    const kMin = num(kgMin), kMax = num(kgMax), vMin = num(m3Min), vMax = num(m3Max)
+    const out = rows.filter(r => {
       if (fiscalFilter !== 'all' && r.fiscal !== fiscalFilter) return false
+      if (kMin !== null && r.kg < kMin) return false
+      if (kMax !== null && r.kg > kMax) return false
+      if (vMin !== null && r.m3 < vMin) return false
+      if (vMax !== null && r.m3 > vMax) return false
       if (q) {
         const blob = `${r.ref} ${r.client} ${r.fiscal} ${r.description}`.toLowerCase()
         if (!blob.includes(q)) return false
       }
       return true
     })
-  }, [rows, search, fiscalFilter])
+    if (sortBy !== 'eta') {
+      const key = sortBy.startsWith('kg') ? 'kg' as const : 'm3' as const
+      const sign = sortBy.endsWith('desc') ? -1 : 1
+      out.sort((a, b) => (a[key] - b[key]) * sign)
+    }
+    return out
+  }, [rows, search, fiscalFilter, kgMin, kgMax, m3Min, m3Max, sortBy])
 
   return (
     <div className="flex flex-col h-full">
@@ -231,6 +250,26 @@ export default function AvailableLoadsPanel({
             </SelectContent>
           </Select>
         </div>
+
+        {/* Rango kg / m³ + orden — para buscar cargas que entren en lo que queda del camión */}
+        <div className="grid grid-cols-4 gap-1.5">
+          <Input value={kgMin} onChange={e => setKgMin(e.target.value)} placeholder="Kg mín" inputMode="decimal" className="h-8 text-xs" />
+          <Input value={kgMax} onChange={e => setKgMax(e.target.value)} placeholder="Kg máx" inputMode="decimal" className="h-8 text-xs" />
+          <Input value={m3Min} onChange={e => setM3Min(e.target.value)} placeholder="M³ mín" inputMode="decimal" className="h-8 text-xs" />
+          <Input value={m3Max} onChange={e => setM3Max(e.target.value)} placeholder="M³ máx" inputMode="decimal" className="h-8 text-xs" />
+        </div>
+        <Select value={sortBy} onValueChange={v => setSortBy(v as typeof sortBy)}>
+          <SelectTrigger className="h-8 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="eta">Orden: llegada</SelectItem>
+            <SelectItem value="kg-desc">Más pesadas primero</SelectItem>
+            <SelectItem value="kg-asc">Más livianas primero</SelectItem>
+            <SelectItem value="m3-desc">Más voluminosas primero</SelectItem>
+            <SelectItem value="m3-asc">Menos voluminosas primero</SelectItem>
+          </SelectContent>
+        </Select>
 
         <div className="flex items-center gap-4 text-xs">
           <div className="flex items-center gap-1.5">
