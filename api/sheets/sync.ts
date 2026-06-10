@@ -44,11 +44,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let mirror: Record<string, unknown> = { upserted: 0 }
     try {
       const db = getSupabase()
-      const rows = fclMirrorRows(shipments, Date.now())
+      const now = Date.now()
+      const rows = fclMirrorRows(shipments, now)
       for (let i = 0; i < rows.length; i += 500) {
         const { error } = await db.from('shipments').upsert(rows.slice(i, i + 500), { onConflict: 'id' })
         if (error) throw error
       }
+      // Espejo = reflejo exacto: filas que ya no están en la planilla se van
+      // (solo source='sheet'; las cargas de la web nunca se tocan acá).
+      const { error: staleErr } = await db.from('shipments')
+        .delete().eq('source', 'sheet').lt('updated_at_ts', now)
+      if (staleErr) console.warn('Mirror stale cleanup failed:', staleErr.message)
       mirror = { upserted: rows.length }
     } catch (mirrorError: any) {
       console.warn('FCL mirror upsert failed:', mirrorError?.message || mirrorError)
