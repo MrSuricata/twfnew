@@ -1202,13 +1202,17 @@ const SHIPMENT_COLS = new Set([
   'ref','client_ref','mode','agente','cliente','shipper','incoterm','pkgs','kg','m3',
   'doc_number','origin','etd','eta','seguimiento','contenedor','buque','linea','transbordo',
   'seguro','certi','telex','impresa','despacho','deposito','fecha_consol','transporte','camion',
-  'dest_country','discharge_port','dest_port','fiscal','wood','no_apilable','oog','imo','ftl_ltl','costo_extra','observacion','status',
+  'dest_country','discharge_port','dest_port','fiscal','wood','no_apilable','oog','imo','tipo','ftl_ltl','costo_extra','observacion','status',
   'operator_id','notes','archived','source',
 ])
 
 async function handleShipments(req: VercelRequest, res: VercelResponse, db: any) {
   if (req.method === 'GET') {
-    const { data, error } = await db.from('shipments').select('*').order('ref', { ascending: true }).limit(5000)
+    // source='sheet' = filas espejo de la migración FCL (Etapa 1): invisibles
+    // para la app hasta el flip. ?includeMirror=1 las trae (verificación).
+    let q = db.from('shipments').select('*').order('ref', { ascending: true }).limit(5000)
+    if (req.query.includeMirror !== '1') q = q.neq('source', 'sheet')
+    const { data, error } = await q
     if (error) throw error
     return res.status(200).json({ shipments: data || [] })
   }

@@ -456,7 +456,11 @@ export function mergeOperativasData(shipments: ParsedShipment[], opMap: Map<stri
   })
 }
 
-const HARDCODED_EXCLUDED_REFS = ['A7530']
+// Refs basura confirmadas por Brian (10/06/2026): A6791 (split viejo Chile),
+// A6836 (ref reutilizada por error, ambas operaciones viejas). A7804 NO se
+// excluye: la fila GIECO es una operación vigente (la fila VMG vacía se
+// corrige en la planilla).
+const HARDCODED_EXCLUDED_REFS = ['A7530', 'A6791', 'A6836']
 
 // SG nuevo: ya NO se excluyen Chile/Buenos Aires — entran TODAS las cargas
 // (la zona se deriva del POD y se filtra en la UI). Solo se sacan refs basura.
@@ -492,6 +496,67 @@ export async function performServerSync(sheetsUrl: string): Promise<ParsedShipme
 
   processed = filterShipments(processed)
   return processed
+}
+
+// ─── Espejo FCL → tabla `shipments` (Etapa 1 de la migración) ────────
+// La planilla sigue siendo master. Cada sync upserta TODAS las FCL como
+// filas mode='fcl' source='sheet' para correr en paralelo y verificar
+// conteos antes del flip (Etapa 2). Reglas:
+//  - id determinístico por (ref, booking, cliente): re-sync = update, y las
+//    refs duplicadas de la planilla (splits / reuso) no colisionan entre sí
+//  - el RESTO de la app IGNORA estas filas (GET de shipments y tracking
+//    filtran source='sheet') hasta el flip — si no, duplicarían cada FCL
+//  - NO se copia el estado operativo (se deriva en la app: derive-on-read)
+//  - las operativas por contenedor (SALIDA/ETA_FISC/LIBRE) NO entran acá:
+//    siguen viviendo en la hoja Operativas hasta la Etapa 2+ (tabla hija)
+
+const mirrorSlug = (s: string) =>
+  (s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40)
+
+export function fclMirrorRows(shipments: ParsedShipment[], now: number): Record<string, unknown>[] {
+  const toNum = (v: unknown) => {
+    const n = typeof v === 'number' ? v : parseFloat(String(v ?? '').replace(',', '.'))
+    return isFinite(n) ? n : 0
+  }
+  const rows: Record<string, unknown>[] = []
+  const seen = new Set<string>()
+  for (const s of shipments) {
+    if (!s.REF) continue
+    const ops = s.operativas || []
+    const first = (key: string): string => String((ops as Array<Record<string, unknown>>).find(o => o[key])?.[key] ?? '')
+    const id = ['shp-fcl', mirrorSlug(s.REF), mirrorSlug(s.MBL || ''), mirrorSlug(s.CLIENTE || '')]
+      .filter(Boolean).join('-')
+    if (seen.has(id)) continue // fila idéntica repetida en la planilla → una sola
+    seen.add(id)
+    rows.push({
+      id,
+      ref: s.REF,
+      mode: 'fcl',
+      source: 'sheet',
+      cliente: s.CLIENTE || first('CLIENTE_OP'),
+      doc_number: s.MBL || '',
+      contenedor: s.CNTR || '',
+      buque: s.BUQUE || '',
+      linea: s.LINEA || '',
+      origin: s.POL || '',
+      discharge_port: s.POD || '',
+      dest_country: s.PAIS || '',
+      tipo: s.TIPO || first('TIPO'),
+      seguimiento: s.SEGUIMIENTO || '',
+      etd: s.ETD || '',
+      eta: s.ETA || '',
+      pkgs: ops.reduce((a, o) => a + toNum((o as Record<string, unknown>).PKGS), 0),
+      kg: ops.reduce((a, o) => a + toNum((o as Record<string, unknown>).KG), 0),
+      m3: ops.reduce((a, o) => a + toNum((o as Record<string, unknown>).M3), 0),
+      deposito: first('DEPOSITO'),
+      fiscal: first('FISCAL'),
+      transporte: first('TRANSPORTE'),
+      observacion: first('DESCRIPCION'),
+      wood: ops.some(o => String((o as Record<string, unknown>).WOOD || '').toUpperCase().startsWith('SI')),
+      updated_at_ts: now,
+    })
+  }
+  return rows
 }
 
 /**
