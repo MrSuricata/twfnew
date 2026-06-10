@@ -50,25 +50,35 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(500).json({ error: 'Server configuration error' })
     }
 
-    // Compare username (case-insensitive) and verify password with bcrypt
-    const usernameOk = username.toLowerCase() === adminUser.toLowerCase()
-    const passwordOk = await verifyPassword(password, adminPassHash)
-
-    if (!usernameOk || !passwordOk) {
-      return res.status(401).json({ error: 'Invalid credentials' })
+    // 1) Owner (Brian): credenciales por env vars, como siempre.
+    if (username.toLowerCase() === adminUser.toLowerCase()) {
+      const passwordOk = await verifyPassword(password, adminPassHash)
+      if (!passwordOk) return res.status(401).json({ error: 'Invalid credentials' })
+      await clearRateLimit(rateLimitKey)
+      const token = signAdminToken(username, username, 'owner')
+      return res.status(200).json({ token, role: 'admin', user: username, name: username, level: 'owner' })
     }
 
-    // Success — clear rate limit for this IP
+    // 2) Usuario individual del equipo (tabla admin_users, login por email).
+    const db = getSupabase()
+    const { data: teamUser } = await db
+      .from('admin_users')
+      .select('*')
+      .eq('email', username.toLowerCase().trim())
+      .eq('active', true)
+      .maybeSingle()
+
+    if (!teamUser) return res.status(401).json({ error: 'Invalid credentials' })
+    const passwordOk = await verifyPassword(password, teamUser.password_hash)
+    if (!passwordOk) return res.status(401).json({ error: 'Invalid credentials' })
+
     await clearRateLimit(rateLimitKey)
+    db.from('admin_users').update({ last_login: new Date().toISOString() }).eq('id', teamUser.id)
+      .then(() => {}, () => {}) // best-effort, no bloquea el login
 
-    // Generate JWT
-    const token = signAdminToken(username)
-
-    return res.status(200).json({
-      token,
-      role: 'admin',
-      user: username,
-    })
+    const level = teamUser.level === 'owner' ? 'owner' : 'admin'
+    const token = signAdminToken(teamUser.email, teamUser.name || teamUser.email, level)
+    return res.status(200).json({ token, role: 'admin', user: teamUser.email, name: teamUser.name, level })
   } catch (error: any) {
     console.error('Admin login error:', error?.message || error, error?.stack)
     return res.status(500).json({ error: 'Internal server error' })

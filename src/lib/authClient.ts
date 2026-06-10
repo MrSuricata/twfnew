@@ -24,6 +24,30 @@ function setAuth(token: string, role: UserRole, data?: Record<string, string>) {
   try { sessionStorage.setItem('twf-token', token) } catch {}
 }
 
+/** Decodifica el payload del JWT guardado (sin verificar — solo para UI;
+ *  el servidor SIEMPRE re-valida los permisos). */
+function decodeTokenPayload(): Record<string, unknown> | null {
+  try {
+    const t = _token || sessionStorage.getItem('twf-token')
+    if (!t) return null
+    return JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
+  } catch { return null }
+}
+
+/** Nivel del admin logueado: 'owner' (Brian — gestiona usuarios) o 'admin'
+ *  (usuario del equipo). Tokens viejos sin level = owner. */
+export function getAdminLevel(): 'owner' | 'admin' {
+  const p = decodeTokenPayload()
+  if (!p || p.role !== 'admin') return 'admin'
+  return p.level === 'admin' ? 'admin' : 'owner'
+}
+
+/** Nombre visible del usuario logueado. */
+export function getAdminName(): string {
+  const p = decodeTokenPayload()
+  return String(p?.name || p?.user || '')
+}
+
 /** Clear auth state and all cached data (logout).
  * SECURITY: removes all business data from localStorage to prevent leakage after logout. */
 export function clearAuth() {
@@ -56,7 +80,7 @@ export async function loginAdmin(username: string, password: string): Promise<{ 
     }
 
     const data = await res.json()
-    setAuth(data.token, 'admin', { user: data.user })
+    setAuth(data.token, 'admin', { user: data.user, name: data.name || data.user, level: data.level || 'owner' })
     return { success: true }
   } catch (err) {
     console.error('Login error:', err)

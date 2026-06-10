@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { authenticateRequest } from '../_lib/jwt.js'
+import { authenticateRequest, auditUser, type TokenPayload, type AdminPayload } from '../_lib/jwt.js'
 import { handleCors } from '../_lib/cors.js'
 import { getSupabase } from '../_lib/supabase.js'
 import { sendMail } from '../_lib/mail.js'
@@ -44,6 +44,24 @@ function validateBatch<T>(itemSchema: z.ZodSchema<T>, body: unknown): { ok: true
 //          /api/data/settings, /api/data/shipments-cache,
 //          /api/data/partner-users, /api/data/partner-shipments
 // ─────────────────────────────────────────────────────────────────────
+
+// ── Auditoría ──
+// Registro best-effort de quién hizo qué (no bloquea la operación si falla).
+function logAudit(db: any, payload: TokenPayload | null, action: string, entity: string, ref: string, details?: Record<string, unknown>) {
+  try {
+    db.from('audit_log')
+      .insert({ usuario: auditUser(payload as any), action, entity, ref: ref || '', details: details || null })
+      .then(() => {}, (e: any) => console.warn('[audit] insert failed:', e?.message))
+  } catch (e: any) {
+    console.warn('[audit] failed:', e?.message)
+  }
+}
+
+/** owner = Brian (env vars) o usuario con level owner; tokens viejos sin level = owner. */
+function isOwner(payload: TokenPayload | null): boolean {
+  const p = payload as AdminPayload | null
+  return !!p && p.role === 'admin' && p.level !== 'admin'
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handleCors(req, res)) return
@@ -95,13 +113,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       case 'truck-counter':
         return handleTruckCounter(req, res, db)
       case 'billing':
-        return handleBilling(req, res, db)
+        return handleBilling(req, res, db, payload)
       case 'operators':
         return handleOperators(req, res, db)
       case 'operator-assignments':
         return handleOperatorAssignments(req, res, db)
       case 'shipments':
-        return handleShipments(req, res, db)
+        return handleShipments(req, res, db, payload)
+      case 'admin-users':
+        return handleAdminUsers(req, res, db, payload)
+      case 'audit-log':
+        return handleAuditLog(req, res, db)
       default:
         return res.status(404).json({ error: `Unknown entity: ${entity}` })
     }
@@ -1099,7 +1121,7 @@ function mapBillingRowToApi(b: any) {
   }
 }
 
-async function handleBilling(req: VercelRequest, res: VercelResponse, db: any) {
+async function handleBilling(req: VercelRequest, res: VercelResponse, db: any, payload: TokenPayload | null) {
   if (req.method === 'GET') {
     const { data, error } = await db
       .from('shipment_billing')
@@ -1114,6 +1136,8 @@ async function handleBilling(req: VercelRequest, res: VercelResponse, db: any) {
     const v = validateBatch(BillingRowSchema, req.body)
     if (!v.ok) return res.status(400).json({ error: v.error })
     const nowIso = new Date().toISOString()
+    // invoiced_by sale del TOKEN (usuario real), no del cliente — auditoría.
+    const who = auditUser(payload as any)
     const rows = v.items.map((b) => ({
       ref: b.ref,
       status: b.status,
@@ -1122,13 +1146,12 @@ async function handleBilling(req: VercelRequest, res: VercelResponse, db: any) {
       invoiced_at: b.status === 'facturada'
         ? (b.invoicedAt || b.invoiced_at || nowIso)
         : null,
-      invoiced_by: b.status === 'facturada'
-        ? (b.invoicedBy || b.invoiced_by || '')
-        : '',
+      invoiced_by: b.status === 'facturada' ? who : '',
       updated_at: nowIso,
     }))
     const { error } = await db.from('shipment_billing').upsert(rows, { onConflict: 'ref' })
     if (error) throw error
+    for (const r of rows) logAudit(db, payload, `facturación: ${r.status}`, 'billing', r.ref, r.invoice_number ? { factura: r.invoice_number } : undefined)
     return res.status(200).json({ saved: true, count: rows.length })
   }
 
@@ -1137,6 +1160,7 @@ async function handleBilling(req: VercelRequest, res: VercelResponse, db: any) {
     if (!ref) return res.status(400).json({ error: 'ref query parameter required' })
     const { error } = await db.from('shipment_billing').delete().eq('ref', ref)
     if (error) throw error
+    logAudit(db, payload, 'facturación: deshacer', 'billing', ref)
     return res.status(200).json({ deleted: true })
   }
 
@@ -1206,7 +1230,7 @@ const SHIPMENT_COLS = new Set([
   'operator_id','notes','archived','source',
 ])
 
-async function handleShipments(req: VercelRequest, res: VercelResponse, db: any) {
+async function handleShipments(req: VercelRequest, res: VercelResponse, db: any, payload: TokenPayload | null) {
   if (req.method === 'GET') {
     // source='sheet' = filas espejo de la migración FCL: por defecto invisibles.
     // ?includeMirror=only → SOLO el espejo, payload mínimo (sheet_raw): es la
@@ -1238,20 +1262,21 @@ async function handleShipments(req: VercelRequest, res: VercelResponse, db: any)
     if (req.query.fcl === '1') {
       if ('REF' in body) return res.status(400).json({ error: 'La REF no se edita acá (flujo aparte con confirmación)' })
       const FCL_EDIT_KEYS = new Set(['CLIENTE', 'ETD', 'ETA', 'CNTR', 'BUQUE', 'LINEA', 'POL', 'POD', 'SEGUIMIENTO', 'TIPO', 'MBL'])
-      const { data: row, error: rowErr } = await db.from('shipments').select('id, source, web_edits').eq('id', id).maybeSingle()
+      const { data: row, error: rowErr } = await db.from('shipments').select('id, ref, source, web_edits').eq('id', id).maybeSingle()
       if (rowErr) throw rowErr
       if (!row || row.source !== 'sheet') return res.status(404).json({ error: 'Carga FCL espejo no encontrada' })
       const merged: Record<string, unknown> = { ...(row.web_edits || {}) }
-      let touched = 0
+      const applied: Record<string, unknown> = {}
       for (const [k, v] of Object.entries(body)) {
         if (!FCL_EDIT_KEYS.has(k)) continue
         if (v === null) delete merged[k]   // null = revertir al valor de la planilla
         else merged[k] = v
-        touched++
+        applied[k] = v
       }
-      if (touched === 0) return res.status(400).json({ error: 'No valid fields' })
+      if (Object.keys(applied).length === 0) return res.status(400).json({ error: 'No valid fields' })
       const { error } = await db.from('shipments').update({ web_edits: merged, updated_at_ts: Date.now() }).eq('id', id)
       if (error) throw error
+      logAudit(db, payload, 'editar FCL', 'shipments', row.ref || id, applied)
       return res.status(200).json({ updated: true, webEdits: merged })
     }
 
@@ -1261,8 +1286,11 @@ async function handleShipments(req: VercelRequest, res: VercelResponse, db: any)
     }
     if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No valid fields' })
     updates.updated_at_ts = Date.now()
-    const { error } = await db.from('shipments').update(updates).eq('id', id)
+    const { data: updRow, error } = await db.from('shipments').update(updates).eq('id', id).select('ref').maybeSingle()
     if (error) throw error
+    logAudit(db, payload, 'archived' in updates && Object.keys(updates).length === 1
+      ? (updates.archived ? 'archivar' : 'restaurar')
+      : 'editar', 'shipments', updRow?.ref || id, updates)
     return res.status(200).json({ updated: true })
   }
 
@@ -1277,6 +1305,7 @@ async function handleShipments(req: VercelRequest, res: VercelResponse, db: any)
     })
     const { error } = await db.from('shipments').upsert(rows, { onConflict: 'id' })
     if (error) throw error
+    logAudit(db, payload, 'crear/actualizar carga', 'shipments', rows.map(r => r.ref).filter(Boolean).join(', ') || String(rows[0]?.id || ''))
     return res.status(200).json({ saved: true, count: rows.length })
   }
 
@@ -1315,10 +1344,104 @@ async function handleShipments(req: VercelRequest, res: VercelResponse, db: any)
     }
     const { error } = await db.from('shipments').delete().eq('id', id)
     if (error) throw error
+    logAudit(db, payload, 'ELIMINAR carga', 'shipments', ref || id)
     return res.status(200).json({ deleted: true })
   }
 
   return res.status(405).json({ error: 'Method not allowed' })
+}
+
+// ── Usuarios del equipo (admin_users) — SOLO el owner los gestiona ──
+// GET lista · POST crear/editar {id?, email, name, password?} · PATCH ?id=
+// {active|password} · DELETE ?id=. El owner (Brian) entra por env vars como
+// siempre; estos usuarios entran con su email + contraseña en el mismo login.
+
+async function handleAdminUsers(req: VercelRequest, res: VercelResponse, db: any, payload: TokenPayload | null) {
+  if (!isOwner(payload)) return res.status(403).json({ error: 'Solo el owner gestiona usuarios' })
+
+  if (req.method === 'GET') {
+    const { data, error } = await db.from('admin_users')
+      .select('id, email, name, level, active, created_at, last_login')
+      .order('created_at', { ascending: true })
+    if (error) throw error
+    return res.status(200).json({ users: data || [] })
+  }
+
+  if (req.method === 'POST') {
+    const v = validate(z.object({
+      id: z.string().optional(),
+      email: z.string().email(),
+      name: z.string().min(1),
+      password: z.string().min(8).optional(),
+    }), req.body)
+    if (!v.ok) return res.status(400).json({ error: v.error })
+    const { id, email, name, password } = v.data
+    const emailNorm = email.toLowerCase().trim()
+
+    if (!id) {
+      // Crear: contraseña obligatoria
+      if (!password) return res.status(400).json({ error: 'Contraseña requerida (mínimo 8 caracteres)' })
+      const { data: exists } = await db.from('admin_users').select('id').eq('email', emailNorm).maybeSingle()
+      if (exists) return res.status(409).json({ error: `Ya existe un usuario con el email ${emailNorm}` })
+      const row = {
+        id: `au-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        email: emailNorm,
+        name: name.trim(),
+        password_hash: await hashPassword(password),
+        level: 'admin',
+        active: true,
+      }
+      const { error } = await db.from('admin_users').insert(row)
+      if (error) throw error
+      logAudit(db, payload, 'crear usuario', 'admin_users', emailNorm)
+      return res.status(200).json({ saved: true, id: row.id })
+    }
+
+    // Editar nombre/email (+ contraseña si viene)
+    const updates: Record<string, unknown> = { email: emailNorm, name: name.trim() }
+    if (password) updates.password_hash = await hashPassword(password)
+    const { error } = await db.from('admin_users').update(updates).eq('id', id)
+    if (error) throw error
+    logAudit(db, payload, password ? 'editar usuario + contraseña' : 'editar usuario', 'admin_users', emailNorm)
+    return res.status(200).json({ saved: true })
+  }
+
+  if (req.method === 'PATCH') {
+    const id = req.query.id as string
+    if (!id) return res.status(400).json({ error: 'id required' })
+    const body = (req.body || {}) as Record<string, unknown>
+    const updates: Record<string, unknown> = {}
+    if (typeof body.active === 'boolean') updates.active = body.active
+    if (typeof body.password === 'string' && body.password.length >= 8) updates.password_hash = await hashPassword(body.password)
+    if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No valid fields' })
+    const { data: u, error } = await db.from('admin_users').update(updates).eq('id', id).select('email').maybeSingle()
+    if (error) throw error
+    logAudit(db, payload, 'active' in updates ? (updates.active ? 'activar usuario' : 'desactivar usuario') : 'resetear contraseña', 'admin_users', u?.email || id)
+    return res.status(200).json({ updated: true })
+  }
+
+  if (req.method === 'DELETE') {
+    const id = req.query.id as string
+    if (!id) return res.status(400).json({ error: 'id required' })
+    const { data: u } = await db.from('admin_users').select('email').eq('id', id).maybeSingle()
+    const { error } = await db.from('admin_users').delete().eq('id', id)
+    if (error) throw error
+    logAudit(db, payload, 'eliminar usuario', 'admin_users', u?.email || id)
+    return res.status(200).json({ deleted: true })
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' })
+}
+
+// ── Log de actividad (lectura) ──────────────────────────────────────
+async function handleAuditLog(req: VercelRequest, res: VercelResponse, db: any) {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
+  const { data, error } = await db.from('audit_log')
+    .select('id, ts, usuario, action, entity, ref, details')
+    .order('ts', { ascending: false })
+    .limit(300)
+  if (error) throw error
+  return res.status(200).json({ log: data || [] })
 }
 
 // ── Operator assignments (overlay ref → operativo) ─────────────────

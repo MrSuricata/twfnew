@@ -4,6 +4,11 @@ import jwt from 'jsonwebtoken'
 export interface AdminPayload {
   role: 'admin'
   user: string
+  /** Nombre visible para auditoría (tokens viejos no lo traen). */
+  name?: string
+  /** 'owner' = Brian (login por env vars) — gestiona usuarios. 'admin' =
+   *  usuario individual de admin_users. Tokens viejos sin level = owner. */
+  level?: 'owner' | 'admin'
 }
 
 export interface ClientPayload {
@@ -46,9 +51,15 @@ function getSecret(): string {
 }
 
 /** Sign an admin JWT (8h expiry) */
-export function signAdminToken(user: string): string {
-  const payload: AdminPayload = { role: 'admin', user }
+export function signAdminToken(user: string, name?: string, level: 'owner' | 'admin' = 'owner'): string {
+  const payload: AdminPayload = { role: 'admin', user, name: name || user, level }
   return jwt.sign(payload, getSecret(), { expiresIn: '8h' })
+}
+
+/** Nombre para el log de auditoría (tokens viejos: user a secas). */
+export function auditUser(payload: { user?: string; name?: string; email?: string } | null): string {
+  if (!payload) return 'desconocido'
+  return payload.name || payload.user || payload.email || 'desconocido'
 }
 
 /** Sign a client JWT (24h expiry) */
