@@ -143,6 +143,26 @@ export function deriveTruckDisplayStatus(t: Truck, today: Date): TruckStatus {
   return t.status
 }
 
+/** Etiqueta FINA del estado derivado — mismo lenguaje que las cargas:
+ *  carga HOY → "Carga HOY" · salida HOY → "Sale HOY" · salida pasada →
+ *  "En Frontera" · arribo HOY → "Llega a Fiscal HOY" · arribo pasado →
+ *  "Entregado". El status (4 valores) queda para filtros/colores. */
+export function deriveTruckDisplayInfo(t: Truck, today: Date): { status: TruckStatus; label: string; hoy: boolean } {
+  const status = deriveTruckDisplayStatus(t, today)
+  const isToday = (s?: string) => {
+    if (!s) return false
+    const p = s.split('-')
+    if (p.length !== 3) return false
+    const d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]))
+    return !isNaN(d.getTime()) && d.getTime() === today.getTime()
+  }
+  if (status === 'delivered' && isToday(t.arrivalDate)) return { status, label: 'Llega a Fiscal HOY', hoy: true }
+  if (status === 'in_transit' && isToday(t.departureDate)) return { status, label: 'Sale HOY', hoy: true }
+  if (status === 'in_transit') return { status, label: 'En Frontera', hoy: false }
+  if (status === 'loaded' && isToday(t.loadDate)) return { status, label: 'Carga HOY', hoy: true }
+  return { status, label: TRUCK_STATUS_LABELS[status], hoy: false }
+}
+
 export const LCL_AIR_STATUS_LABELS: Record<LclAirStatus, string> = {
   en_origen: 'En Origen',
   en_transito: 'En Tránsito',

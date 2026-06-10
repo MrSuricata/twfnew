@@ -34,6 +34,7 @@ import {
   computeTruckTotals,
   getTruckLimits,
   deriveTruckDisplayStatus,
+  deriveTruckDisplayInfo,
 } from '@/lib/truckTypes'
 import {
   formatKg,
@@ -83,6 +84,7 @@ export default function TruckBuilder(props: TruckBuilderProps) {
   // Estado mostrado = derivado de las fechas (las fechas mandan).
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0)
   const derivedStatus = deriveTruckDisplayStatus(truck, hoy)
+  const derivedInfo = deriveTruckDisplayInfo(truck, hoy)
 
   // Tocar un estado completa la fecha correspondiente con HOY si está vacía
   // (así el derivado coincide y la agenda/facturación reaccionan solas).
@@ -218,8 +220,8 @@ export default function TruckBuilder(props: TruckBuilderProps) {
           Volver
         </Button>
         <h2 className="text-2xl font-bold">{truck.code}</h2>
-        <Badge variant="outline" title="Estado automático: derivado de las fechas de carga/salida/arribo">
-          {TRUCK_STATUS_LABELS[derivedStatus]}
+        <Badge variant="outline" className={derivedInfo.hoy ? 'animate-pulse font-semibold border-amber-400 text-amber-700' : ''} title="Estado automático: derivado de las fechas de carga/salida/arribo">
+          {derivedInfo.label}
         </Badge>
         {truck.isSider && <Badge variant="outline">Sider</Badge>}
         <div className="ml-auto flex items-center gap-2">

@@ -38,6 +38,7 @@ import {
   computeTruckTotals,
   getTruckLimits,
   deriveTruckDisplayStatus,
+  deriveTruckDisplayInfo,
 } from '@/lib/truckTypes'
 import { formatKg, formatM3 } from '@/lib/truckUtils'
 import { nextTruckCode } from '@/lib/dataClient'
@@ -212,9 +213,14 @@ export default function TrucksList({
                       <p className="text-xs text-muted-foreground mt-0.5">{t.transport}</p>
                     )}
                   </div>
-                  <Badge className={`border ${TRUCK_STATUS_COLORS[deriveTruckDisplayStatus(t, hoyList)]}`} variant="outline" title="Estado automático según las fechas del camión">
-                    {TRUCK_STATUS_LABELS[deriveTruckDisplayStatus(t, hoyList)]}
-                  </Badge>
+                  {(() => {
+                    const info = deriveTruckDisplayInfo(t, hoyList)
+                    return (
+                      <Badge className={`border ${TRUCK_STATUS_COLORS[info.status]} ${info.hoy ? 'animate-pulse font-semibold' : ''}`} variant="outline" title="Estado automático según las fechas del camión">
+                        {info.label}
+                      </Badge>
+                    )
+                  })()}
                 </div>
 
                 {/* Totals */}
