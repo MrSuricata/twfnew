@@ -257,6 +257,12 @@ export default function OperationsGrid({
     switch (key) {
       case 'operator': return op.operatorId ? (operatorById.get(op.operatorId)?.name || '') : ''
       case 'wood': return op.wood ? 'SI' : ''
+      case 'noApilable': return op.noApilable ? 'SI' : ''
+      case 'oog': return op.oog ? 'SI' : ''
+      case 'imo': return op.imo ? 'SI' : ''
+      case 'seguro': return op.seguro ? 'SI' : ''
+      case 'certi': return op.certi ? 'SI' : ''
+      case 'impresa': return op.impresa ? 'SI' : ''
       case 'pkgs': return op.pkgs ? String(op.pkgs) : ''
       case 'kg': return op.kg ? String(op.kg) : ''
       case 'm3': return op.m3 ? String(op.m3) : ''
