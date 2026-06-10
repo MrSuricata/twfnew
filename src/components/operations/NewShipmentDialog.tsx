@@ -38,13 +38,24 @@ export default function NewShipmentDialog({
   const [cliente, setCliente] = useState('')
   const [operatorId, setOperatorId] = useState('')
   const [origin, setOrigin] = useState('')
+  const [dischargePort, setDischargePort] = useState('')
   const [destPort, setDestPort] = useState('')
   const [docNumber, setDocNumber] = useState('')
+  const [linea, setLinea] = useState('')
   const [eta, setEta] = useState('')
+  const [seguimiento, setSeguimiento] = useState('')
+  // tildes
+  const [impresa, setImpresa] = useState(false)
+  const [seguro, setSeguro] = useState(false)
+  const [certi, setCerti] = useState(false)
+  const [telex, setTelex] = useState(false)
+  const [noApilable, setNoApilable] = useState(false)
 
   const reset = () => {
     setMode('lcl'); setRef(''); setCliente(''); setOperatorId('')
-    setOrigin(''); setDestPort(''); setDocNumber(''); setEta('')
+    setOrigin(''); setDischargePort(''); setDestPort(''); setDocNumber('')
+    setLinea(''); setEta(''); setSeguimiento('')
+    setImpresa(false); setSeguro(false); setCerti(false); setTelex(false); setNoApilable(false)
   }
 
   const eligibleOps = operatorsForMode(operators, mode)
@@ -56,9 +67,13 @@ export default function NewShipmentDialog({
       cliente: cliente.trim(),
       operator_id: operatorId || null,
       origin: origin.trim(),
+      discharge_port: dischargePort.trim(),
       dest_port: destPort.trim(),
       doc_number: docNumber.trim(),
+      linea: linea.trim(),
       eta: eta.trim(),
+      seguimiento: seguimiento.trim(),
+      impresa, seguro, certi, telex, no_apilable: noApilable,
     })
     onCreate(row)
     toast.success(`Carga ${row.ref || MODALITY_LABELS[mode]} agregada — completá el resto en la grilla`)
@@ -122,17 +137,49 @@ export default function NewShipmentDialog({
               <Label htmlFor="ns-doc">BL / AWB / CRT</Label>
               <Input id="ns-doc" value={docNumber} onChange={e => setDocNumber(e.target.value)} placeholder="Documento" />
             </div>
+          </div>
+
+          {/* Ruta: Origen → Puerto de descarga → Destino */}
+          <div className="space-y-1.5">
+            <Label>Ruta — Origen · Puerto de descarga · Destino</Label>
+            <div className="grid grid-cols-3 gap-2">
+              <Input value={origin} onChange={e => setOrigin(e.target.value)} placeholder="Origen" />
+              <Input value={dischargePort} onChange={e => setDischargePort(e.target.value)} placeholder="Pto. descarga" />
+              <Input value={destPort} onChange={e => setDestPort(e.target.value)} placeholder="Destino" />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="ns-ori">Origen</Label>
-              <Input id="ns-ori" value={origin} onChange={e => setOrigin(e.target.value)} placeholder="Shanghai…" />
+              <Label htmlFor="ns-lin">Línea marítima</Label>
+              <Input id="ns-lin" value={linea} onChange={e => setLinea(e.target.value)} placeholder="MAERSK, COSCO…" />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="ns-dst">Destino</Label>
-              <Input id="ns-dst" value={destPort} onChange={e => setDestPort(e.target.value)} placeholder="Montevideo…" />
+              <Label htmlFor="ns-eta">ETA</Label>
+              <Input id="ns-eta" type="date" value={eta} onChange={e => setEta(e.target.value)} />
             </div>
             <div className="space-y-1.5 col-span-2">
-              <Label htmlFor="ns-eta">ETA</Label>
-              <Input id="ns-eta" type="date" value={eta} onChange={e => setEta(e.target.value)} className="w-44" />
+              <Label htmlFor="ns-seg">Fecha de seguimiento</Label>
+              <Input id="ns-seg" type="date" value={seguimiento} onChange={e => setSeguimiento(e.target.value)} className="w-48" />
+            </div>
+          </div>
+
+          {/* Tildes */}
+          <div className="space-y-1.5">
+            <Label>Marcar lo que corresponda</Label>
+            <div className="flex flex-wrap gap-x-4 gap-y-2">
+              {([
+                ['Impreso', impresa, setImpresa],
+                ['Seguro', seguro, setSeguro],
+                ['Certificada', certi, setCerti],
+                ['Telex', telex, setTelex],
+                ['No apilable', noApilable, setNoApilable],
+              ] as [string, boolean, (v: boolean) => void][]).map(([label, val, set]) => (
+                <label key={label} className="flex items-center gap-2 text-sm cursor-pointer select-none">
+                  <input type="checkbox" checked={val} onChange={e => set(e.target.checked)} className="h-4 w-4 accent-primary" />
+                  {label}
+                </label>
+              ))}
             </div>
           </div>
         </div>
