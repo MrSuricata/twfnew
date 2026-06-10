@@ -463,9 +463,16 @@ export function mergeOperativasData(shipments: ParsedShipment[], opMap: Map<stri
 const HARDCODED_EXCLUDED_REFS = ['A7530', 'A6791', 'A6836']
 
 // SG nuevo: ya NO se excluyen Chile/Buenos Aires — entran TODAS las cargas
-// (la zona se deriva del POD y se filtra en la UI). Solo se sacan refs basura.
+// (la zona se deriva del POD y se filtra en la UI). Solo se sacan refs basura
+// y las filas que NO son FCL: el equipo anota también LCL/consolidados en la
+// misma hoja (E64, LCL12348...) y esas cargas viven en la web — ingerirlas
+// acá las duplicaba como "FCL" fantasma. FCL = ref con formato A#### .
+const FCL_REF_RE = /^A\s?\d/i
 export function filterShipments(shipments: ParsedShipment[]): ParsedShipment[] {
-  return shipments.filter(s => !HARDCODED_EXCLUDED_REFS.includes((s.REF || '').toUpperCase()))
+  return shipments.filter(s => {
+    const ref = (s.REF || '').trim().toUpperCase()
+    return FCL_REF_RE.test(ref) && !HARDCODED_EXCLUDED_REFS.includes(ref)
+  })
 }
 
 // ─── Full server-side sync ──────────────────────────────────────────
