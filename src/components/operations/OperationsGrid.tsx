@@ -169,6 +169,18 @@ export default function OperationsGrid({
   )
   const archivedCount = useMemo(() => dbShipments.filter(s => s.archived).length, [dbShipments])
 
+  // Próxima ref FCL sugerida: máximo A#### entre TODAS las cargas + 1.
+  // El espacio de numeración "A" es compartido con los aéreos, así que se
+  // toma el máximo global para no chocar (ej: aéreo A8013 vs FCL A8035).
+  const suggestedRef = useMemo(() => {
+    let max = 0
+    for (const o of operations) {
+      const m = /^A\s?(\d{3,})/i.exec(o.ref || '')
+      if (m) max = Math.max(max, parseInt(m[1], 10))
+    }
+    return max > 0 ? `A${max + 1}` : ''
+  }, [operations])
+
   // ref → { truckCode, derivedStatus } for cargas loaded on a truck. The truck
   // drives the cargo's status (its dates are the source of truth), so the Estado
   // cell becomes read-only for these. planning trucks (no advance) are skipped.
@@ -624,6 +636,7 @@ export default function OperationsGrid({
           onOpenChange={setNewOpen}
           operators={operators}
           onCreate={onCreateShipment}
+          suggestedRef={suggestedRef}
         />
       )}
 

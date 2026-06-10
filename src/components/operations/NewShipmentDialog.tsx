@@ -27,11 +27,14 @@ export default function NewShipmentDialog({
   onOpenChange,
   operators,
   onCreate,
+  suggestedRef = '',
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
   operators: Operator[]
   onCreate: (row: DbShipment) => void
+  /** Próxima ref FCL libre (máx A#### + 1) — se ofrece al elegir modo FCL. */
+  suggestedRef?: string
 }) {
   const [mode, setMode] = useState<Modality>('lcl')
   const [ref, setRef] = useState('')
@@ -120,7 +123,17 @@ export default function NewShipmentDialog({
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="ns-ref">Ref</Label>
-              <Input id="ns-ref" value={ref} onChange={e => setRef(e.target.value)} placeholder="E198, A7990…" />
+              <Input id="ns-ref" value={ref} onChange={e => setRef(e.target.value)} placeholder={mode === 'fcl' && suggestedRef ? suggestedRef : 'E198, A7990…'} />
+              {mode === 'fcl' && suggestedRef && ref.trim() === '' && (
+                <button
+                  type="button"
+                  onClick={() => setRef(suggestedRef)}
+                  className="text-xs text-primary hover:underline"
+                  title="Siguiente número libre detectado entre todas las cargas (FCL y aéreas comparten la numeración A)"
+                >
+                  Sugerida: <strong>{suggestedRef}</strong> — click para usar
+                </button>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="ns-cli">Cliente / Cnee</Label>
