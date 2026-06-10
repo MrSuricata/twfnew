@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -276,6 +276,7 @@ export default function TruckBuilder(props: TruckBuilderProps) {
 
               {/* Editable fields */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
+                <FieldCode truck={truck} trucks={trucks} onCommit={code => updateTruck({ code })} />
                 <FieldText
                   label="Transporte"
                   value={truck.transport}
@@ -501,6 +502,39 @@ function LoadRow({
 }
 
 // ── Form atoms ──
+
+// Código del consolidado: editable a mano, commit al salir del campo (blur/Enter).
+// Valida vacío y unicidad contra los demás camiones; el backend re-valida y
+// ajusta truck_counter para que el próximo código automático no choque.
+function FieldCode({ truck, trucks, onCommit }: { truck: Truck; trucks: Truck[]; onCommit: (code: string) => void }) {
+  const [draft, setDraft] = useState(truck.code)
+  useEffect(() => { setDraft(truck.code) }, [truck.code])
+  const commit = () => {
+    const v = draft.trim().toUpperCase()
+    if (!v) { setDraft(truck.code); return }
+    if (v === truck.code) { setDraft(v); return }
+    if (trucks.some(t => t.id !== truck.id && t.code === v)) {
+      toast.error(`El código ${v} ya lo usa otro camión`)
+      setDraft(truck.code)
+      return
+    }
+    onCommit(v)
+    toast.success(`Código del consolidado: ${v}`)
+  }
+  return (
+    <div>
+      <Label className="text-xs text-muted-foreground">Código (consolidado)</Label>
+      <Input
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); (e.target as HTMLInputElement).blur() } }}
+        placeholder="C440"
+        className="mt-1 h-9 text-sm font-semibold"
+      />
+    </div>
+  )
+}
 
 function FieldText({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
   return (
