@@ -164,6 +164,7 @@ export default function OperationsGrid({
     () => buildOperations(shipments, dbShipments, assignMap, showArchived),
     [shipments, dbShipments, assignMap, showArchived]
   )
+  const archivedCount = useMemo(() => dbShipments.filter(s => s.archived).length, [dbShipments])
 
   // ref → { truckCode, derivedStatus } for cargas loaded on a truck. The truck
   // drives the cargo's status (its dates are the source of truth), so the Estado
@@ -431,13 +432,14 @@ export default function OperationsGrid({
         </button>
         <button
           onClick={() => setShowArchived(v => !v)}
-          title="Mostrar también las cargas archivadas"
+          title="Mostrar también las cargas archivadas (el número indica cuántas hay)"
           className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 border text-xs transition-all hover:shadow-sm ${
             showArchived ? 'bg-amber-50 border-amber-300 text-amber-700' : 'bg-card border-border text-muted-foreground'
           }`}
         >
           <Archive size={12} />
           <span className="font-medium">Ver archivadas</span>
+          <span className="text-[10px] tabular-nums">{archivedCount}</span>
         </button>
       </div>
 
