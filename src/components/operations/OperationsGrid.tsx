@@ -20,7 +20,17 @@ import {
   ClipboardText,
   DownloadSimple,
   Plus,
+  Archive,
+  ArrowCounterClockwise,
+  Trash,
 } from '@phosphor-icons/react'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog'
 import { toast } from 'sonner'
 import OperatorsManager from './OperatorsManager'
 import PasteImportDialog from './PasteImportDialog'
@@ -55,6 +65,7 @@ interface OperationsGridProps {
   onAssignOperator: (ref: string, operatorId: string | null) => void
   onPatchShipment: (id: string, fields: Record<string, unknown>) => void
   onCreateShipment?: (row: DbShipment) => void
+  onDeleteShipment?: (op: UnifiedOperation) => void
   onUpdateOperators: (operators: Operator[]) => void
   onDeleteOperator: (id: string) => void
 }
@@ -92,6 +103,7 @@ export default function OperationsGrid({
   onAssignOperator,
   onPatchShipment,
   onCreateShipment,
+  onDeleteShipment,
   onUpdateOperators,
   onDeleteOperator,
 }: OperationsGridProps) {
@@ -112,6 +124,10 @@ export default function OperationsGrid({
   const [managerOpen, setManagerOpen] = useState(false)
   const [pasteOpen, setPasteOpen] = useState(false)
   const [newOpen, setNewOpen] = useState(false)
+  // "Ver archivadas" (OFF por defecto) + confirmación de eliminado definitivo.
+  const [showArchived, setShowArchived] = useState(false)
+  const [deleteTarget, setDeleteTarget] = useState<UnifiedOperation | null>(null)
+  const [deleteConfirm, setDeleteConfirm] = useState('')
 
   // Per-user visible columns (localStorage). Default from column defs.
   const [visibleCols, setVisibleCols] = useState<Set<string>>(() => {
@@ -145,8 +161,8 @@ export default function OperationsGrid({
 
   const assignMap = useMemo(() => indexAssignments(assignments), [assignments])
   const operations = useMemo(
-    () => buildOperations(shipments, dbShipments, assignMap),
-    [shipments, dbShipments, assignMap]
+    () => buildOperations(shipments, dbShipments, assignMap, showArchived),
+    [shipments, dbShipments, assignMap, showArchived]
   )
 
   // ref → { truckCode, derivedStatus } for cargas loaded on a truck. The truck
@@ -177,12 +193,20 @@ export default function OperationsGrid({
     else onAssignOperator(op.ref, operatorId)
   }, [onPatchShipment, onAssignOperator])
 
+  // Abrir confirmación de eliminado (estable para las filas memoizadas).
+  const requestDelete = useCallback((op: UnifiedOperation) => {
+    setDeleteConfirm('')
+    setDeleteTarget(op)
+  }, [])
+
   // Base visible: con "Solo activas" ON se ocultan las terminadas (criterio:
   // devuelta Y en fiscal · DB: estado terminal · sin datos: ETA >60d atrás).
   const visibleOps = useMemo(() => {
     if (!activeOnly) return operations
     const today = new Date(); today.setHours(0, 0, 0, 0)
-    return operations.filter(o => isOperationActive(o, truckByRef.get(o.ref)?.status, today))
+    // Archivadas exentas del filtro de activas: si "Ver archivadas" está ON,
+    // se muestran siempre (si no, ese toggle no mostraría nada).
+    return operations.filter(o => o.archived || isOperationActive(o, truckByRef.get(o.ref)?.status, today))
   }, [operations, activeOnly, truckByRef])
 
   const counts = useMemo(() => {
@@ -399,6 +423,16 @@ export default function OperationsGrid({
           <span className={`w-2 h-2 rounded-full ${activeOnly ? 'bg-green-500' : 'bg-muted-foreground/40'}`} />
           <span className="font-medium">Solo activas</span>
         </button>
+        <button
+          onClick={() => setShowArchived(v => !v)}
+          title="Mostrar también las cargas archivadas"
+          className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 border text-xs transition-all hover:shadow-sm ${
+            showArchived ? 'bg-amber-50 border-amber-300 text-amber-700' : 'bg-card border-border text-muted-foreground'
+          }`}
+        >
+          <Archive size={12} />
+          <span className="font-medium">Ver archivadas</span>
+        </button>
       </div>
 
       {/* Toolbar */}
@@ -505,11 +539,12 @@ export default function OperationsGrid({
                   </th>
                 )
               })}
+              <th className="px-2 py-2 w-[64px]" />
             </tr>
           </thead>
           <tbody className="divide-y">
             {sorted.length === 0 ? (
-              <tr><td colSpan={cols.length} className="text-center py-12 text-muted-foreground">Sin operaciones para los filtros actuales.</td></tr>
+              <tr><td colSpan={cols.length + 1} className="text-center py-12 text-muted-foreground">Sin operaciones para los filtros actuales.</td></tr>
             ) : sorted.map((op) => (
               <OperationRow
                 key={op.uid}
@@ -520,6 +555,7 @@ export default function OperationsGrid({
                 truckStatus={truckByRef.get(op.ref)}
                 onAssign={assignOp}
                 onPatch={onPatchShipment}
+                onDelete={requestDelete}
               />
             ))}
           </tbody>
@@ -578,6 +614,43 @@ export default function OperationsGrid({
           onCreate={onCreateShipment}
         />
       )}
+
+      {/* Confirmación de eliminado definitivo: hay que tipear la ref exacta. */}
+      <Dialog open={!!deleteTarget} onOpenChange={(v) => { if (!v) setDeleteTarget(null) }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600"><Trash size={18} /> Eliminar carga</DialogTitle>
+            <DialogDescription>
+              La carga <strong>{deleteTarget?.ref || '(sin ref)'}</strong>{deleteTarget?.cliente ? ` de ${deleteTarget.cliente}` : ''} se elimina
+              <strong> PARA SIEMPRE</strong> — no se puede deshacer. Si solo querés sacarla de la vista, usá <em>Archivar</em>.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <span className="text-xs text-muted-foreground">
+              Escribí <strong>{deleteTarget?.ref || 'ELIMINAR'}</strong> para confirmar:
+            </span>
+            <Input
+              autoFocus
+              value={deleteConfirm}
+              onChange={e => setDeleteConfirm(e.target.value)}
+              placeholder={deleteTarget?.ref || 'ELIMINAR'}
+            />
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" onClick={() => setDeleteTarget(null)}>Cancelar</Button>
+            <Button
+              variant="destructive"
+              disabled={deleteConfirm.trim() !== (deleteTarget?.ref || 'ELIMINAR')}
+              onClick={() => {
+                if (deleteTarget && onDeleteShipment) onDeleteShipment(deleteTarget)
+                setDeleteTarget(null)
+              }}
+            >
+              <Trash size={14} className="mr-1.5" /> Eliminar definitivamente
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -592,6 +665,7 @@ const OperationRow = memo(function OperationRow({
   truckStatus,
   onAssign,
   onPatch,
+  onDelete,
 }: {
   op: UnifiedOperation
   cols: typeof OPERATION_COLUMNS
@@ -600,6 +674,7 @@ const OperationRow = memo(function OperationRow({
   truckStatus?: TruckRefInfo
   onAssign: (op: UnifiedOperation, operatorId: string | null) => void
   onPatch: (id: string, fields: Record<string, unknown>) => void
+  onDelete?: (op: UnifiedOperation) => void
 }) {
   const eligible = operatorsForMode(operators, op.mode)
   const assigned = op.operatorId ? operatorById.get(op.operatorId) : null
@@ -614,6 +689,7 @@ const OperationRow = memo(function OperationRow({
             <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: MODALITY_COLORS[op.mode] }} />
             {op.ref}
             {op.readOnly && <LockSimple size={11} className="text-muted-foreground" />}
+            {op.archived && <Badge variant="outline" className="h-4 text-[8px] text-amber-700 border-amber-300">ARCHIVADA</Badge>}
           </span>
         )
       case 'operator':
@@ -690,6 +766,31 @@ const OperationRow = memo(function OperationRow({
           </td>
         )
       })}
+      {/* Acciones (solo filas DB): archivar/restaurar + eliminar. FCL = espejo planilla, sin acciones. */}
+      <td className="px-1 py-1.5 align-top whitespace-nowrap text-right">
+        {op.source === 'db' && op.dbId && (
+          <span className="inline-flex items-center gap-0.5">
+            <button
+              type="button"
+              title={op.archived ? 'Restaurar carga' : 'Archivar carga (reversible)'}
+              onClick={() => onPatch(op.dbId!, { archived: !op.archived })}
+              className="p-1 rounded text-muted-foreground/60 hover:text-amber-600 hover:bg-amber-50"
+            >
+              {op.archived ? <ArrowCounterClockwise size={13} /> : <Archive size={13} />}
+            </button>
+            {onDelete && (
+              <button
+                type="button"
+                title="Eliminar definitivamente…"
+                onClick={() => onDelete(op)}
+                className="p-1 rounded text-muted-foreground/60 hover:text-red-600 hover:bg-red-50"
+              >
+                <Trash size={13} />
+              </button>
+            )}
+          </span>
+        )}
+      </td>
     </tr>
   )
 })

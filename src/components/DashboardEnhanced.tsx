@@ -41,7 +41,7 @@ import { ParsedShipment } from '@/lib/shipmentTypes'
 import { ClientAccount, ShipmentDocument, OperativeReport, OriginPhoto, QuoteFormData } from '@/lib/quotationTypes'
 import { Truck, TruckLoad, LclAirShipment } from '@/lib/truckTypes'
 import { BillingRecord, getBillingState, indexBilling } from '@/lib/billingTypes'
-import { Operator, OperatorAssignment, DbShipment } from '@/lib/operationsTypes'
+import { Operator, OperatorAssignment, DbShipment, UnifiedOperation } from '@/lib/operationsTypes'
 import Breadcrumbs from './Breadcrumbs'
 
 interface DashboardEnhancedProps {
@@ -79,11 +79,12 @@ interface DashboardEnhancedProps {
   onAssignOperator?: (ref: string, operatorId: string | null) => void
   onPatchShipment?: (id: string, fields: Record<string, unknown>) => void
   onCreateShipment?: (row: DbShipment) => void
+  onDeleteShipment?: (op: UnifiedOperation) => void
 }
 
 const ONE_DAY_MS = 86_400_000
 
-export default function DashboardEnhanced({ onLogout, clients = [], shipments = [], documents = [], reports = [], originPhotos = [], quotes = [], trucks = [], truckLoads = [], lclAir = [], billing = [], operators = [], assignments = [], dbShipments = [], dbSyncError = null, onUpdateShipments, onUpdateClients, onUpdateDocuments, onUpdateReports, onUpdateOriginPhotos, onUpdateQuotes, onUpdateTrucks, onDeleteTruck, onUpdateTruckLoads, onDeleteTruckLoad, onUpdateLclAir, onDeleteLclAir, onUpdateBilling, onClearBilling, onUpdateOperators, onDeleteOperator, onAssignOperator, onPatchShipment, onCreateShipment }: DashboardEnhancedProps) {
+export default function DashboardEnhanced({ onLogout, clients = [], shipments = [], documents = [], reports = [], originPhotos = [], quotes = [], trucks = [], truckLoads = [], lclAir = [], billing = [], operators = [], assignments = [], dbShipments = [], dbSyncError = null, onUpdateShipments, onUpdateClients, onUpdateDocuments, onUpdateReports, onUpdateOriginPhotos, onUpdateQuotes, onUpdateTrucks, onDeleteTruck, onUpdateTruckLoads, onDeleteTruckLoad, onUpdateLclAir, onDeleteLclAir, onUpdateBilling, onClearBilling, onUpdateOperators, onDeleteOperator, onAssignOperator, onPatchShipment, onCreateShipment, onDeleteShipment }: DashboardEnhancedProps) {
   const brand = useBrand()
   const ops = brand.capabilities.opsAdmin
   // TWF brand has no ops tabs → land on the first content tab.
@@ -378,6 +379,7 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
               onAssignOperator={(ref, opId) => { if (onAssignOperator) onAssignOperator(ref, opId) }}
               onPatchShipment={(id, fields) => { if (onPatchShipment) onPatchShipment(id, fields) }}
               onCreateShipment={(row) => { if (onCreateShipment) onCreateShipment(row) }}
+              onDeleteShipment={(op) => { if (onDeleteShipment) onDeleteShipment(op) }}
               onUpdateOperators={(o) => { if (onUpdateOperators) onUpdateOperators(o) }}
               onDeleteOperator={(id) => { if (onDeleteOperator) onDeleteOperator(id) }}
             />
