@@ -121,3 +121,11 @@ describe('fclMirrorRows - espejo FCL (Etapa 1 migracion)', () => {
     expect(fclMirrorRows([mk(), mk()], 1)).toHaveLength(1)
   })
 })
+
+describe('filterShipments - solo refs FCL (A####)', () => {
+  const mk2 = (REF: string) => ({ REF, PAIS: 'UY', POD: 'MONTEVIDEO', operativas: [] }) as never
+  it('excluye las filas LCL/E que el equipo anota en la misma hoja del SG', () => {
+    const out = filterShipments([mk2('A8000'), mk2('E64'), mk2('LCL12348'), mk2('LCL30'), mk2('A7611 B')])
+    expect(out.map((s: { REF: string }) => s.REF)).toEqual(['A8000', 'A7611 B'])
+  })
+})
