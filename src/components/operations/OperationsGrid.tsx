@@ -46,6 +46,7 @@ import {
   deriveTruckCargoStatus,
   OPERATION_COLUMNS,
   EDITABLE_FIELDS,
+  EDITABLE_FCL_FIELDS,
   STATUS_LABEL,
   STATUS_OPTIONS,
   MODALITY_LABELS,
@@ -66,6 +67,7 @@ interface OperationsGridProps {
   onPatchShipment: (id: string, fields: Record<string, unknown>) => void
   onCreateShipment?: (row: DbShipment) => void
   onDeleteShipment?: (op: UnifiedOperation) => void
+  onPatchFclField?: (dbId: string, edits: Record<string, unknown>) => void
   onUpdateOperators: (operators: Operator[]) => void
   onDeleteOperator: (id: string) => void
 }
@@ -104,6 +106,7 @@ export default function OperationsGrid({
   onPatchShipment,
   onCreateShipment,
   onDeleteShipment,
+  onPatchFclField,
   onUpdateOperators,
   onDeleteOperator,
 }: OperationsGridProps) {
@@ -563,6 +566,7 @@ export default function OperationsGrid({
                 truckStatus={truckByRef.get(op.ref)}
                 onAssign={assignOp}
                 onPatch={onPatchShipment}
+                onPatchFcl={onPatchFclField}
                 onDelete={requestDelete}
               />
             ))}
@@ -596,7 +600,7 @@ export default function OperationsGrid({
       </div>
 
       <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-        <LockSimple size={12} /> Las FCL son espejo de la planilla (read-only) 🔒. LCL / aéreo / terrestre se editan acá: <strong>click en una celda</strong> para cambiarla (Enter guarda · Esc cancela). El operativo se asigna para todas.
+        <LockSimple size={12} /> <strong>Click en una celda</strong> para editarla (Enter guarda · Esc cancela). FCL: se editan los datos del buque/ruta (✏️ = pisa a la planilla); salida/fiscal/LIBRE siguen viniendo de la planilla hasta el flip. La REF no se edita.
       </p>
 
       <OperatorsManager
@@ -673,6 +677,7 @@ const OperationRow = memo(function OperationRow({
   truckStatus,
   onAssign,
   onPatch,
+  onPatchFcl,
   onDelete,
 }: {
   op: UnifiedOperation
@@ -682,12 +687,15 @@ const OperationRow = memo(function OperationRow({
   truckStatus?: TruckRefInfo
   onAssign: (op: UnifiedOperation, operatorId: string | null) => void
   onPatch: (id: string, fields: Record<string, unknown>) => void
+  onPatchFcl?: (dbId: string, edits: Record<string, unknown>) => void
   onDelete?: (op: UnifiedOperation) => void
 }) {
   const eligible = operatorsForMode(operators, op.mode)
   const assigned = op.operatorId ? operatorById.get(op.operatorId) : null
   // DB rows (LCL/aéreo/terrestre) are inline-editable; FCL is a read-only mirror.
   const editable = op.source === 'db' && !!op.dbId && !op.readOnly
+  // FCL espejo (Etapa 3): campos del nivel SG editables vía overlay web_edits.
+  const fclEditable = op.source === 'fcl' && !!op.dbId && !!onPatchFcl
 
   const cell = (key: string) => {
     switch (key) {
@@ -696,7 +704,10 @@ const OperationRow = memo(function OperationRow({
           <span className="inline-flex items-center gap-1.5 font-semibold">
             <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: MODALITY_COLORS[op.mode] }} />
             {op.ref}
-            {op.readOnly && <LockSimple size={11} className="text-muted-foreground" />}
+            {op.readOnly && !fclEditable && <LockSimple size={11} className="text-muted-foreground" />}
+            {op.webEdited && op.webEdited.length > 0 && (
+              <span title={`Editada en la web: ${op.webEdited.join(', ')} (pisa a la planilla)`} className="text-[10px]">✏️</span>
+            )}
             {op.archived && <Badge variant="outline" className="h-4 text-[8px] text-amber-700 border-amber-300">ARCHIVADA</Badge>}
           </span>
         )
@@ -760,6 +771,21 @@ const OperationRow = memo(function OperationRow({
                 options={ef.options}
                 wrap={c.wrap}
                 onCommit={v => onPatch(op.dbId!, { [ef.col]: v })}
+              />
+            </td>
+          )
+        }
+
+        // FCL espejo: edición por overlay (campos SG; operativas siguen en la planilla)
+        const ffKey = fclEditable ? EDITABLE_FCL_FIELDS[c.key as keyof UnifiedOperation] : undefined
+        if (ffKey) {
+          return (
+            <td key={c.key} className={tdClass}>
+              <EditableCell
+                value={(op as unknown as Record<string, unknown>)[c.key] as string}
+                type="text"
+                wrap={c.wrap}
+                onCommit={v => onPatchFcl!(op.dbId!, { [ffKey]: v })}
               />
             </td>
           )

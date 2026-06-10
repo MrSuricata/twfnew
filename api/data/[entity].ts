@@ -1213,7 +1213,7 @@ async function handleShipments(req: VercelRequest, res: VercelResponse, db: any)
     // fuente FCL de la app desde la Etapa 2. ?includeMirror=1 → todo junto.
     if (req.query.includeMirror === 'only') {
       const { data, error } = await db.from('shipments')
-        .select('sheet_raw, updated_at_ts')
+        .select('id, sheet_raw, web_edits, updated_at_ts')
         .eq('source', 'sheet')
         .not('sheet_raw', 'is', null)
         .limit(5000)
@@ -1231,6 +1231,30 @@ async function handleShipments(req: VercelRequest, res: VercelResponse, db: any)
     const id = req.query.id as string
     if (!id) return res.status(400).json({ error: 'id required' })
     const body = (req.body || {}) as Record<string, unknown>
+
+    // Etapa 3 migración: edición de una FCL espejo → overlay por campo en
+    // web_edits (claves de ParsedShipment, NUNCA la REF). El sync no pisa
+    // estas ediciones porque no escribe esa columna; sheet_raw queda puro.
+    if (req.query.fcl === '1') {
+      if ('REF' in body) return res.status(400).json({ error: 'La REF no se edita acá (flujo aparte con confirmación)' })
+      const FCL_EDIT_KEYS = new Set(['CLIENTE', 'ETD', 'ETA', 'CNTR', 'BUQUE', 'LINEA', 'POL', 'POD', 'SEGUIMIENTO', 'TIPO', 'MBL'])
+      const { data: row, error: rowErr } = await db.from('shipments').select('id, source, web_edits').eq('id', id).maybeSingle()
+      if (rowErr) throw rowErr
+      if (!row || row.source !== 'sheet') return res.status(404).json({ error: 'Carga FCL espejo no encontrada' })
+      const merged: Record<string, unknown> = { ...(row.web_edits || {}) }
+      let touched = 0
+      for (const [k, v] of Object.entries(body)) {
+        if (!FCL_EDIT_KEYS.has(k)) continue
+        if (v === null) delete merged[k]   // null = revertir al valor de la planilla
+        else merged[k] = v
+        touched++
+      }
+      if (touched === 0) return res.status(400).json({ error: 'No valid fields' })
+      const { error } = await db.from('shipments').update({ web_edits: merged, updated_at_ts: Date.now() }).eq('id', id)
+      if (error) throw error
+      return res.status(200).json({ updated: true, webEdits: merged })
+    }
+
     const updates: Record<string, unknown> = {}
     for (const [k, v] of Object.entries(body)) {
       if (SHIPMENT_COLS.has(k)) updates[k] = v
