@@ -52,6 +52,23 @@ export interface ShipmentRecord {
   BL: boolean
   AD: boolean
   AT: boolean
+  // SG nuevo (multizona)
+  POL: string          // puerto de carga (origen)
+  POD: string          // puerto de descarga
+  PAIS: 'UY' | 'AR' | 'CL' | 'OTRO'
+  SEGUIMIENTO: string  // fecha de seguimiento
+  TIPO: string         // tipo de contenedor (40HQ, 20GP…)
+}
+
+// Puerto de descarga → país/zona. Editable: ampliar acá.
+export const POD_ZONA: Record<string, 'UY' | 'AR' | 'CL'> = {
+  MONTEVIDEO: 'UY', MVD: 'UY',
+  'BUENOS AIRES': 'AR', BSAS: 'AR', BA: 'AR',
+  VALPARAISO: 'CL', 'SAN ANTONIO': 'CL', IQUIQUE: 'CL', 'SAN VICENTE': 'CL', CALLAO: 'CL',
+}
+export function zonaFromPOD(pod: string): 'UY' | 'AR' | 'CL' | 'OTRO' {
+  const k = (pod || '').trim().toUpperCase()
+  return POD_ZONA[k] || 'OTRO'
 }
 
 export interface Container {
@@ -219,6 +236,11 @@ export function processShipmentRecord(record: Partial<ShipmentRecord>): ParsedSh
     BL: record.BL || false,
     AD: record.AD || false,
     AT: record.AT || false,
+    POL: record.POL || '',
+    POD: record.POD || '',
+    PAIS: record.PAIS || zonaFromPOD(record.POD || ''),
+    SEGUIMIENTO: record.SEGUIMIENTO || '',
+    TIPO: record.TIPO || '',
     containers,
     calculatedN,
     calculatedLibreHasta: libreHasta
@@ -242,13 +264,30 @@ export function parseMainSheetCSV(csvData: string): Partial<ShipmentRecord>[] {
 
     headers.forEach((header, index) => {
       const value = values[index] || ''
-      const nh = header.trim().toUpperCase().replace(/\s+/g, '_').replace(/\./g, '').replace(/°/g, '')
+      let nh = header.trim().toUpperCase().replace(/\s+/g, '_').replace(/\./g, '').replace(/°/g, '')
+      // SG nuevo: la primera columna (Ref) viene SIN encabezado.
+      if (nh === '' && index === 0) nh = 'REF'
 
       switch (nh) {
         case 'REF': case 'REFERENCIA':
           record.REF = value.trim(); break
-        case 'CLIENTE': case 'CLIENT':
+        case 'CLIENTE': case 'CLIENT': case 'CONSIGNEE':
           record.CLIENTE = value.trim(); break
+        case 'POL': case 'ORIGEN':
+          record.POL = value.trim(); break
+        case 'POD': case 'PUERTO_DESCARGA':
+          record.POD = value.trim(); break
+        case 'BOOKING':
+          if (!record.MBL) record.MBL = value.trim(); break  // SG nuevo no trae MBL
+        case 'NOMBRE_BUQUE': case 'NOMBRE':
+          if (!record.BUQUE) record.BUQUE = value.trim(); break
+        case 'CONTS':
+          if (!record.CNTR) record.CNTR = value.trim(); break
+        case 'SEGUIMIENTO':
+          record.SEGUIMIENTO = value.trim(); break
+        case 'TIPO':
+          record.TIPO = value.trim(); break
+        // ESTADO y OPERATIVO: NO se mapean (la app maneja estado/operativo)
         case 'ETD': case 'LAST_ETD':
           if (!record.ETD) record.ETD = parseDate(value); break
         case 'ETA': case 'LAST_ETA':
@@ -297,7 +336,10 @@ export function parseMainSheetCSV(csvData: string): Partial<ShipmentRecord>[] {
       }
     })
 
-    if (record.REF && record.CLIENTE) {
+    record.PAIS = zonaFromPOD(record.POD || '')
+
+    // Solo se exige REF (CLIENTE puede faltar en algunas cargas no-UY).
+    if (record.REF) {
       records.push(record)
     }
   }
@@ -308,14 +350,21 @@ export function parseMainSheetCSV(csvData: string): Partial<ShipmentRecord>[] {
 // ─── Operativas Parsing ─────────────────────────────────────────────
 
 const OPERATIVAS_GID = '1133111465'
+const SG_GID = '1606359155'   // SG nuevo (enriquecido, todas las cargas)
 
 export function buildCsvUrl(sheetsUrl: string): string {
   if (sheetsUrl.includes('/edit')) {
     const sheetId = sheetsUrl.match(/\/d\/([a-zA-Z0-9-_]+)/)?.[1]
     if (!sheetId) throw new Error('Invalid Google Sheets URL')
-    return `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv`
+    return `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${SG_GID}`
   }
-  return sheetsUrl
+  try {
+    const url = new URL(sheetsUrl)
+    url.searchParams.set('gid', SG_GID)
+    return url.toString()
+  } catch {
+    return sheetsUrl
+  }
 }
 
 export function buildOperativasUrl(baseUrl: string): string | null {
@@ -407,24 +456,12 @@ export function mergeOperativasData(shipments: ParsedShipment[], opMap: Map<stri
   })
 }
 
-const EXCLUDED_TERMINAL_KEYWORDS = ['CHILE', 'BUENOS AIRES']
 const HARDCODED_EXCLUDED_REFS = ['A7530']
 
+// SG nuevo: ya NO se excluyen Chile/Buenos Aires — entran TODAS las cargas
+// (la zona se deriva del POD y se filtra en la UI). Solo se sacan refs basura.
 export function filterShipments(shipments: ParsedShipment[]): ParsedShipment[] {
-  return shipments.filter(s => {
-    if (HARDCODED_EXCLUDED_REFS.includes(s.REF.toUpperCase())) return false
-
-    const terminal = s.TERMINAL.toUpperCase()
-    if (EXCLUDED_TERMINAL_KEYWORDS.some(kw => terminal.includes(kw))) return false
-
-    const ops = s.operativas || []
-    if (ops.length > 0) {
-      const deposito = ops[0].DEPOSITO.toUpperCase()
-      if (EXCLUDED_TERMINAL_KEYWORDS.some(kw => deposito.includes(kw))) return false
-    }
-
-    return true
-  })
+  return shipments.filter(s => !HARDCODED_EXCLUDED_REFS.includes((s.REF || '').toUpperCase()))
 }
 
 // ─── Full server-side sync ──────────────────────────────────────────

@@ -45,6 +45,12 @@ export interface ShipmentRecord {
   BL: boolean
   AD: boolean
   AT: boolean
+  // SG nuevo (multizona) — los puebla el parser server-side
+  POL: string          // puerto de carga (origen)
+  POD: string          // puerto de descarga
+  PAIS: 'UY' | 'AR' | 'CL' | 'OTRO'
+  SEGUIMIENTO: string  // fecha de seguimiento
+  TIPO: string         // tipo de contenedor
 }
 
 export interface Container {
@@ -521,6 +527,11 @@ export function processShipmentRecord(record: Partial<ShipmentRecord>): ParsedSh
     BL: record.BL || false,
     AD: record.AD || false,
     AT: record.AT || false,
+    POL: record.POL || '',
+    POD: record.POD || '',
+    PAIS: record.PAIS || 'OTRO',
+    SEGUIMIENTO: record.SEGUIMIENTO || '',
+    TIPO: record.TIPO || '',
     containers,
     calculatedN,
     calculatedLibreHasta: libreHasta

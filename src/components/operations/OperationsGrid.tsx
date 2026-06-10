@@ -31,6 +31,7 @@ import type { Truck, TruckLoad } from '@/lib/truckTypes'
 import {
   buildOperations,
   indexAssignments,
+  isOperationActive,
   operatorsForMode,
   deriveTruckCargoStatus,
   OPERATION_COLUMNS,
@@ -59,8 +60,12 @@ interface OperationsGridProps {
 }
 
 type ModeFilter = 'all' | Modality
+type ZonaFilter = 'all' | 'UY' | 'AR' | 'CL' | 'OTRO'
 const COLS_STORAGE_KEY = 'twf-ops-columns'     // per-user visible columns
 const COL_ORDER_KEY = 'twf-ops-col-order'      // per-user column order (drag & drop)
+const ACTIVE_ONLY_KEY = 'twf-ops-active-only'  // toggle "Solo activas"
+
+const PAIS_LABEL: Record<string, string> = { UY: '🇺🇾 UY', AR: '🇦🇷 AR', CL: '🇨🇱 CL', OTRO: '—' }
 
 // Column value typing for sorting.
 const NUMERIC_KEYS = new Set(['pkgs', 'kg', 'm3'])
@@ -92,7 +97,18 @@ export default function OperationsGrid({
 }: OperationsGridProps) {
   const [search, setSearch] = useState('')
   const [modeFilter, setModeFilter] = useState<ModeFilter>('all')
+  const [zonaFilter, setZonaFilter] = useState<ZonaFilter>('all')
+  const [originFilter, setOriginFilter] = useState('')
+  const [destFilter, setDestFilter] = useState('')
   const [operatorFilter, setOperatorFilter] = useState<string>('all')
+  // "Solo activas" (ON por defecto): oculta devueltas+en fiscal / terminadas.
+  const [activeOnly, setActiveOnly] = useState<boolean>(() => {
+    try { const s = localStorage.getItem(ACTIVE_ONLY_KEY); if (s != null) return s === '1' } catch { /* ignore */ }
+    return true
+  })
+  useEffect(() => {
+    try { localStorage.setItem(ACTIVE_ONLY_KEY, activeOnly ? '1' : '0') } catch { /* ignore */ }
+  }, [activeOnly])
   const [managerOpen, setManagerOpen] = useState(false)
   const [pasteOpen, setPasteOpen] = useState(false)
   const [newOpen, setNewOpen] = useState(false)
@@ -161,11 +177,25 @@ export default function OperationsGrid({
     else onAssignOperator(op.ref, operatorId)
   }, [onPatchShipment, onAssignOperator])
 
+  // Base visible: con "Solo activas" ON se ocultan las terminadas (criterio:
+  // devuelta Y en fiscal · DB: estado terminal · sin datos: ETA >60d atrás).
+  const visibleOps = useMemo(() => {
+    if (!activeOnly) return operations
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    return operations.filter(o => isOperationActive(o, truckByRef.get(o.ref)?.status, today))
+  }, [operations, activeOnly, truckByRef])
+
   const counts = useMemo(() => {
-    const c: Record<string, number> = { all: operations.length, fcl: 0, lcl: 0, air: 0, land: 0 }
-    for (const o of operations) c[o.mode] = (c[o.mode] || 0) + 1
+    const c: Record<string, number> = { all: visibleOps.length, fcl: 0, lcl: 0, air: 0, land: 0 }
+    for (const o of visibleOps) c[o.mode] = (c[o.mode] || 0) + 1
     return c
-  }, [operations])
+  }, [visibleOps])
+
+  const zonaCounts = useMemo(() => {
+    const c: Record<string, number> = { all: visibleOps.length, UY: 0, AR: 0, CL: 0, OTRO: 0 }
+    for (const o of visibleOps) { const z = o.pais || 'OTRO'; c[z] = (c[z] || 0) + 1 }
+    return c
+  }, [visibleOps])
 
   // Auto-assign: for unassigned refs whose mode has exactly ONE eligible
   // operator, assign it (e.g. aéreo/terrestre → Fabián). FCL/LCL have many
@@ -184,8 +214,11 @@ export default function OperationsGrid({
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim()
-    return operations.filter(o => {
+    return visibleOps.filter(o => {
       if (modeFilter !== 'all' && o.mode !== modeFilter) return false
+      if (zonaFilter !== 'all' && (o.pais || 'OTRO') !== zonaFilter) return false
+      if (originFilter && !(o.origin || '').toLowerCase().includes(originFilter.toLowerCase())) return false
+      if (destFilter && !(`${o.dischargePort} ${o.destPort}` || '').toLowerCase().includes(destFilter.toLowerCase())) return false
       if (operatorFilter !== 'all' && (o.operatorId || '') !== operatorFilter) return false
       if (q) {
         const blob = `${o.ref} ${o.clientRef} ${o.cliente} ${o.cntr} ${o.docNumber} ${o.fiscal} ${o.descripcion} ${o.transporte}`.toLowerCase()
@@ -193,7 +226,7 @@ export default function OperationsGrid({
       }
       return true
     })
-  }, [operations, modeFilter, operatorFilter, search])
+  }, [visibleOps, modeFilter, zonaFilter, originFilter, destFilter, operatorFilter, search])
 
   // Totals for the current filter (planning at a glance).
   const totals = useMemo(() => {
@@ -301,6 +334,14 @@ export default function OperationsGrid({
     { id: 'land', label: 'Terrestre', color: MODALITY_COLORS.land },
   ]
 
+  const zonaChips: { id: ZonaFilter; label: string }[] = [
+    { id: 'all', label: 'Todas las zonas' },
+    { id: 'UY', label: '🇺🇾 Uruguay' },
+    { id: 'AR', label: '🇦🇷 Argentina' },
+    { id: 'CL', label: '🇨🇱 Chile' },
+    { id: 'OTRO', label: 'Otros' },
+  ]
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -333,12 +374,43 @@ export default function OperationsGrid({
         ))}
       </div>
 
+      {/* Zone chips + toggle "Solo activas" */}
+      <div className="flex flex-wrap items-center gap-2">
+        {zonaChips.map(z => (
+          <button
+            key={z.id}
+            onClick={() => setZonaFilter(z.id)}
+            className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 border text-xs transition-all hover:shadow-sm ${
+              zonaFilter === z.id ? 'bg-primary/5 border-primary/40' : 'bg-card border-border'
+            }`}
+          >
+            <span className="font-medium">{z.label}</span>
+            <span className="text-[10px] text-muted-foreground tabular-nums">{zonaCounts[z.id] ?? 0}</span>
+          </button>
+        ))}
+        <span className="mx-1 h-5 w-px bg-border" />
+        <button
+          onClick={() => setActiveOnly(v => !v)}
+          title="Activa = contenedor sin devolver o carga sin llegar a fiscal. Apagalo para ver el histórico completo."
+          className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 border text-xs transition-all hover:shadow-sm ${
+            activeOnly ? 'bg-green-50 border-green-300 text-green-700' : 'bg-card border-border text-muted-foreground'
+          }`}
+        >
+          <span className={`w-2 h-2 rounded-full ${activeOnly ? 'bg-green-500' : 'bg-muted-foreground/40'}`} />
+          <span className="font-medium">Solo activas</span>
+        </button>
+      </div>
+
       {/* Toolbar */}
       <div className="flex items-center gap-2 flex-wrap">
         <div className="relative flex-1 min-w-[220px] max-w-md">
           <MagnifyingGlass size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar ref, cliente, CNTR, fiscal…" className="pl-9 h-9" />
         </div>
+
+        {/* Origen / Destino (puerto) */}
+        <Input value={originFilter} onChange={e => setOriginFilter(e.target.value)} placeholder="Origen…" className="h-9 w-28" />
+        <Input value={destFilter} onChange={e => setDestFilter(e.target.value)} placeholder="Destino…" className="h-9 w-28" />
 
         {/* Operator filter */}
         <select
@@ -440,7 +512,7 @@ export default function OperationsGrid({
               <tr><td colSpan={cols.length} className="text-center py-12 text-muted-foreground">Sin operaciones para los filtros actuales.</td></tr>
             ) : sorted.map((op) => (
               <OperationRow
-                key={`${op.source}-${op.ref}`}
+                key={op.uid}
                 op={op}
                 cols={cols}
                 operators={operators}
@@ -460,7 +532,7 @@ export default function OperationsGrid({
           <div className="text-center py-10 text-muted-foreground text-sm border rounded-lg bg-card">Sin operaciones para los filtros actuales.</div>
         ) : sorted.map(op => (
           <OperationCard
-            key={`${op.source}-${op.ref}`}
+            key={op.uid}
             op={op}
             operators={operators}
             operatorById={operatorById}
@@ -563,6 +635,8 @@ const OperationRow = memo(function OperationRow({
       case 'm3': return fmtNum(op.m3)
       case 'tipo':
         return <Badge variant="outline" className="h-5 text-[9px]">{op.tipo || MODALITY_LABELS[op.mode]}</Badge>
+      case 'pais':
+        return op.pais ? <Badge variant="outline" className="h-5 text-[9px] whitespace-nowrap">{PAIS_LABEL[op.pais] || op.pais}</Badge> : ''
       case 'status': {
         // FCL: derived label (read-only). DB: code → label.
         const label = op.source === 'fcl' ? op.status : (STATUS_LABEL[op.status] || op.status)
