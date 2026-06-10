@@ -2,7 +2,7 @@ import type { ParsedShipment, OperativasRecord } from './shipmentTypes'
 import type { CalendarEvent, AlertEmoji, EventType } from './agendaTypes'
 import { getShipmentStatus, processShipmentRecord } from './shipmentTypes'
 import type { Truck, TruckLoad } from './truckTypes'
-import { TRUCK_STATUS_LABELS, deriveTruckDisplayStatus } from './truckTypes'
+import { deriveTruckDisplayInfo } from './truckTypes'
 
 // ─── Alert Generation ─────────────────────────────────────────────────
 
@@ -304,7 +304,7 @@ export function trucksToEvents(trucks: Truck[], truckLoads: TruckLoad[]): Calend
     const fiscal = loads.find(l => l.fiscal)?.fiscal || ''
     const cliente = `Camión consolidado${t.transport ? ' · ' + t.transport : ''}`
     const descripcion = refs.length ? `Lleva: ${refs.join(', ')}` : 'Sin cargas asignadas'
-    const statusLabel = TRUCK_STATUS_LABELS[deriveTruckDisplayStatus(t, today)]
+    const statusLabel = deriveTruckDisplayInfo(t, today).label
 
     const shipment = processShipmentRecord({ REF: t.code, CLIENTE: cliente })
     const op: OperativasRecord = {
