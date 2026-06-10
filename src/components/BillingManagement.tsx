@@ -19,22 +19,31 @@ import {
   Prohibit,
   Clock,
   Warning,
-  Package,
+  Truck as TruckIcon,
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
-import type { BillingRecord } from '@/lib/billingTypes'
+import type { Truck, TruckLoad } from '@/lib/truckTypes'
+import type { DbShipment } from '@/lib/operationsTypes'
+import { MODALITY_LABELS, MODALITY_COLORS } from '@/lib/operationsTypes'
+import type { BillableItem, BillingRecord } from '@/lib/billingTypes'
 import {
   AGING_THRESHOLD_DAYS,
-  getBillingState,
-  getDaysPending,
-  getFiscalArrivalDate,
+  buildBillableItems,
+  daysSince,
   indexBilling,
   isInvoicedThisMonth,
 } from '@/lib/billingTypes'
 
+// ─── Facturación universal ───────────────────────────────────────────
+// TODA carga (FCL planilla + LCL/aéreo/terrestre/FCL web) entra acá cuando
+// llega a su punto final — derive-on-read, sin triggers: ninguna se pierde.
+
 interface BillingManagementProps {
   shipments: ParsedShipment[]
+  dbShipments?: DbShipment[]
+  trucks?: Truck[]
+  truckLoads?: TruckLoad[]
   billing: BillingRecord[]
   onUpdateBilling?: (row: BillingRecord) => void
   onClearBilling?: (ref: string) => void
@@ -44,39 +53,39 @@ type SubTab = 'pendientes' | 'facturadas' | 'no_aplica'
 
 const INVOICED_BY = 'admin'
 
-export default function BillingManagement({ shipments, billing, onUpdateBilling, onClearBilling }: BillingManagementProps) {
+export default function BillingManagement({ shipments, dbShipments = [], trucks = [], truckLoads = [], billing, onUpdateBilling, onClearBilling }: BillingManagementProps) {
   const [subTab, setSubTab] = useState<SubTab>('pendientes')
   const [search, setSearch] = useState('')
-  const [invoiceDialog, setInvoiceDialog] = useState<ParsedShipment | null>(null)
+  const [invoiceDialog, setInvoiceDialog] = useState<BillableItem | null>(null)
   const [invoiceNumber, setInvoiceNumber] = useState('')
 
   const billingMap = useMemo(() => indexBilling(billing), [billing])
 
-  // Classify every shipment by its billing state.
+  // Universal: cada carga que llegó a su punto final, con su estado derivado.
   const buckets = useMemo(() => {
-    const pendientes: ParsedShipment[] = []
-    const facturadas: ParsedShipment[] = []
-    const noAplica: ParsedShipment[] = []
-    for (const s of shipments) {
-      const state = getBillingState(s, billingMap)
-      if (state === 'pendiente') pendientes.push(s)
-      else if (state === 'facturada') facturadas.push(s)
-      else if (state === 'no_aplica') noAplica.push(s)
+    const all = buildBillableItems(shipments, dbShipments, trucks, truckLoads, billingMap)
+    const pendientes: BillableItem[] = []
+    const facturadas: BillableItem[] = []
+    const noAplica: BillableItem[] = []
+    for (const { item, state } of all) {
+      if (state === 'pendiente') pendientes.push(item)
+      else if (state === 'facturada') facturadas.push(item)
+      else noAplica.push(item)
     }
-    // Pendientes: oldest-pending first (most aged at top)
-    pendientes.sort((a, b) => getDaysPending(b) - getDaysPending(a))
-    // Facturadas: most recently invoiced first
+    // Pendientes: la más vieja arriba (aging)
+    pendientes.sort((a, b) => daysSince(b.arrival) - daysSince(a.arrival))
+    // Facturadas: la más reciente arriba
     facturadas.sort((a, b) => {
-      const ra = billingMap.get(a.REF)?.invoicedAt || ''
-      const rb = billingMap.get(b.REF)?.invoicedAt || ''
+      const ra = billingMap.get(a.ref)?.invoicedAt || ''
+      const rb = billingMap.get(b.ref)?.invoicedAt || ''
       return rb.localeCompare(ra)
     })
     return { pendientes, facturadas, noAplica }
-  }, [shipments, billingMap])
+  }, [shipments, dbShipments, trucks, truckLoads, billingMap])
 
   // Facturadas this month only (for the count + default view)
   const facturadasMonth = useMemo(
-    () => buckets.facturadas.filter(s => isInvoicedThisMonth(billingMap.get(s.REF)?.invoicedAt || null)),
+    () => buckets.facturadas.filter(s => isInvoicedThisMonth(billingMap.get(s.ref)?.invoicedAt || null)),
     [buckets.facturadas, billingMap]
   )
 
@@ -90,57 +99,57 @@ export default function BillingManagement({ shipments, billing, onUpdateBilling,
     const q = search.toLowerCase().trim()
     if (!q) return activeList
     return activeList.filter(s => {
-      const inv = billingMap.get(s.REF)?.invoiceNumber || ''
-      const blob = `${s.REF} ${s.CLIENTE} ${inv}`.toLowerCase()
+      const inv = billingMap.get(s.ref)?.invoiceNumber || ''
+      const blob = `${s.ref} ${s.cliente} ${inv}`.toLowerCase()
       return blob.includes(q)
     })
   }, [activeList, search, billingMap])
 
-  // ── Actions ──
-  const markFacturada = (s: ParsedShipment, invNumber: string) => {
+  // ── Actions (por ref — vale para cualquier modalidad) ──
+  const markFacturada = (item: BillableItem, invNumber: string) => {
     if (!onUpdateBilling) return
     onUpdateBilling({
-      ref: s.REF,
+      ref: item.ref,
       status: 'facturada',
       invoiceNumber: invNumber.trim(),
       invoicedAt: new Date().toISOString(),
       invoicedBy: INVOICED_BY,
       updatedAt: new Date().toISOString(),
     })
-    toast.success(`${s.REF} marcada como facturada`)
+    toast.success(`${item.ref} marcada como facturada`)
   }
 
-  const undoFacturada = (s: ParsedShipment) => {
+  const undoFacturada = (item: BillableItem) => {
     // Removing the overlay returns it to the derived "pendiente" state.
     if (onClearBilling) {
-      onClearBilling(s.REF)
-      toast.success(`${s.REF} vuelta a pendiente`)
+      onClearBilling(item.ref)
+      toast.success(`${item.ref} vuelta a pendiente`)
     }
   }
 
-  const markNoAplica = (s: ParsedShipment) => {
+  const markNoAplica = (item: BillableItem) => {
     if (!onUpdateBilling) return
     onUpdateBilling({
-      ref: s.REF,
+      ref: item.ref,
       status: 'no_aplica',
       invoiceNumber: '',
       invoicedAt: null,
       invoicedBy: '',
       updatedAt: new Date().toISOString(),
     })
-    toast.success(`${s.REF} marcada como "no aplica"`)
+    toast.success(`${item.ref} marcada como "no aplica"`)
   }
 
-  const restore = (s: ParsedShipment) => {
+  const restore = (item: BillableItem) => {
     if (onClearBilling) {
-      onClearBilling(s.REF)
-      toast.success(`${s.REF} restaurada`)
+      onClearBilling(item.ref)
+      toast.success(`${item.ref} restaurada`)
     }
   }
 
-  const openInvoiceDialog = (s: ParsedShipment) => {
+  const openInvoiceDialog = (item: BillableItem) => {
     setInvoiceNumber('')
-    setInvoiceDialog(s)
+    setInvoiceDialog(item)
   }
 
   const confirmInvoice = () => {
@@ -158,7 +167,7 @@ export default function BillingManagement({ shipments, billing, onUpdateBilling,
             Facturación
           </h2>
           <p className="text-sm text-muted-foreground">
-            Cargas arribadas a fiscal pendientes de facturar
+            Todas las modalidades: FCL · LCL · aéreo · terrestre. Una carga entra sola a Pendientes al llegar a fiscal / entregarse.
           </p>
         </div>
       </div>
@@ -215,8 +224,9 @@ export default function BillingManagement({ shipments, billing, onUpdateBilling,
               <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
                 <tr>
                   <th className="text-left px-3 py-2">Ref</th>
+                  <th className="text-left px-3 py-2">Tipo</th>
                   <th className="text-left px-3 py-2">Cliente</th>
-                  <th className="text-left px-3 py-2">Arribo fiscal</th>
+                  <th className="text-left px-3 py-2">Llegada</th>
                   {subTab === 'pendientes' && <th className="text-left px-3 py-2">Aging</th>}
                   {subTab === 'facturadas' && <th className="text-left px-3 py-2">Nº Factura</th>}
                   {subTab === 'facturadas' && <th className="text-left px-3 py-2">Facturada</th>}
@@ -224,16 +234,16 @@ export default function BillingManagement({ shipments, billing, onUpdateBilling,
                 </tr>
               </thead>
               <tbody className="divide-y">
-                {filtered.map(s => (
+                {filtered.map((item, i) => (
                   <BillingRow
-                    key={s.REF}
-                    shipment={s}
-                    record={billingMap.get(s.REF)}
+                    key={`${item.mode}-${item.ref}-${i}`}
+                    item={item}
+                    record={billingMap.get(item.ref)}
                     subTab={subTab}
-                    onInvoice={() => openInvoiceDialog(s)}
-                    onUndo={() => undoFacturada(s)}
-                    onNoAplica={() => markNoAplica(s)}
-                    onRestore={() => restore(s)}
+                    onInvoice={() => openInvoiceDialog(item)}
+                    onUndo={() => undoFacturada(item)}
+                    onNoAplica={() => markNoAplica(item)}
+                    onRestore={() => restore(item)}
                   />
                 ))}
               </tbody>
@@ -246,7 +256,7 @@ export default function BillingManagement({ shipments, billing, onUpdateBilling,
       <Dialog open={!!invoiceDialog} onOpenChange={(open) => !open && setInvoiceDialog(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Facturar {invoiceDialog?.REF}</DialogTitle>
+            <DialogTitle>Facturar {invoiceDialog?.ref}</DialogTitle>
           </DialogHeader>
           <div className="space-y-2">
             <Label className="text-sm text-muted-foreground">Nº de factura (opcional)</Label>
@@ -277,7 +287,7 @@ export default function BillingManagement({ shipments, billing, onUpdateBilling,
 // ── Row ──
 
 function BillingRow({
-  shipment,
+  item,
   record,
   subTab,
   onInvoice,
@@ -285,7 +295,7 @@ function BillingRow({
   onNoAplica,
   onRestore,
 }: {
-  shipment: ParsedShipment
+  item: BillableItem
   record?: BillingRecord
   subTab: SubTab
   onInvoice: () => void
@@ -293,15 +303,27 @@ function BillingRow({
   onNoAplica: () => void
   onRestore: () => void
 }) {
-  const arrival = getFiscalArrivalDate(shipment)
-  const days = getDaysPending(shipment)
+  const days = daysSince(item.arrival)
   const aged = days >= AGING_THRESHOLD_DAYS
 
   return (
     <tr className="hover:bg-muted/30">
-      <td className="px-3 py-2 font-medium">{shipment.REF}</td>
-      <td className="px-3 py-2">{shipment.CLIENTE || '—'}</td>
-      <td className="px-3 py-2 text-muted-foreground">{arrival ? fmtDate(arrival) : '—'}</td>
+      <td className="px-3 py-2 font-medium">{item.ref}</td>
+      <td className="px-3 py-2">
+        <span className="inline-flex items-center gap-1.5">
+          <Badge variant="outline" className="h-5 text-[9px]" style={{ color: MODALITY_COLORS[item.mode], borderColor: MODALITY_COLORS[item.mode] }}>
+            {MODALITY_LABELS[item.mode]}
+          </Badge>
+          {item.truckCode && (
+            <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground" title={`Llegó consolidada en el camión ${item.truckCode}`}>
+              <TruckIcon size={11} weight="fill" className="text-primary" />
+              {item.truckCode}
+            </span>
+          )}
+        </span>
+      </td>
+      <td className="px-3 py-2">{item.cliente || '—'}</td>
+      <td className="px-3 py-2 text-muted-foreground">{item.arrival ? fmtDate(item.arrival) : '—'}</td>
 
       {subTab === 'pendientes' && (
         <td className="px-3 py-2">
@@ -391,6 +413,3 @@ function fmtDate(d: Date): string {
   const m = String(d.getMonth() + 1).padStart(2, '0')
   return `${day}/${m}/${d.getFullYear()}`
 }
-
-// silence unused import (Package kept for potential future use)
-void Package

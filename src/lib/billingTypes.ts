@@ -11,6 +11,9 @@
 
 import type { ParsedShipment } from './shipmentTypes'
 import { parseLocalDate, isValidDate, isDatePast, isDateToday } from './shipmentTypes'
+import type { DbShipment, Modality } from './operationsTypes'
+import { deriveTruckCargoStatus } from './operationsTypes'
+import type { Truck, TruckLoad } from './truckTypes'
 
 export type BillingStatus = 'pendiente' | 'facturada' | 'no_aplica'
 
@@ -93,6 +96,97 @@ export function indexBilling(rows: BillingRecord[]): Map<string, BillingRecord> 
   const m = new Map<string, BillingRecord>()
   for (const r of rows) m.set(r.ref, r)
   return m
+}
+
+// ─── Facturación UNIVERSAL (todas las modalidades) ──────────────────
+// Mismo principio derive-on-read que FCL: nada se pre-siembra, así NINGUNA
+// carga puede "perderse" — cualquier carga que llegue a su punto final
+// aparece sola en Pendientes. Punto final por modalidad:
+//   FCL planilla → último contenedor en fiscal (hasReachedFiscal)
+//   LCL/aéreo/terrestre → estado efectivo en_fiscal o entregado, derivado
+//   del camión si va en uno (cada carga del consolidado factura por su ref)
+
+/** Ítem facturable unificado para la pestaña Facturación. */
+export interface BillableItem {
+  ref: string
+  cliente: string
+  mode: Modality
+  arrival: Date | null         // llegada (FCL: última ETA_FISC · DB: arribo del camión o ETA)
+  truckCode?: string           // si llegó consolidada en un camión
+}
+
+/** DB cargas: facturable cuando el estado efectivo llegó a fiscal o se entregó. */
+export function hasReachedFinalDb(effectiveStatus: string | null | undefined): boolean {
+  return effectiveStatus === 'en_fiscal' || effectiveStatus === 'devuelto'
+}
+
+/** ref → estado derivado del camión que la lleva (fuente de verdad). */
+function truckInfoByRef(trucks: Truck[], truckLoads: TruckLoad[], today: Date): Map<string, { code: string; status: string; arrival: Date | null }> {
+  const m = new Map<string, { code: string; status: string; arrival: Date | null }>()
+  if (!trucks.length || !truckLoads.length) return m
+  const byId = new Map(trucks.map(t => [t.id, t]))
+  for (const l of truckLoads) {
+    const t = byId.get(l.truckId)
+    if (!t) continue
+    const status = deriveTruckCargoStatus(
+      { status: t.status, loadDate: t.loadDate, departureDate: t.departureDate, arrivalDate: t.arrivalDate },
+      today,
+    )
+    if (status) m.set(l.sourceRef, { code: t.code, status, arrival: parseLocalDate(t.arrivalDate || '') })
+  }
+  return m
+}
+
+/** Días desde una fecha (aging). 0 si es desconocida o futura. */
+export function daysSince(d: Date | null): number {
+  if (!d) return 0
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const diff = Math.floor((today.getTime() - d.getTime()) / 86_400_000)
+  return diff > 0 ? diff : 0
+}
+
+/** Lista universal de ítems facturables con su estado (FCL planilla + cargas DB). */
+export function buildBillableItems(
+  shipments: ParsedShipment[],
+  dbShipments: DbShipment[],
+  trucks: Truck[],
+  truckLoads: TruckLoad[],
+  billingByRef: Map<string, BillingRecord>,
+): { item: BillableItem; state: BillingStatus }[] {
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const tByRef = truckInfoByRef(trucks, truckLoads, today)
+  const out: { item: BillableItem; state: BillingStatus }[] = []
+
+  // FCL de la planilla (refs duplicadas en el Sheet: una sola entrada — la
+  // facturación es por ref hasta la migración con sufijos)
+  const seenFcl = new Set<string>()
+  for (const s of shipments) {
+    if (!s.REF || seenFcl.has(s.REF)) continue
+    seenFcl.add(s.REF)
+    const state = getBillingState(s, billingByRef)
+    if (!state) continue
+    out.push({ item: { ref: s.REF, cliente: s.CLIENTE || '', mode: 'fcl', arrival: getFiscalArrivalDate(s) }, state })
+  }
+
+  // Cargas DB (LCL/aéreo/terrestre/FCL web) — incluye archivadas a propósito:
+  // archivar NO la saca de facturación (eso sería una fuga)
+  for (const d of dbShipments) {
+    if (!d.ref) continue
+    const rec = billingByRef.get(d.ref)
+    const t = tByRef.get(d.ref)
+    const eff = t?.status || d.status
+    let state: DerivedBillingState = null
+    if (rec?.status === 'facturada' || rec?.status === 'no_aplica') state = rec.status
+    else if (hasReachedFinalDb(eff)) state = 'pendiente'
+    if (!state) continue
+    out.push({
+      item: { ref: d.ref, cliente: d.cliente || '', mode: d.mode, arrival: t?.arrival || parseLocalDate(d.eta || ''), truckCode: t?.code },
+      state,
+    })
+  }
+  return out
 }
 
 export const BILLING_STATUS_LABELS: Record<BillingStatus, string> = {
