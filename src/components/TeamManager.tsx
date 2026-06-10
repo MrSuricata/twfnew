@@ -49,7 +49,7 @@ interface AuditEntry {
   details: Record<string, unknown> | null
 }
 
-export default function TeamManager() {
+export default function TeamManager({ refreshKey = 0 }: { refreshKey?: number }) {
   const [users, setUsers] = useState<AdminUser[]>([])
   const [log, setLog] = useState<AuditEntry[]>([])
   const [loading, setLoading] = useState(true)
@@ -75,7 +75,8 @@ export default function TeamManager() {
     }
   }, [])
 
-  useEffect(() => { load() }, [load])
+  // refreshKey: el botón Refrescar global del navbar también recarga esto.
+  useEffect(() => { load() }, [load, refreshKey])
 
   const openCreate = () => { setEditing(null); setFName(''); setFEmail(''); setFPassword(''); setDialogOpen(true) }
   const openEdit = (u: AdminUser) => { setEditing(u); setFName(u.name); setFEmail(u.email); setFPassword(''); setDialogOpen(true) }
@@ -198,12 +199,18 @@ export default function TeamManager() {
       </Card>
 
       {/* ── Actividad ── */}
-      <div>
-        <h3 className="text-lg font-semibold flex items-center gap-2">
-          <ClockCounterClockwise size={20} className="text-primary" />
-          Actividad reciente
-        </h3>
-        <p className="text-xs text-muted-foreground">Quién hizo qué (últimas 300 acciones): ediciones, facturación, archivado, eliminados, usuarios.</p>
+      <div className="flex items-end justify-between gap-3 flex-wrap">
+        <div>
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <ClockCounterClockwise size={20} className="text-primary" />
+            Actividad reciente
+          </h3>
+          <p className="text-xs text-muted-foreground">Quién hizo qué (últimas 300 acciones): ediciones, facturación, archivado, eliminados, usuarios.</p>
+        </div>
+        <Button variant="outline" size="sm" className="h-8" onClick={load} disabled={loading}>
+          <ClockCounterClockwise size={14} className="mr-1.5" />
+          Actualizar
+        </Button>
       </div>
 
       <Card>

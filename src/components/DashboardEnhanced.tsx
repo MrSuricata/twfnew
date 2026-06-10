@@ -96,6 +96,8 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
   // Pestaña Equipo: solo el owner (Brian) — el backend re-valida igual.
   const isOwner = getAdminLevel() === 'owner'
   const [isRefreshing, setIsRefreshing] = useState(false)
+  // Tick que sube con cada Refrescar global → recarga la Actividad del Equipo.
+  const [refreshTick, setRefreshTick] = useState(0)
 
   // Manual refresh from the navbar — pulls fresh data from Google Sheets via
   // /api/sheets/sync (drops it into shipments_cache and updates local state).
@@ -127,6 +129,7 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
       toast.error(`Error al sincronizar: ${err?.message || 'sin detalles'}`, { id: t })
     } finally {
       setIsRefreshing(false)
+      setRefreshTick(t => t + 1)
     }
   }
 
@@ -444,7 +447,7 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
 
           {isOwner && (
             <TabsContent value="equipo">
-              <TeamManager />
+              <TeamManager refreshKey={refreshTick} />
             </TabsContent>
           )}
         </Tabs>
