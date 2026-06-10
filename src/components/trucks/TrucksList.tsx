@@ -37,6 +37,7 @@ import {
   TRUCK_STATUS_COLORS,
   computeTruckTotals,
   getTruckLimits,
+  deriveTruckDisplayStatus,
 } from '@/lib/truckTypes'
 import { formatKg, formatM3 } from '@/lib/truckUtils'
 import { nextTruckCode } from '@/lib/dataClient'
@@ -63,6 +64,8 @@ export default function TrucksList({
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [creating, setCreating] = useState(false)
   const [pendingDelete, setPendingDelete] = useState<Truck | null>(null)
+  // Estado mostrado/filtrado = derivado de las fechas del camión.
+  const hoyList = new Date(); hoyList.setHours(0, 0, 0, 0)
 
   // Group loads by truck for quick totals lookup
   const loadsByTruck = useMemo(() => {
@@ -78,7 +81,7 @@ export default function TrucksList({
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim()
     return trucks.filter(t => {
-      if (statusFilter !== 'all' && t.status !== statusFilter) return false
+      if (statusFilter !== 'all' && deriveTruckDisplayStatus(t, hoyList) !== statusFilter) return false
       if (q) {
         const blob = `${t.code} ${t.transport} ${t.driver} ${t.plate} ${t.notes}`.toLowerCase()
         if (!blob.includes(q)) return false
@@ -209,8 +212,8 @@ export default function TrucksList({
                       <p className="text-xs text-muted-foreground mt-0.5">{t.transport}</p>
                     )}
                   </div>
-                  <Badge className={`border ${TRUCK_STATUS_COLORS[t.status]}`} variant="outline">
-                    {TRUCK_STATUS_LABELS[t.status]}
+                  <Badge className={`border ${TRUCK_STATUS_COLORS[deriveTruckDisplayStatus(t, hoyList)]}`} variant="outline" title="Estado automático según las fechas del camión">
+                    {TRUCK_STATUS_LABELS[deriveTruckDisplayStatus(t, hoyList)]}
                   </Badge>
                 </div>
 

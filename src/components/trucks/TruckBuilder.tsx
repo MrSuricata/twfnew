@@ -33,6 +33,7 @@ import {
   TRUCK_STATUS_LABELS,
   computeTruckTotals,
   getTruckLimits,
+  deriveTruckDisplayStatus,
 } from '@/lib/truckTypes'
 import {
   formatKg,
@@ -77,6 +78,21 @@ export default function TruckBuilder(props: TruckBuilderProps) {
   const updateTruck = (patch: Partial<Truck>) => {
     const updated = { ...truck, ...patch, updatedAt: Date.now() }
     onUpdateTrucks(trucks.map(t => t.id === truck.id ? updated : t))
+  }
+
+  // Estado mostrado = derivado de las fechas (las fechas mandan).
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0)
+  const derivedStatus = deriveTruckDisplayStatus(truck, hoy)
+
+  // Tocar un estado completa la fecha correspondiente con HOY si está vacía
+  // (así el derivado coincide y la agenda/facturación reaccionan solas).
+  const setStatusWithDate = (st: TruckStatus) => {
+    const iso = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`
+    const patch: Partial<Truck> = { status: st }
+    if (st === 'loaded' && !truck.loadDate) patch.loadDate = iso
+    if (st === 'in_transit' && !truck.departureDate) patch.departureDate = iso
+    if (st === 'delivered' && !truck.arrivalDate) patch.arrivalDate = iso
+    updateTruck(patch)
   }
 
   const updateLoad = (loadId: string, patch: Partial<TruckLoad>, markOverrides: string[] = []) => {
@@ -202,7 +218,9 @@ export default function TruckBuilder(props: TruckBuilderProps) {
           Volver
         </Button>
         <h2 className="text-2xl font-bold">{truck.code}</h2>
-        <Badge variant="outline">{TRUCK_STATUS_LABELS[truck.status]}</Badge>
+        <Badge variant="outline" title="Estado automático: derivado de las fechas de carga/salida/arribo">
+          {TRUCK_STATUS_LABELS[derivedStatus]}
+        </Badge>
         {truck.isSider && <Badge variant="outline">Sider</Badge>}
         <div className="ml-auto flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={handleExportPdf} disabled={loads.length === 0}>
@@ -248,15 +266,16 @@ export default function TruckBuilder(props: TruckBuilderProps) {
           {/* Truck metadata card */}
           <Card>
             <CardContent className="p-4 space-y-4">
-              {/* Status stepper */}
+              {/* Status stepper — el estado REAL se deriva de las fechas; tocar
+                  un estado es un atajo que completa la fecha de hoy si falta. */}
               <div className="flex items-center gap-2 flex-wrap">
                 <Label className="text-xs text-muted-foreground">Estado:</Label>
                 {(['planning', 'loaded', 'in_transit', 'delivered'] as TruckStatus[]).map(st => (
                   <Button
                     key={st}
                     size="sm"
-                    variant={truck.status === st ? 'default' : 'outline'}
-                    onClick={() => updateTruck({ status: st })}
+                    variant={derivedStatus === st ? 'default' : 'outline'}
+                    onClick={() => setStatusWithDate(st)}
                     className="h-7 text-xs"
                   >
                     {TRUCK_STATUS_LABELS[st]}
@@ -271,6 +290,9 @@ export default function TruckBuilder(props: TruckBuilderProps) {
                   <Label htmlFor="is-sider" className="text-xs cursor-pointer">Sider</Label>
                 </div>
               </div>
+              <p className="text-[11px] text-muted-foreground -mt-2">
+                ⚡ Automático: al pasar la <strong>fecha de salida</strong> el camión (y sus cargas) pasan a En Ruta solos; al pasar el <strong>arribo a fiscal</strong>, a Entregado — y las cargas entran a Facturación. Tocar un estado completa la fecha de hoy.
+              </p>
 
               <Separator />
 

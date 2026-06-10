@@ -1,6 +1,8 @@
 import type { ParsedShipment, OperativasRecord } from './shipmentTypes'
 import type { CalendarEvent, AlertEmoji, EventType } from './agendaTypes'
-import { getShipmentStatus } from './shipmentTypes'
+import { getShipmentStatus, processShipmentRecord } from './shipmentTypes'
+import type { Truck, TruckLoad } from './truckTypes'
+import { TRUCK_STATUS_LABELS, deriveTruckDisplayStatus } from './truckTypes'
 
 // ─── Alert Generation ─────────────────────────────────────────────────
 
@@ -279,6 +281,72 @@ export function shipmentsToEvents(
 
   // Sort by date ascending
   events.sort((a, b) => a.date.localeCompare(b.date))
+  return events
+}
+
+// ─── Camiones → Calendar Events ───────────────────────────────────────
+// Hitos del camión consolidado en la agenda, derivados de SUS fechas (las
+// mismas que mueven el estado de sus cargas): salida MVD → "en frontera" y
+// arribo a fiscal. Se sintetiza un ParsedShipment mínimo para reusar las
+// cards del calendario sin tocar el modelo de eventos.
+
+export function trucksToEvents(trucks: Truck[], truckLoads: TruckLoad[]): CalendarEvent[] {
+  const events: CalendarEvent[] = []
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  for (const t of trucks) {
+    const loads = truckLoads.filter(l => l.truckId === t.id)
+    const refs = loads.map(l => l.sourceRef).filter(Boolean)
+    const kg = loads.reduce((a, l) => a + (Number(l.kg) || 0), 0)
+    const m3 = loads.reduce((a, l) => a + (Number(l.m3) || 0), 0)
+    const pkgs = loads.reduce((a, l) => a + (Number(l.pkgs) || 0), 0)
+    const fiscal = loads.find(l => l.fiscal)?.fiscal || ''
+    const cliente = `Camión consolidado${t.transport ? ' · ' + t.transport : ''}`
+    const descripcion = refs.length ? `Lleva: ${refs.join(', ')}` : 'Sin cargas asignadas'
+    const statusLabel = TRUCK_STATUS_LABELS[deriveTruckDisplayStatus(t, today)]
+
+    const shipment = processShipmentRecord({ REF: t.code, CLIENTE: cliente })
+    const op: OperativasRecord = {
+      REF: t.code, TLX: '', DEPOSITO: '', ETA_OP: '', SALIDA: t.departureDate || '',
+      ETA_FISC: t.arrivalDate || '', LIBRE: '', OPERATIVA: 'CAMIÓN', CNTR_OP: t.plate || '',
+      PKGS: pkgs, KG: kg, M3: m3, DESCRIPCION: descripcion, FISCAL: fiscal, DESCARGA: '',
+      DEV: '', CLIENTE_OP: cliente, TIPO: t.isSider ? 'SIDER' : 'CAMIÓN', WOOD: '',
+      TRANSPORTE: t.transport || '', HORARIO: '',
+    }
+
+    const make = (type: EventType, dateStr: string): CalendarEvent | null => {
+      if (!isValidDateStr(dateStr)) return null
+      const d = parseDateLocal(dateStr)
+      return {
+        id: `truck-${t.id}-${type}`,
+        date: toDateKey(d),
+        type,
+        ref: `🚛 ${t.code}`,
+        operativa: 'CAMIÓN',
+        cntr: t.plate || '',
+        tipo: t.isSider ? 'SIDER' : 'CAMIÓN',
+        cliente,
+        fiscal,
+        deposito: '',
+        libre: '',
+        descripcion,
+        kg, pkgs, m3,
+        transporte: t.transport || '',
+        alerts: [],
+        shipment,
+        op,
+        statusColor: 'blue',
+        statusLabel,
+      }
+    }
+
+    const salida = make('salida', t.departureDate || '')
+    if (salida) events.push(salida)
+    const arribo = make('eta_fisc', t.arrivalDate || '')
+    if (arribo) events.push(arribo)
+  }
+
   return events
 }
 

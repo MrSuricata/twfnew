@@ -124,6 +124,25 @@ export const TRUCK_STATUS_LABELS: Record<TruckStatus, string> = {
   delivered: 'Entregado',
 }
 
+// ── Estado AUTOMÁTICO del camión (derive-on-read) ──
+// Las fechas mandan, igual que con sus cargas: pasó el arribo → Entregado ·
+// pasó la salida → En Ruta · pasó la carga → Cargado · si no, el estado
+// manual. Los botones de estado quedan como atajo que completa la fecha.
+// IMPORTANTE: misma precedencia que deriveTruckCargoStatus (operationsTypes).
+export function deriveTruckDisplayStatus(t: Truck, today: Date): TruckStatus {
+  const reached = (s?: string) => {
+    if (!s) return false
+    const p = s.split('-')
+    if (p.length !== 3) return false
+    const d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2]))
+    return !isNaN(d.getTime()) && d.getTime() <= today.getTime()
+  }
+  if (reached(t.arrivalDate) || t.status === 'delivered') return 'delivered'
+  if (reached(t.departureDate) || t.status === 'in_transit') return 'in_transit'
+  if (reached(t.loadDate) || t.status === 'loaded') return 'loaded'
+  return t.status
+}
+
 export const LCL_AIR_STATUS_LABELS: Record<LclAirStatus, string> = {
   en_origen: 'En Origen',
   en_transito: 'En Tránsito',
