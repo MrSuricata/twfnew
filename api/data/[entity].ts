@@ -864,8 +864,30 @@ async function handleTrucks(req: VercelRequest, res: VercelResponse, db: any) {
         updated_at_ts: now,
       }
     })
+    // Código de consolidado único (la DB tiene constraint trucks_code_key;
+    // este pre-check devuelve un error amigable en vez de un 500).
+    const codes = rows.map(r => r.code).filter(Boolean)
+    const dupInBatch = codes.find((c, i) => codes.indexOf(c) !== i)
+    if (dupInBatch) return res.status(409).json({ error: `Código repetido en el lote: ${dupInBatch}` })
+    if (codes.length) {
+      const { data: clash, error: clashErr } = await db.from('trucks').select('id, code').in('code', codes)
+      if (clashErr) throw clashErr
+      const conflict = (clash || []).find((c: any) => rows.some(r => r.code === c.code && r.id !== c.id))
+      if (conflict) return res.status(409).json({ error: `El código ${conflict.code} ya existe en otro camión` })
+    }
     const { error } = await db.from('trucks').upsert(rows, { onConflict: 'id' })
     if (error) throw error
+    // Si un código manual supera el contador, subirlo para que el próximo
+    // auto-generado no choque (editar a C500 → el próximo automático es C501).
+    for (const r of rows) {
+      const m = /^(C)(\d+)$/.exec(r.code) || /^(LCL|AIR)-(\d+)$/.exec(r.code)
+      if (!m) continue
+      const prefix = m[1], n = parseInt(m[2], 10)
+      const { data: cur } = await db.from('truck_counter').select('last_number').eq('prefix', prefix).single()
+      if (((cur?.last_number as number | undefined) ?? 0) < n) {
+        await db.from('truck_counter').upsert({ prefix, last_number: n }, { onConflict: 'prefix' })
+      }
+    }
     return res.status(200).json({ saved: true, count: rows.length })
   }
 
