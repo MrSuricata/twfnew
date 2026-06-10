@@ -332,7 +332,7 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
           </TabsContent>
 
           <TabsContent value="agenda">
-            <AgendaCalendar shipments={shipments || []} />
+            <AgendaCalendar shipments={shipments || []} trucks={trucks} truckLoads={truckLoads} />
           </TabsContent>
 
           <TabsContent value="analytics">

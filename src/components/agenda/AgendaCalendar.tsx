@@ -2,7 +2,8 @@ import { useState, useMemo, useCallback } from 'react'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
 import { parseLocalDate } from '@/lib/shipmentTypes'
 import type { AgendaView, CalendarEvent } from '@/lib/agendaTypes'
-import { shipmentsToEvents, groupEventsByDate, countAlertsInRange, getWeekDates, toDateKey } from '@/lib/agendaUtils'
+import type { Truck, TruckLoad } from '@/lib/truckTypes'
+import { shipmentsToEvents, trucksToEvents, groupEventsByDate, countAlertsInRange, getWeekDates, toDateKey } from '@/lib/agendaUtils'
 
 // Shipment is "pending to coordinate" only if it's already at MVD port or
 // arrives within this many days. Farther-out ETAs aren't actionable yet.
@@ -18,6 +19,9 @@ import ShipmentDetailsDialog from '../ShipmentDetailsDialog'
 
 interface AgendaCalendarProps {
   shipments: ParsedShipment[]
+  /** Camiones consolidados: sus hitos (salida → frontera, arribo fiscal) entran a la agenda. */
+  trucks?: Truck[]
+  truckLoads?: TruckLoad[]
   depotFilter?: string
   transportFilter?: string
   partnerView?: boolean
@@ -29,6 +33,8 @@ interface AgendaCalendarProps {
 
 export default function AgendaCalendar({
   shipments,
+  trucks,
+  truckLoads,
   depotFilter,
   transportFilter,
   partnerView = false,
@@ -44,11 +50,13 @@ export default function AgendaCalendar({
   const [activeTransports, setActiveTransports] = useState<Set<string>>(new Set())
   const [showPendingSidebar, setShowPendingSidebar] = useState(false)
 
-  // Transform all shipments into calendar events
-  const allEvents = useMemo(
-    () => shipmentsToEvents(shipments, depotFilter, transportFilter),
-    [shipments, depotFilter, transportFilter]
-  )
+  // Transform all shipments into calendar events (+ hitos de camiones)
+  const allEvents = useMemo(() => {
+    const list = shipmentsToEvents(shipments, depotFilter, transportFilter)
+    if (trucks?.length) list.push(...trucksToEvents(trucks, truckLoads || []))
+    list.sort((a, b) => a.date.localeCompare(b.date))
+    return list
+  }, [shipments, trucks, truckLoads, depotFilter, transportFilter])
 
   // Extract unique depots from events
   const availableDepots = useMemo(() => {
