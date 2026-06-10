@@ -180,6 +180,7 @@ export interface UnifiedOperation {
   certi: boolean
   impresa: boolean
   archived: boolean              // solo filas DB; visible con "Ver archivadas"
+  webEdited?: string[]           // FCL espejo: campos editados en la web (badge ✏️)
   status: string                 // DB: código editable · FCL: label derivado de la planilla
 }
 
@@ -209,6 +210,8 @@ function fclToOperation(s: ParsedShipment, operatorId: string | null, uid: strin
     mode: 'fcl',
     source: 'fcl',
     readOnly: true,
+    dbId: s.__dbId,                // espejo en DB → habilita edición Etapa 3
+    webEdited: s.__webEdited,
     operatorId,
     cliente: s.CLIENTE || firstWith('CLIENTE_OP'),
     docNumber: s.MBL || '',     // SG nuevo: booking
@@ -459,6 +462,25 @@ export const EDITABLE_FIELDS: Partial<Record<keyof UnifiedOperation, EditableFie
   certi: { col: 'certi', type: 'bool' },
   impresa: { col: 'impresa', type: 'bool' },
   status: { col: 'status', type: 'select', options: STATUS_OPTIONS },
+}
+
+// ── Edición inline de FCL espejo (Etapa 3 migración) ──
+// Columna de la grilla → clave del ParsedShipment que pisa el overlay
+// web_edits. Solo campos del nivel SG; los de operativas por contenedor
+// (salida/etaFisc/libre/operativa/depósito...) se siguen editando en la
+// planilla hasta el flip. La REF nunca (flujo aparte con confirmación).
+export const EDITABLE_FCL_FIELDS: Partial<Record<keyof UnifiedOperation, string>> = {
+  cliente: 'CLIENTE',
+  etd: 'ETD',
+  eta: 'ETA',
+  cntr: 'CNTR',
+  docNumber: 'MBL',
+  buque: 'BUQUE',
+  linea: 'LINEA',
+  origin: 'POL',
+  dischargePort: 'POD',
+  seguimiento: 'SEGUIMIENTO',
+  tipo: 'TIPO',
 }
 
 // Build a new DB shipment row with sensible empty defaults. Only `mode` is

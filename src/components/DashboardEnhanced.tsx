@@ -20,6 +20,7 @@ import {
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import { authFetch } from '@/lib/authClient'
+import { fetchShipmentsFromDB } from '@/lib/dataClient'
 
 import TodayDashboard from './TodayDashboard'
 import AgendaCalendar from './agenda/AgendaCalendar'
@@ -80,11 +81,12 @@ interface DashboardEnhancedProps {
   onPatchShipment?: (id: string, fields: Record<string, unknown>) => void
   onCreateShipment?: (row: DbShipment) => void
   onDeleteShipment?: (op: UnifiedOperation) => void
+  onPatchFclField?: (dbId: string, edits: Record<string, unknown>) => void
 }
 
 const ONE_DAY_MS = 86_400_000
 
-export default function DashboardEnhanced({ onLogout, clients = [], shipments = [], documents = [], reports = [], originPhotos = [], quotes = [], trucks = [], truckLoads = [], lclAir = [], billing = [], operators = [], assignments = [], dbShipments = [], dbSyncError = null, onUpdateShipments, onUpdateClients, onUpdateDocuments, onUpdateReports, onUpdateOriginPhotos, onUpdateQuotes, onUpdateTrucks, onDeleteTruck, onUpdateTruckLoads, onDeleteTruckLoad, onUpdateLclAir, onDeleteLclAir, onUpdateBilling, onClearBilling, onUpdateOperators, onDeleteOperator, onAssignOperator, onPatchShipment, onCreateShipment, onDeleteShipment }: DashboardEnhancedProps) {
+export default function DashboardEnhanced({ onLogout, clients = [], shipments = [], documents = [], reports = [], originPhotos = [], quotes = [], trucks = [], truckLoads = [], lclAir = [], billing = [], operators = [], assignments = [], dbShipments = [], dbSyncError = null, onUpdateShipments, onUpdateClients, onUpdateDocuments, onUpdateReports, onUpdateOriginPhotos, onUpdateQuotes, onUpdateTrucks, onDeleteTruck, onUpdateTruckLoads, onDeleteTruckLoad, onUpdateLclAir, onDeleteLclAir, onUpdateBilling, onClearBilling, onUpdateOperators, onDeleteOperator, onAssignOperator, onPatchShipment, onCreateShipment, onDeleteShipment, onPatchFclField }: DashboardEnhancedProps) {
   const brand = useBrand()
   const ops = brand.capabilities.opsAdmin
   // TWF brand has no ops tabs → land on the first content tab.
@@ -104,7 +106,14 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
         throw new Error(err.error || `HTTP ${res.status}`)
       }
       const data = await res.json()
-      const fresh = data.shipments || []
+      let fresh = data.shipments || []
+      // Etapa 3: el sync devuelve la planilla CRUDA (sin __dbId ni ediciones
+      // web). Re-leemos del espejo recién actualizado para no perder las
+      // ediciones ✏️ ni la editabilidad; si falla, usamos la cruda como antes.
+      try {
+        const mirror = await fetchShipmentsFromDB()
+        if (mirror.shipments.length > 0) fresh = mirror.shipments
+      } catch { /* fallback a la cruda */ }
       if (onUpdateShipments) onUpdateShipments(fresh)
       toast.success(`${fresh.length} cargas sincronizadas`, {
         id: t,
@@ -383,6 +392,7 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
               onPatchShipment={(id, fields) => { if (onPatchShipment) onPatchShipment(id, fields) }}
               onCreateShipment={(row) => { if (onCreateShipment) onCreateShipment(row) }}
               onDeleteShipment={(op) => { if (onDeleteShipment) onDeleteShipment(op) }}
+              onPatchFclField={(dbId, edits) => { if (onPatchFclField) onPatchFclField(dbId, edits) }}
               onUpdateOperators={(o) => { if (onUpdateOperators) onUpdateOperators(o) }}
               onDeleteOperator={(id) => { if (onDeleteOperator) onDeleteOperator(id) }}
             />

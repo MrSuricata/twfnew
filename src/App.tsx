@@ -10,7 +10,7 @@ import { Operator, OperatorAssignment, DbShipment, UnifiedOperation } from '@/li
 import { getDemoShipments } from '@/lib/demoShipments'
 import { filterShipments } from '@/lib/sheetsSync'
 import { verifySession, clearAuth, authFetch } from '@/lib/authClient'
-import { loadAdminData, saveQuotes, saveDocuments, saveReports, saveReportWithFile, deleteReport, saveClients, saveOriginPhoto, deleteOriginPhoto, saveTrucks, saveTruckLoads, saveLclAir, deleteTruck as apiDeleteTruck, deleteTruckLoad as apiDeleteTruckLoad, deleteLclAir as apiDeleteLclAir, saveBilling, deleteBilling as apiDeleteBilling, saveOperators, saveOperatorAssignment, deleteOperator as apiDeleteOperator, patchDbShipment, createDbShipment, deleteDbShipment } from '@/lib/dataClient'
+import { loadAdminData, saveQuotes, saveDocuments, saveReports, saveReportWithFile, deleteReport, saveClients, saveOriginPhoto, deleteOriginPhoto, saveTrucks, saveTruckLoads, saveLclAir, deleteTruck as apiDeleteTruck, deleteTruckLoad as apiDeleteTruckLoad, deleteLclAir as apiDeleteLclAir, saveBilling, deleteBilling as apiDeleteBilling, saveOperators, saveOperatorAssignment, deleteOperator as apiDeleteOperator, patchDbShipment, createDbShipment, deleteDbShipment, patchFclShipment } from '@/lib/dataClient'
 
 import Login from './components/Login'
 import ClientLogin from './components/ClientLogin'
@@ -566,6 +566,25 @@ function App() {
     }
   }
 
+  // Etapa 3 migración: editar un campo de una FCL espejo. Optimista en el
+  // estado local (merge sobre el ParsedShipment por __dbId) + PATCH al overlay
+  // web_edits — el sync de la planilla nunca pisa estas ediciones.
+  const handlePatchFclField = (dbId: string, edits: Record<string, unknown>) => {
+    const next = shipments.map(s => {
+      if (s.__dbId !== dbId) return s
+      const edited = new Set([...(s.__webEdited || []), ...Object.keys(edits)])
+      return { ...s, ...edits, __webEdited: [...edited] } as ParsedShipment
+    })
+    setShipments(next)
+    saveToStorage('twf-shipments', next)
+    if (isAdminLoggedIn) {
+      patchFclShipment(dbId, edits).catch(err => {
+        console.warn('[DB] Failed to patch FCL web edit:', err)
+        toast.warning(`Error al guardar la edición FCL: ${err?.message || ''}`, { duration: 5000 })
+      })
+    }
+  }
+
   // Eliminar definitivo de una carga DB. NO es optimista: espera la validación
   // del backend (camión / facturada / fotos → 409 con motivo) antes de sacarla.
   const handleDeleteShipment = (op: UnifiedOperation) => {
@@ -796,6 +815,7 @@ function App() {
           onPatchShipment={handlePatchShipment}
           onCreateShipment={handleCreateShipment}
           onDeleteShipment={handleDeleteShipment}
+          onPatchFclField={handlePatchFclField}
         />
       </>
     )

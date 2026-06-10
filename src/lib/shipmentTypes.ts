@@ -63,6 +63,21 @@ export interface ParsedShipment extends ShipmentRecord {
   calculatedN: number
   calculatedLibreHasta: string
   operativas?: OperativasRecord[]
+  // Etapa 3 migración FCL: presentes cuando la carga viene del espejo en DB.
+  __dbId?: string        // id de la fila en `shipments` (para editar)
+  __webEdited?: string[] // campos pisados por ediciones web (badge ✏️)
+}
+
+/** Etapa 3: aplica las ediciones web (overlay por campo) sobre el dato puro de
+ *  la planilla. Las ediciones GANAN; sheet_raw queda intacto en la DB para
+ *  comparar/revertir. */
+export function applyWebEdits(
+  sheetRaw: ParsedShipment,
+  webEdits: Record<string, unknown> | null | undefined,
+  dbId: string
+): ParsedShipment {
+  const edits = webEdits || {}
+  return { ...sheetRaw, ...edits, __dbId: dbId, __webEdited: Object.keys(edits) } as ParsedShipment
 }
 
 // ─── Shipment Status Tracking ─────────────────────────────────────────

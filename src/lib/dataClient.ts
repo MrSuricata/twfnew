@@ -7,6 +7,7 @@
 import { authFetch } from './authClient'
 import type { QuoteFormData, ClientAccount, ShipmentDocument, OperativeReport, OriginPhoto } from './quotationTypes'
 import type { ParsedShipment } from './shipmentTypes'
+import { applyWebEdits } from './shipmentTypes'
 import type { Truck, TruckLoad, LclAirShipment } from './truckTypes'
 import type { BillingRecord } from './billingTypes'
 import type { Operator, OperatorAssignment, DbShipment } from './operationsTypes'
@@ -28,7 +29,8 @@ export async function fetchShipmentsFromDB(): Promise<{ shipments: ParsedShipmen
       if (rows.length > 0) {
         const maxTs = Math.max(...rows.map((r: any) => Number(r.updated_at_ts) || 0))
         return {
-          shipments: rows.map((r: any) => r.sheet_raw as ParsedShipment),
+          // Etapa 3: las ediciones web (web_edits) PISAN al dato de la planilla
+          shipments: rows.map((r: any) => applyWebEdits(r.sheet_raw, r.web_edits, r.id)),
           syncedAt: maxTs > 0 ? new Date(maxTs).toISOString() : null,
         }
       }
@@ -562,6 +564,21 @@ export async function patchDbShipment(id: string, fields: Record<string, unknown
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(fields),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
+}
+
+/** Etapa 3 migración: editar un campo de una FCL espejo (overlay web_edits).
+ *  Claves de ParsedShipment (ETA, BUQUE, CNTR...); value null = revertir al
+ *  valor de la planilla. La REF no se edita por acá. */
+export async function patchFclShipment(id: string, edits: Record<string, unknown>): Promise<void> {
+  const res = await authFetch(`/api/data/shipments?id=${encodeURIComponent(id)}&fcl=1`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(edits),
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))

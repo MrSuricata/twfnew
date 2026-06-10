@@ -63,3 +63,25 @@ describe('isOperationActive — criterio devuelta + en fiscal', () => {
     expect(isOperationActive(op({ source: 'db', status: 'en_fiscal' }), 'en_frontera', TODAY)).toBe(true)
   })
 })
+
+// Etapa 3 migracion FCL: overlay de ediciones web sobre el dato de la planilla
+import { applyWebEdits } from './shipmentTypes'
+
+describe('applyWebEdits — ediciones web sobre FCL espejo', () => {
+  const raw = { REF: 'A7800', CLIENTE: 'BASSO', ETA: '2026-06-01', BUQUE: 'EVER', operativas: [] } as never
+
+  it('sin ediciones: agrega __dbId y lista vacia, datos intactos', () => {
+    const out = applyWebEdits(raw, null, 'shp-fcl-a7800')
+    expect(out.__dbId).toBe('shp-fcl-a7800')
+    expect(out.__webEdited).toEqual([])
+    expect(out.ETA).toBe('2026-06-01')
+  })
+
+  it('las ediciones PISAN a la planilla y quedan marcadas', () => {
+    const out = applyWebEdits(raw, { ETA: '2026-06-05', BUQUE: 'MSC LUNA' }, 'x')
+    expect(out.ETA).toBe('2026-06-05')
+    expect(out.BUQUE).toBe('MSC LUNA')
+    expect(out.CLIENTE).toBe('BASSO')
+    expect(out.__webEdited).toEqual(['ETA', 'BUQUE'])
+  })
+})
