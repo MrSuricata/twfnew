@@ -24,7 +24,7 @@ import {
 import { toast } from 'sonner'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
 import type { Truck, TruckLoad } from '@/lib/truckTypes'
-import type { DbShipment } from '@/lib/operationsTypes'
+import type { DbShipment, Modality } from '@/lib/operationsTypes'
 import { MODALITY_LABELS, MODALITY_COLORS } from '@/lib/operationsTypes'
 import type { BillableItem, BillingRecord } from '@/lib/billingTypes'
 import {
@@ -58,6 +58,8 @@ export default function BillingManagement({ shipments, dbShipments = [], trucks 
   const [search, setSearch] = useState('')
   const [invoiceDialog, setInvoiceDialog] = useState<BillableItem | null>(null)
   const [invoiceNumber, setInvoiceNumber] = useState('')
+  // Filtro por tipo de carga (FCL / LCL / aéreo / terrestre).
+  const [modeFilter, setModeFilter] = useState<'all' | Modality>('all')
   // Orden por columna: 1er click ▼ (mayor→menor, ej: últimas arribadas), 2do ▲, 3ro limpia.
   const [sort, setSort] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(null)
   const toggleSort = (key: string) => setSort(prev =>
@@ -100,15 +102,25 @@ export default function BillingManagement({ shipments, dbShipments = [], trucks 
     ? buckets.facturadas
     : buckets.noAplica
 
+  // Conteo por tipo dentro de la sub-pestaña activa (para los chips).
+  const modeCounts = useMemo(() => {
+    const c: Record<string, number> = { all: activeList.length, fcl: 0, lcl: 0, air: 0, land: 0 }
+    for (const s of activeList) c[s.mode] = (c[s.mode] || 0) + 1
+    return c
+  }, [activeList])
+
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim()
-    if (!q) return activeList
     return activeList.filter(s => {
-      const inv = billingMap.get(s.ref)?.invoiceNumber || ''
-      const blob = `${s.ref} ${s.cliente} ${inv}`.toLowerCase()
-      return blob.includes(q)
+      if (modeFilter !== 'all' && s.mode !== modeFilter) return false
+      if (q) {
+        const inv = billingMap.get(s.ref)?.invoiceNumber || ''
+        const blob = `${s.ref} ${s.cliente} ${inv}`.toLowerCase()
+        if (!blob.includes(q)) return false
+      }
+      return true
     })
-  }, [activeList, search, billingMap])
+  }, [activeList, modeFilter, search, billingMap])
 
   const sorted = useMemo(() => {
     if (!sort) return filtered
@@ -234,15 +246,30 @@ export default function BillingManagement({ shipments, dbShipments = [], trucks 
         />
       </div>
 
-      {/* Search */}
-      <div className="relative max-w-md">
-        <MagnifyingGlass size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Buscar REF, cliente, nº factura…"
-          className="pl-9 h-9"
-        />
+      {/* Filtro por tipo de carga + búsqueda */}
+      <div className="flex items-center gap-2 flex-wrap">
+        {([['all', 'Todas'], ['fcl', 'FCL'], ['lcl', 'LCL'], ['air', 'Aéreo'], ['land', 'Terrestre']] as ['all' | Modality, string][]).map(([id, label]) => (
+          <button
+            key={id}
+            onClick={() => setModeFilter(id)}
+            className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 border text-xs transition-all hover:shadow-sm ${
+              modeFilter === id ? 'bg-primary/5 border-primary/40 font-medium' : 'bg-card border-border'
+            }`}
+          >
+            {id !== 'all' && <span className="w-2 h-2 rounded-sm" style={{ background: MODALITY_COLORS[id as Modality] }} />}
+            {label}
+            <span className="text-[10px] text-muted-foreground tabular-nums">{modeCounts[id] ?? 0}</span>
+          </button>
+        ))}
+        <div className="relative max-w-md flex-1 min-w-[200px]">
+          <MagnifyingGlass size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar REF, cliente, nº factura…"
+            className="pl-9 h-9"
+          />
+        </div>
       </div>
 
       {/* List */}
