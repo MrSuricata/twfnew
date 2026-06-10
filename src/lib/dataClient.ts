@@ -550,6 +550,16 @@ export async function patchDbShipment(id: string, fields: Record<string, unknown
   }
 }
 
+/** Eliminar definitivo de una carga: el backend valida (camión / facturada /
+ *  fotos) y responde 409 con el motivo si no se puede — mostrar tal cual. */
+export async function deleteDbShipment(id: string): Promise<void> {
+  const res = await authFetch(`/api/data/shipments?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
+}
+
 // ── Bulk Load (load all admin data in parallel) ──
 
 export interface AdminData {

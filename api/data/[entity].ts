@@ -1245,6 +1245,36 @@ async function handleShipments(req: VercelRequest, res: VercelResponse, db: any)
   if (req.method === 'DELETE') {
     const id = req.query.id as string
     if (!id) return res.status(400).json({ error: 'id required' })
+    // Eliminar es definitivo: solo se permite si la carga nunca estuvo en un
+    // camión, no está facturada y no tiene fotos. Si no cumple → 409 con el
+    // motivo (la UI ofrece archivar en su lugar). Al borrar se limpian los
+    // overlays por ref (billing no facturada, asignación de operativo) para
+    // no dejar huérfanos.
+    const { data: ship, error: shipErr } = await db.from('shipments').select('id, ref').eq('id', id).maybeSingle()
+    if (shipErr) throw shipErr
+    if (!ship) return res.status(404).json({ error: 'Carga no encontrada' })
+    const ref = (ship.ref || '').trim()
+    if (ref) {
+      const { data: loads, error: loadsErr } = await db.from('truck_loads').select('id, truck_id').eq('source_ref', ref)
+      if (loadsErr) throw loadsErr
+      if (loads?.length) {
+        const ids = [...new Set(loads.map((l: any) => l.truck_id))]
+        const { data: tks } = await db.from('trucks').select('code').in('id', ids)
+        const codes = (tks || []).map((t: any) => t.code).join(', ')
+        return res.status(409).json({ error: `No se puede eliminar: está/estuvo en el camión ${codes || 'N/D'}. Archivala en su lugar.` })
+      }
+      const { data: bill, error: billErr } = await db.from('shipment_billing').select('status').eq('ref', ref).maybeSingle()
+      if (billErr) throw billErr
+      if (bill?.status === 'facturada') {
+        return res.status(409).json({ error: 'No se puede eliminar: la carga ya está FACTURADA. Archivala en su lugar.' })
+      }
+      const { count: fotos } = await db.from('origin_photos').select('id', { count: 'exact', head: true }).eq('shipment_ref', ref)
+      if (fotos) {
+        return res.status(409).json({ error: `No se puede eliminar: tiene ${fotos} foto(s) asociadas. Archivala en su lugar.` })
+      }
+      if (bill) await db.from('shipment_billing').delete().eq('ref', ref)
+      await db.from('operator_assignments').delete().eq('ref', ref)
+    }
     const { error } = await db.from('shipments').delete().eq('id', id)
     if (error) throw error
     return res.status(200).json({ deleted: true })

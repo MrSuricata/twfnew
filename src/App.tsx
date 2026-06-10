@@ -6,11 +6,11 @@ import { ParsedShipment } from '@/lib/shipmentTypes'
 import { Truck, TruckLoad, LclAirShipment } from '@/lib/truckTypes'
 import { getBrand } from '@/lib/brand'
 import { BillingRecord } from '@/lib/billingTypes'
-import { Operator, OperatorAssignment, DbShipment } from '@/lib/operationsTypes'
+import { Operator, OperatorAssignment, DbShipment, UnifiedOperation } from '@/lib/operationsTypes'
 import { getDemoShipments } from '@/lib/demoShipments'
 import { filterShipments } from '@/lib/sheetsSync'
 import { verifySession, clearAuth, authFetch } from '@/lib/authClient'
-import { loadAdminData, saveQuotes, saveDocuments, saveReports, saveReportWithFile, deleteReport, saveClients, saveOriginPhoto, deleteOriginPhoto, saveTrucks, saveTruckLoads, saveLclAir, deleteTruck as apiDeleteTruck, deleteTruckLoad as apiDeleteTruckLoad, deleteLclAir as apiDeleteLclAir, saveBilling, deleteBilling as apiDeleteBilling, saveOperators, saveOperatorAssignment, deleteOperator as apiDeleteOperator, patchDbShipment, createDbShipment } from '@/lib/dataClient'
+import { loadAdminData, saveQuotes, saveDocuments, saveReports, saveReportWithFile, deleteReport, saveClients, saveOriginPhoto, deleteOriginPhoto, saveTrucks, saveTruckLoads, saveLclAir, deleteTruck as apiDeleteTruck, deleteTruckLoad as apiDeleteTruckLoad, deleteLclAir as apiDeleteLclAir, saveBilling, deleteBilling as apiDeleteBilling, saveOperators, saveOperatorAssignment, deleteOperator as apiDeleteOperator, patchDbShipment, createDbShipment, deleteDbShipment } from '@/lib/dataClient'
 
 import Login from './components/Login'
 import ClientLogin from './components/ClientLogin'
@@ -566,6 +566,25 @@ function App() {
     }
   }
 
+  // Eliminar definitivo de una carga DB. NO es optimista: espera la validación
+  // del backend (camión / facturada / fotos → 409 con motivo) antes de sacarla.
+  const handleDeleteShipment = (op: UnifiedOperation) => {
+    const id = op.dbId
+    if (!id) return
+    deleteDbShipment(id)
+      .then(() => {
+        setDbShipments(prev => {
+          const next = prev.filter(s => s.id !== id)
+          saveToStorage('twf-db-shipments', next)
+          return next
+        })
+        toast.success(`Carga ${op.ref || ''} eliminada definitivamente`)
+      })
+      .catch(err => {
+        toast.error(err?.message || 'No se pudo eliminar la carga', { duration: 6000 })
+      })
+  }
+
   // Assign an operativo to a ref (overlay). operatorId=null clears it.
   const handleAssignOperator = (ref: string, operatorId: string | null) => {
     const next = (() => {
@@ -776,6 +795,7 @@ function App() {
           onAssignOperator={handleAssignOperator}
           onPatchShipment={handlePatchShipment}
           onCreateShipment={handleCreateShipment}
+          onDeleteShipment={handleDeleteShipment}
         />
       </>
     )

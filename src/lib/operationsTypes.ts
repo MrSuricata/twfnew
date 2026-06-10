@@ -179,6 +179,7 @@ export interface UnifiedOperation {
   seguro: boolean
   certi: boolean
   impresa: boolean
+  archived: boolean              // solo filas DB; visible con "Ver archivadas"
   status: string                 // DB: código editable · FCL: label derivado de la planilla
 }
 
@@ -192,6 +193,7 @@ const EMPTY = {
   buque: '', linea: '', camion: '', docNumber: '', destPort: '', despacho: '',
   dischargePort: '', pais: '', noApilable: false, oog: false, imo: false,
   seguimiento: '', seguro: false, certi: false, impresa: false,
+  archived: false,
 }
 
 /** Collapse a FCL ParsedShipment (1+ operativas) into a single unified row. */
@@ -289,6 +291,7 @@ export function dbShipmentToOperation(s: DbShipment): UnifiedOperation {
     seguro: !!s.seguro,
     certi: !!s.certi,
     impresa: !!s.impresa,
+    archived: !!s.archived,
     status: s.status || '',
   }
 }
@@ -298,7 +301,8 @@ export function dbShipmentToOperation(s: DbShipment): UnifiedOperation {
 export function buildOperations(
   shipments: ParsedShipment[],
   dbShipments: DbShipment[],
-  assignments: Map<string, string | null>
+  assignments: Map<string, string | null>,
+  includeArchived = false
 ): UnifiedOperation[] {
   const out: UnifiedOperation[] = []
   // La planilla reutiliza refs (split en 2 clientes, A/B): cada repetición es una
@@ -312,7 +316,7 @@ export function buildOperations(
     out.push(fclToOperation(s, assignments.get(s.REF) ?? null, uid))
   }
   for (const s of dbShipments) {
-    if (s.archived) continue
+    if (s.archived && !includeArchived) continue
     out.push(dbShipmentToOperation(s))
   }
   return out
