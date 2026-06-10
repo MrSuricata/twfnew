@@ -113,9 +113,11 @@ export interface DbShipment {
   transporte: string
   camion: string
   dest_country: string
+  discharge_port: string
   dest_port: string
   fiscal: string
   wood: boolean
+  no_apilable: boolean
   ftl_ltl: string
   costo_extra: string
   observacion: string
@@ -158,13 +160,19 @@ export interface UnifiedOperation {
   m3: number
   descripcion: string
   fiscal: string
+  dischargePort: string          // puerto de descarga
   destPort: string
   descarga: string
   dev: string
   despacho: string
   tipo: string
   wood: boolean
+  noApilable: boolean            // carga NO apilable
   transporte: string
+  seguimiento: string            // fecha de seguimiento
+  seguro: boolean
+  certi: boolean
+  impresa: boolean
   status: string                 // DB: código editable · FCL: label derivado de la planilla
 }
 
@@ -176,6 +184,7 @@ const num = (v: unknown): number => {
 const EMPTY = {
   clientRef: '', shipper: '', agente: '', incoterm: '', origin: '', etd: '',
   buque: '', linea: '', camion: '', docNumber: '', destPort: '', despacho: '',
+  dischargePort: '', noApilable: false, seguimiento: '', seguro: false, certi: false, impresa: false,
 }
 
 /** Collapse a FCL ParsedShipment (1+ operativas) into a single unified row. */
@@ -251,13 +260,19 @@ export function dbShipmentToOperation(s: DbShipment): UnifiedOperation {
     m3: s.m3 || 0,
     descripcion: s.observacion || '',
     fiscal: s.fiscal || '',
+    dischargePort: s.discharge_port || '',
     destPort: s.dest_port || '',
     descarga: '',
     dev: '',
     despacho: s.despacho || '',
     tipo: MODALITY_LABELS[s.mode] || '',
     wood: !!s.wood,
+    noApilable: !!s.no_apilable,
     transporte: s.transporte || '',
+    seguimiento: s.seguimiento || '',
+    seguro: !!s.seguro,
+    certi: !!s.certi,
+    impresa: !!s.impresa,
     status: s.status || '',
   }
 }
@@ -314,6 +329,7 @@ export const OPERATION_COLUMNS: ColumnDef[] = [
   { key: 'agente', label: 'Agente', defaultOn: false, wrap: true, w: 'max-w-[110px]' },
   { key: 'incoterm', label: 'Incoterm', defaultOn: false, w: 'max-w-[72px]' },
   { key: 'origin', label: 'Origen', defaultOn: true, wrap: true, w: 'max-w-[100px]' },
+  { key: 'dischargePort', label: 'Pto. Descarga', defaultOn: true, wrap: true, w: 'max-w-[100px]' },
   { key: 'docNumber', label: 'BL / MAWB / CRT', defaultOn: true, wrap: true, w: 'max-w-[120px]' },
   { key: 'tlx', label: 'TLX', defaultOn: false, w: 'max-w-[60px]' },
   { key: 'deposito', label: 'Depósito', defaultOn: true, w: 'max-w-[92px]' },
@@ -338,7 +354,12 @@ export const OPERATION_COLUMNS: ColumnDef[] = [
   { key: 'dev', label: 'DEV', defaultOn: false, w: 'max-w-[90px]' },
   { key: 'tipo', label: 'Tipo', defaultOn: true },
   { key: 'status', label: 'Estado', defaultOn: true, w: 'max-w-[130px]' },
+  { key: 'seguimiento', label: 'Seguimiento', defaultOn: false, w: 'max-w-[92px]' },
   { key: 'wood', label: 'Wood', defaultOn: true, w: 'max-w-[56px]' },
+  { key: 'noApilable', label: 'No apilable', defaultOn: false, w: 'max-w-[64px]' },
+  { key: 'seguro', label: 'Seguro', defaultOn: false, w: 'max-w-[56px]' },
+  { key: 'certi', label: 'Certi', defaultOn: false, w: 'max-w-[56px]' },
+  { key: 'impresa', label: 'Impresa', defaultOn: false, w: 'max-w-[60px]' },
   { key: 'transporte', label: 'Transporte', defaultOn: true, wrap: true, w: 'max-w-[110px]' },
 ]
 
@@ -359,6 +380,7 @@ export const EDITABLE_FIELDS: Partial<Record<keyof UnifiedOperation, EditableFie
   agente: { col: 'agente', type: 'text' },
   incoterm: { col: 'incoterm', type: 'text' },
   origin: { col: 'origin', type: 'text' },
+  dischargePort: { col: 'discharge_port', type: 'text' },
   docNumber: { col: 'doc_number', type: 'text' },
   deposito: { col: 'deposito', type: 'text' },
   etd: { col: 'etd', type: 'text' },
@@ -375,8 +397,13 @@ export const EDITABLE_FIELDS: Partial<Record<keyof UnifiedOperation, EditableFie
   camion: { col: 'camion', type: 'text' },
   despacho: { col: 'despacho', type: 'text' },
   transporte: { col: 'transporte', type: 'text' },
+  seguimiento: { col: 'seguimiento', type: 'text' },
   tlx: { col: 'telex', type: 'bool' },
   wood: { col: 'wood', type: 'bool' },
+  noApilable: { col: 'no_apilable', type: 'bool' },
+  seguro: { col: 'seguro', type: 'bool' },
+  certi: { col: 'certi', type: 'bool' },
+  impresa: { col: 'impresa', type: 'bool' },
   status: { col: 'status', type: 'select', options: STATUS_OPTIONS },
 }
 
@@ -390,7 +417,8 @@ export function newDbShipment(fields: Partial<DbShipment> & { mode: Modality }):
     incoterm: '', pkgs: 0, kg: 0, m3: 0, doc_number: '', origin: '', etd: '', eta: '',
     seguimiento: '', contenedor: '', buque: '', linea: '', transbordo: '', seguro: false,
     certi: false, telex: false, impresa: false, despacho: '', deposito: '', fecha_consol: '',
-    transporte: '', camion: '', dest_country: '', dest_port: '', fiscal: '', wood: false,
+    transporte: '', camion: '', dest_country: '', discharge_port: '', dest_port: '',
+    fiscal: '', wood: false, no_apilable: false,
     ftl_ltl: '', costo_extra: '', observacion: '', status: 'en_origen', operator_id: null,
     notes: '', source: 'web', archived: false,
     ...fields,
