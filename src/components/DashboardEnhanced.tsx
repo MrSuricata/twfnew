@@ -362,6 +362,9 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
           <TabsContent value="billing">
             <BillingManagement
               shipments={shipments || []}
+              dbShipments={dbShipments}
+              trucks={trucks}
+              truckLoads={truckLoads}
               billing={billing}
               onUpdateBilling={onUpdateBilling}
               onClearBilling={onClearBilling}
