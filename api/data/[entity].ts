@@ -1208,8 +1208,18 @@ const SHIPMENT_COLS = new Set([
 
 async function handleShipments(req: VercelRequest, res: VercelResponse, db: any) {
   if (req.method === 'GET') {
-    // source='sheet' = filas espejo de la migración FCL (Etapa 1): invisibles
-    // para la app hasta el flip. ?includeMirror=1 las trae (verificación).
+    // source='sheet' = filas espejo de la migración FCL: por defecto invisibles.
+    // ?includeMirror=only → SOLO el espejo, payload mínimo (sheet_raw): es la
+    // fuente FCL de la app desde la Etapa 2. ?includeMirror=1 → todo junto.
+    if (req.query.includeMirror === 'only') {
+      const { data, error } = await db.from('shipments')
+        .select('sheet_raw, updated_at_ts')
+        .eq('source', 'sheet')
+        .not('sheet_raw', 'is', null)
+        .limit(5000)
+      if (error) throw error
+      return res.status(200).json({ shipments: data || [] })
+    }
     let q = db.from('shipments').select('*').order('ref', { ascending: true }).limit(5000)
     if (req.query.includeMirror !== '1') q = q.neq('source', 'sheet')
     const { data, error } = await q

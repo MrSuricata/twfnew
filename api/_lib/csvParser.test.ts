@@ -103,6 +103,8 @@ describe('fclMirrorRows - espejo FCL (Etapa 1 migracion)', () => {
     expect(r.kg).toBe(100)
     expect(r.fiscal).toBe('CORDOBA')
     expect(r.updated_at_ts).toBe(123)
+    expect(r.sheet_raw).toBeTruthy()
+    expect((r.sheet_raw as Record<string, unknown>).REF).toBe('A6902')
   })
 
   it('refs duplicadas (2 clientes) -> 2 filas con id distinto y ESTABLE ante reorden', () => {

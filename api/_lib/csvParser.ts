@@ -553,6 +553,10 @@ export function fclMirrorRows(shipments: ParsedShipment[], now: number): Record<
       transporte: first('TRANSPORTE'),
       observacion: first('DESCRIPCION'),
       wood: ops.some(o => String((o as Record<string, unknown>).WOOD || '').toUpperCase().startsWith('SI')),
+      // Fidelidad completa: el ParsedShipment entero (operativas, checks, VTO,
+      // costos...). Etapa 2: la app reconstruye las FCL desde acá en vez del
+      // cache — mismos objetos, misma lógica derivada, otra fuente.
+      sheet_raw: s,
       updated_at_ts: now,
     })
   }

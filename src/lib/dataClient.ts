@@ -12,9 +12,28 @@ import type { BillingRecord } from './billingTypes'
 import type { Operator, OperatorAssignment, DbShipment } from './operationsTypes'
 import { matchesPattern } from './clientMatching'
 
-// ── Shipments (cached from Google Sheets sync) ──
+// ── Shipments FCL (espejo en `shipments` → fallback cache JSON) ──
+// Etapa 2 de la migración: la fuente primaria de las FCL es el ESPEJO en la
+// tabla `shipments` (filas source='sheet', columna sheet_raw = ParsedShipment
+// completo). Mismos objetos que el cache → toda la lógica derivada (estado,
+// LIBRE, facturación, Solo activas) funciona idéntica. Si el espejo todavía
+// no tiene sheet_raw (falta un sync) o falla, se cae al cache como siempre.
 
 export async function fetchShipmentsFromDB(): Promise<{ shipments: ParsedShipment[]; syncedAt: string | null }> {
+  try {
+    const res = await authFetch('/api/data/shipments?includeMirror=only')
+    if (res.ok) {
+      const data = await res.json()
+      const rows = (data.shipments || []).filter((r: any) => r.sheet_raw)
+      if (rows.length > 0) {
+        const maxTs = Math.max(...rows.map((r: any) => Number(r.updated_at_ts) || 0))
+        return {
+          shipments: rows.map((r: any) => r.sheet_raw as ParsedShipment),
+          syncedAt: maxTs > 0 ? new Date(maxTs).toISOString() : null,
+        }
+      }
+    }
+  } catch { /* fallback al cache */ }
   const res = await authFetch('/api/data/shipments-cache')
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   return res.json()
