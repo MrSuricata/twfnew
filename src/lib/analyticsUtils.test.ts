@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { UnifiedOperation } from './operationsTypes'
-import { filterOperations, zoneOf, opYear, kpisGenerales, volumenes, porModalidad, porZona, topClientes, porLinea, porTerminal, porOperativa, porTransporte, porFiscal, porTipoContenedor, porMes } from './analyticsUtils'
+import { filterOperations, zoneOf, opYear, kpisGenerales, volumenes, porModalidad, porZona, topClientes, porLinea, porTerminal, porOperativa, porTransporte, porFiscal, porTipoContenedor, porMes, truckYear, kpisConsolidados, consolidadosPorMes, volumenPorTransportista } from './analyticsUtils'
+import type { Truck, TruckLoad } from './truckTypes'
 
 // Factory mínima: solo los campos que usan las analíticas.
 export const op = (over: Partial<UnifiedOperation> = {}): UnifiedOperation =>
@@ -133,5 +134,59 @@ describe('porMes', () => {
   it('en años pasados muestra todos los meses con datos', () => {
     const data = porMes([op({ eta: '5/3/2025' }), op({ eta: '5/9/2025' })], NOW)
     expect(data).toHaveLength(2)
+  })
+})
+
+const truck = (over: Partial<Truck> = {}): Truck =>
+  ({
+    id: 't1', code: 'C430', status: 'delivered', isSider: false, transport: 'OLAVERRY',
+    driver: '', plate: '', loadDate: '2026-03-05', departureDate: '', arrivalDate: '',
+    notes: '', createdAt: 0, updatedAt: 0, ...over,
+  }) as Truck
+
+const load = (over: Partial<TruckLoad> = {}): TruckLoad =>
+  ({
+    id: 'l1', truckId: 't1', sourceType: 'shipment', sourceRef: 'LCL-1', client: '',
+    fiscal: '', kg: 100, m3: 1, pkgs: 2, description: '', mvdArrival: '',
+    desconsolDate: '', overrides: {}, position: 0, ...over,
+  }) as TruckLoad
+
+describe('consolidados', () => {
+  it('truckYear usa loadDate con fallback a departureDate', () => {
+    expect(truckYear(truck())).toBe(2026)
+    expect(truckYear(truck({ loadDate: '', departureDate: '2025-12-20' }))).toBe(2025)
+    expect(truckYear(truck({ loadDate: '', departureDate: '' }))).toBe(null)
+  })
+  it('kpisConsolidados suma solo cargas de camiones del año', () => {
+    const trucks = [truck(), truck({ id: 't2', loadDate: '2025-03-05' })]
+    const loads = [
+      load(), load({ id: 'l2', kg: 200, m3: 2, pkgs: 3 }),
+      load({ id: 'l3', truckId: 't2', kg: 999 }),
+    ]
+    const k = kpisConsolidados(trucks, loads, 2026)
+    expect(k).toEqual({ camiones: 1, kg: 300, m3: 3, pkgs: 5, cargasPorCamion: 2 })
+  })
+  it('cargasPorCamion redondea a 1 decimal y es 0 sin camiones', () => {
+    const trucks = [truck(), truck({ id: 't2' })]
+    const loads = [load(), load({ id: 'l2' }), load({ id: 'l3', truckId: 't2' })]
+    expect(kpisConsolidados(trucks, loads, 2026).cargasPorCamion).toBe(1.5)
+    expect(kpisConsolidados([], [], 2026).cargasPorCamion).toBe(0)
+  })
+  it('consolidadosPorMes agrupa por mes de carga', () => {
+    const data = consolidadosPorMes(
+      [truck(), truck({ id: 't2', loadDate: '2026-03-20' }), truck({ id: 't3', loadDate: '2026-05-01' })],
+      2026,
+      new Date(2026, 5, 11)
+    )
+    expect(data).toHaveLength(2)
+    expect(data[0].camiones).toBe(2)
+  })
+  it('volumenPorTransportista suma kg por transporte del camión', () => {
+    const trucks = [truck(), truck({ id: 't2', transport: 'TRANSCAL' })]
+    const loads = [load(), load({ id: 'l2', kg: 50 }), load({ id: 'l3', truckId: 't2', kg: 70 })]
+    expect(volumenPorTransportista(trucks, loads, 2026)).toEqual([
+      { name: 'OLAVERRY', value: 150 },
+      { name: 'TRANSCAL', value: 70 },
+    ])
   })
 })
