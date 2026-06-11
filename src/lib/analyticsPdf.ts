@@ -109,7 +109,7 @@ export function buildAnalyticsReport(
 
 async function logoDataUrl(): Promise<{ png: string; w: number; h: number } | null> {
   try {
-    const res = await fetch('/images/med-logo-dark.svg')
+    const res = await fetch('/images/med-logo-dark.svg', { signal: AbortSignal.timeout(3000) })
     if (!res.ok) return null
     const svg = await res.text()
     const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }))
@@ -147,8 +147,9 @@ export async function downloadAnalyticsPdf(report: AnalyticsReport): Promise<voi
   // Header página 1: logo (o texto) + título + filtros + fecha
   const logo = await logoDataUrl()
   if (logo) {
-    const w = 42
-    doc.addImage(logo.png, 'PNG', margin, 12, w, (logo.h / logo.w) * w)
+    const h = 14                       // alto fijo: no invade título (y=34) ni KPIs
+    const w = (logo.w / logo.h) * h
+    doc.addImage(logo.png, 'PNG', margin, 12, w, h)
   } else {
     doc.setTextColor(MED_BLUE)
     doc.setFontSize(14)
@@ -184,6 +185,10 @@ export async function downloadAnalyticsPdf(report: AnalyticsReport): Promise<voi
   let y = 66
   for (const table of report.resumen) {
     if (table.rows.length === 0) continue
+    if (y > 250) {
+      doc.addPage()
+      y = 20
+    }
     doc.setTextColor(MED_BLUE)
     doc.setFontSize(10)
     doc.setFont('helvetica', 'bold')
@@ -198,10 +203,6 @@ export async function downloadAnalyticsPdf(report: AnalyticsReport): Promise<voi
       alternateRowStyles: { fillColor: [240, 241, 248] as [number, number, number] },
     })
     y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8
-    if (y > 250) {
-      doc.addPage()
-      y = 20
-    }
   }
 
   // Detalle en página nueva
