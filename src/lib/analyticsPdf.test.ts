@@ -13,7 +13,7 @@ const l1: TruckLoad = {
   id: 'l1', truckId: 't1', sourceType: 'shipment', sourceRef: 'LCL-1', client: '',
   fiscal: '', kg: 100, m3: 1, pkgs: 2, description: '', mvdArrival: '',
   desconsolDate: '', overrides: {}, position: 0,
-} as TruckLoad
+} as unknown as TruckLoad
 
 describe('buildAnalyticsReport', () => {
   const ops = [
