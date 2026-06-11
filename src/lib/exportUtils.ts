@@ -22,7 +22,8 @@ export function exportToCSV(data: any[], filename: string) {
     )
   ].join('\n')
 
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+  // BOM: sin esto Excel en Windows muestra mojibake en los acentos (Aéreo → AÃ©reo)
+  const blob = new Blob(['﻿' + csvContent], { type: 'text/csv;charset=utf-8;' })
   const link = document.createElement('a')
   const url = URL.createObjectURL(blob)
   

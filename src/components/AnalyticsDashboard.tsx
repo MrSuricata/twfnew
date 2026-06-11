@@ -58,6 +58,7 @@ export default function AnalyticsDashboard({ shipments, dbShipments = [], trucks
   const [selectedYear, setSelectedYear] = useState(now.getFullYear())
   const [modeFilter, setModeFilter] = useState<ModeFilter>('all')
   const [zoneFilter, setZoneFilter] = useState<ZoneFilter>('all')
+  const [exportingPdf, setExportingPdf] = useState(false)
 
   // Misma fuente que la grilla de Operaciones → mismos números. Archivadas
   // incluidas: las estadísticas son historia, no operación viva.
@@ -101,13 +102,18 @@ export default function AnalyticsDashboard({ shipments, dbShipments = [], trucks
   const consTransportistas = useMemo(() => volumenPorTransportista(trucks, truckLoads, selectedYear), [trucks, truckLoads, selectedYear])
 
   const handleExportPDF = async () => {
+    if (exportingPdf) return
+    setExportingPdf(true)
     try {
       const report = buildAnalyticsReport(filtered, trucks, truckLoads, {
         year: selectedYear, mode: modeFilter, zone: zoneFilter, now,
       })
       await downloadAnalyticsPdf(report)
-    } catch {
+    } catch (e) {
+      console.error('PDF export:', e)
       toast.error('No se pudo generar el PDF. Probá de nuevo.')
+    } finally {
+      setExportingPdf(false)
     }
   }
 
@@ -153,9 +159,9 @@ export default function AnalyticsDashboard({ shipments, dbShipments = [], trucks
           </div>
         </div>
         <div className="flex gap-2">
-          <Button onClick={handleExportPDF} variant="outline" size="sm">
+          <Button onClick={handleExportPDF} variant="outline" size="sm" disabled={exportingPdf}>
             <FilePdf size={18} className="mr-2" />
-            PDF
+            {exportingPdf ? 'Generando…' : 'PDF'}
           </Button>
           <Button onClick={handleExportExcel} variant="outline" size="sm">
             <FileXls size={18} className="mr-2" />
