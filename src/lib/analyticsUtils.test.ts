@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { UnifiedOperation } from './operationsTypes'
-import { filterOperations, zoneOf, opYear } from './analyticsUtils'
+import { filterOperations, zoneOf, opYear, kpisGenerales, volumenes } from './analyticsUtils'
 
 // Factory mínima: solo los campos que usan las analíticas.
 export const op = (over: Partial<UnifiedOperation> = {}): UnifiedOperation =>
@@ -44,5 +44,38 @@ describe('filterOperations — año + modalidad + zona combinados', () => {
     expect(filterOperations(ops, 2026, 'fcl', 'all').map(o => o.uid)).toEqual(['a', 'c'])
     expect(filterOperations(ops, 2026, 'all', 'UY').map(o => o.uid)).toEqual(['a', 'b'])
     expect(filterOperations(ops, 2026, 'fcl', 'CL').map(o => o.uid)).toEqual(['c'])
+  })
+})
+
+describe('kpisGenerales', () => {
+  it('cuenta cargas, contenedores FCL (n), tránsito promedio y clientes únicos', () => {
+    const ops = [
+      op({ cliente: 'PERETTI', n: 2, etd: '1/3/2026', eta: '31/3/2026' }),   // 30 días
+      op({ cliente: 'PERETTI', n: 1, etd: '1/3/2026', eta: '21/3/2026' }),   // 20 días
+      op({ cliente: 'CHIAPERO', mode: 'lcl', n: 0, etd: '', eta: '2026-04-01' }),
+    ]
+    const k = kpisGenerales(ops)
+    expect(k.cargas).toBe(3)
+    expect(k.contenedores).toBe(3)
+    expect(k.transitoPromedio).toBe(25)
+    expect(k.clientes).toBe(2)
+  })
+  it('tránsitos inválidos (negativos, >365d, sin fechas) no cuentan', () => {
+    const k = kpisGenerales([
+      op({ etd: '10/3/2026', eta: '1/3/2026' }),
+      op({ etd: '1/1/2020', eta: '1/3/2026' }),
+      op({ etd: '', eta: '1/3/2026' }),
+    ])
+    expect(k.transitoPromedio).toBe(0)
+  })
+})
+
+describe('volumenes', () => {
+  it('suma bultos/kg/m3 de todas las modalidades', () => {
+    const v = volumenes([
+      op({ pkgs: 10, kg: 1000, m3: 5 }),
+      op({ mode: 'lcl', pkgs: 5, kg: 500, m3: 2.5 }),
+    ])
+    expect(v).toEqual({ pkgs: 15, kg: 1500, m3: 7.5 })
   })
 })
