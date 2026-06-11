@@ -19,9 +19,14 @@ import {
 } from '@/lib/todayFilters'
 import ShipmentDetailsDialog from './ShipmentDetailsDialog'
 import type { ShipmentDocument, OperativeReport, OriginPhoto } from '@/lib/quotationTypes'
+import type { Truck as TruckType, TruckLoad } from '@/lib/truckTypes'
+import { deriveTruckDisplayInfo, deriveTruckDisplayStatus } from '@/lib/truckTypes'
+import { Badge } from '@/components/ui/badge'
 
 interface TodayDashboardProps {
   shipments: ParsedShipment[]
+  trucks?: TruckType[]
+  truckLoads?: TruckLoad[]
   documents?: ShipmentDocument[]
   reports?: OperativeReport[]
   originPhotos?: OriginPhoto[]
@@ -37,6 +42,8 @@ interface TodayDashboardProps {
  */
 export default function TodayDashboard({
   shipments,
+  trucks = [],
+  truckLoads = [],
   documents = [],
   reports = [],
   originPhotos = [],
@@ -47,6 +54,24 @@ export default function TodayDashboard({
   const [open, setOpen] = useState(false)
 
   const snapshot = useMemo(() => buildTodaySnapshot(shipments), [shipments])
+
+  // 🚛 Consolidados en movimiento: carga/sale/llega HOY o en frontera ahora.
+  // Estados derivados de las fechas del camión (misma lógica que sus cargas).
+  const trucksHoy = useMemo(() => {
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    return trucks
+      .map(t => {
+        const info = deriveTruckDisplayInfo(t, today)
+        const status = deriveTruckDisplayStatus(t, today)
+        const loads = truckLoads.filter(l => l.truckId === t.id)
+        const refs = loads.map(l => l.sourceRef).filter(Boolean)
+        const kg = loads.reduce((a, l) => a + (Number(l.kg) || 0), 0)
+        const m3 = loads.reduce((a, l) => a + (Number(l.m3) || 0), 0)
+        return { t, info, status, refs, kg, m3 }
+      })
+      // En el HOY entran: hitos de hoy (carga/sale/llega) + los que están en frontera
+      .filter(x => x.info.hoy || (x.status === 'in_transit'))
+  }, [trucks, truckLoads])
 
   const openShipment = (s: ParsedShipment) => {
     setSelected(s)
@@ -82,8 +107,8 @@ export default function TodayDashboard({
         </div>
       </div>
 
-      {/* ── Empty state ──────────────────────────────────── */}
-      {!snapshot.hasMovement && (
+      {/* ── Empty state (tampoco hay consolidados en movimiento) ── */}
+      {!snapshot.hasMovement && trucksHoy.length === 0 && (
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center justify-center py-20 text-muted-foreground">
             <div className="p-4 bg-muted rounded-full mb-4">
@@ -91,6 +116,39 @@ export default function TodayDashboard({
             </div>
             <p className="text-lg font-semibold text-foreground">Nada programado hoy</p>
             <p className="text-sm mt-1">Tomá un café ☕</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── 🚛 Consolidados en movimiento (carga/sale/llega HOY + en frontera) ── */}
+      {trucksHoy.length > 0 && (
+        <Card className="accent-top overflow-hidden" style={{ ['--bar-color' as any]: '#f59e0b' }}>
+          <CardContent className="pt-5 pb-4">
+            <div className="flex items-center gap-2.5 mb-3">
+              <div className="p-1.5 bg-amber-100 rounded-md">
+                <Truck size={18} weight="fill" className="text-amber-600" />
+              </div>
+              <h2 className="text-sm font-semibold uppercase tracking-wide">Consolidados en movimiento</h2>
+              <span className="text-xs text-muted-foreground">{trucksHoy.length}</span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
+              {trucksHoy.map(({ t, info, refs, kg, m3 }) => (
+                <div key={t.id} className="rounded-lg border bg-card px-3 py-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-semibold">🚛 {t.code}</span>
+                    <Badge variant="outline" className={`text-[10px] whitespace-nowrap ${info.hoy ? 'animate-pulse font-semibold border-amber-400 text-amber-700' : ''}`}>
+                      {info.label}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1 truncate" title={refs.join(', ')}>
+                    {t.transport || 'Sin transporte'}{refs.length > 0 ? ` · Lleva: ${refs.join(', ')}` : ' · Sin cargas'}
+                  </p>
+                  {(kg > 0 || m3 > 0) && (
+                    <p className="text-[11px] text-muted-foreground mt-0.5">{Math.round(kg).toLocaleString('es-UY')} kg · {m3.toLocaleString('es-UY', { maximumFractionDigits: 1 })} m³</p>
+                  )}
+                </div>
+              ))}
+            </div>
           </CardContent>
         </Card>
       )}
