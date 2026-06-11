@@ -123,7 +123,9 @@ export default function AnalyticsDashboard({ shipments, dbShipments = [], trucks
       ZONA: zoneOf(o), ETD: o.etd, ETA: o.eta, 'CNTR/DOC': o.cntr || o.docNumber,
       BULTOS: o.pkgs, KG: o.kg, M3: o.m3, ESTADO: o.status,
     }))
-    exportToCSV(data, `cargas-${selectedYear}.csv`)
+    const sufijos = [modeFilter !== 'all' ? modeFilter : '', zoneFilter !== 'all' ? zoneFilter.toLowerCase() : '']
+      .filter(Boolean).map(s => `-${s}`).join('')
+    exportToCSV(data, `cargas-${selectedYear}${sufijos}.csv`)
   }
 
   return (

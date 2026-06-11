@@ -154,7 +154,7 @@ export async function downloadAnalyticsPdf(report: AnalyticsReport): Promise<voi
     doc.setTextColor(MED_BLUE)
     doc.setFontSize(14)
     doc.setFont('helvetica', 'bold')
-    doc.text('MEDITERRANEA CARGHAS', margin, 20)
+    doc.text('MEDITERRÁNEA CARGHAS', margin, 20)
   }
   doc.setTextColor(MED_BLUE)
   doc.setFontSize(16)

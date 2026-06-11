@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { buildAnalyticsReport } from './analyticsPdf'
-import { op } from './analyticsUtils.test'
+import { op } from './analyticsTestFactories'
 import type { Truck, TruckLoad } from './truckTypes'
 
 const NOW = new Date(2026, 5, 11)

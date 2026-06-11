@@ -1,16 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import type { UnifiedOperation } from './operationsTypes'
 import { filterOperations, zoneOf, opYear, kpisGenerales, volumenes, porModalidad, porZona, topClientes, porLinea, porTerminal, porOperativa, porTransporte, porFiscal, porTipoContenedor, porMes, truckYear, kpisConsolidados, consolidadosPorMes, volumenPorTransportista } from './analyticsUtils'
 import type { Truck, TruckLoad } from './truckTypes'
-
-// Factory mínima: solo los campos que usan las analíticas.
-export const op = (over: Partial<UnifiedOperation> = {}): UnifiedOperation =>
-  ({
-    uid: 'u1', ref: 'A1', mode: 'fcl', source: 'fcl', cliente: '', etd: '', eta: '',
-    pais: 'UY', linea: '', terminal: '', n: 0, pkgs: 0, kg: 0, m3: 0,
-    operativa: '', transporte: '', fiscal: '', tipo: '', status: '',
-    ...over,
-  }) as UnifiedOperation
+import { op } from './analyticsTestFactories'
 
 describe('zoneOf — bucket de zona', () => {
   it('UY/AR/CL pasan directo; resto (incluido vacío) es OTRO', () => {
