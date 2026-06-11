@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildOperations, isOperationActive, type UnifiedOperation } from './operationsTypes'
+import { buildOperations, isOperationActive, type UnifiedOperation, type DbShipment } from './operationsTypes'
 import type { ParsedShipment } from './shipmentTypes'
 
 // La planilla reutiliza refs (caso real: A6902 con dos clientes distintos,
@@ -83,5 +83,21 @@ describe('applyWebEdits — ediciones web sobre FCL espejo', () => {
     expect(out.BUQUE).toBe('MSC LUNA')
     expect(out.CLIENTE).toBe('BASSO')
     expect(out.__webEdited).toEqual(['ETA', 'BUQUE'])
+  })
+})
+
+// Analíticas multi-modalidad: el dashboard necesita TERMINAL y N (cantidad de
+// contenedores FCL) que antes solo vivían en ParsedShipment.
+describe('UnifiedOperation — terminal y n para analíticas', () => {
+  it('FCL mapea TERMINAL y N; DB queda con terminal vacío y n=0', () => {
+    const out = buildOperations(
+      [fcl({ TERMINAL: 'TCP', N: 3 })],
+      [{ id: 'shp-lcl-1', ref: 'LCL-1', mode: 'lcl', archived: false } as unknown as DbShipment],
+      new Map()
+    )
+    expect(out[0].terminal).toBe('TCP')
+    expect(out[0].n).toBe(3)
+    expect(out[1].terminal).toBe('')
+    expect(out[1].n).toBe(0)
   })
 })

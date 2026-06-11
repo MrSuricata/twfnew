@@ -338,7 +338,12 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
           </TabsContent>
 
           <TabsContent value="analytics">
-            <AnalyticsDashboard shipments={shipments || []} />
+            <AnalyticsDashboard
+              shipments={shipments || []}
+              dbShipments={dbShipments}
+              trucks={trucks}
+              truckLoads={truckLoads}
+            />
           </TabsContent>
 
           <TabsContent value="tracking">

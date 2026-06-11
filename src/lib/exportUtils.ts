@@ -22,7 +22,8 @@ export function exportToCSV(data: any[], filename: string) {
     )
   ].join('\n')
 
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+  // BOM: sin esto Excel en Windows muestra mojibake en los acentos (Aéreo → AÃ©reo)
+  const blob = new Blob(['﻿' + csvContent], { type: 'text/csv;charset=utf-8;' })
   const link = document.createElement('a')
   const url = URL.createObjectURL(blob)
   
@@ -79,86 +80,4 @@ export function exportQuotesToExcel(quotes: QuoteFormData[], filename: string = 
   }))
   
   exportToCSV(exportData, filename)
-}
-
-export async function exportToPDF(
-  title: string,
-  data: any[],
-  headers: string[],
-  filename: string = 'report.pdf'
-) {
-  const content = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>${title}</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      padding: 40px;
-    }
-    h1 {
-      color: #1a1a2e;
-      margin-bottom: 30px;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 20px;
-    }
-    th, td {
-      border: 1px solid #ddd;
-      padding: 12px;
-      text-align: left;
-    }
-    th {
-      background-color: #f2f2f2;
-      font-weight: bold;
-    }
-    tr:nth-child(even) {
-      background-color: #f9f9f9;
-    }
-    .footer {
-      margin-top: 30px;
-      font-size: 12px;
-      color: #666;
-    }
-  </style>
-</head>
-<body>
-  <h1>${title}</h1>
-  <p>Generado: ${new Date().toLocaleString('es-UY')}</p>
-  <table>
-    <thead>
-      <tr>
-        ${headers.map(h => `<th>${h}</th>`).join('')}
-      </tr>
-    </thead>
-    <tbody>
-      ${data.map(row => `
-        <tr>
-          ${headers.map(h => `<td>${row[h] || ''}</td>`).join('')}
-        </tr>
-      `).join('')}
-    </tbody>
-  </table>
-  <div class="footer">
-    <p>Transit World Forwarding - Soluciones Logísticas Globales</p>
-  </div>
-</body>
-</html>
-  `
-
-  const printWindow = window.open('', '', 'width=800,height=600')
-  if (printWindow) {
-    printWindow.document.write(content)
-    printWindow.document.close()
-    printWindow.focus()
-    
-    setTimeout(() => {
-      printWindow.print()
-      printWindow.close()
-    }, 250)
-  }
 }
