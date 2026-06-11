@@ -1,18 +1,29 @@
 import { useState, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { FilePdf, FileXls, Boat, Package, Clock, Users, Truck, Warehouse, Cube, CaretLeft, CaretRight } from '@phosphor-icons/react'
-import { ParsedShipment, OperativasRecord, parseLocalDate } from '@/lib/shipmentTypes'
-import { exportToCSV, exportToPDF } from '@/lib/exportUtils'
+import { FilePdf, FileXls, Boat, Package, Clock, Users, Truck as TruckIcon, Warehouse, Cube, CaretLeft, CaretRight } from '@phosphor-icons/react'
+import { ParsedShipment } from '@/lib/shipmentTypes'
+import { buildOperations, DbShipment, MODALITY_LABELS } from '@/lib/operationsTypes'
+import type { Truck, TruckLoad } from '@/lib/truckTypes'
+import {
+  ModeFilter, ZoneFilter, filterOperations, zoneOf, opYear, kpisGenerales, volumenes,
+  porModalidad, porZona, porMes, topClientes, porLinea, porTerminal, porOperativa,
+  porTransporte, porFiscal, porTipoContenedor, truckYear, kpisConsolidados,
+  consolidadosPorMes, volumenPorTransportista,
+} from '@/lib/analyticsUtils'
+import { buildAnalyticsReport, downloadAnalyticsPdf } from '@/lib/analyticsPdf'
+import { exportToCSV } from '@/lib/exportUtils'
+import { toast } from 'sonner'
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 
 interface AnalyticsDashboardProps {
   shipments: ParsedShipment[]
+  dbShipments?: DbShipment[]
+  trucks?: Truck[]
+  truckLoads?: TruckLoad[]
 }
 
-// Chart palette — references the CSS custom properties defined in src/index.css
-// so that changing a theme token in CSS updates every chart at once.
-// See `--chart-1..5` in :root. Extras (6, 7) fall back to earth tones.
+// Paleta de charts — referencia las CSS custom properties de src/index.css.
 const COLORS = [
   'var(--chart-1)',
   'var(--chart-2)',
@@ -27,230 +38,87 @@ const CHART_PRIMARY = 'var(--chart-1)'
 const CHART_SECONDARY = 'var(--chart-2)'
 const CHART_TERTIARY = 'var(--chart-3)'
 
-function getYearFromDate(dateStr: string): number | null {
-  if (!dateStr) return null
-  try {
-    const d = parseLocalDate(dateStr)
-    if (!d) return null
-    return d.getFullYear()
-  } catch {
-    return null
-  }
-}
+const MODE_CHIPS: { value: ModeFilter; label: string }[] = [
+  { value: 'all', label: 'Todas' },
+  { value: 'fcl', label: 'FCL' },
+  { value: 'lcl', label: 'LCL' },
+  { value: 'air', label: 'Aéreo' },
+  { value: 'land', label: 'Terrestre' },
+]
+const ZONE_CHIPS: { value: ZoneFilter; label: string }[] = [
+  { value: 'all', label: 'Todas' },
+  { value: 'UY', label: '🇺🇾 UY' },
+  { value: 'AR', label: '🇦🇷 AR' },
+  { value: 'CL', label: '🇨🇱 CL' },
+  { value: 'OTRO', label: 'Otros' },
+]
 
-export default function AnalyticsDashboard({ shipments }: AnalyticsDashboardProps) {
+export default function AnalyticsDashboard({ shipments, dbShipments = [], trucks = [], truckLoads = [] }: AnalyticsDashboardProps) {
   const now = new Date()
   const [selectedYear, setSelectedYear] = useState(now.getFullYear())
-  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const [modeFilter, setModeFilter] = useState<ModeFilter>('all')
+  const [zoneFilter, setZoneFilter] = useState<ZoneFilter>('all')
 
-  // Filter shipments by selected year (based on ETA)
-  const yearShipments = useMemo(() =>
-    shipments.filter(s => {
-      const y = getYearFromDate(s.ETA)
-      return y === selectedYear
-    }),
-    [shipments, selectedYear]
+  // Misma fuente que la grilla de Operaciones → mismos números. Archivadas
+  // incluidas: las estadísticas son historia, no operación viva.
+  const operations = useMemo(
+    () => buildOperations(shipments, dbShipments, new Map(), true),
+    [shipments, dbShipments]
   )
 
-  // Available years for navigation
+  const filtered = useMemo(
+    () => filterOperations(operations, selectedYear, modeFilter, zoneFilter),
+    [operations, selectedYear, modeFilter, zoneFilter]
+  )
+
+  // Años con datos (cargas por ETA + camiones por fecha de carga) + año actual.
   const availableYears = useMemo(() => {
     const years = new Set<number>()
-    shipments.forEach(s => {
-      const y = getYearFromDate(s.ETA)
-      if (y) years.add(y)
-    })
-    // Always include current year
+    operations.forEach(o => { const y = opYear(o); if (y) years.add(y) })
+    trucks.forEach(t => { const y = truckYear(t); if (y) years.add(y) })
     years.add(now.getFullYear())
     return Array.from(years).sort()
-  }, [shipments])
+  }, [operations, trucks])
 
-  const getShipmentsPerMonth = () => {
-    const monthCounts: Record<string, number> = {}
+  const kpis = useMemo(() => kpisGenerales(filtered), [filtered])
+  const vols = useMemo(() => volumenes(filtered), [filtered])
+  const dataModalidad = useMemo(() => porModalidad(filtered), [filtered])
+  const dataZona = useMemo(() => porZona(filtered), [filtered])
+  const shipmentsPerMonth = useMemo(() => porMes(filtered, now), [filtered])
+  const dataClientes = useMemo(() => topClientes(filtered), [filtered])
+  const byLine = useMemo(() => porLinea(filtered), [filtered])
+  const byTerminal = useMemo(() => porTerminal(filtered), [filtered])
+  const byOperationType = useMemo(() => porOperativa(filtered), [filtered])
+  const byTransport = useMemo(() => porTransporte(filtered), [filtered])
+  const byFiscal = useMemo(() => porFiscal(filtered), [filtered])
+  const byContainerType = useMemo(() => porTipoContenedor(filtered), [filtered])
 
-    yearShipments.forEach(s => {
-      if (s.ETA) {
-        const date = parseLocalDate(s.ETA)
-        if (!date) return
-        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`
-        if (monthKey <= currentMonth) {
-          monthCounts[monthKey] = (monthCounts[monthKey] || 0) + 1
-        }
-      }
-    })
+  // Consolidados: por año (no dependen de modalidad/zona); ocultos si el
+  // filtro es FCL o Terrestre (consolidados = LCL/aéreo).
+  const showConsolidados = modeFilter !== 'fcl' && modeFilter !== 'land'
+  const consKpis = useMemo(() => kpisConsolidados(trucks, truckLoads, selectedYear), [trucks, truckLoads, selectedYear])
+  const consPorMes = useMemo(() => consolidadosPorMes(trucks, selectedYear, now), [trucks, selectedYear])
+  const consTransportistas = useMemo(() => volumenPorTransportista(trucks, truckLoads, selectedYear), [trucks, truckLoads, selectedYear])
 
-    return Object.entries(monthCounts)
-      .sort()
-      .slice(-12)
-      .map(([month, count]) => ({
-        month: new Date(month + '-01').toLocaleDateString('es-UY', { month: 'short' }),
-        cargas: count
-      }))
-  }
-
-  const getTopClients = () => {
-    const clientCounts: Record<string, number> = {}
-
-    yearShipments.forEach(s => {
-      if (s.CLIENTE) {
-        clientCounts[s.CLIENTE] = (clientCounts[s.CLIENTE] || 0) + s.N
-      }
-    })
-
-    return Object.entries(clientCounts)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 7)
-      .map(([cliente, contenedores]) => ({
-        cliente: cliente.length > 15 ? cliente.substring(0, 15) + '...' : cliente,
-        contenedores
-      }))
-  }
-
-  const getByShippingLine = () => {
-    const lines: Record<string, number> = {}
-
-    yearShipments.forEach(s => {
-      if (s.LINEA) {
-        lines[s.LINEA] = (lines[s.LINEA] || 0) + 1
-      }
-    })
-
-    return Object.entries(lines)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 6)
-      .map(([name, value]) => ({ name, value }))
-  }
-
-  const getByTerminal = () => {
-    const terminals: Record<string, number> = {}
-
-    yearShipments.forEach(s => {
-      if (s.TERMINAL) {
-        terminals[s.TERMINAL] = (terminals[s.TERMINAL] || 0) + 1
-      }
-    })
-
-    return Object.entries(terminals)
-      .sort((a, b) => b[1] - a[1])
-      .map(([name, value]) => ({ name, value }))
-  }
-
-  const getAverageTransitTime = () => {
-    const transits: number[] = []
-
-    yearShipments.forEach(s => {
-      if (s.ETD && s.ETA) {
-        const etd = parseLocalDate(s.ETD)
-        const eta = parseLocalDate(s.ETA)
-        if (!etd || !eta) return
-        const days = Math.floor((eta.getTime() - etd.getTime()) / (1000 * 60 * 60 * 24))
-        if (days > 0 && days < 365) {
-          transits.push(days)
-        }
-      }
-    })
-
-    if (transits.length === 0) return 0
-    return Math.round(transits.reduce((sum, t) => sum + t, 0) / transits.length)
-  }
-
-  // Flatten all operativas records from filtered shipments
-  const allOperativas: OperativasRecord[] = yearShipments.flatMap(s => s.operativas || [])
-  const hasOperativas = allOperativas.length > 0
-
-  const getByOperationType = () => {
-    const types: Record<string, number> = {}
-    allOperativas.forEach(o => {
-      if (o.OPERATIVA) {
-        types[o.OPERATIVA] = (types[o.OPERATIVA] || 0) + 1
-      }
-    })
-    return Object.entries(types)
-      .sort((a, b) => b[1] - a[1])
-      .map(([name, value]) => ({ name, value }))
-  }
-
-  const getByTransport = () => {
-    const transports: Record<string, number> = {}
-    allOperativas.forEach(o => {
-      if (o.TRANSPORTE) {
-        transports[o.TRANSPORTE] = (transports[o.TRANSPORTE] || 0) + 1
-      }
-    })
-    return Object.entries(transports)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 8)
-      .map(([name, value]) => ({ name, value }))
-  }
-
-  const getByFiscal = () => {
-    const fiscals: Record<string, number> = {}
-    allOperativas.forEach(o => {
-      if (o.FISCAL) {
-        fiscals[o.FISCAL] = (fiscals[o.FISCAL] || 0) + 1
-      }
-    })
-    return Object.entries(fiscals)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 8)
-      .map(([name, value]) => ({
-        name: name.length > 18 ? name.substring(0, 18) + '…' : name,
-        value
-      }))
-  }
-
-  const getByContainerType = () => {
-    const types: Record<string, number> = {}
-    allOperativas.forEach(o => {
-      if (o.TIPO) {
-        types[o.TIPO] = (types[o.TIPO] || 0) + 1
-      }
-    })
-    return Object.entries(types)
-      .sort((a, b) => b[1] - a[1])
-      .map(([name, value]) => ({ name, value }))
-  }
-
-  const getTotalVolumes = () => {
-    const totalKg = allOperativas.reduce((sum, o) => sum + o.KG, 0)
-    const totalM3 = allOperativas.reduce((sum, o) => sum + o.M3, 0)
-    const totalPkgs = allOperativas.reduce((sum, o) => sum + o.PKGS, 0)
-    return { totalKg, totalM3, totalPkgs }
-  }
-
-  const handleExportPDF = () => {
-    const data = yearShipments.map(s => ({
-      REF: s.REF,
-      CLIENTE: s.CLIENTE,
-      ETA: s.ETA,
-      TERMINAL: s.TERMINAL,
-      N: s.N,
-      LIBRE_HASTA: s.LIBRE_HASTA
-    }))
-    exportToPDF(`Reporte de Cargas ${selectedYear} - TWF`, data, ['REF', 'CLIENTE', 'ETA', 'TERMINAL', 'N', 'LIBRE_HASTA'], `cargas-twf-${selectedYear}.pdf`)
+  const handleExportPDF = async () => {
+    try {
+      const report = buildAnalyticsReport(filtered, trucks, truckLoads, {
+        year: selectedYear, mode: modeFilter, zone: zoneFilter, now,
+      })
+      await downloadAnalyticsPdf(report)
+    } catch {
+      toast.error('No se pudo generar el PDF. Probá de nuevo.')
+    }
   }
 
   const handleExportExcel = () => {
-    const data = yearShipments.map(s => ({
-      REF: s.REF, CLIENTE: s.CLIENTE, ETD: s.ETD, ETA: s.ETA,
-      FT: s.FT, LIBRE_HASTA: s.LIBRE_HASTA, CNTR: s.CNTR,
-      N: s.N, MBL: s.MBL, LINEA: s.LINEA, BUQUE: s.BUQUE,
-      TERMINAL: s.TERMINAL, FLETE: s.FLETE
+    const data = filtered.map(o => ({
+      REF: o.ref, CLIENTE: o.cliente, MODO: MODALITY_LABELS[o.mode] || o.mode,
+      ZONA: zoneOf(o), ETD: o.etd, ETA: o.eta, 'CNTR/DOC': o.cntr || o.docNumber,
+      BULTOS: o.pkgs, KG: o.kg, M3: o.m3, ESTADO: o.status,
     }))
-    exportToCSV(data, `cargas-twf-${selectedYear}.csv`)
+    exportToCSV(data, `cargas-${selectedYear}.csv`)
   }
-
-  const shipmentsPerMonth = getShipmentsPerMonth()
-  const topClients = getTopClients()
-  const byLine = getByShippingLine()
-  const byTerminal = getByTerminal()
-  const avgTransit = getAverageTransitTime()
-  const uniqueClients = new Set(yearShipments.map(s => s.CLIENTE)).size
-  const totalContainers = yearShipments.reduce((sum, s) => sum + s.N, 0)
-  const byOperationType = getByOperationType()
-  const byTransport = getByTransport()
-  const byFiscal = getByFiscal()
-  const byContainerType = getByContainerType()
-  const volumes = getTotalVolumes()
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -259,7 +127,7 @@ export default function AnalyticsDashboard({ shipments }: AnalyticsDashboardProp
         <div className="flex items-center gap-4">
           <div>
             <h2 className="text-2xl font-bold">Estadísticas</h2>
-            <p className="text-sm text-muted-foreground">{yearShipments.length} operaciones en {selectedYear}</p>
+            <p className="text-sm text-muted-foreground">{filtered.length} cargas en {selectedYear}</p>
           </div>
           {/* Year selector */}
           <div className="flex items-center gap-1 bg-muted rounded-lg p-0.5">
@@ -296,6 +164,36 @@ export default function AnalyticsDashboard({ shipments }: AnalyticsDashboardProp
         </div>
       </div>
 
+      {/* Filtros: modalidad + zona (combinables con el año) */}
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="flex items-center gap-1">
+          {MODE_CHIPS.map(c => (
+            <Button
+              key={c.value}
+              size="sm"
+              variant={modeFilter === c.value ? 'default' : 'outline'}
+              className="h-7 px-2.5 text-xs"
+              onClick={() => setModeFilter(c.value)}
+            >
+              {c.label}
+            </Button>
+          ))}
+        </div>
+        <div className="flex items-center gap-1">
+          {ZONE_CHIPS.map(c => (
+            <Button
+              key={c.value}
+              size="sm"
+              variant={zoneFilter === c.value ? 'default' : 'outline'}
+              className="h-7 px-2.5 text-xs"
+              onClick={() => setZoneFilter(c.value)}
+            >
+              {c.label}
+            </Button>
+          ))}
+        </div>
+      </div>
+
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="overflow-hidden">
@@ -305,8 +203,8 @@ export default function AnalyticsDashboard({ shipments }: AnalyticsDashboardProp
                 <Boat size={22} className="text-accent" weight="fill" />
               </div>
               <div>
-                <div className="text-2xl font-bold">{shipments.length}</div>
-                <div className="text-xs text-muted-foreground">Operaciones</div>
+                <div className="text-2xl font-bold">{kpis.cargas}</div>
+                <div className="text-xs text-muted-foreground">Cargas</div>
               </div>
             </div>
           </CardContent>
@@ -318,8 +216,8 @@ export default function AnalyticsDashboard({ shipments }: AnalyticsDashboardProp
                 <Package size={22} className="text-accent" weight="fill" />
               </div>
               <div>
-                <div className="text-2xl font-bold">{totalContainers}</div>
-                <div className="text-xs text-muted-foreground">Contenedores</div>
+                <div className="text-2xl font-bold">{kpis.contenedores}</div>
+                <div className="text-xs text-muted-foreground">Contenedores FCL</div>
               </div>
             </div>
           </CardContent>
@@ -331,7 +229,7 @@ export default function AnalyticsDashboard({ shipments }: AnalyticsDashboardProp
                 <Clock size={22} className="text-accent" weight="fill" />
               </div>
               <div>
-                <div className="text-2xl font-bold">{avgTransit}<span className="text-sm font-normal text-muted-foreground ml-1">días</span></div>
+                <div className="text-2xl font-bold">{kpis.transitoPromedio}<span className="text-sm font-normal text-muted-foreground ml-1">días</span></div>
                 <div className="text-xs text-muted-foreground">Tránsito Promedio</div>
               </div>
             </div>
@@ -344,7 +242,7 @@ export default function AnalyticsDashboard({ shipments }: AnalyticsDashboardProp
                 <Users size={22} className="text-accent" weight="fill" />
               </div>
               <div>
-                <div className="text-2xl font-bold">{uniqueClients}</div>
+                <div className="text-2xl font-bold">{kpis.clientes}</div>
                 <div className="text-xs text-muted-foreground">Clientes</div>
               </div>
             </div>
@@ -353,7 +251,7 @@ export default function AnalyticsDashboard({ shipments }: AnalyticsDashboardProp
       </div>
 
       {/* Operativas KPI Cards — only when data available */}
-      {hasOperativas && (
+      {(vols.pkgs > 0 || vols.kg > 0) && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <Card className="overflow-hidden">
             <CardContent className="pt-5 pb-4">
@@ -362,7 +260,7 @@ export default function AnalyticsDashboard({ shipments }: AnalyticsDashboardProp
                   <Cube size={22} className="text-blue-600" weight="fill" />
                 </div>
                 <div>
-                  <div className="text-2xl font-bold">{volumes.totalPkgs.toLocaleString()}</div>
+                  <div className="text-2xl font-bold">{vols.pkgs.toLocaleString()}</div>
                   <div className="text-xs text-muted-foreground">Bultos Totales</div>
                 </div>
               </div>
@@ -375,7 +273,7 @@ export default function AnalyticsDashboard({ shipments }: AnalyticsDashboardProp
                   <Cube size={22} className="text-blue-600" weight="fill" />
                 </div>
                 <div>
-                  <div className="text-2xl font-bold">{(volumes.totalKg / 1000).toFixed(0)}<span className="text-sm font-normal text-muted-foreground ml-1">ton</span></div>
+                  <div className="text-2xl font-bold">{(vols.kg / 1000).toFixed(0)}<span className="text-sm font-normal text-muted-foreground ml-1">ton</span></div>
                   <div className="text-xs text-muted-foreground">Peso Total</div>
                 </div>
               </div>
@@ -388,7 +286,7 @@ export default function AnalyticsDashboard({ shipments }: AnalyticsDashboardProp
                   <Warehouse size={22} className="text-blue-600" weight="fill" />
                 </div>
                 <div>
-                  <div className="text-2xl font-bold">{volumes.totalM3.toFixed(0)}<span className="text-sm font-normal text-muted-foreground ml-1">m³</span></div>
+                  <div className="text-2xl font-bold">{vols.m3.toFixed(0)}<span className="text-sm font-normal text-muted-foreground ml-1">m³</span></div>
                   <div className="text-xs text-muted-foreground">Volumen Total</div>
                 </div>
               </div>
@@ -398,10 +296,10 @@ export default function AnalyticsDashboard({ shipments }: AnalyticsDashboardProp
             <CardContent className="pt-5 pb-4">
               <div className="flex items-center gap-3">
                 <div className="rounded-lg bg-blue-500/10 p-2.5">
-                  <Truck size={22} className="text-blue-600" weight="fill" />
+                  <TruckIcon size={22} className="text-blue-600" weight="fill" />
                 </div>
                 <div>
-                  <div className="text-2xl font-bold">{new Set(allOperativas.filter(o => o.TRANSPORTE).map(o => o.TRANSPORTE)).size}</div>
+                  <div className="text-2xl font-bold">{new Set(filtered.filter(o => o.transporte).map(o => o.transporte)).size}</div>
                   <div className="text-xs text-muted-foreground">Transportistas</div>
                 </div>
               </div>
@@ -412,6 +310,52 @@ export default function AnalyticsDashboard({ shipments }: AnalyticsDashboardProp
 
       {/* Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Por modalidad */}
+        <Card className="animate-in slide-in-from-left duration-500">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Por Modalidad</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {dataModalidad.length > 0 ? (
+              <ResponsiveContainer width="100%" height={280}>
+                <PieChart>
+                  <Pie data={dataModalidad} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={3} dataKey="value" label={({ name, value }) => `${name}: ${value}`}>
+                    {dataModalidad.map((_entry, index) => (
+                      <Cell key={`cell-mod-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }} />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-[280px] flex items-center justify-center text-muted-foreground">No hay datos</div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Por zona */}
+        <Card className="animate-in slide-in-from-right duration-500">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Por Zona</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {dataZona.length > 0 ? (
+              <ResponsiveContainer width="100%" height={280}>
+                <PieChart>
+                  <Pie data={dataZona} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={3} dataKey="value" label={({ name, value }) => `${name}: ${value}`}>
+                    {dataZona.map((_entry, index) => (
+                      <Cell key={`cell-zona-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }} />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-[280px] flex items-center justify-center text-muted-foreground">No hay datos</div>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Shipments per month */}
         <Card className="animate-in slide-in-from-left duration-500">
           <CardHeader className="pb-2">
@@ -441,17 +385,17 @@ export default function AnalyticsDashboard({ shipments }: AnalyticsDashboardProp
         {/* Top clients */}
         <Card className="animate-in slide-in-from-right duration-500">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Top Clientes por Volumen</CardTitle>
+            <CardTitle className="text-base">Top Clientes</CardTitle>
           </CardHeader>
           <CardContent>
-            {topClients.length > 0 ? (
+            {dataClientes.length > 0 ? (
               <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={topClients} layout="vertical">
+                <BarChart data={dataClientes} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
                   <XAxis type="number" tick={{ fontSize: 12 }} />
-                  <YAxis dataKey="cliente" type="category" tick={{ fontSize: 11 }} width={120} />
+                  <YAxis dataKey="name" type="category" tick={{ fontSize: 11 }} width={120} />
                   <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }} />
-                  <Bar dataKey="contenedores" fill={CHART_SECONDARY} radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="value" fill={CHART_SECONDARY} radius={[0, 4, 4, 0]} name="Cargas" />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
@@ -522,11 +466,11 @@ export default function AnalyticsDashboard({ shipments }: AnalyticsDashboardProp
       </div>
 
       {/* Operativas Charts — only when data available */}
-      {hasOperativas && (
+      {(byOperationType.length > 0 || byTransport.length > 0 || byFiscal.length > 0) && (
         <>
           <div className="border-t pt-6">
             <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-              <Truck size={22} className="text-accent" />
+              <TruckIcon size={22} className="text-accent" />
               Analíticas Operativas
             </h3>
           </div>
@@ -644,6 +588,116 @@ export default function AnalyticsDashboard({ shipments }: AnalyticsDashboardProp
                   <div className="h-[280px] flex items-center justify-center text-muted-foreground">
                     No hay datos
                   </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </>
+      )}
+
+      {/* Consolidados (camiones) — por año; ocultos si el filtro es FCL/Terrestre */}
+      {showConsolidados && consKpis.camiones > 0 && (
+        <>
+          <div className="border-t pt-6">
+            <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              <TruckIcon size={22} className="text-accent" />
+              Consolidados
+            </h3>
+          </div>
+
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card className="overflow-hidden">
+              <CardContent className="pt-5 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-lg bg-emerald-500/10 p-2.5">
+                    <TruckIcon size={22} className="text-emerald-600" weight="fill" />
+                  </div>
+                  <div>
+                    <div className="text-2xl font-bold">{consKpis.camiones}</div>
+                    <div className="text-xs text-muted-foreground">Camiones Armados</div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="overflow-hidden">
+              <CardContent className="pt-5 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-lg bg-emerald-500/10 p-2.5">
+                    <Cube size={22} className="text-emerald-600" weight="fill" />
+                  </div>
+                  <div>
+                    <div className="text-2xl font-bold">{(consKpis.kg / 1000).toFixed(0)}<span className="text-sm font-normal text-muted-foreground ml-1">ton</span></div>
+                    <div className="text-xs text-muted-foreground">Peso Transportado</div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="overflow-hidden">
+              <CardContent className="pt-5 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-lg bg-emerald-500/10 p-2.5">
+                    <Warehouse size={22} className="text-emerald-600" weight="fill" />
+                  </div>
+                  <div>
+                    <div className="text-2xl font-bold">{consKpis.m3.toFixed(0)}<span className="text-sm font-normal text-muted-foreground ml-1">m³</span></div>
+                    <div className="text-xs text-muted-foreground">Volumen Transportado</div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="overflow-hidden">
+              <CardContent className="pt-5 pb-4">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-lg bg-emerald-500/10 p-2.5">
+                    <Package size={22} className="text-emerald-600" weight="fill" />
+                  </div>
+                  <div>
+                    <div className="text-2xl font-bold">{consKpis.cargasPorCamion}</div>
+                    <div className="text-xs text-muted-foreground">Cargas por Camión</div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Camiones por Mes</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {consPorMes.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={280}>
+                    <BarChart data={consPorMes}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                      <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                      <YAxis tick={{ fontSize: 12 }} allowDecimals={false} />
+                      <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }} />
+                      <Bar dataKey="camiones" fill={CHART_PRIMARY} radius={[4, 4, 0, 0]} name="Camiones" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-[280px] flex items-center justify-center text-muted-foreground">No hay datos</div>
+                )}
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Kg por Transportista</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {consTransportistas.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={280}>
+                    <BarChart data={consTransportistas} layout="vertical">
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                      <XAxis type="number" tick={{ fontSize: 12 }} />
+                      <YAxis dataKey="name" type="category" tick={{ fontSize: 11 }} width={100} />
+                      <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }} />
+                      <Bar dataKey="value" fill={CHART_SECONDARY} radius={[0, 4, 4, 0]} name="Kg" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-[280px] flex items-center justify-center text-muted-foreground">No hay datos</div>
                 )}
               </CardContent>
             </Card>
