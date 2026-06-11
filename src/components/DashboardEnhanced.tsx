@@ -323,6 +323,8 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
           <TabsContent value="hoy">
             <TodayDashboard
               shipments={shipments || []}
+              trucks={trucks}
+              truckLoads={truckLoads}
               documents={documents}
               reports={reports}
               originPhotos={originPhotos}
