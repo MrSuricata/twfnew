@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { UnifiedOperation } from './operationsTypes'
-import { filterOperations, zoneOf, opYear, kpisGenerales, volumenes } from './analyticsUtils'
+import { filterOperations, zoneOf, opYear, kpisGenerales, volumenes, porModalidad, porZona, topClientes, porLinea, porTerminal, porOperativa, porTransporte, porFiscal, porTipoContenedor, porMes } from './analyticsUtils'
 
 // Factory mínima: solo los campos que usan las analíticas.
 export const op = (over: Partial<UnifiedOperation> = {}): UnifiedOperation =>
@@ -77,5 +77,61 @@ describe('volumenes', () => {
       op({ mode: 'lcl', pkgs: 5, kg: 500, m3: 2.5 }),
     ])
     expect(v).toEqual({ pkgs: 15, kg: 1500, m3: 7.5 })
+  })
+})
+
+describe('agregaciones para charts', () => {
+  it('porModalidad usa labels y ordena desc', () => {
+    expect(porModalidad([op(), op(), op({ mode: 'lcl' })])).toEqual([
+      { name: 'FCL', value: 2 },
+      { name: 'LCL', value: 1 },
+    ])
+  })
+  it('porZona agrupa con el bucket OTRO', () => {
+    expect(porZona([op({ pais: 'UY' }), op({ pais: '' }), op({ pais: 'UY' })])).toEqual([
+      { name: 'UY', value: 2 },
+      { name: 'OTRO', value: 1 },
+    ])
+  })
+  it('topClientes cuenta CARGAS (no contenedores) y corta en 7', () => {
+    const ops = ['A', 'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'].map(c => op({ cliente: c }))
+    const top = topClientes(ops)
+    expect(top).toHaveLength(7)
+    expect(top[0]).toEqual({ name: 'A', value: 2 })
+  })
+  it('vacíos no cuentan (linea/terminal/operativa/transporte/fiscal sin dato)', () => {
+    expect(porLinea([op({ linea: '' })])).toEqual([])
+    expect(porTerminal([op({ terminal: 'TCP' }), op({ terminal: '' })])).toEqual([
+      { name: 'TCP', value: 1 },
+    ])
+    expect(porOperativa([op()])).toEqual([])
+    expect(porTransporte([op()])).toEqual([])
+    expect(porFiscal([op()])).toEqual([])
+  })
+  it('porTipoContenedor solo mira FCL (el tipo DB es el label de modalidad)', () => {
+    expect(porTipoContenedor([op({ tipo: '40HC' }), op({ mode: 'lcl', tipo: 'LCL' })])).toEqual([
+      { name: '40HC', value: 1 },
+    ])
+  })
+  it('porFiscal trunca nombres largos a 18 chars + …', () => {
+    expect(porFiscal([op({ fiscal: 'DEPOSITO FISCAL ZONA OESTE' })])).toEqual([
+      { name: 'DEPOSITO FISCAL ZO…', value: 1 },
+    ])
+  })
+})
+
+describe('porMes', () => {
+  const NOW = new Date(2026, 5, 11) // 11/06/2026
+  it('agrupa por mes de ETA y no muestra meses futuros', () => {
+    const data = porMes(
+      [op({ eta: '5/3/2026' }), op({ eta: '20/3/2026' }), op({ eta: '1/9/2026' })],
+      NOW
+    )
+    expect(data).toHaveLength(1)
+    expect(data[0].cargas).toBe(2)
+  })
+  it('en años pasados muestra todos los meses con datos', () => {
+    const data = porMes([op({ eta: '5/3/2025' }), op({ eta: '5/9/2025' })], NOW)
+    expect(data).toHaveLength(2)
   })
 })
