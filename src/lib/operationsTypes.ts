@@ -325,6 +325,30 @@ export function buildOperations(
   return out
 }
 
+/** Seguimiento vencido (Brian 10/06/2026): pasaron 7+ días desde la fecha de
+ *  seguimiento y la carga sigue ACTIVA — recordatorio de actualizar el
+ *  seguimiento. Si ya llegó a fiscal / se entregó, no molesta. Sin fecha de
+ *  seguimiento no alerta. Acepta 'YYYY-MM-DD' (web) y 'D/M/YYYY' (planilla). */
+export const SEGUIMIENTO_DIAS = 7
+function parseSegDate(s: string): Date | null {
+  const t = (s || '').trim()
+  let m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(t)
+  if (m) return new Date(+m[1], +m[2] - 1, +m[3])
+  m = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/.exec(t)
+  if (m) {
+    const y = m[3].length === 2 ? 2000 + +m[3] : +m[3]
+    return new Date(y, +m[2] - 1, +m[1])
+  }
+  return null
+}
+export function isSeguimientoVencido(op: UnifiedOperation, truckStatus: string | undefined, today: Date): boolean {
+  if (!op.seguimiento) return false
+  const d = parseSegDate(op.seguimiento)
+  if (!d || isNaN(d.getTime())) return false
+  if (!isOperationActive(op, truckStatus, today)) return false
+  return today.getTime() - d.getTime() >= SEGUIMIENTO_DIAS * 86400000
+}
+
 /** Criterio de Brian (10/06/2026): una carga deja de estar "activa" cuando el
  *  contenedor se devolvió Y la carga llegó a fiscal; sin tramo fiscal cuenta
  *  solo la devolución. FCL sin datos de operativa (Chile/BA, históricas): se
