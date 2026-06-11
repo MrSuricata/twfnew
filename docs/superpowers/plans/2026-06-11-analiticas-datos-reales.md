@@ -471,7 +471,8 @@ export const porTerminal = (ops: UnifiedOperation[]) => countBy(ops, o => o.term
 export const porOperativa = (ops: UnifiedOperation[]) => countBy(ops, o => o.operativa)
 export const porTransporte = (ops: UnifiedOperation[]) => countBy(ops, o => o.transporte, 8)
 export const porFiscal = (ops: UnifiedOperation[]) =>
-  countBy(ops, o => (o.fiscal.length > 18 ? o.fiscal.slice(0, 18) + '…' : o.fiscal), 8)
+  countBy(ops, o => o.fiscal, 8).map(e =>
+    e.name.length > 18 ? { ...e, name: e.name.slice(0, 18) + '…' } : e)
 export const porTipoContenedor = (ops: UnifiedOperation[]) =>
   countBy(ops.filter(o => o.mode === 'fcl'), o => o.tipo)
 

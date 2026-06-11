@@ -119,6 +119,17 @@ describe('agregaciones para charts', () => {
       { name: 'DEPOSITO FISCAL ZO…', value: 1 },
     ])
   })
+  it('porFiscal cuenta por nombre completo y trunca recién al final (no fusiona prefijos)', () => {
+    const out = porFiscal([
+      op({ fiscal: 'DEPOSITO FISCAL ZONA OESTE' }),
+      op({ fiscal: 'DEPOSITO FISCAL ZONA OESTE' }),
+      op({ fiscal: 'DEPOSITO FISCAL ZONA ESTE' }),
+    ])
+    expect(out).toEqual([
+      { name: 'DEPOSITO FISCAL ZO…', value: 2 },
+      { name: 'DEPOSITO FISCAL ZO…', value: 1 },
+    ])
+  })
 })
 
 describe('porMes', () => {
