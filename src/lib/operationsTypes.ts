@@ -170,6 +170,8 @@ export interface UnifiedOperation {
   dev: string
   despacho: string
   tipo: string
+  terminal: string               // FCL: terminal del SG (TCP/MONTECON) · DB: ''
+  n: number                      // FCL: cantidad de contenedores (col N) · DB: 0
   wood: boolean
   noApilable: boolean            // carga NO apilable
   oog: boolean                   // sobredimensionada (out of gauge) — FCL
@@ -238,6 +240,8 @@ function fclToOperation(s: ParsedShipment, operatorId: string | null, uid: strin
     descarga: firstWith('DESCARGA'),
     dev: firstWith('DEV'),
     tipo: s.TIPO || firstWith('TIPO') || 'FCL',
+    terminal: s.TERMINAL || '',
+    n: num(s.N),
     wood,
     transporte: firstWith('TRANSPORTE'),
     status: getShipmentStatus(s).label,   // derivado de la planilla (read-only)
@@ -285,6 +289,8 @@ export function dbShipmentToOperation(s: DbShipment): UnifiedOperation {
     dev: '',
     despacho: s.despacho || '',
     tipo: MODALITY_LABELS[s.mode] || '',
+    terminal: '',
+    n: 0,
     wood: !!s.wood,
     noApilable: !!s.no_apilable,
     oog: !!s.oog,
