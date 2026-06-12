@@ -296,7 +296,9 @@ export function trucksToEvents(trucks: Truck[], truckLoads: TruckLoad[]): Calend
   today.setHours(0, 0, 0, 0)
 
   for (const t of trucks) {
-    const loads = truckLoads.filter(l => l.truckId === t.id)
+    if (t.draft) continue                        // camiones borrador: invisibles en agenda
+    // Solo cargas confirmadas y las marcadas para quitar (pending='add' excluidas)
+    const loads = truckLoads.filter(l => l.truckId === t.id && l.pending !== 'add')
     const refs = loads.map(l => l.sourceRef).filter(Boolean)
     const kg = loads.reduce((a, l) => a + (Number(l.kg) || 0), 0)
     const m3 = loads.reduce((a, l) => a + (Number(l.m3) || 0), 0)

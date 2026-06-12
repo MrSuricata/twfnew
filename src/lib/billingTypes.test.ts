@@ -11,10 +11,10 @@ const db = (over: Partial<DbShipment>): DbShipment =>
   ({ id: 'shp-1', ref: 'E10', mode: 'lcl', cliente: 'ACME', status: 'en_transito', eta: '', archived: false, ...over }) as DbShipment
 
 const truck = (over: Partial<Truck>): Truck =>
-  ({ id: 't1', code: 'C440', status: 'planning', isSider: false, transport: '', driver: '', plate: '', loadDate: '', departureDate: '', arrivalDate: '', notes: '', createdAt: 0, updatedAt: 0, ...over }) as Truck
+  ({ id: 't1', code: 'C440', status: 'planning', isSider: false, transport: '', driver: '', plate: '', loadDate: '', departureDate: '', arrivalDate: '', notes: '', createdAt: 0, updatedAt: 0, draft: false, pendingEdits: null, costDespacho: 0, costFlete: 0, costCarga: 0, ...over }) as Truck
 
 const load = (over: Partial<TruckLoad>): TruckLoad =>
-  ({ id: 'l1', truckId: 't1', sourceType: 'lcl', sourceRef: 'E10', client: '', fiscal: '', kg: 0, m3: 0, pkgs: 0, description: '', mvdArrival: '', desconsolDate: '', overrides: {}, position: 0, ...over }) as TruckLoad
+  ({ id: 'l1', truckId: 't1', sourceType: 'lcl', sourceRef: 'E10', client: '', fiscal: '', kg: 0, m3: 0, pkgs: 0, description: '', mvdArrival: '', desconsolDate: '', overrides: {}, position: 0, pending: null, ...over }) as TruckLoad
 
 const noBilling = new Map<string, BillingRecord>()
 
@@ -71,5 +71,31 @@ describe('buildBillableItems — universal', () => {
     const out = buildBillableItems([fcl('UNO'), fcl('DOS')], [], [], [], noBilling)
     expect(out).toHaveLength(1)
     expect(out[0].item.mode).toBe('fcl')
+  })
+})
+
+describe('borradores invisibles para facturación', () => {
+  it('cargas en camión draft NO derivan estado de camión (carga NO es facturable)', () => {
+    // camión entregado pero draft → aunque el status es delivered, no debe
+    // derivar estado para las cargas que lleva (el camión no está publicado)
+    const t = truck({ draft: true, status: 'delivered', arrivalDate: '2026-06-01' })
+    const l = load({ truckId: 't1', sourceRef: 'E10' })
+    const out = buildBillableItems([], [db({ status: 'en_transito' })], [t], [l], noBilling)
+    // Sin el filtro el camión draft haría la carga facturable; con el filtro: 0
+    expect(out).toHaveLength(0)
+  })
+
+  it('load pending=add en camión entregado NO hace la carga facturable; pending=remove SÍ (sigue en el camión hasta guardar)', () => {
+    const t = truck({ status: 'delivered', arrivalDate: '2026-06-01' })
+    // pending='add': borrador de edición — la carga no existe aún en el camión
+    const lAdd = load({ id: 'la', truckId: 't1', sourceRef: 'E10', pending: 'add' })
+    const outAdd = buildBillableItems([], [db({ status: 'en_transito' })], [t], [lAdd], noBilling)
+    expect(outAdd).toHaveLength(0)
+
+    // pending='remove': marcada para quitar pero todavía sigue en el camión hasta guardar
+    const lRemove = load({ id: 'lr', truckId: 't1', sourceRef: 'E10', pending: 'remove' })
+    const outRemove = buildBillableItems([], [db({ status: 'en_transito' })], [t], [lRemove], noBilling)
+    expect(outRemove).toHaveLength(1)
+    expect(outRemove[0].state).toBe('pendiente')
   })
 })

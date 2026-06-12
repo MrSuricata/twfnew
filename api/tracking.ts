@@ -190,16 +190,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (trackable.length > 0) {
       const db = getSupabase()
       const refs = trackable.map((r: any) => r.REF)
-      const { data: loads } = await db.from('truck_loads').select('source_ref, truck_id').in('source_ref', refs)
+      // pending: filter loads that are drafts; draft: filter trucks that are drafts
+      const { data: loads } = await db.from('truck_loads').select('source_ref, truck_id, pending').in('source_ref', refs)
       if (loads && loads.length) {
         const truckIds = [...new Set(loads.map((l: any) => l.truck_id))]
         const { data: trucksData } = await db
           .from('trucks')
-          .select('id, code, status, load_date, departure_date, arrival_date')
+          .select('id, code, status, load_date, departure_date, arrival_date, draft')
           .in('id', truckIds)
         const tById = new Map((trucksData || []).map((t: any) => [t.id, t]))
         const truckByRef = new Map<string, any>()
-        for (const l of loads as any[]) { const t = tById.get(l.truck_id); if (t) truckByRef.set(l.source_ref, t) }
+        for (const l of loads as any[]) {
+          if (l.pending === 'add') continue        // borrador: la carga aún no está en el camión
+          const t = tById.get(l.truck_id)
+          if (t && !t.draft) truckByRef.set(l.source_ref, t)  // camiones borrador: invisibles
+        }
 
         const today = new Date(); today.setHours(0, 0, 0, 0)
         const parseLocal = (s: string) => {
