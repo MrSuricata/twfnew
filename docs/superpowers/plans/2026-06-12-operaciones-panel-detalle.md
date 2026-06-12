@@ -157,6 +157,8 @@ git commit -m "feat(operaciones): helpers de contenedores (parse/serialize/norma
 **Files:**
 - Create: `src/components/ui/sheet.tsx`
 
+> **NOTA (fix post-review):** Este componente ya fue creado y commiteado (e8024c1). El ancho del lado `right` fue revertido a `w-3/4 sm:max-w-sm` (valor shadcn estándar) para no romper otros consumidores (mobile nav, sidebar). El panel `OperationDetailPanel` pide su ancho propio en el call-site (`w-full sm:w-[480px] sm:max-w-[90vw]` vía className). **No tocar este archivo.**
+
 Sin test unitario (componente UI estándar); gate = typecheck + build.
 
 - [ ] **Step 1: Crear el componente**
@@ -467,7 +469,7 @@ export default function OperationDetailPanel({
 
   return (
     <Sheet open={!!op} onOpenChange={(v) => { if (!v) onClose() }}>
-      <SheetContent side="right" className="overflow-y-auto">
+      <SheetContent side="right" className="w-full sm:w-[480px] sm:max-w-[90vw] overflow-y-auto p-0">
         <SheetHeader className="border-b">
           <SheetTitle className="flex items-center gap-2 flex-wrap pr-8">
             <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: MODALITY_COLORS[op.mode] }} />
