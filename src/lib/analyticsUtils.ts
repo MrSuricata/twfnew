@@ -150,9 +150,9 @@ export interface ConsolidadosKpis {
 }
 
 export function kpisConsolidados(trucks: Truck[], loads: TruckLoad[], year: number): ConsolidadosKpis {
-  const ts = trucks.filter(t => truckYear(t) === year)
+  const ts = trucks.filter(t => !t.draft && truckYear(t) === year)
   const ids = new Set(ts.map(t => t.id))
-  const ls = loads.filter(l => ids.has(l.truckId))
+  const ls = loads.filter(l => ids.has(l.truckId) && l.pending !== 'add')
   return {
     camiones: ts.length,
     kg: ls.reduce((a, l) => a + (l.kg || 0), 0),
@@ -166,7 +166,7 @@ export function consolidadosPorMes(trucks: Truck[], year: number, now: Date): { 
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
   const counts: Record<string, number> = {}
   for (const t of trucks) {
-    if (truckYear(t) !== year) continue
+    if (t.draft || truckYear(t) !== year) continue
     const d = (t.loadDate || t.departureDate).slice(0, 7) // YYYY-MM
     if (d <= currentMonth) counts[d] = (counts[d] || 0) + 1
   }
@@ -180,10 +180,11 @@ export function consolidadosPorMes(trucks: Truck[], year: number, now: Date): { 
 }
 
 export function volumenPorTransportista(trucks: Truck[], loads: TruckLoad[], year: number): NameValue[] {
-  const ts = trucks.filter(t => truckYear(t) === year)
+  const ts = trucks.filter(t => !t.draft && truckYear(t) === year)
   const byId = new Map(ts.map(t => [t.id, t.transport || '—']))
   const kg: Record<string, number> = {}
   for (const l of loads) {
+    if (l.pending === 'add') continue
     const transport = byId.get(l.truckId)
     if (!transport) continue
     kg[transport] = (kg[transport] || 0) + (l.kg || 0)

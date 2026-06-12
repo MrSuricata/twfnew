@@ -75,6 +75,7 @@ Todo consumidor que deriva algo de camiones lee **solo lo publicado**:
 | `TodayDashboard` (consolidados en movimiento) | Salta `draft` |
 | `billingTypes.buildBillableItems` | Estados efectivos solo con loads confirmadas |
 | `AvailableLoadsPanel` (reserva) | Una carga con CUALQUIER truck_load (incl. `pending='add'`) NO está disponible |
+| `analyticsUtils` (consolidados de Estadísticas) | `kpisConsolidados`/`consolidadosPorMes`/`volumenPorTransportista` saltan `draft` y `pending='add'` |
 
 `pending='remove'` sigue contando como carga del camión para todas las derivaciones
 hasta que se guarde.

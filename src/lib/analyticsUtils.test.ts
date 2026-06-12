@@ -143,14 +143,16 @@ const truck = (over: Partial<Truck> = {}): Truck =>
   ({
     id: 't1', code: 'C430', status: 'delivered', isSider: false, transport: 'OLAVERRY',
     driver: '', plate: '', loadDate: '2026-03-05', departureDate: '', arrivalDate: '',
-    notes: '', createdAt: 0, updatedAt: 0, ...over,
+    notes: '', draft: false, pendingEdits: null,
+    costDespacho: 0, costFlete: 0, costCarga: 0,
+    createdAt: 0, updatedAt: 0, ...over,
   }) as Truck
 
 const load = (over: Partial<TruckLoad> = {}): TruckLoad =>
   ({
     id: 'l1', truckId: 't1', sourceType: 'shipment', sourceRef: 'LCL-1', client: '',
     fiscal: '', kg: 100, m3: 1, pkgs: 2, description: '', mvdArrival: '',
-    desconsolDate: '', overrides: {}, position: 0, ...over,
+    desconsolDate: '', overrides: {}, position: 0, pending: null, ...over,
   }) as TruckLoad
 
 describe('consolidados', () => {
@@ -190,5 +192,18 @@ describe('consolidados', () => {
       { name: 'OLAVERRY', value: 150 },
       { name: 'TRANSCAL', value: 70 },
     ])
+  })
+  it('los camiones borrador no cuentan en las estadísticas', () => {
+    const ts = [truck(), truck({ id: 't2', draft: true })]
+    const ls = [load(), load({ id: 'l2', truckId: 't2', kg: 999 })]
+    expect(kpisConsolidados(ts, ls, 2026).camiones).toBe(1)
+    expect(kpisConsolidados(ts, ls, 2026).kg).toBe(100)
+    expect(consolidadosPorMes(ts, 2026, new Date(2026, 5, 12))).toHaveLength(1)
+  })
+  it('las cargas pending=add de un borrador de edición no suman', () => {
+    const ts = [truck()]
+    const ls = [load(), load({ id: 'l2', kg: 500, pending: 'add' })]
+    expect(kpisConsolidados(ts, ls, 2026).kg).toBe(100)
+    expect(volumenPorTransportista(ts, ls, 2026)).toEqual([{ name: 'OLAVERRY', value: 100 }])
   })
 })

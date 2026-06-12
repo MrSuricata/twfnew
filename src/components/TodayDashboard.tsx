@@ -64,7 +64,7 @@ export default function TodayDashboard({
       .map(t => {
         const info = deriveTruckDisplayInfo(t, today)
         const status = deriveTruckDisplayStatus(t, today)
-        const loads = truckLoads.filter(l => l.truckId === t.id)
+        const loads = truckLoads.filter(l => l.truckId === t.id && l.pending !== 'add')
         const refs = loads.map(l => l.sourceRef).filter(Boolean)
         const kg = loads.reduce((a, l) => a + (Number(l.kg) || 0), 0)
         const m3 = loads.reduce((a, l) => a + (Number(l.m3) || 0), 0)
