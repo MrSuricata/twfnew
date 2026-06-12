@@ -493,18 +493,6 @@ export default function OperationsGrid({
           <span className="font-medium">Ver archivadas</span>
           <span className="text-[10px] tabular-nums">{archivedCount}</span>
         </button>
-        {segVencidos > 0 && (
-          <button
-            onClick={() => setSegFilter(v => !v)}
-            title="Cargas activas con 7+ días sin actualizar el seguimiento — click para ver solo esas"
-            className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 border text-xs transition-all hover:shadow-sm ${
-              segFilter ? 'bg-red-100 border-red-400 text-red-800 font-semibold' : 'bg-red-50 border-red-300 text-red-700'
-            }`}
-          >
-            ⏰ Seguimiento vencido
-            <span className="text-[10px] tabular-nums font-bold">{segVencidos}</span>
-          </button>
-        )}
       </div>
 
       {/* Toolbar */}
