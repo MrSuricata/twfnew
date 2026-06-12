@@ -120,14 +120,17 @@ export function hasReachedFinalDb(effectiveStatus: string | null | undefined): b
   return effectiveStatus === 'en_fiscal' || effectiveStatus === 'devuelto'
 }
 
-/** ref → estado derivado del camión que la lleva (fuente de verdad). */
+/** ref → estado derivado del camión que la lleva (fuente de verdad).
+ *  Borradores invisibles: camiones draft y loads pending='add' se ignoran.
+ *  loads pending='remove' siguen contando (todavía están en el camión hasta guardar). */
 function truckInfoByRef(trucks: Truck[], truckLoads: TruckLoad[], today: Date): Map<string, { code: string; status: string; arrival: Date | null }> {
   const m = new Map<string, { code: string; status: string; arrival: Date | null }>()
   if (!trucks.length || !truckLoads.length) return m
   const byId = new Map(trucks.map(t => [t.id, t]))
   for (const l of truckLoads) {
+    if (l.pending === 'add') continue          // borrador: la carga aún no está en el camión
     const t = byId.get(l.truckId)
-    if (!t) continue
+    if (!t || t.draft) continue               // camiones borrador: invisibles para derivaciones
     const status = deriveTruckCargoStatus(
       { status: t.status, loadDate: t.loadDate, departureDate: t.departureDate, arrivalDate: t.arrivalDate },
       today,

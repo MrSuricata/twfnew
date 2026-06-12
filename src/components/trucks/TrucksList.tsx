@@ -38,8 +38,13 @@ import {
   getTruckLimits,
   deriveTruckDisplayStatus,
   deriveTruckDisplayInfo,
+  hasDraftState,
+  truckCostPerM3,
+  costColor,
+  effectiveTruckLoads,
+  COST_STYLES,
 } from '@/lib/truckTypes'
-import { formatKg, formatM3 } from '@/lib/truckUtils'
+import { formatKg, formatM3, discardPendingArrays } from '@/lib/truckUtils'
 import { nextTruckCode } from '@/lib/dataClient'
 import { makeEmptyTruck } from '@/lib/truckUtils'
 
@@ -47,7 +52,9 @@ interface TrucksListProps {
   trucks: Truck[]
   truckLoads: TruckLoad[]
   onUpdateTrucks: (trucks: Truck[]) => void
+  onUpdateTruckLoads: (loads: TruckLoad[]) => void
   onDeleteTruck: (id: string) => void
+  onDeleteTruckLoad: (id: string) => void
   onOpenBuilder: (id: string) => void
 }
 
@@ -57,7 +64,9 @@ export default function TrucksList({
   trucks,
   truckLoads,
   onUpdateTrucks,
+  onUpdateTruckLoads,
   onDeleteTruck,
+  onDeleteTruckLoad,
   onOpenBuilder,
 }: TrucksListProps) {
   const [search, setSearch] = useState('')
@@ -88,13 +97,16 @@ export default function TrucksList({
       }
       return true
     }).sort((a, b) => {
-      // Active first (planning/loaded/in_transit before delivered), then most-recently-updated
+      // Draft/pending first, then active (planning/loaded/in_transit before delivered), then most-recently-updated
+      const aDs = hasDraftState(a, truckLoads) ? 0 : 1
+      const bDs = hasDraftState(b, truckLoads) ? 0 : 1
+      if (aDs !== bDs) return aDs - bDs
       const aDelivered = a.status === 'delivered' ? 1 : 0
       const bDelivered = b.status === 'delivered' ? 1 : 0
       if (aDelivered !== bDelivered) return aDelivered - bDelivered
       return (b.updatedAt || 0) - (a.updatedAt || 0)
     })
-  }, [trucks, search, statusFilter])
+  }, [trucks, truckLoads, search, statusFilter])
 
   const handleCreate = async () => {
     if (creating) return
@@ -131,6 +143,20 @@ export default function TrucksList({
     onDeleteTruck(pendingDelete.id)
     toast.success(`Camión ${pendingDelete.code} eliminado`)
     setPendingDelete(null)
+  }
+
+  const handleDiscard = (t: Truck) => {
+    const ds = hasDraftState(t, truckLoads)
+    if (ds === 'draft') {
+      if (!window.confirm(`¿Descartar el borrador ${t.code}? Se borra el camión y se liberan sus cargas.`)) return
+      onDeleteTruck(t.id)
+    } else if (ds === 'pending') {
+      if (!window.confirm(`¿Descartar los cambios sin guardar de ${t.code}?`)) return
+      const r = discardPendingArrays(trucks, truckLoads, t.id)
+      r.deleteLoadIds.forEach(id => onDeleteTruckLoad(id))
+      onUpdateTrucks(r.trucks)
+      onUpdateTruckLoads(r.loads)
+    }
   }
 
   // ── Empty state ──
@@ -193,19 +219,26 @@ export default function TrucksList({
       {/* Cards grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {filtered.map(t => {
-          const loads = loadsByTruck.get(t.id) || []
+          const loads = effectiveTruckLoads(truckLoads, t.id, { includePending: true })
           const totals = computeTruckTotals(t, loads)
           const limits = getTruckLimits(t.isSider)
+          const ds = hasDraftState(t, truckLoads)
           return (
-            <Card key={t.id} className="hover:border-primary/40 transition-colors">
+            <Card key={t.id} className={`hover:border-primary/40 transition-colors${ds ? ' border-amber-300' : ''}`}>
               <CardContent className="p-4 space-y-3">
                 {/* Header row */}
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold text-lg tracking-tight">{t.code}</span>
                       {t.isSider && (
                         <Badge variant="outline" className="text-[10px] h-5">Sider</Badge>
+                      )}
+                      {ds === 'draft' && (
+                        <Badge className="bg-amber-100 text-amber-800 border-amber-300 border text-[10px] h-5">BORRADOR</Badge>
+                      )}
+                      {ds === 'pending' && (
+                        <Badge className="bg-orange-100 text-orange-800 border-orange-300 border text-[10px] h-5">CAMBIOS SIN GUARDAR</Badge>
                       )}
                     </div>
                     {t.transport && (
@@ -249,6 +282,20 @@ export default function TrucksList({
                     </div>
                   </div>
                 </div>
+
+                {/* USD/m³ cost chip */}
+                {(() => {
+                  const { perM3 } = truckCostPerM3(t, truckLoads)
+                  if (perM3 === null) return null
+                  const c = costColor(perM3)
+                  return (
+                    <div className="flex justify-center">
+                      <span className={`text-xs font-semibold tabular-nums rounded px-1.5 py-0.5 border ${COST_STYLES[c]}`}>
+                        USD {perM3.toFixed(2)}/m³
+                      </span>
+                    </div>
+                  )
+                })()}
 
                 {/* Capacity bars */}
                 <div className="space-y-1.5">
@@ -297,21 +344,32 @@ export default function TrucksList({
                 <div className="flex items-center gap-2 pt-2 border-t">
                   <Button
                     size="sm"
-                    variant="outline"
+                    variant={ds ? 'default' : 'outline'}
                     className="flex-1"
                     onClick={() => onOpenBuilder(t.id)}
                   >
                     <PencilSimple size={14} className="mr-1.5" />
-                    Armar
+                    {ds ? 'Retomar' : 'Armar'}
                   </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                    onClick={() => setPendingDelete(t)}
-                  >
-                    <Trash size={14} />
-                  </Button>
+                  {ds ? (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="text-amber-700 hover:text-amber-800 hover:bg-amber-50 border-amber-300"
+                      onClick={() => handleDiscard(t)}
+                    >
+                      Descartar
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                      onClick={() => setPendingDelete(t)}
+                    >
+                      <Trash size={14} />
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>

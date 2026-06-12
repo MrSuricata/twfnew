@@ -428,7 +428,10 @@ function App() {
     if (isAdminLoggedIn && updated.length > 0) {
       pendingTruckLoadsWritesRef.current += 1
       saveTruckLoads(updated)
-        .catch(err => console.warn('[DB] Failed to save truck loads:', err))
+        .catch((err: any) => {
+          console.warn('[DB] Failed to save truck loads:', err)
+          toast.error(`⚠️ Las cargas del camión NO se guardaron: ${err?.message || 'error de conexión'}`, { duration: 10000 })
+        })
         .finally(() => {
           pendingTruckLoadsWritesRef.current = Math.max(0, pendingTruckLoadsWritesRef.current - 1)
         })
@@ -436,9 +439,11 @@ function App() {
   }
 
   const handleDeleteTruckLoad = async (id: string) => {
-    const next = truckLoads.filter(l => l.id !== id)
-    setTruckLoads(next)
-    saveToStorage('twf-truck-loads', next)
+    setTruckLoads(prev => {
+      const next = prev.filter(l => l.id !== id)
+      saveToStorage('twf-truck-loads', next)
+      return next
+    })
     if (isAdminLoggedIn) {
       try {
         await apiDeleteTruckLoad(id)

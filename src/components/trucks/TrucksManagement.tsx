@@ -44,6 +44,7 @@ export default function TrucksManagement(props: TrucksManagementProps) {
         onUpdateTrucks={props.onUpdateTrucks}
         onUpdateTruckLoads={props.onUpdateTruckLoads}
         onDeleteTruckLoad={props.onDeleteTruckLoad}
+        onDeleteTruck={props.onDeleteTruck}
       />
     )
   }
@@ -74,7 +75,9 @@ export default function TrucksManagement(props: TrucksManagementProps) {
             trucks={props.trucks}
             truckLoads={props.truckLoads}
             onUpdateTrucks={props.onUpdateTrucks}
+            onUpdateTruckLoads={props.onUpdateTruckLoads}
             onDeleteTruck={props.onDeleteTruck}
+            onDeleteTruckLoad={props.onDeleteTruckLoad}
             onOpenBuilder={(id) => setSelectedTruckId(id)}
           />
         </TabsContent>

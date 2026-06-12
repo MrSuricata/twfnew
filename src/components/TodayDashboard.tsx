@@ -60,10 +60,11 @@ export default function TodayDashboard({
   const trucksHoy = useMemo(() => {
     const today = new Date(); today.setHours(0, 0, 0, 0)
     return trucks
+      .filter(t => !t.draft)                    // camiones borrador: invisibles en HOY
       .map(t => {
         const info = deriveTruckDisplayInfo(t, today)
         const status = deriveTruckDisplayStatus(t, today)
-        const loads = truckLoads.filter(l => l.truckId === t.id)
+        const loads = truckLoads.filter(l => l.truckId === t.id && l.pending !== 'add')
         const refs = loads.map(l => l.sourceRef).filter(Boolean)
         const kg = loads.reduce((a, l) => a + (Number(l.kg) || 0), 0)
         const m3 = loads.reduce((a, l) => a + (Number(l.m3) || 0), 0)

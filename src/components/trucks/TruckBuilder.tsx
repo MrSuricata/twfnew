@@ -28,6 +28,12 @@ import {
   getTruckLimits,
   deriveTruckDisplayStatus,
   deriveTruckDisplayInfo,
+  applyTruckPending,
+  effectiveTruckLoads,
+  hasDraftState,
+  truckCostPerM3,
+  costColor,
+  COST_STYLES,
 } from '@/lib/truckTypes'
 import {
   formatKg,
@@ -36,6 +42,8 @@ import {
   newId,
   prefillFclFromShipment,
   getTruckHealthIssues,
+  discardPendingArrays,
+  commitPendingArrays,
 } from '@/lib/truckUtils'
 import AvailableLoadsPanel from './AvailableLoadsPanel'
 import { exportTruckPdf } from '@/lib/truckExport'
@@ -51,22 +59,33 @@ interface TruckBuilderProps {
   onUpdateTrucks: (trucks: Truck[]) => void
   onUpdateTruckLoads: (loads: TruckLoad[]) => void
   onDeleteTruckLoad: (id: string) => void
+  onDeleteTruck: (id: string) => void
 }
 
 export default function TruckBuilder(props: TruckBuilderProps) {
-  const { truck, trucks, truckLoads, lclAir, dbShipments, shipments, onBack, onUpdateTrucks, onUpdateTruckLoads, onDeleteTruckLoad } = props
+  const { truck, trucks, truckLoads, lclAir, dbShipments, shipments, onBack, onUpdateTrucks, onUpdateTruckLoads, onDeleteTruckLoad, onDeleteTruck } = props
 
-  // Loads currently in this truck (sorted by position)
-  const loads = useMemo(
+  const isDraft = truck.draft
+  // Lo que se VE y EDITA: el camión con el overlay aplicado.
+  const merged = useMemo(() => applyTruckPending(truck), [truck])
+
+  // ALL loads of this truck, sorted by position (for the table — includes pending remove)
+  const allMine = useMemo(
     () => truckLoads
       .filter(l => l.truckId === truck.id)
       .sort((a, b) => a.position - b.position),
     [truckLoads, truck.id]
   )
 
-  const totals = useMemo(() => computeTruckTotals(truck, loads), [truck, loads])
-  const limits = getTruckLimits(truck.isSider)
-  const healthIssues = useMemo(() => getTruckHealthIssues(truck, loads), [truck, loads])
+  // Effective loads (for totals): confirmed + pending='add', excluding pending='remove'
+  const loads = useMemo(
+    () => effectiveTruckLoads(truckLoads, truck.id, { includePending: true }),
+    [truckLoads, truck.id]
+  )
+
+  const totals = useMemo(() => computeTruckTotals(merged, loads), [merged, loads])
+  const limits = getTruckLimits(merged.isSider)
+  const healthIssues = useMemo(() => getTruckHealthIssues(merged, loads), [merged, loads])
 
   // Cargas especiales en ESTE camión: NO apilable (va arriba de todo) e IMO
   // (mercancía peligrosa). Los flags viven en la carga (tabla shipments).
@@ -85,23 +104,29 @@ export default function TruckBuilder(props: TruckBuilderProps) {
 
   // ── Truck-level update helpers ──
   const updateTruck = (patch: Partial<Truck>) => {
-    const updated = { ...truck, ...patch, updatedAt: Date.now() }
-    onUpdateTrucks(trucks.map(t => t.id === truck.id ? updated : t))
+    if (isDraft) {
+      const updated = { ...truck, ...patch, updatedAt: Date.now() }
+      onUpdateTrucks(trucks.map(t => (t.id === truck.id ? updated : t)))
+    } else {
+      // Publicado: el cambio va al overlay, las columnas reales no se tocan.
+      const pendingEdits = { ...(truck.pendingEdits || {}), ...patch }
+      onUpdateTrucks(trucks.map(t => (t.id === truck.id ? { ...t, pendingEdits, updatedAt: Date.now() } : t)))
+    }
   }
 
   // Estado mostrado = derivado de las fechas (las fechas mandan).
   const hoy = new Date(); hoy.setHours(0, 0, 0, 0)
-  const derivedStatus = deriveTruckDisplayStatus(truck, hoy)
-  const derivedInfo = deriveTruckDisplayInfo(truck, hoy)
+  const derivedStatus = deriveTruckDisplayStatus(merged, hoy)
+  const derivedInfo = deriveTruckDisplayInfo(merged, hoy)
 
   // Tocar un estado completa la fecha correspondiente con HOY si está vacía
   // (así el derivado coincide y la agenda/facturación reaccionan solas).
   const setStatusWithDate = (st: TruckStatus) => {
     const iso = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`
     const patch: Partial<Truck> = { status: st }
-    if (st === 'loaded' && !truck.loadDate) patch.loadDate = iso
-    if (st === 'in_transit' && !truck.departureDate) patch.departureDate = iso
-    if (st === 'delivered' && !truck.arrivalDate) patch.arrivalDate = iso
+    if (st === 'loaded' && !merged.loadDate) patch.loadDate = iso
+    if (st === 'in_transit' && !merged.departureDate) patch.departureDate = iso
+    if (st === 'delivered' && !merged.arrivalDate) patch.arrivalDate = iso
     updateTruck(patch)
   }
 
@@ -132,7 +157,8 @@ export default function TruckBuilder(props: TruckBuilderProps) {
       mvdArrival: prefill.mvdArrival,
       desconsolDate: prefill.desconsolDate,
       overrides: {},
-      position: loads.length,
+      position: allMine.length,
+      pending: isDraft ? null : 'add',
     }
     onUpdateTruckLoads([...truckLoads, load])
     toast.success(`${s.REF} agregado al camión`)
@@ -153,7 +179,8 @@ export default function TruckBuilder(props: TruckBuilderProps) {
       mvdArrival: s.etaMvd,
       desconsolDate: s.desconsolDate,
       overrides: {},
-      position: loads.length,
+      position: allMine.length,
+      pending: isDraft ? null : 'add',
     }
     onUpdateTruckLoads([...truckLoads, load])
     toast.success(`${s.ref} agregado al camión`)
@@ -175,7 +202,8 @@ export default function TruckBuilder(props: TruckBuilderProps) {
       mvdArrival: s.eta || '',
       desconsolDate: s.fecha_consol || '',
       overrides: {},
-      position: loads.length,
+      position: allMine.length,
+      pending: isDraft ? null : 'add',
     }
     onUpdateTruckLoads([...truckLoads, load])
     toast.success(`${s.ref} agregado al camión`)
@@ -208,13 +236,55 @@ export default function TruckBuilder(props: TruckBuilderProps) {
     toast.success(`${load.sourceRef} re-sincronizado desde planilla`)
   }
 
-  const removeLoad = (loadId: string) => {
-    onDeleteTruckLoad(loadId)
+  const removeLoad = (l: TruckLoad) => {
+    if (isDraft || l.pending === 'add') { onDeleteTruckLoad(l.id); return }
+    // Publicado: marcar para quitar (se concreta al Guardar)
+    onUpdateTruckLoads(truckLoads.map(x => (x.id === l.id ? { ...x, pending: 'remove' as const } : x)))
+  }
+
+  const undoRemoveLoad = (l: TruckLoad) => {
+    onUpdateTruckLoads(truckLoads.map(x => (x.id === l.id ? { ...x, pending: null } : x)))
+  }
+
+  // ── Draft state + Save/Cancel ──
+  const draftState = hasDraftState(truck, truckLoads)
+
+  const handleSave = () => {
+    const effLoads = effectiveTruckLoads(truckLoads, truck.id, { includePending: true })
+    if (effLoads.length === 0) {
+      toast.error('El camión necesita al menos una carga para guardarse')
+      return
+    }
+    if (isDraft) {
+      onUpdateTrucks(trucks.map(t => (t.id === truck.id ? { ...t, draft: false, updatedAt: Date.now() } : t)))
+    } else {
+      // Deletes FIRST, loads array LAST — evita carreras y resurrección de filas.
+      const r = commitPendingArrays(trucks, truckLoads, truck.id)
+      r.deleteLoadIds.forEach(id => onDeleteTruckLoad(id))
+      onUpdateTrucks(r.trucks)
+      onUpdateTruckLoads(r.loads)
+    }
+    toast.success(`Camión ${truck.code} guardado`)
+  }
+
+  const handleCancel = () => {
+    if (isDraft) {
+      // Cancelar un borrador nuevo = borrar el camión entero (las cargas se liberan).
+      if (!window.confirm(`¿Descartar el borrador ${truck.code}? Se borra el camión y se liberan sus cargas.`)) return
+      onDeleteTruck(truck.id)
+      onBack()
+      return
+    }
+    const r = discardPendingArrays(trucks, truckLoads, truck.id)
+    r.deleteLoadIds.forEach(id => onDeleteTruckLoad(id))
+    onUpdateTrucks(r.trucks)
+    onUpdateTruckLoads(r.loads)
+    toast.info('Cambios descartados')
   }
 
   const handleExportPdf = async () => {
     try {
-      await exportTruckPdf(truck, loads, totals)
+      await exportTruckPdf(merged, loads, totals)
       toast.success('PDF generado')
     } catch (err: any) {
       console.error(err)
@@ -230,11 +300,17 @@ export default function TruckBuilder(props: TruckBuilderProps) {
           <ArrowLeft size={16} className="mr-1.5" />
           Volver
         </Button>
-        <h2 className="text-2xl font-bold">{truck.code}</h2>
+        <h2 className="text-2xl font-bold">{merged.code}</h2>
         <Badge variant="outline" className={derivedInfo.hoy ? 'animate-pulse font-semibold border-amber-400 text-amber-700' : ''} title="Estado automático: derivado de las fechas de carga/salida/arribo">
           {derivedInfo.label}
         </Badge>
-        {truck.isSider && <Badge variant="outline">Sider</Badge>}
+        {merged.isSider && <Badge variant="outline">Sider</Badge>}
+        {draftState === 'draft' && (
+          <Badge className="bg-amber-100 text-amber-800 border-amber-300 border">BORRADOR</Badge>
+        )}
+        {draftState === 'pending' && (
+          <Badge className="bg-orange-100 text-orange-800 border-orange-300 border">CAMBIOS SIN GUARDAR</Badge>
+        )}
         <div className="ml-auto flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={handleExportPdf} disabled={loads.length === 0}>
             <FilePdf size={14} className="mr-1.5" />
@@ -309,7 +385,7 @@ export default function TruckBuilder(props: TruckBuilderProps) {
                 <div className="ml-auto flex items-center gap-1.5">
                   <Switch
                     id="is-sider"
-                    checked={truck.isSider}
+                    checked={merged.isSider}
                     onCheckedChange={(v) => updateTruck({ isSider: v })}
                   />
                   <Label htmlFor="is-sider" className="text-xs cursor-pointer">Sider</Label>
@@ -326,33 +402,33 @@ export default function TruckBuilder(props: TruckBuilderProps) {
                 <FieldCode truck={truck} trucks={trucks} onCommit={code => updateTruck({ code })} />
                 <FieldText
                   label="Transporte"
-                  value={truck.transport}
+                  value={merged.transport}
                   onChange={v => updateTruck({ transport: v })}
                   placeholder="Olaverry, PCS, Wildengold…"
                 />
                 <FieldText
                   label="Chofer"
-                  value={truck.driver}
+                  value={merged.driver}
                   onChange={v => updateTruck({ driver: v })}
                 />
                 <FieldText
                   label="Patente"
-                  value={truck.plate}
+                  value={merged.plate}
                   onChange={v => updateTruck({ plate: v })}
                 />
                 <FieldDate
                   label="Fecha de carga"
-                  value={truck.loadDate}
+                  value={merged.loadDate}
                   onChange={v => updateTruck({ loadDate: v })}
                 />
                 <FieldDate
                   label="Fecha de salida"
-                  value={truck.departureDate}
+                  value={merged.departureDate}
                   onChange={v => updateTruck({ departureDate: v })}
                 />
                 <FieldDate
                   label="Arribo a fiscal"
-                  value={truck.arrivalDate}
+                  value={merged.arrivalDate}
                   onChange={v => updateTruck({ arrivalDate: v })}
                 />
               </div>
@@ -361,11 +437,36 @@ export default function TruckBuilder(props: TruckBuilderProps) {
                 <Label className="text-xs text-muted-foreground">Notas</Label>
                 <Textarea
                   rows={2}
-                  value={truck.notes}
+                  value={merged.notes}
                   onChange={(e) => updateTruck({ notes: e.target.value })}
                   placeholder="Restricciones, orden de carga, observaciones…"
                   className="mt-1 text-sm"
                 />
+              </div>
+
+              {/* Costos del flete → USD por m³ del camión armado */}
+              <div className="border-t pt-3 mt-3">
+                <div className="text-[10px] uppercase tracking-wide text-muted-foreground mb-2">Costos del flete (USD)</div>
+                <div className="grid grid-cols-3 gap-2">
+                  {([
+                    ['costDespacho', 'Despacho'],
+                    ['costFlete', 'Flete terrestre'],
+                    ['costCarga', 'Carga s/ camión'],
+                  ] as const).map(([key, label]) => (
+                    <div key={key}>
+                      <div className="text-[10px] text-muted-foreground">{label}</div>
+                      <Input
+                        type="number"
+                        min={0}
+                        value={merged[key] || ''}
+                        onChange={e => updateTruck({ [key]: parseFloat(e.target.value) || 0 })}
+                        className="h-8 text-sm"
+                        placeholder="0"
+                      />
+                    </div>
+                  ))}
+                </div>
+                <CostPerM3Indicator truck={truck} truckLoads={truckLoads} />
               </div>
             </CardContent>
           </Card>
@@ -390,7 +491,7 @@ export default function TruckBuilder(props: TruckBuilderProps) {
                 <h3 className="font-semibold text-sm">Cargas en el camión</h3>
                 <span className="text-xs text-muted-foreground">{loads.length} {loads.length === 1 ? 'ref' : 'refs'}</span>
               </div>
-              {loads.length === 0 ? (
+              {allMine.length === 0 ? (
                 <div className="px-4 py-12 text-center text-sm text-muted-foreground">
                   Aún no hay cargas. Agregalas desde el panel de la derecha.
                 </div>
@@ -411,13 +512,14 @@ export default function TruckBuilder(props: TruckBuilderProps) {
                       </tr>
                     </thead>
                     <tbody className="divide-y">
-                      {loads.map(l => (
+                      {allMine.map(l => (
                         <LoadRow
                           key={l.id}
                           load={l}
                           onChange={(patch, fields) => updateLoad(l.id, patch, fields)}
                           onResync={() => resyncFcl(l)}
-                          onRemove={() => removeLoad(l.id)}
+                          onRemove={() => removeLoad(l)}
+                          onUndoRemove={() => undoRemoveLoad(l)}
                         />
                       ))}
                     </tbody>
@@ -443,6 +545,46 @@ export default function TruckBuilder(props: TruckBuilderProps) {
           />
         </Card>
       </div>
+
+      {/* Barra de estado + acciones del borrador */}
+      <div className="sticky bottom-0 z-10 mt-4 -mx-1 rounded-lg border bg-card/95 backdrop-blur px-4 py-3 flex items-center justify-between gap-3 shadow-lg">
+        <span className="text-xs font-medium">
+          {draftState === 'draft' && <span className="text-amber-700">🟡 BORRADOR — no publicado</span>}
+          {draftState === 'pending' && <span className="text-orange-700">🟠 CAMBIOS SIN GUARDAR</span>}
+          {!draftState && <span className="text-green-700">✓ Guardado</span>}
+        </span>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={handleCancel} disabled={!draftState}>
+            Cancelar
+          </Button>
+          <Button onClick={handleSave} disabled={!draftState} className="gap-1.5">
+            💾 Guardar camión
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Cost indicator component ──
+
+function CostPerM3Indicator({ truck, truckLoads }: { truck: Truck; truckLoads: TruckLoad[] }) {
+  const { total, m3, perM3 } = truckCostPerM3(truck, truckLoads)
+  if (perM3 === null) {
+    return (
+      <p className="mt-2 text-xs text-muted-foreground">
+        {total > 0 ? 'Agregá cargas con m³ para ver el costo por m³.' : 'Cargá los costos para ver el USD/m³.'}
+      </p>
+    )
+  }
+  return (
+    <div className={`mt-2 rounded-lg border px-3 py-2 flex items-baseline justify-between ${COST_STYLES[costColor(perM3)]}`}>
+      <span className="text-lg font-bold tabular-nums">
+        USD {perM3.toLocaleString('es-UY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / m³
+      </span>
+      <span className="text-xs">
+        {total.toLocaleString('es-UY')} USD ÷ {m3.toLocaleString('es-UY', { maximumFractionDigits: 1 })} m³
+      </span>
     </div>
   )
 }
@@ -454,39 +596,48 @@ function LoadRow({
   onChange,
   onResync,
   onRemove,
+  onUndoRemove,
 }: {
   load: TruckLoad
   onChange: (patch: Partial<TruckLoad>, fields: string[]) => void
   onResync: () => void
   onRemove: () => void
+  onUndoRemove: () => void
 }) {
   const ov = load.overrides || {}
   const Icon = load.sourceType === 'fcl' ? TruckIcon : load.sourceType === 'lcl' ? Boat : Airplane
+  const isRemoved = load.pending === 'remove'
+  const isNew = load.pending === 'add'
   return (
-    <tr className="hover:bg-muted/30">
+    <tr className={`hover:bg-muted/30 ${isRemoved ? 'opacity-50' : ''}`}>
       <td className="px-3 py-2">
         <div className="flex items-center gap-1.5">
           <Icon size={12} className="text-primary shrink-0" weight="fill" />
-          <span className="font-medium">{load.sourceRef}</span>
+          <span className={`font-medium ${isRemoved ? 'line-through' : ''}`}>{load.sourceRef}</span>
+          {isNew && (
+            <span className="text-[9px] font-bold bg-blue-100 text-blue-700 rounded px-1 py-0.5 uppercase tracking-wide">NUEVA</span>
+          )}
         </div>
         <div className="text-[10px] text-muted-foreground uppercase">{load.sourceType}</div>
       </td>
-      <td className="px-3 py-2">
+      <td className={`px-3 py-2 ${isRemoved ? 'line-through' : ''}`}>
         <InlineInput
           value={load.client}
           onChange={v => onChange({ client: v }, ['client'])}
           modified={ov.client}
           placeholder="—"
           className="w-32"
+          disabled={isRemoved}
         />
       </td>
-      <td className="px-3 py-2">
+      <td className={`px-3 py-2 ${isRemoved ? 'line-through' : ''}`}>
         <InlineInput
           value={load.fiscal}
           onChange={v => onChange({ fiscal: v }, ['fiscal'])}
           modified={ov.fiscal}
           placeholder="—"
           className="w-32"
+          disabled={isRemoved}
         />
       </td>
       <td className="px-3 py-2 text-right">
@@ -495,6 +646,7 @@ function LoadRow({
           onChange={v => onChange({ kg: v }, ['kg'])}
           modified={ov.kg}
           className="w-20 text-right"
+          disabled={isRemoved}
         />
       </td>
       <td className="px-3 py-2 text-right">
@@ -504,6 +656,7 @@ function LoadRow({
           modified={ov.m3}
           step={0.1}
           className="w-16 text-right"
+          disabled={isRemoved}
         />
       </td>
       <td className="px-3 py-2 text-right">
@@ -512,6 +665,7 @@ function LoadRow({
           onChange={v => onChange({ pkgs: v }, ['pkgs'])}
           modified={ov.pkgs}
           className="w-16 text-right"
+          disabled={isRemoved}
         />
       </td>
       <td className="px-3 py-2">
@@ -521,6 +675,7 @@ function LoadRow({
           onChange={v => onChange({ mvdArrival: v }, ['mvdArrival'])}
           modified={ov.mvdArrival}
           className="w-32"
+          disabled={isRemoved}
         />
       </td>
       <td className="px-3 py-2">
@@ -530,18 +685,27 @@ function LoadRow({
           onChange={v => onChange({ desconsolDate: v }, ['desconsolDate'])}
           modified={ov.desconsolDate}
           className="w-32"
+          disabled={isRemoved}
         />
       </td>
       <td className="px-3 py-2">
         <div className="flex items-center gap-1 justify-end">
-          {load.sourceType === 'fcl' && (
-            <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={onResync} title="Re-sincronizar desde planilla">
-              <ArrowsClockwise size={12} />
+          {isRemoved ? (
+            <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-blue-600 hover:text-blue-700 hover:bg-blue-50" onClick={onUndoRemove} title="Deshacer eliminación">
+              Deshacer
             </Button>
+          ) : (
+            <>
+              {load.sourceType === 'fcl' && (
+                <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={onResync} title="Re-sincronizar desde planilla">
+                  <ArrowsClockwise size={12} />
+                </Button>
+              )}
+              <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={onRemove} title="Quitar del camión">
+                <Trash size={12} />
+              </Button>
+            </>
           )}
-          <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={onRemove} title="Quitar del camión">
-            <Trash size={12} />
-          </Button>
         </div>
       </td>
     </tr>
@@ -618,6 +782,7 @@ function InlineInput({
   placeholder,
   modified,
   className,
+  disabled,
 }: {
   value: string
   onChange: (v: string) => void
@@ -625,6 +790,7 @@ function InlineInput({
   placeholder?: string
   modified?: boolean
   className?: string
+  disabled?: boolean
 }) {
   return (
     <div className="relative inline-flex items-center">
@@ -633,6 +799,7 @@ function InlineInput({
         value={value || ''}
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
+        disabled={disabled}
         className={`h-7 px-1.5 text-sm ${modified ? 'border-amber-500' : ''} ${className || ''}`}
       />
       {modified && (
@@ -648,12 +815,14 @@ function InlineNumber({
   step,
   modified,
   className,
+  disabled,
 }: {
   value: number
   onChange: (v: number) => void
   step?: number
   modified?: boolean
   className?: string
+  disabled?: boolean
 }) {
   const [draft, setDraft] = useState<string>(value === 0 ? '' : String(value))
   // Sync external changes back into the draft
@@ -664,6 +833,7 @@ function InlineNumber({
         type="number"
         step={step}
         value={draft}
+        disabled={disabled}
         onChange={e => {
           setDraft(e.target.value)
           const n = parseFloat(e.target.value)

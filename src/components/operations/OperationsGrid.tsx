@@ -222,8 +222,9 @@ export default function OperationsGrid({
     const today = new Date(); today.setHours(0, 0, 0, 0)
     const tById = new Map(trucks.map(t => [t.id, t]))
     for (const l of truckLoads) {
+      if (l.pending === 'add') continue          // borrador: la carga aún no está en el camión
       const t = tById.get(l.truckId)
-      if (!t) continue
+      if (!t || t.draft) continue               // camiones borrador: invisibles para estados
       const status = deriveTruckCargoStatus(
         { status: t.status, loadDate: t.loadDate, departureDate: t.departureDate, arrivalDate: t.arrivalDate },
         today,
