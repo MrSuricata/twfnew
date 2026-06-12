@@ -105,9 +105,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       case 'partner-users':
         return handlePartnerUsers(req, res, db)
       case 'trucks':
-        return handleTrucks(req, res, db)
+        return handleTrucks(req, res, db, payload)
       case 'truck-loads':
-        return handleTruckLoads(req, res, db)
+        return handleTruckLoads(req, res, db, payload)
       case 'lcl-air':
         return handleLclAir(req, res, db)
       case 'truck-counter':
@@ -850,7 +850,7 @@ function mapTruckRowToApi(t: any) {
   }
 }
 
-async function handleTrucks(req: VercelRequest, res: VercelResponse, db: any) {
+async function handleTrucks(req: VercelRequest, res: VercelResponse, db: any, payload: TokenPayload | null = null) {
   if (req.method === 'GET') {
     const id = req.query.id as string
     if (id) {
@@ -917,8 +917,31 @@ async function handleTrucks(req: VercelRequest, res: VercelResponse, db: any) {
       const conflict = (clash || []).find((c: any) => deduped.some(r => r.code === c.code && r.id !== c.id))
       if (conflict) return res.status(409).json({ error: `El código ${conflict.code} ya existe en otro camión — cambiale el código y volvé a guardar` })
     }
+    // Pre-select estado anterior para auditoría de crear/publicar/despublicar
+    // (fire-and-forget: fallo aquí no detiene el guardado).
+    const ids = deduped.map(r => r.id)
+    let prevById = new Map<string, { id: string; draft: boolean; code: string }>()
+    try {
+      const { data: prevRows } = await db.from('trucks').select('id, draft, code').in('id', ids)
+      prevById = new Map((prevRows || []).map((r: any) => [r.id, r]))
+    } catch { /* ignorar: auditamos con lo que tenemos */ }
+
     const { error } = await db.from('trucks').upsert(deduped, { onConflict: 'id' })
     if (error) throw error
+
+    // Auditar crear / publicar / despublicar (cambios de ciclo de vida únicamente)
+    for (const row of deduped) {
+      const prev = prevById.get(row.id)
+      if (!prev) {
+        logAudit(db, payload, 'crear', 'camion', row.code, { draft: row.draft })
+      } else if (prev.draft === true && row.draft === false) {
+        logAudit(db, payload, 'publicar', 'camion', row.code, {})
+      } else if (prev.draft === false && row.draft === true) {
+        logAudit(db, payload, 'despublicar', 'camion', row.code, {})
+      }
+      // Cambios de campos NO se auditan (evitar ruido por keystroke)
+    }
+
     // Si un código manual supera el contador, subirlo para que el próximo
     // auto-generado no choque (editar a C500 → el próximo automático es C501).
     for (const r of deduped) {
@@ -936,9 +959,20 @@ async function handleTrucks(req: VercelRequest, res: VercelResponse, db: any) {
   if (req.method === 'DELETE') {
     const id = req.query.id as string
     if (!id) return res.status(400).json({ error: 'id required' })
+    // Pre-select para auditoría antes de borrar (ON DELETE CASCADE borra las cargas)
+    let truckCode: string = id
+    let cascadedRefs: string[] = []
+    try {
+      const { data: t } = await db.from('trucks').select('code').eq('id', id).maybeSingle()
+      if (t?.code) truckCode = t.code
+      const { data: ls } = await db.from('truck_loads').select('source_ref').eq('truck_id', id)
+      cascadedRefs = (ls || []).map((l: any) => l.source_ref).filter(Boolean)
+    } catch { /* ignorar: auditar con lo que tenemos */ }
+
     // truck_loads have ON DELETE CASCADE
     const { error } = await db.from('trucks').delete().eq('id', id)
     if (error) throw error
+    logAudit(db, payload, 'eliminar', 'camion', truckCode, { cargas_cascadeadas: cascadedRefs })
     return res.status(200).json({ deleted: true })
   }
 
@@ -967,7 +1001,7 @@ function mapTruckLoadRowToApi(l: any) {
   }
 }
 
-async function handleTruckLoads(req: VercelRequest, res: VercelResponse, db: any) {
+async function handleTruckLoads(req: VercelRequest, res: VercelResponse, db: any, payload: TokenPayload | null = null) {
   if (req.method === 'GET') {
     const truckId = req.query.truckId as string
     let query = db.from('truck_loads').select('*').order('position', { ascending: true }).limit(5000)
@@ -979,7 +1013,11 @@ async function handleTruckLoads(req: VercelRequest, res: VercelResponse, db: any
 
   if (req.method === 'POST') {
     const v = validateBatch(TruckLoadRowSchema, req.body)
-    if (!v.ok) return res.status(400).json({ error: v.error })
+    if (!v.ok) {
+      // Batch rechazado: dejar rastro server-side aunque el cliente lo ignore.
+      logAudit(db, payload, 'guardado_rechazado', 'camion', 'batch', { error: v.error, filas: Array.isArray(req.body) ? req.body.length : 1 })
+      return res.status(400).json({ error: v.error })
+    }
     const rows = v.items.map((l) => ({
       id: l.id,
       truck_id: l.truckId || l.truck_id,
@@ -997,8 +1035,65 @@ async function handleTruckLoads(req: VercelRequest, res: VercelResponse, db: any
       position: l.position ?? 0,
       pending: l.pending ?? null,
     }))
+
+    // Pre-select estado anterior para auditar cargas nuevas y cambios de pending
+    const rowIds = rows.map(r => r.id)
+    let prevLoadsById = new Map<string, { id: string; pending: string | null; source_ref: string; truck_id: string }>()
+    try {
+      const { data: prevLoads } = await db.from('truck_loads').select('id, pending, source_ref, truck_id').in('id', rowIds)
+      prevLoadsById = new Map((prevLoads || []).map((l: any) => [l.id, l]))
+    } catch { /* ignorar: auditamos con lo que tenemos */ }
+
     const { error } = await db.from('truck_loads').upsert(rows, { onConflict: 'id' })
     if (error) throw error
+
+    // Auditar cargas nuevas (agrupadas por truck_id)
+    const newRows = rows.filter(r => !prevLoadsById.has(r.id))
+    if (newRows.length > 0) {
+      // Resolver codes de los trucks afectados
+      const truckIds = [...new Set(newRows.map(r => r.truck_id).filter(Boolean))]
+      let codeByTruckId = new Map<string, string>()
+      try {
+        const { data: tks } = await db.from('trucks').select('id, code').in('id', truckIds)
+        codeByTruckId = new Map((tks || []).map((t: any) => [t.id, t.code]))
+      } catch { /* ignorar */ }
+      // Agrupar refs nuevas por truck
+      const refsByTruck = new Map<string, string[]>()
+      const pendingByTruck = new Map<string, string[]>()
+      for (const r of newRows) {
+        const tid = r.truck_id
+        if (!refsByTruck.has(tid)) { refsByTruck.set(tid, []); pendingByTruck.set(tid, []) }
+        refsByTruck.get(tid)!.push(r.source_ref)
+        if (r.pending) pendingByTruck.get(tid)!.push(r.source_ref)
+      }
+      for (const [tid, refs] of refsByTruck) {
+        const code = codeByTruckId.get(tid) || tid
+        logAudit(db, payload, 'agregar_cargas', 'camion', code, { refs, pending: pendingByTruck.get(tid) || [] })
+      }
+    }
+
+    // Auditar cambios de pending en filas existentes
+    for (const row of rows) {
+      const prev = prevLoadsById.get(row.id)
+      if (!prev) continue
+      if (prev.pending === row.pending) continue
+      // Cambio estructural de pending — resolver code del truck
+      let code = row.truck_id
+      try {
+        const { data: tk } = await db.from('trucks').select('code').eq('id', row.truck_id).maybeSingle()
+        if (tk?.code) code = tk.code
+      } catch { /* ignorar */ }
+      let action: string
+      if (row.pending === 'remove') {
+        action = 'marcar_quitar_carga'
+      } else if (row.pending === null && prev.pending === 'add') {
+        action = 'confirmar_carga'
+      } else {
+        action = 'cambio_pending'
+      }
+      logAudit(db, payload, action, 'camion', code, { ref: row.source_ref, de: prev.pending, a: row.pending })
+    }
+
     return res.status(200).json({ saved: true, count: rows.length })
   }
 
@@ -1006,13 +1101,34 @@ async function handleTruckLoads(req: VercelRequest, res: VercelResponse, db: any
     const id = req.query.id as string
     const truckId = req.query.truckId as string
     if (id) {
+      // Pre-select para auditoría antes de borrar
+      let sourceRef = id
+      let resolvedCode = ''
+      try {
+        const { data: l } = await db.from('truck_loads').select('source_ref, truck_id').eq('id', id).maybeSingle()
+        if (l?.source_ref) sourceRef = l.source_ref
+        if (l?.truck_id) {
+          const { data: tk } = await db.from('trucks').select('code').eq('id', l.truck_id).maybeSingle()
+          if (tk?.code) resolvedCode = tk.code
+        }
+      } catch { /* ignorar */ }
+
       const { error } = await db.from('truck_loads').delete().eq('id', id)
       if (error) throw error
+      logAudit(db, payload, 'quitar_carga', 'camion', resolvedCode || id, { ref: sourceRef })
       return res.status(200).json({ deleted: true })
     }
     if (truckId) {
+      // Bulk delete — pre-select refs antes de borrar
+      let refs: string[] = []
+      try {
+        const { data: ls } = await db.from('truck_loads').select('source_ref').eq('truck_id', truckId)
+        refs = (ls || []).map((l: any) => l.source_ref).filter(Boolean)
+      } catch { /* ignorar */ }
+
       const { error } = await db.from('truck_loads').delete().eq('truck_id', truckId)
       if (error) throw error
+      logAudit(db, payload, 'quitar_cargas_bulk', 'camion', truckId, { refs })
       return res.status(200).json({ deleted: true })
     }
     return res.status(400).json({ error: 'id or truckId required' })
