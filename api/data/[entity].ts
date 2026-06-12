@@ -923,7 +923,7 @@ async function handleTrucks(req: VercelRequest, res: VercelResponse, db: any, pa
     let prevById = new Map<string, { id: string; draft: boolean; code: string }>()
     try {
       const { data: prevRows } = await db.from('trucks').select('id, draft, code').in('id', ids)
-      prevById = new Map((prevRows || []).map((r: any) => [r.id, r]))
+      prevById = new Map((prevRows || []).map((r: { id: string; draft: boolean; code: string }) => [r.id, r]))
     } catch { /* ignorar: auditamos con lo que tenemos */ }
 
     const { error } = await db.from('trucks').upsert(deduped, { onConflict: 'id' })
@@ -966,7 +966,7 @@ async function handleTrucks(req: VercelRequest, res: VercelResponse, db: any, pa
       const { data: t } = await db.from('trucks').select('code').eq('id', id).maybeSingle()
       if (t?.code) truckCode = t.code
       const { data: ls } = await db.from('truck_loads').select('source_ref').eq('truck_id', id)
-      cascadedRefs = (ls || []).map((l: any) => l.source_ref).filter(Boolean)
+      cascadedRefs = (ls || []).map((l: { source_ref: string }) => l.source_ref).filter(Boolean)
     } catch { /* ignorar: auditar con lo que tenemos */ }
 
     // truck_loads have ON DELETE CASCADE
@@ -1041,7 +1041,7 @@ async function handleTruckLoads(req: VercelRequest, res: VercelResponse, db: any
     let prevLoadsById = new Map<string, { id: string; pending: string | null; source_ref: string; truck_id: string }>()
     try {
       const { data: prevLoads } = await db.from('truck_loads').select('id, pending, source_ref, truck_id').in('id', rowIds)
-      prevLoadsById = new Map((prevLoads || []).map((l: any) => [l.id, l]))
+      prevLoadsById = new Map((prevLoads || []).map((l: { id: string; pending: string | null; source_ref: string; truck_id: string }) => [l.id, l]))
     } catch { /* ignorar: auditamos con lo que tenemos */ }
 
     const { error } = await db.from('truck_loads').upsert(rows, { onConflict: 'id' })
@@ -1055,7 +1055,7 @@ async function handleTruckLoads(req: VercelRequest, res: VercelResponse, db: any
       let codeByTruckId = new Map<string, string>()
       try {
         const { data: tks } = await db.from('trucks').select('id, code').in('id', truckIds)
-        codeByTruckId = new Map((tks || []).map((t: any) => [t.id, t.code]))
+        codeByTruckId = new Map((tks || []).map((t: { id: string; code: string }) => [t.id, t.code]))
       } catch { /* ignorar */ }
       // Agrupar refs nuevas por truck
       const refsByTruck = new Map<string, string[]>()
@@ -1072,26 +1072,31 @@ async function handleTruckLoads(req: VercelRequest, res: VercelResponse, db: any
       }
     }
 
-    // Auditar cambios de pending en filas existentes
-    for (const row of rows) {
+    // Auditar cambios de pending en filas existentes — una sola query para todos los trucks
+    const changedPendingRows = rows.filter(row => {
       const prev = prevLoadsById.get(row.id)
-      if (!prev) continue
-      if (prev.pending === row.pending) continue
-      // Cambio estructural de pending — resolver code del truck
-      let code = row.truck_id
+      return prev && prev.pending !== row.pending
+    })
+    if (changedPendingRows.length > 0) {
+      const changedTruckIds = [...new Set(changedPendingRows.map(r => r.truck_id).filter(Boolean))]
+      let codeByTruckIdPending = new Map<string, string>()
       try {
-        const { data: tk } = await db.from('trucks').select('code').eq('id', row.truck_id).maybeSingle()
-        if (tk?.code) code = tk.code
+        const { data: tks } = await db.from('trucks').select('id, code').in('id', changedTruckIds)
+        codeByTruckIdPending = new Map((tks || []).map((t: { id: string; code: string }) => [t.id, t.code]))
       } catch { /* ignorar */ }
-      let action: string
-      if (row.pending === 'remove') {
-        action = 'marcar_quitar_carga'
-      } else if (row.pending === null && prev.pending === 'add') {
-        action = 'confirmar_carga'
-      } else {
-        action = 'cambio_pending'
+      for (const row of changedPendingRows) {
+        const prev = prevLoadsById.get(row.id)!
+        const code = codeByTruckIdPending.get(row.truck_id) || row.truck_id
+        let action: string
+        if (row.pending === 'remove') {
+          action = 'marcar_quitar_carga'
+        } else if (row.pending === null && prev.pending === 'add') {
+          action = 'confirmar_carga'
+        } else {
+          action = 'cambio_pending'
+        }
+        logAudit(db, payload, action, 'camion', code, { ref: row.source_ref, de: prev.pending, a: row.pending })
       }
-      logAudit(db, payload, action, 'camion', code, { ref: row.source_ref, de: prev.pending, a: row.pending })
     }
 
     return res.status(200).json({ saved: true, count: rows.length })
@@ -1123,7 +1128,7 @@ async function handleTruckLoads(req: VercelRequest, res: VercelResponse, db: any
       let refs: string[] = []
       try {
         const { data: ls } = await db.from('truck_loads').select('source_ref').eq('truck_id', truckId)
-        refs = (ls || []).map((l: any) => l.source_ref).filter(Boolean)
+        refs = (ls || []).map((l: { source_ref: string }) => l.source_ref).filter(Boolean)
       } catch { /* ignorar */ }
 
       const { error } = await db.from('truck_loads').delete().eq('truck_id', truckId)

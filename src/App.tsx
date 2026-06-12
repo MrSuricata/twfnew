@@ -112,6 +112,10 @@ function App() {
   const pendingQuotesWritesRef = useRef(0)
   const pendingTrucksWritesRef = useRef(0)
   const pendingTruckLoadsWritesRef = useRef(0)
+  // Generación de escrituras de camiones: si AVANZÓ mientras el refresh estaba
+  // en vuelo, el snapshot es viejo y NO se aplica (mata la carrera residual
+  // que resucitaba/duplicaba cargas).
+  const trucksWriteGenRef = useRef(0)
   const pendingLclAirWritesRef = useRef(0)
   const pendingBillingWritesRef = useRef(0)
 
@@ -388,6 +392,7 @@ function App() {
   }
 
   const handleUpdateTrucks = (updated: Truck[], changedIds?: string[]) => {
+    trucksWriteGenRef.current += 1
     setTrucks(updated)
     saveToStorage('twf-trucks', updated)
     const toSave = changedIds ? updated.filter(t => changedIds.includes(t.id)) : updated
@@ -407,6 +412,7 @@ function App() {
   }
 
   const handleDeleteTruck = async (id: string) => {
+    trucksWriteGenRef.current += 1
     const next = trucks.filter(t => t.id !== id)
     const nextLoads = truckLoads.filter(l => l.truckId !== id)
     setTrucks(next)
@@ -424,6 +430,7 @@ function App() {
   }
 
   const handleUpdateTruckLoads = (updated: TruckLoad[], changedIds?: string[]) => {
+    trucksWriteGenRef.current += 1
     setTruckLoads(updated)
     saveToStorage('twf-truck-loads', updated)
     const toSave = changedIds ? updated.filter(l => changedIds.includes(l.id)) : updated
@@ -445,7 +452,9 @@ function App() {
   const refreshTrucksFromDb = useCallback(async () => {
     if (!isAdminLoggedIn) return
     try {
+      const gen = trucksWriteGenRef.current
       const [freshTrucks, freshLoads] = await Promise.all([fetchTrucks(), fetchTruckLoads()])
+      if (trucksWriteGenRef.current !== gen) return // hubo escrituras mientras tanto: snapshot viejo
       if (pendingTrucksWritesRef.current === 0) {
         setTrucks(freshTrucks)
         saveToStorage('twf-trucks', freshTrucks)
@@ -460,6 +469,7 @@ function App() {
   }, [isAdminLoggedIn])
 
   const handleDeleteTruckLoad = async (id: string) => {
+    trucksWriteGenRef.current += 1
     setTruckLoads(prev => {
       const next = prev.filter(l => l.id !== id)
       saveToStorage('twf-truck-loads', next)
