@@ -878,7 +878,7 @@ git commit -m "perf(operaciones): render incremental de filas (150 + scroll) - c
 - [ ] **Step 1: Suite completa**
 
 Run: `npm run typecheck && npm run test:run && npm run build`
-Expected: verde (tests totales: 103 previos + 4 de cntrUtils = 107).
+Expected: verde (tests totales: 80 (76 previos + 4 de cntrUtils)).
 
 - [ ] **Step 2: Push**
 
@@ -899,6 +899,7 @@ Checklist de verificación manual en el preview de Vercel (para Brian o con brow
 6. Chip "Seguimiento vencido" aparece UNA vez.
 7. Grilla angosta (12 columnas) sin scroll horizontal en desktop; botón Columnas re-agrega.
 8. Mobile: tap en tarjeta abre panel full-width.
+9. FCL: quitar el ÚLTIMO contenedor de una ref puede hacer reaparecer los CNTR de operativas (fallback de fclToOperation) — verificar el comportamiento y decidir si molesta.
 
 ---
 

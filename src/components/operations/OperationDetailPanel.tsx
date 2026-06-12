@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -123,6 +123,10 @@ export default function OperationDetailPanel({
 }) {
   const [newCntr, setNewCntr] = useState('')
 
+  // El panel no se desmonta al cambiar de operación: limpiar el borrador.
+  const opUid = op?.uid
+  useEffect(() => { setNewCntr('') }, [opUid])
+
   if (!op) return <Sheet open={false}><SheetContent side="right" /></Sheet>
 
   const commit = (key: keyof UnifiedOperation, v: unknown) => {
@@ -138,7 +142,7 @@ export default function OperationDetailPanel({
   const removeCntr = (i: number) => commit('cntr', serializeCntr(cntrs.filter((_, j) => j !== i)))
   const addCntr = () => {
     const c = normalizeCntr(newCntr)
-    if (!c) return
+    if (!c || cntrs.includes(c)) { setNewCntr(''); return }
     commit('cntr', serializeCntr([...cntrs, c]))
     setNewCntr('')
   }
@@ -150,7 +154,7 @@ export default function OperationDetailPanel({
 
   return (
     <Sheet open={!!op} onOpenChange={(v) => { if (!v) onClose() }}>
-      <SheetContent side="right" className="w-full sm:w-[480px] sm:max-w-[90vw] overflow-y-auto p-0">
+      <SheetContent side="right" className="w-full sm:w-[480px] sm:max-w-[90vw] overflow-y-auto p-0" onEscapeKeyDown={e => { if ((e.target as HTMLElement)?.tagName === 'INPUT') e.preventDefault() }}>
         <SheetHeader className="border-b">
           <SheetTitle className="flex items-center gap-2 flex-wrap pr-8">
             <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: MODALITY_COLORS[op.mode] }} />
@@ -325,12 +329,8 @@ function FieldRow({
       // Para DB con type 'bool' (ej: wood, tlx→telex): enviar bool real.
       // tlx en UnifiedOperation es string, pero la columna DB es bool;
       // EDITABLE_FIELDS['tlx'].col = 'telex', type = 'bool'.
-      if (mode?.kind === 'db' && mode.type === 'bool') {
-        onCommit(fieldKey, !val)
-      } else {
-        // FCL o texto bool: enviar como valor opuesto al display actual
-        onCommit(fieldKey, !val)
-      }
+      // FCL o texto bool: enviar el valor opuesto al display actual.
+      onCommit(fieldKey, !val)
     }
 
     return (
@@ -362,7 +362,14 @@ function FieldRow({
   }
   const save = () => {
     setEditing(false)
-    const v = kind === 'number' ? (parseFloat(draft.replace(',', '.')) || 0) : draft.trim()
+    if (kind === 'number') {
+      const n = parseFloat(draft.replace(',', '.'))
+      const v = draft.trim() === '' ? 0 : n
+      if (!isFinite(v)) return            // basura tipeada → no comitear nada
+      if (String(raw ?? '') !== String(v)) onCommit(fieldKey, v)
+      return
+    }
+    const v = draft.trim()
     if (String(raw ?? '') !== String(v)) onCommit(fieldKey, v)
   }
 
@@ -374,6 +381,7 @@ function FieldRow({
           autoFocus
           value={draft}
           onChange={e => setDraft(e.target.value)}
+          onFocus={e => e.target.select()}
           onBlur={save}
           onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
           className="h-6 text-xs flex-1"
