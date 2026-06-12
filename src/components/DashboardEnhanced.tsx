@@ -69,9 +69,9 @@ interface DashboardEnhancedProps {
   onUpdateReports?: (reports: OperativeReport[]) => void
   onUpdateOriginPhotos?: (photos: OriginPhoto[]) => void
   onUpdateQuotes?: (quotes: QuoteFormData[]) => void
-  onUpdateTrucks?: (trucks: Truck[]) => void
+  onUpdateTrucks?: (trucks: Truck[], changedIds?: string[]) => void
   onDeleteTruck?: (id: string) => void
-  onUpdateTruckLoads?: (loads: TruckLoad[]) => void
+  onUpdateTruckLoads?: (loads: TruckLoad[], changedIds?: string[]) => void
   onDeleteTruckLoad?: (id: string) => void
   onUpdateLclAir?: (shipments: LclAirShipment[]) => void
   onDeleteLclAir?: (id: string) => void
@@ -370,9 +370,9 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
               lclAir={lclAir}
               dbShipments={dbShipments}
               shipments={shipments || []}
-              onUpdateTrucks={(t) => { if (onUpdateTrucks) onUpdateTrucks(t) }}
+              onUpdateTrucks={(t, ids) => { if (onUpdateTrucks) onUpdateTrucks(t, ids) }}
               onDeleteTruck={(id) => { if (onDeleteTruck) onDeleteTruck(id) }}
-              onUpdateTruckLoads={(l) => { if (onUpdateTruckLoads) onUpdateTruckLoads(l) }}
+              onUpdateTruckLoads={(l, ids) => { if (onUpdateTruckLoads) onUpdateTruckLoads(l, ids) }}
               onDeleteTruckLoad={(id) => { if (onDeleteTruckLoad) onDeleteTruckLoad(id) }}
               onUpdateLclAir={(s) => { if (onUpdateLclAir) onUpdateLclAir(s) }}
               onDeleteLclAir={(id) => { if (onDeleteLclAir) onDeleteLclAir(id) }}

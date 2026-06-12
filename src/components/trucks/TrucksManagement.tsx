@@ -14,9 +14,9 @@ interface TrucksManagementProps {
   lclAir: LclAirShipment[]
   dbShipments?: DbShipment[]
   shipments: ParsedShipment[]
-  onUpdateTrucks: (trucks: Truck[]) => void
+  onUpdateTrucks: (trucks: Truck[], changedIds?: string[]) => void
   onDeleteTruck: (id: string) => void
-  onUpdateTruckLoads: (loads: TruckLoad[]) => void
+  onUpdateTruckLoads: (loads: TruckLoad[], changedIds?: string[]) => void
   onDeleteTruckLoad: (id: string) => void
   onUpdateLclAir: (shipments: LclAirShipment[]) => void
   onDeleteLclAir: (id: string) => void

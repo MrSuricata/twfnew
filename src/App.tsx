@@ -387,12 +387,13 @@ function App() {
     // This handler is for local state sync only
   }
 
-  const handleUpdateTrucks = (updated: Truck[]) => {
+  const handleUpdateTrucks = (updated: Truck[], changedIds?: string[]) => {
     setTrucks(updated)
     saveToStorage('twf-trucks', updated)
-    if (isAdminLoggedIn && updated.length > 0) {
+    const toSave = changedIds ? updated.filter(t => changedIds.includes(t.id)) : updated
+    if (isAdminLoggedIn && toSave.length > 0) {
       pendingTrucksWritesRef.current += 1
-      saveTrucks(updated)
+      saveTrucks(toSave)
         .catch(err => {
           console.warn('[DB] Failed to save trucks:', err)
           // Mostrar el motivo REAL y fuerte: un guardado fallido silencioso
@@ -422,12 +423,13 @@ function App() {
     }
   }
 
-  const handleUpdateTruckLoads = (updated: TruckLoad[]) => {
+  const handleUpdateTruckLoads = (updated: TruckLoad[], changedIds?: string[]) => {
     setTruckLoads(updated)
     saveToStorage('twf-truck-loads', updated)
-    if (isAdminLoggedIn && updated.length > 0) {
+    const toSave = changedIds ? updated.filter(l => changedIds.includes(l.id)) : updated
+    if (isAdminLoggedIn && toSave.length > 0) {
       pendingTruckLoadsWritesRef.current += 1
-      saveTruckLoads(updated)
+      saveTruckLoads(toSave)
         .catch((err: any) => {
           console.warn('[DB] Failed to save truck loads:', err)
           toast.error(`⚠️ Las cargas del camión NO se guardaron: ${err?.message || 'error de conexión'}`, { duration: 10000 })
