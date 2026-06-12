@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -17,13 +17,14 @@ const NUM_FMT = new Intl.NumberFormat('es-UY', { maximumFractionDigits: 2 })
 
 // Secciones del panel: declarativas.
 // kind: 'bool' → toggle; kind: 'number' → input numérico.
-// Nota: tlx tiene kind: 'bool' explícito porque en UnifiedOperation es string 'SI'|'',
-// no boolean — ver FieldRow para el manejo especial.
-const SECTIONS: { title: string; fields: { key: keyof UnifiedOperation; label: string; kind?: 'bool' | 'number' }[] }[] = [
+// wide: true → col-span-2 en el grid de 2 columnas.
+// Nota: los campos bool (tlx, wood, oog, imo, noApilable, seguro, certi, impresa)
+// se sacan de las secciones y se renderizan como chips en la fila de indicadores.
+const SECTIONS: { title: string; fields: { key: keyof UnifiedOperation; label: string; kind?: 'number'; wide?: boolean }[] }[] = [
   {
     title: 'Identificación',
     fields: [
-      { key: 'cliente', label: 'Cliente / Cnee' },
+      { key: 'cliente', label: 'Cliente / Cnee', wide: true },
       { key: 'clientRef', label: 'Ref cliente' },
       { key: 'shipper', label: 'Shipper' },
       { key: 'agente', label: 'Agente' },
@@ -34,7 +35,6 @@ const SECTIONS: { title: string; fields: { key: keyof UnifiedOperation; label: s
     title: 'Documental',
     fields: [
       { key: 'docNumber', label: 'BL / MAWB / CRT' },
-      { key: 'tlx', label: 'Telex', kind: 'bool' },
       { key: 'buque', label: 'Buque' },
       { key: 'linea', label: 'Línea' },
     ],
@@ -66,15 +66,8 @@ const SECTIONS: { title: string; fields: { key: keyof UnifiedOperation; label: s
       { key: 'pkgs', label: 'Bultos', kind: 'number' },
       { key: 'kg', label: 'Kg', kind: 'number' },
       { key: 'm3', label: 'M³', kind: 'number' },
-      { key: 'descripcion', label: 'Descripción' },
+      { key: 'descripcion', label: 'Descripción', wide: true },
       { key: 'tipo', label: 'Tipo' },
-      { key: 'wood', label: 'Wood', kind: 'bool' },
-      { key: 'oog', label: 'OOG', kind: 'bool' },
-      { key: 'imo', label: 'IMO', kind: 'bool' },
-      { key: 'noApilable', label: 'No apilable', kind: 'bool' },
-      { key: 'seguro', label: 'Seguro', kind: 'bool' },
-      { key: 'certi', label: 'Certificada', kind: 'bool' },
-      { key: 'impresa', label: 'Impresa', kind: 'bool' },
     ],
   },
   {
@@ -89,6 +82,19 @@ const SECTIONS: { title: string; fields: { key: keyof UnifiedOperation; label: s
       { key: 'dev', label: 'DEV' },
     ],
   },
+]
+
+// Flags que se muestran como chips en la sección Carga y Documental.
+// tlx es string 'SI'|'' en UnifiedOperation; el resto son boolean.
+const FLAGS: { key: keyof UnifiedOperation; label: string }[] = [
+  { key: 'tlx', label: 'Telex' },
+  { key: 'wood', label: 'Wood' },
+  { key: 'oog', label: 'OOG' },
+  { key: 'imo', label: 'IMO' },
+  { key: 'noApilable', label: 'No apilable' },
+  { key: 'seguro', label: 'Seguro' },
+  { key: 'certi', label: 'Certi' },
+  { key: 'impresa', label: 'Impresa' },
 ]
 
 // Cómo se edita un campo para esta operación (mismas reglas que la grilla vieja):
@@ -132,10 +138,12 @@ export default function OperationDetailPanel({
   onClose: () => void
 }) {
   const [newCntr, setNewCntr] = useState('')
+  const [addingCntr, setAddingCntr] = useState(false)
+  const addCntrInputRef = useRef<HTMLInputElement>(null)
 
   // El panel no se desmonta al cambiar de operación: limpiar el borrador.
   const opUid = op?.uid
-  useEffect(() => { setNewCntr('') }, [opUid])
+  useEffect(() => { setNewCntr(''); setAddingCntr(false) }, [opUid])
 
   if (!op) return <Sheet open={false}><SheetContent side="right" /></Sheet>
 
@@ -155,6 +163,7 @@ export default function OperationDetailPanel({
     if (!c || cntrs.includes(c)) { setNewCntr(''); return }
     commit('cntr', serializeCntr([...cntrs, c]))
     setNewCntr('')
+    // Mantener el input abierto para carga rápida múltiple
   }
 
   const assigned = op.operatorId ? operatorById.get(op.operatorId) : null
@@ -165,7 +174,7 @@ export default function OperationDetailPanel({
   return (
     <Sheet open={!!op} onOpenChange={(v) => { if (!v) onClose() }}>
       <SheetContent side="right" className="w-full sm:w-[480px] sm:max-w-[90vw] overflow-y-auto p-0" onEscapeKeyDown={e => { if ((e.target as HTMLElement)?.tagName === 'INPUT') e.preventDefault() }}>
-        <SheetHeader className="border-b">
+        <SheetHeader className="border-b px-4 pt-4 pb-2">
           <SheetTitle className="flex items-center gap-2 flex-wrap pr-8">
             <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: MODALITY_COLORS[op.mode] }} />
             {op.ref || '(sin ref)'}
@@ -198,7 +207,7 @@ export default function OperationDetailPanel({
           </div>
         </SheetHeader>
 
-        <div className="p-4 space-y-5 text-sm">
+        <div className="p-4 space-y-4 text-sm">
           {/* Operativo asignado */}
           <div className="flex items-center gap-2">
             <span className="text-[10px] uppercase tracking-wide text-muted-foreground w-24 shrink-0">Operativo</span>
@@ -215,7 +224,7 @@ export default function OperationDetailPanel({
 
           {/* Contenedores */}
           <section>
-            <h4 className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1.5">
+            <h4 className="text-[10px] uppercase tracking-wide text-muted-foreground mb-2 pb-1 border-b">
               Contenedores ({cntrs.length})
             </h4>
             <div className="flex flex-wrap gap-1.5">
@@ -223,7 +232,7 @@ export default function OperationDetailPanel({
               {cntrs.map((c, i) => (
                 <span
                   key={`${c}-${i}`}
-                  className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-mono ${isStandardCntr(c) ? 'bg-muted/50' : 'bg-amber-50 border-amber-300 text-amber-800'}`}
+                  className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-sm font-mono ${isStandardCntr(c) ? 'bg-muted/50' : 'bg-amber-50 border-amber-300 text-amber-800'}`}
                   title={isStandardCntr(c) ? c : `${c} — formato no estándar`}
                 >
                   {c}
@@ -235,18 +244,34 @@ export default function OperationDetailPanel({
                 </span>
               ))}
               {cntrEditable && (
-                <span className="inline-flex items-center gap-1">
-                  <Input
-                    value={newCntr}
-                    onChange={e => setNewCntr(e.target.value)}
-                    onKeyDown={e => { if (e.key === 'Enter') addCntr() }}
-                    placeholder="AGREGAR…"
-                    className="h-6 w-32 text-xs font-mono"
-                  />
-                  <button type="button" onClick={addCntr} title="Agregar contenedor" className="p-1 rounded text-muted-foreground hover:text-primary hover:bg-primary/5">
-                    <Plus size={13} />
+                addingCntr ? (
+                  <span className="inline-flex items-center gap-1">
+                    <Input
+                      ref={addCntrInputRef}
+                      autoFocus
+                      value={newCntr}
+                      onChange={e => setNewCntr(e.target.value)}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') addCntr()
+                        if (e.key === 'Escape') { setNewCntr(''); setAddingCntr(false) }
+                      }}
+                      onBlur={() => { if (!newCntr.trim()) setAddingCntr(false) }}
+                      placeholder="CNTR…"
+                      className="h-7 w-32 text-xs font-mono"
+                    />
+                    <button type="button" onClick={addCntr} title="Agregar contenedor" className="p-1 rounded text-muted-foreground hover:text-primary hover:bg-primary/5">
+                      <Plus size={13} />
+                    </button>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setAddingCntr(true)}
+                    className="inline-flex items-center gap-1 rounded-full border border-dashed px-3 py-1 text-sm text-muted-foreground hover:border-primary hover:text-primary transition-colors"
+                  >
+                    <Plus size={12} /> agregar
                   </button>
-                </span>
+                )
               )}
             </div>
           </section>
@@ -254,8 +279,8 @@ export default function OperationDetailPanel({
           {/* Secciones de campos */}
           {SECTIONS.map(sec => (
             <section key={sec.title}>
-              <h4 className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1.5 border-b pb-1">{sec.title}</h4>
-              <div className="space-y-0.5">
+              <h4 className="text-[10px] uppercase tracking-wide text-muted-foreground mb-2 pb-1 border-b">{sec.title}</h4>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2.5">
                 {sec.fields.map(f => (
                   <FieldRow
                     key={f.key}
@@ -263,11 +288,40 @@ export default function OperationDetailPanel({
                     op={op}
                     fieldKey={f.key}
                     kind={f.kind}
+                    wide={f.wide}
                     segVencido={f.key === 'seguimiento' && segVencido}
                     onCommit={commit}
                   />
                 ))}
               </div>
+              {/* Indicadores booleanos — solo en la sección Carga */}
+              {sec.title === 'Carga' && (
+                <div className="mt-3">
+                  <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1.5">Indicadores</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {FLAGS.map(f => {
+                      const raw = (op as unknown as Record<string, unknown>)[f.key]
+                      const isOn = raw === true || raw === 'SI'
+                      const mode = editModeFor(op, f.key)
+                      return (
+                        <button
+                          key={f.key}
+                          type="button"
+                          onClick={mode ? () => commit(f.key, !isOn) : undefined}
+                          disabled={!mode}
+                          className={`rounded-full border px-2.5 py-0.5 text-xs transition-colors ${
+                            isOn
+                              ? 'bg-green-50 border-green-300 text-green-700 font-semibold'
+                              : 'bg-card border-border text-muted-foreground'
+                          } ${mode ? 'hover:opacity-80 cursor-pointer' : 'cursor-default'}`}
+                        >
+                          {f.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
             </section>
           ))}
 
@@ -305,7 +359,7 @@ export default function OperationDetailPanel({
   )
 }
 
-// ── Una fila label+valor del panel; editable según editModeFor ──
+// ── Una stat-block label+valor del panel; editable según editModeFor ──
 // Nota sobre tlx: en UnifiedOperation es string 'SI'|'' (DB telex es bool,
 // pero el campo unificado siempre es string). Con kind='bool' y raw string,
 // val = raw === 'SI'. Al commitear un toggle DB, se envía el bool opuesto.
@@ -314,13 +368,15 @@ function FieldRow({
   op,
   fieldKey,
   kind,
+  wide,
   segVencido,
   onCommit,
 }: {
   label: string
   op: UnifiedOperation
   fieldKey: keyof UnifiedOperation
-  kind?: 'bool' | 'number'
+  kind?: 'number'
+  wide?: boolean
   segVencido?: boolean
   onCommit: (key: keyof UnifiedOperation, v: unknown) => void
 }) {
@@ -329,41 +385,11 @@ function FieldRow({
   const mode = editModeFor(op, fieldKey)
   const raw = (op as unknown as Record<string, unknown>)[fieldKey]
 
-  // Bool: toggle inmediato si es editable, badge si no.
-  // Maneja tanto boolean nativo como string 'SI'|'' (caso tlx en UnifiedOperation).
-  if (kind === 'bool' || typeof raw === 'boolean') {
-    // val: true si el campo es true (boolean) o 'SI' (string)
-    const val = raw === true || raw === 'SI'
-
-    const handleToggle = () => {
-      // Para DB con type 'bool' (ej: wood, tlx→telex): enviar bool real.
-      // tlx en UnifiedOperation es string, pero la columna DB es bool;
-      // EDITABLE_FIELDS['tlx'].col = 'telex', type = 'bool'.
-      // FCL o texto bool: enviar el valor opuesto al display actual.
-      onCommit(fieldKey, !val)
-    }
-
-    return (
-      <div className="flex items-center gap-2 py-0.5">
-        <span className="text-[11px] text-muted-foreground w-24 shrink-0">{label}</span>
-        {mode ? (
-          <button
-            type="button"
-            onClick={handleToggle}
-            className={`text-xs rounded px-2 py-0.5 border ${val ? 'bg-green-50 border-green-300 text-green-700 font-semibold' : 'bg-card border-border text-muted-foreground'}`}
-          >
-            {val ? 'SI' : '—'}
-          </button>
-        ) : (
-          <span className={`text-xs ${val ? 'text-green-700 font-semibold' : 'text-muted-foreground'}`}>{val ? 'SI' : '—'}</span>
-        )}
-      </div>
-    )
-  }
-
   const display = kind === 'number'
     ? (Number(raw) ? NUM_FMT.format(Number(raw)) : '—')
     : (String(raw ?? '') || '—')
+
+  const isEmpty = display === '—'
 
   const startEdit = () => {
     if (!mode) return
@@ -384,8 +410,8 @@ function FieldRow({
   }
 
   return (
-    <div className="flex items-center gap-2 py-0.5 group">
-      <span className="text-[11px] text-muted-foreground w-24 shrink-0">{label}</span>
+    <div className={`group flex flex-col gap-0.5 min-w-0 ${wide ? 'col-span-2' : ''}`}>
+      <span className="text-[10px] uppercase tracking-wide text-muted-foreground leading-none">{label}</span>
       {editing ? (
         <Input
           autoFocus
@@ -394,7 +420,7 @@ function FieldRow({
           onFocus={e => e.target.select()}
           onBlur={save}
           onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
-          className="h-6 text-xs flex-1"
+          className="h-6 text-[13px] px-1"
           inputMode={kind === 'number' ? 'decimal' : undefined}
         />
       ) : (
@@ -402,11 +428,17 @@ function FieldRow({
           type="button"
           onClick={startEdit}
           disabled={!mode}
-          className={`flex-1 text-left text-xs rounded px-1 py-0.5 break-words ${segVencido ? 'bg-red-50 text-red-700 font-semibold' : ''} ${mode ? 'hover:bg-primary/5 cursor-text' : 'cursor-default'}`}
+          className={`text-left text-[13px] leading-snug rounded px-0.5 py-0.5 break-words min-w-0 ${
+            segVencido
+              ? 'text-red-700 font-semibold'
+              : isEmpty
+                ? 'text-muted-foreground'
+                : 'font-medium'
+          } ${mode ? 'hover:bg-primary/5 cursor-text' : 'cursor-default'}`}
           title={mode ? 'Click para editar (Enter guarda · Esc cancela)' : 'Solo lectura (viene de la planilla)'}
         >
           {display}
-          {mode && <PencilSimple size={10} className="inline ml-1.5 opacity-0 group-hover:opacity-40" />}
+          {mode && !isEmpty && <PencilSimple size={10} className="inline ml-1 opacity-0 group-hover:opacity-40" />}
         </button>
       )}
     </div>
