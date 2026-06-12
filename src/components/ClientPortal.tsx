@@ -28,8 +28,6 @@ import {
   CheckCircle,
   Info,
   X as XIcon,
-  MapPin,
-  Warehouse,
   CalendarBlank,
   Timer,
   Anchor,
@@ -38,10 +36,9 @@ import {
   Funnel,
   Boat,
 } from '@phosphor-icons/react'
-import { ParsedShipment, getShipmentStatus, generateShipmentAlerts, isShipmentCompleted, ShipmentAlert, parseLocalDate } from '@/lib/shipmentTypes'
+import { ParsedShipment, getShipmentStatus, generateShipmentAlerts, isShipmentCompleted, parseLocalDate } from '@/lib/shipmentTypes'
 import { statusColorToClass, getUrgencyMeta } from '@/lib/statusColors'
 import { ClientAccount, OperativeReport, OriginPhoto } from '@/lib/quotationTypes'
-import { toast } from 'sonner'
 import { authFetch } from '@/lib/authClient'
 import { fetchClientReports, fetchClientOriginPhotos } from '@/lib/dataClient'
 import ShipmentDetailsDialog from './ShipmentDetailsDialog'

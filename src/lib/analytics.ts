@@ -108,6 +108,8 @@ export const initGA = () => {
 
     window.dataLayer = window.dataLayer || []
     window.gtag = function gtag() {
+      // gtag exige el objeto `arguments` literal; un array de rest params no funciona
+      // eslint-disable-next-line prefer-rest-params
       window.dataLayer?.push(arguments)
     }
     window.gtag('js', new Date())

@@ -3,7 +3,7 @@ import type { ParsedShipment } from '@/lib/shipmentTypes'
 import { parseLocalDate } from '@/lib/shipmentTypes'
 import type { AgendaView, CalendarEvent } from '@/lib/agendaTypes'
 import type { Truck, TruckLoad } from '@/lib/truckTypes'
-import { shipmentsToEvents, trucksToEvents, groupEventsByDate, countAlertsInRange, getWeekDates, toDateKey } from '@/lib/agendaUtils'
+import { shipmentsToEvents, trucksToEvents, countAlertsInRange, getWeekDates, toDateKey } from '@/lib/agendaUtils'
 
 // Shipment is "pending to coordinate" only if it's already at MVD port or
 // arrives within this many days. Farther-out ETAs aren't actionable yet.

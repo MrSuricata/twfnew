@@ -11,7 +11,7 @@ const MBL_RE = /^[A-Z0-9]{9,20}$/i            // bill of lading / master bill
 // strict shapes above: LCL/land refs (E22, 26-0749, 25/01884), BLs/AWBs/CRTs with
 // dashes/dots/slashes (615-06357654, BR.7581.06289, CAN/MVD/00319, PSMVD25C0004).
 // Anti-enumeration is preserved by EXACT-match-only filtering + the IP rate limit.
-const GEN_RE = /^[A-Z0-9][A-Z0-9/.\-]{2,29}$/i // 3–30 chars, alnum + / . -
+const GEN_RE = /^[A-Z0-9][A-Z0-9/.-]{2,29}$/i // 3–30 chars, alnum + / . -
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   // CORS — restrict to configured origin
