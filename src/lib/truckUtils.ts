@@ -224,6 +224,11 @@ export function makeEmptyTruck(code: string): Truck {
     departureDate: '',
     arrivalDate: '',
     notes: '',
+    draft: true,
+    pendingEdits: null,
+    costDespacho: 0,
+    costFlete: 0,
+    costCarga: 0,
     createdAt: now,
     updatedAt: now,
   }
@@ -251,6 +256,25 @@ export function makeEmptyTruckLoad(
     desconsolDate: '',
     overrides: {},
     position,
+    pending: null,
+  }
+}
+
+/** Cancelar el overlay de un camión publicado: limpia pendingEdits, saca las
+ *  cargas 'add' (van a deleteLoadIds para borrar en DB) y des-marca las 'remove'.
+ *  Pura: devuelve los arrays nuevos, el caller persiste. */
+export function discardPendingArrays(
+  trucks: Truck[],
+  loads: TruckLoad[],
+  truckId: string
+): { trucks: Truck[]; loads: TruckLoad[]; deleteLoadIds: string[] } {
+  const deleteLoadIds = loads.filter(l => l.truckId === truckId && l.pending === 'add').map(l => l.id)
+  return {
+    trucks: trucks.map(t => (t.id === truckId ? { ...t, pendingEdits: null, updatedAt: Date.now() } : t)),
+    loads: loads
+      .filter(l => !(l.truckId === truckId && l.pending === 'add'))
+      .map(l => (l.truckId === truckId && l.pending === 'remove' ? { ...l, pending: null } : l)),
+    deleteLoadIds,
   }
 }
 

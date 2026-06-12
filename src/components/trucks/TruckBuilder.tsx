@@ -133,6 +133,7 @@ export default function TruckBuilder(props: TruckBuilderProps) {
       desconsolDate: prefill.desconsolDate,
       overrides: {},
       position: loads.length,
+      pending: null,
     }
     onUpdateTruckLoads([...truckLoads, load])
     toast.success(`${s.REF} agregado al camión`)
@@ -154,6 +155,7 @@ export default function TruckBuilder(props: TruckBuilderProps) {
       desconsolDate: s.desconsolDate,
       overrides: {},
       position: loads.length,
+      pending: null,
     }
     onUpdateTruckLoads([...truckLoads, load])
     toast.success(`${s.ref} agregado al camión`)
@@ -176,6 +178,7 @@ export default function TruckBuilder(props: TruckBuilderProps) {
       desconsolDate: s.fecha_consol || '',
       overrides: {},
       position: loads.length,
+      pending: null,
     }
     onUpdateTruckLoads([...truckLoads, load])
     toast.success(`${s.ref} agregado al camión`)

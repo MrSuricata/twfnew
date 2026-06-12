@@ -21,6 +21,22 @@ export const TRUCK_LIMITS = {
   sider:    { kgMax: 24500, m3Max: 80 },
 } as const
 
+// ── Campos editables del camión (usados en el overlay pendingEdits) ──
+export interface TruckEditableFields {
+  status: TruckStatus
+  isSider: boolean
+  transport: string
+  driver: string
+  plate: string
+  loadDate: string
+  departureDate: string
+  arrivalDate: string
+  notes: string
+  costDespacho: number
+  costFlete: number
+  costCarga: number
+}
+
 // ── Truck ──
 export interface Truck {
   id: string
@@ -34,6 +50,15 @@ export interface Truck {
   departureDate: string
   arrivalDate: string
   notes: string
+  // Borradores (12/06/2026): draft = camión nuevo sin publicar (invisible para
+  // estados/agenda/HOY/facturación/tracking; solo reserva cargas).
+  draft: boolean
+  // Overlay de cambios sin guardar sobre un camión PUBLICADO (patrón web_edits).
+  pendingEdits: Partial<TruckEditableFields> | null
+  // Costos del flete (USD) → indicador USD/m³ con semáforo.
+  costDespacho: number
+  costFlete: number
+  costCarga: number
   createdAt: number
   updatedAt: number
 }
@@ -54,6 +79,9 @@ export interface TruckLoad {
   desconsolDate: string
   overrides: Record<string, boolean>  // which fields were manually edited
   position: number
+  // 'add' = agregada en un borrador de edición · 'remove' = marcada para quitar
+  // · null = confirmada. Solo aplica a camiones publicados con cambios sin guardar.
+  pending: 'add' | 'remove' | null
 }
 
 // ── LCL / Air registry entry (refs not in the FCL planilla) ──
@@ -176,4 +204,58 @@ export const TRUCK_STATUS_COLORS: Record<TruckStatus, string> = {
   loaded: 'bg-amber-100 text-amber-800 border-amber-200',
   in_transit: 'bg-blue-100 text-blue-800 border-blue-200',
   delivered: 'bg-green-100 text-green-800 border-green-200',
+}
+
+// ── Borradores y costos (12/06/2026) ──────────────────────────────────────────
+
+/** Lo que ve el ARMADOR: el camión con sus cambios sin guardar encima.
+ *  Las derivaciones (agenda, estados, tracking) NUNCA llaman esto. */
+export function applyTruckPending(t: Truck): Truck {
+  if (!t.pendingEdits || Object.keys(t.pendingEdits).length === 0) return t
+  return { ...t, ...t.pendingEdits }
+}
+
+/** Cargas de un camión según quién pregunta:
+ *  - includePending=false (derivaciones): confirmadas + pending='remove'
+ *    (siguen siendo del camión hasta guardar); las 'add' NO existen aún.
+ *  - includePending=true (armador): confirmadas + 'add', sin las 'remove'. */
+export function effectiveTruckLoads(
+  loads: TruckLoad[],
+  truckId: string,
+  opts: { includePending: boolean }
+): TruckLoad[] {
+  const mine = loads.filter(l => l.truckId === truckId)
+  return opts.includePending
+    ? mine.filter(l => l.pending !== 'remove')
+    : mine.filter(l => l.pending !== 'add')
+}
+
+/** Estado de borrador para badges: 'draft' (nuevo sin publicar) ·
+ *  'pending' (publicado con cambios sin guardar) · null (limpio). */
+export function hasDraftState(t: Truck, loads: TruckLoad[]): 'draft' | 'pending' | null {
+  if (t.draft) return 'draft'
+  if (t.pendingEdits && Object.keys(t.pendingEdits).length > 0) return 'pending'
+  if (loads.some(l => l.truckId === t.id && l.pending)) return 'pending'
+  return null
+}
+
+/** (despacho + flete + carga) / m³ del camión COMO SE ESTÁ ARMANDO.
+ *  perM3 null si no hay m³ o no hay costos (no se muestra semáforo). */
+export function truckCostPerM3(
+  t: Truck,
+  loads: TruckLoad[]
+): { total: number; m3: number; perM3: number | null } {
+  const merged = applyTruckPending(t)
+  const ls = effectiveTruckLoads(loads, t.id, { includePending: true })
+  const m3 = ls.reduce((a, l) => a + (l.m3 || 0), 0)
+  const total = (merged.costDespacho || 0) + (merged.costFlete || 0) + (merged.costCarga || 0)
+  return { total, m3, perM3: m3 > 0 && total > 0 ? total / m3 : null }
+}
+
+/** Semáforo del costo por m³ (decisión Brian 12/06): <75 verde ·
+ *  75–80 amarillo (bordes incluidos) · >80 rojo. */
+export function costColor(perM3: number): 'green' | 'yellow' | 'red' {
+  if (perM3 > 80) return 'red'
+  if (perM3 >= 75) return 'yellow'
+  return 'green'
 }
