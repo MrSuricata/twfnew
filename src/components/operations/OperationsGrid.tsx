@@ -293,7 +293,7 @@ export default function OperationsGrid({
       if (modeFilter !== 'all' && o.mode !== modeFilter) return false
       if (zonaFilter !== 'all' && (o.pais || 'OTRO') !== zonaFilter) return false
       if (originFilter && !(o.origin || '').toLowerCase().includes(originFilter.toLowerCase())) return false
-      if (destFilter && !(`${o.dischargePort} ${o.destPort}` || '').toLowerCase().includes(destFilter.toLowerCase())) return false
+      if (destFilter && !`${o.dischargePort} ${o.destPort}`.toLowerCase().includes(destFilter.toLowerCase())) return false
       if (kMin !== null && (o.kg || 0) < kMin) return false
       if (kMax !== null && (o.kg || 0) > kMax) return false
       if (vMin !== null && (o.m3 || 0) < vMin) return false

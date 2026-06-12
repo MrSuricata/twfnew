@@ -33,7 +33,6 @@ import {
 import { toast } from 'sonner'
 import type { Truck, TruckLoad, TruckStatus } from '@/lib/truckTypes'
 import {
-  TRUCK_STATUS_LABELS,
   TRUCK_STATUS_COLORS,
   computeTruckTotals,
   getTruckLimits,

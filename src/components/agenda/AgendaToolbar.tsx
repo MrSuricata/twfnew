@@ -1,4 +1,3 @@
-import { Button } from '@/components/ui/button'
 import { CaretLeft, CaretRight, Funnel, Truck, X, Warning } from '@phosphor-icons/react'
 import type { AgendaView } from '@/lib/agendaTypes'
 import { MONTH_NAMES } from '@/lib/agendaTypes'

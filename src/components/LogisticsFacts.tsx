@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import { Card, CardContent } from '@/components/ui/card'
 import { Lightbulb } from '@phosphor-icons/react'
 import { motion, AnimatePresence } from 'framer-motion'
 

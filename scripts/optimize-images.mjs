@@ -1,5 +1,5 @@
 import sharp from 'sharp';
-import { copyFileSync, mkdirSync } from 'fs';
+import { mkdirSync } from 'fs';
 import { join } from 'path';
 
 const SRC = 'C:/Users/Usuario/Desktop/JARVIS CLAUDE';

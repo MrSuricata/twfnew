@@ -740,7 +740,7 @@ async function handlePartnerShipments(req: VercelRequest, res: VercelResponse, d
         // ("/", ",", "+") to support entries like "MARITIMA / URUGUAY".
         const raw: string = op.TRANSPORTE || ''
         if (!raw) return false
-        const parts = raw.split(/[\/,+]/).map((t: string) => t.trim().toUpperCase()).filter(Boolean)
+        const parts = raw.split(/[/,+]/).map((t: string) => t.trim().toUpperCase()).filter(Boolean)
         return parts.some((t: string) => t === filterValueUpper)
       }
       return false

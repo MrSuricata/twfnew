@@ -23,13 +23,9 @@ import {
   List,
   ArrowRight,
   Check,
-  Star,
   Question,
   MagnifyingGlass,
   User,
-  Globe,
-  Headset,
-  CalendarBlank,
   CaretUp,
   X
 } from '@phosphor-icons/react'
