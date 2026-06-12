@@ -10,7 +10,7 @@ import { Operator, OperatorAssignment, DbShipment, UnifiedOperation } from '@/li
 import { getDemoShipments } from '@/lib/demoShipments'
 import { filterShipments } from '@/lib/sheetsSync'
 import { verifySession, clearAuth, authFetch } from '@/lib/authClient'
-import { loadAdminData, saveQuotes, saveDocuments, saveReports, saveClients, saveTrucks, saveTruckLoads, saveLclAir, deleteTruck as apiDeleteTruck, deleteTruckLoad as apiDeleteTruckLoad, deleteLclAir as apiDeleteLclAir, saveBilling, deleteBilling as apiDeleteBilling, saveOperators, saveOperatorAssignment, deleteOperator as apiDeleteOperator, patchDbShipment, createDbShipment, deleteDbShipment, patchFclShipment } from '@/lib/dataClient'
+import { loadAdminData, saveQuotes, saveDocuments, saveReports, saveClients, saveTrucks, saveTruckLoads, saveLclAir, deleteTruck as apiDeleteTruck, deleteTruckLoad as apiDeleteTruckLoad, deleteLclAir as apiDeleteLclAir, saveBilling, deleteBilling as apiDeleteBilling, saveOperators, saveOperatorAssignment, deleteOperator as apiDeleteOperator, patchDbShipment, createDbShipment, deleteDbShipment, patchFclShipment, fetchTrucks, fetchTruckLoads } from '@/lib/dataClient'
 
 import Login from './components/Login'
 import ClientLogin from './components/ClientLogin'
@@ -440,6 +440,25 @@ function App() {
     }
   }
 
+  // Refresco liviano SOLO de camiones (al entrar a la pestaña / volver el foco):
+  // trae la verdad de la DB sin pisar escrituras en vuelo.
+  const refreshTrucksFromDb = useCallback(async () => {
+    if (!isAdminLoggedIn) return
+    try {
+      const [freshTrucks, freshLoads] = await Promise.all([fetchTrucks(), fetchTruckLoads()])
+      if (pendingTrucksWritesRef.current === 0) {
+        setTrucks(freshTrucks)
+        saveToStorage('twf-trucks', freshTrucks)
+      }
+      if (pendingTruckLoadsWritesRef.current === 0) {
+        setTruckLoads(freshLoads)
+        saveToStorage('twf-truck-loads', freshLoads)
+      }
+    } catch (err) {
+      console.warn('[DB] refresh trucks failed:', err)
+    }
+  }, [isAdminLoggedIn])
+
   const handleDeleteTruckLoad = async (id: string) => {
     setTruckLoads(prev => {
       const next = prev.filter(l => l.id !== id)
@@ -813,6 +832,7 @@ function App() {
           onUpdateTrucks={handleUpdateTrucks}
           onDeleteTruck={handleDeleteTruck}
           onUpdateTruckLoads={handleUpdateTruckLoads}
+          onRefreshTrucks={refreshTrucksFromDb}
           onDeleteTruckLoad={handleDeleteTruckLoad}
           onUpdateLclAir={handleUpdateLclAir}
           onDeleteLclAir={handleDeleteLclAir}

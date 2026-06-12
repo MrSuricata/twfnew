@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Truck as TruckIcon, Boat } from '@phosphor-icons/react'
 import type { Truck, TruckLoad, LclAirShipment } from '@/lib/truckTypes'
@@ -20,10 +20,27 @@ interface TrucksManagementProps {
   onDeleteTruckLoad: (id: string) => void
   onUpdateLclAir: (shipments: LclAirShipment[]) => void
   onDeleteLclAir: (id: string) => void
+  onRefreshTrucks?: () => void
 }
 
 export default function TrucksManagement(props: TrucksManagementProps) {
   const [subTab, setSubTab] = useState<'trucks' | 'lcl-air'>('trucks')
+
+  // Al entrar a Camiones: traer lo último (multi-usuario). Al volver el foco
+  // a la ventana, ídem con throttle de 60s.
+  const { onRefreshTrucks } = props
+  const lastRefresh = useRef(0)
+  const doRefresh = useCallback(() => {
+    if (Date.now() - lastRefresh.current < 60_000) return
+    lastRefresh.current = Date.now()
+    onRefreshTrucks?.()
+  }, [onRefreshTrucks])
+  useEffect(() => { doRefresh() }, [doRefresh])
+  useEffect(() => {
+    const onFocus = () => doRefresh()
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [doRefresh])
   const [selectedTruckId, setSelectedTruckId] = useState<string | null>(null)
 
   const selectedTruck = selectedTruckId

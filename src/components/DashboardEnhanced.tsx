@@ -72,6 +72,7 @@ interface DashboardEnhancedProps {
   onUpdateTrucks?: (trucks: Truck[], changedIds?: string[]) => void
   onDeleteTruck?: (id: string) => void
   onUpdateTruckLoads?: (loads: TruckLoad[], changedIds?: string[]) => void
+  onRefreshTrucks?: () => void
   onDeleteTruckLoad?: (id: string) => void
   onUpdateLclAir?: (shipments: LclAirShipment[]) => void
   onDeleteLclAir?: (id: string) => void
@@ -88,7 +89,7 @@ interface DashboardEnhancedProps {
 
 const ONE_DAY_MS = 86_400_000
 
-export default function DashboardEnhanced({ onLogout, clients = [], shipments = [], documents = [], reports = [], originPhotos = [], quotes = [], trucks = [], truckLoads = [], lclAir = [], billing = [], operators = [], assignments = [], dbShipments = [], dbSyncError = null, onUpdateShipments, onUpdateClients, onUpdateDocuments, onUpdateReports, onUpdateOriginPhotos, onUpdateQuotes, onUpdateTrucks, onDeleteTruck, onUpdateTruckLoads, onDeleteTruckLoad, onUpdateLclAir, onDeleteLclAir, onUpdateBilling, onClearBilling, onUpdateOperators, onDeleteOperator, onAssignOperator, onPatchShipment, onCreateShipment, onDeleteShipment, onPatchFclField }: DashboardEnhancedProps) {
+export default function DashboardEnhanced({ onLogout, clients = [], shipments = [], documents = [], reports = [], originPhotos = [], quotes = [], trucks = [], truckLoads = [], lclAir = [], billing = [], operators = [], assignments = [], dbShipments = [], dbSyncError = null, onUpdateShipments, onUpdateClients, onUpdateDocuments, onUpdateReports, onUpdateOriginPhotos, onUpdateQuotes, onUpdateTrucks, onDeleteTruck, onUpdateTruckLoads, onDeleteTruckLoad, onUpdateLclAir, onDeleteLclAir, onUpdateBilling, onClearBilling, onUpdateOperators, onDeleteOperator, onAssignOperator, onPatchShipment, onCreateShipment, onDeleteShipment, onPatchFclField, onRefreshTrucks }: DashboardEnhancedProps) {
   const brand = useBrand()
   const ops = brand.capabilities.opsAdmin
   // TWF brand has no ops tabs → land on the first content tab.
@@ -376,6 +377,7 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
               onDeleteTruckLoad={(id) => { if (onDeleteTruckLoad) onDeleteTruckLoad(id) }}
               onUpdateLclAir={(s) => { if (onUpdateLclAir) onUpdateLclAir(s) }}
               onDeleteLclAir={(id) => { if (onDeleteLclAir) onDeleteLclAir(id) }}
+              onRefreshTrucks={onRefreshTrucks}
             />
           </TabsContent>
 
