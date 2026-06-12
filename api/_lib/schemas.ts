@@ -207,6 +207,15 @@ export const TruckRowSchema = z.object({
   created_at_ts: z.number().int().optional(),
   updatedAt: z.number().int().optional(),
   updated_at_ts: z.number().int().optional(),
+  draft: z.boolean().optional(),
+  pendingEdits: z.record(z.unknown()).nullable().optional(),
+  pending_edits: z.record(z.unknown()).nullable().optional(),
+  costDespacho: z.number().optional(),
+  cost_despacho: z.number().optional(),
+  costFlete: z.number().optional(),
+  cost_flete: z.number().optional(),
+  costCarga: z.number().optional(),
+  cost_carga: z.number().optional(),
 })
 
 /** Truck load row (a ref inside a truck) */
@@ -230,6 +239,7 @@ export const TruckLoadRowSchema = z.object({
   desconsol_date: z.string().max(20).optional().nullable(),
   overrides: z.record(z.boolean()).optional(),
   position: z.number().int().optional().default(0),
+  pending: z.enum(['add', 'remove']).nullable().optional(),
 }).refine(l => l.truckId || l.truck_id, { message: 'truckId required' })
   .refine(l => l.sourceRef || l.source_ref, { message: 'sourceRef required' })
 

@@ -842,6 +842,11 @@ function mapTruckRowToApi(t: any) {
     notes: t.notes || '',
     createdAt: t.created_at_ts,
     updatedAt: t.updated_at_ts,
+    draft: !!t.draft,
+    pendingEdits: t.pending_edits || null,
+    costDespacho: Number(t.cost_despacho) || 0,
+    costFlete: Number(t.cost_flete) || 0,
+    costCarga: Number(t.cost_carga) || 0,
   }
 }
 
@@ -884,6 +889,11 @@ async function handleTrucks(req: VercelRequest, res: VercelResponse, db: any) {
         notes: t.notes || '',
         created_at_ts: t.createdAt || t.created_at_ts || now,
         updated_at_ts: now,
+        draft: t.draft ?? false,
+        pending_edits: t.pendingEdits ?? t.pending_edits ?? null,
+        cost_despacho: t.costDespacho ?? t.cost_despacho ?? 0,
+        cost_flete: t.costFlete ?? t.cost_flete ?? 0,
+        cost_carga: t.costCarga ?? t.cost_carga ?? 0,
       }
     })
     // Códigos duplicados DENTRO del lote = camión "fantasma" local (un alta
@@ -953,6 +963,7 @@ function mapTruckLoadRowToApi(l: any) {
     desconsolDate: l.desconsol_date || '',
     overrides: l.overrides || {},
     position: l.position || 0,
+    pending: l.pending || null,
   }
 }
 
@@ -984,6 +995,7 @@ async function handleTruckLoads(req: VercelRequest, res: VercelResponse, db: any
       desconsol_date: l.desconsolDate || l.desconsol_date || null,
       overrides: l.overrides || {},
       position: l.position ?? 0,
+      pending: l.pending ?? null,
     }))
     const { error } = await db.from('truck_loads').upsert(rows, { onConflict: 'id' })
     if (error) throw error
