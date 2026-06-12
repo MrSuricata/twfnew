@@ -44,6 +44,7 @@ export default function TrucksManagement(props: TrucksManagementProps) {
         onUpdateTrucks={props.onUpdateTrucks}
         onUpdateTruckLoads={props.onUpdateTruckLoads}
         onDeleteTruckLoad={props.onDeleteTruckLoad}
+        onDeleteTruck={props.onDeleteTruck}
       />
     )
   }
