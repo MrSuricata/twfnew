@@ -76,7 +76,7 @@ interface OperationsGridProps {
 
 type ModeFilter = 'all' | Modality
 type ZonaFilter = 'all' | 'UY' | 'AR' | 'CL' | 'OTRO'
-const COLS_STORAGE_KEY = 'twf-ops-columns'     // per-user visible columns
+const COLS_STORAGE_KEY = 'twf-ops-columns-v2'  // v2: default angosto 12 cols (12/06/2026)
 const COL_ORDER_KEY = 'twf-ops-col-order'      // per-user column order (drag & drop)
 const ACTIVE_ONLY_KEY = 'twf-ops-active-only'  // toggle "Solo activas"
 
