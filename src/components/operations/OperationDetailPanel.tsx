@@ -16,10 +16,10 @@ const PAIS_LABEL: Record<string, string> = { UY: '🇺🇾 UY', AR: '🇦🇷 AR
 const NUM_FMT = new Intl.NumberFormat('es-UY', { maximumFractionDigits: 2 })
 
 // Secciones del panel: declarativas.
-// kind: 'bool' → toggle; kind: 'number' → input numérico.
+// kind: 'number' → input numérico.
 // wide: true → col-span-2 en el grid de 2 columnas.
 // Nota: los campos bool (tlx, wood, oog, imo, noApilable, seguro, certi, impresa)
-// se sacan de las secciones y se renderizan como chips en la fila de indicadores.
+// se sacan de las secciones y se renderizan como chips interactivos en la sección Carga.
 const SECTIONS: { title: string; fields: { key: keyof UnifiedOperation; label: string; kind?: 'number'; wide?: boolean }[] }[] = [
   {
     title: 'Identificación',
@@ -84,7 +84,7 @@ const SECTIONS: { title: string; fields: { key: keyof UnifiedOperation; label: s
   },
 ]
 
-// Flags que se muestran como chips en la sección Carga y Documental.
+// Flags que se muestran como chips interactivos en la sección Carga.
 // tlx es string 'SI'|'' en UnifiedOperation; el resto son boolean.
 const FLAGS: { key: keyof UnifiedOperation; label: string }[] = [
   { key: 'tlx', label: 'Telex' },
@@ -139,7 +139,6 @@ export default function OperationDetailPanel({
 }) {
   const [newCntr, setNewCntr] = useState('')
   const [addingCntr, setAddingCntr] = useState(false)
-  const addCntrInputRef = useRef<HTMLInputElement>(null)
 
   // El panel no se desmonta al cambiar de operación: limpiar el borrador.
   const opUid = op?.uid
@@ -247,7 +246,6 @@ export default function OperationDetailPanel({
                 addingCntr ? (
                   <span className="inline-flex items-center gap-1">
                     <Input
-                      ref={addCntrInputRef}
                       autoFocus
                       value={newCntr}
                       onChange={e => setNewCntr(e.target.value)}
@@ -360,9 +358,8 @@ export default function OperationDetailPanel({
 }
 
 // ── Una stat-block label+valor del panel; editable según editModeFor ──
-// Nota sobre tlx: en UnifiedOperation es string 'SI'|'' (DB telex es bool,
-// pero el campo unificado siempre es string). Con kind='bool' y raw string,
-// val = raw === 'SI'. Al commitear un toggle DB, se envía el bool opuesto.
+// Los campos bool (tlx, wood, oog, etc.) se renderizan en OperationDetailPanel
+// como chips interactivos en la sección Carga, no como FieldRow.
 function FieldRow({
   label,
   op,
@@ -430,7 +427,7 @@ function FieldRow({
           disabled={!mode}
           className={`text-left text-[13px] leading-snug rounded px-0.5 py-0.5 break-words min-w-0 ${
             segVencido
-              ? 'text-red-700 font-semibold'
+              ? 'text-red-700 font-semibold bg-red-50 rounded px-1'
               : isEmpty
                 ? 'text-muted-foreground'
                 : 'font-medium'
