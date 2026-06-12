@@ -172,6 +172,12 @@ export default function OperationsGrid({
   const [dragKey, setDragKey] = useState<string | null>(null)
   const [overKey, setOverKey] = useState<string | null>(null)
 
+  // Render incremental: con 1.176 filas montar todo el DOM congela el cambio
+  // de filtros. Se montan ROWS_STEP y el sentinel agrega más al scrollear.
+  // Totales/CSV siguen usando sorted/filtered COMPLETOS.
+  const ROWS_STEP = 150
+  const [rowLimit, setRowLimit] = useState(ROWS_STEP)
+
   const assignMap = useMemo(() => indexAssignments(assignments), [assignments])
   const operations = useMemo(
     () => buildOperations(shipments, dbShipments, assignMap, showArchived),
@@ -384,6 +390,25 @@ export default function OperationsGrid({
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtered, sort, operatorById])
+
+  useEffect(() => {
+    setRowLimit(ROWS_STEP)
+  }, [search, modeFilter, zonaFilter, originFilter, destFilter, kgMin, kgMax, m3Min, m3Max, segFilter, operatorFilter, activeOnly, showArchived, sort])
+
+  const visibleRows = useMemo(() => sorted.slice(0, rowLimit), [sorted, rowLimit])
+  const hasMore = sorted.length > rowLimit
+
+  const sentinelRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    const el = sentinelRef.current
+    if (!el || !hasMore) return
+    const io = new IntersectionObserver(
+      entries => { if (entries[0].isIntersecting) setRowLimit(n => n + ROWS_STEP) },
+      { rootMargin: '600px' }
+    )
+    io.observe(el)
+    return () => io.disconnect()
+  }, [hasMore, rowLimit])
 
   const toggleSort = (key: string) => {
     setSort(prev => {
@@ -642,7 +667,7 @@ export default function OperationsGrid({
           <tbody className="divide-y">
             {sorted.length === 0 ? (
               <tr><td colSpan={cols.length + 1} className="text-center py-12 text-muted-foreground">Sin operaciones para los filtros actuales.</td></tr>
-            ) : sorted.map((op) => (
+            ) : visibleRows.map((op) => (
               <OperationRow
                 key={op.uid}
                 op={op}
@@ -665,7 +690,7 @@ export default function OperationsGrid({
       <div className="md:hidden space-y-2">
         {sorted.length === 0 ? (
           <div className="text-center py-10 text-muted-foreground text-sm border rounded-lg bg-card">Sin operaciones para los filtros actuales.</div>
-        ) : sorted.map(op => (
+        ) : visibleRows.map(op => (
           <OperationCard
             key={op.uid}
             op={op}
@@ -677,6 +702,12 @@ export default function OperationsGrid({
           />
         ))}
       </div>
+
+      {hasMore && (
+        <div ref={sentinelRef} className="text-center py-3 text-xs text-muted-foreground">
+          Mostrando {visibleRows.length.toLocaleString('es-UY')} de {sorted.length.toLocaleString('es-UY')} — desplazate para ver más
+        </div>
+      )}
 
       {/* Totals for the current filter */}
       <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs">
