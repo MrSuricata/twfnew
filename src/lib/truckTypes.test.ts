@@ -3,7 +3,7 @@ import type { Truck, TruckLoad } from './truckTypes'
 import {
   applyTruckPending, effectiveTruckLoads, hasDraftState, truckCostPerM3, costColor,
 } from './truckTypes'
-import { discardPendingArrays } from './truckUtils'
+import { discardPendingArrays, commitPendingArrays } from './truckUtils'
 
 const truck = (over: Partial<Truck> = {}): Truck =>
   ({
@@ -89,5 +89,36 @@ describe('discardPendingArrays — cancelar overlay de un publicado', () => {
     expect(r.loads.find(l => l.id === 'c')!.pending).toBe(null)
     expect(r.deleteLoadIds).toEqual(['b'])
     expect(r.trucks.find(t => t.id === 't2')).toEqual(trucks[1])
+  })
+})
+
+describe('commitPendingArrays — guardar overlay de un publicado', () => {
+  it('aplica overlay, confirma adds, manda removes a borrar y NO los deja en el array', () => {
+    const trucks = [truck({ pendingEdits: { transport: 'TRANSCAL' } })]
+    const loads = [load({ id: 'a' }), load({ id: 'b', pending: 'add' }), load({ id: 'c', pending: 'remove' })]
+    const r = commitPendingArrays(trucks, loads, 't1')
+    expect(r.trucks[0].transport).toBe('TRANSCAL')
+    expect(r.trucks[0].pendingEdits).toBe(null)
+    expect(r.loads.map(l => l.id)).toEqual(['a', 'b'])      // la 'remove' NO está
+    expect(r.loads.find(l => l.id === 'b')!.pending).toBe(null)
+    expect(r.deleteLoadIds).toEqual(['c'])
+  })
+
+  it('sin pendingEdits: el camión queda intacto (sin crashear)', () => {
+    const trucks = [truck()]
+    const loads = [load({ id: 'a' })]
+    const r = commitPendingArrays(trucks, loads, 't1')
+    expect(r.trucks[0].transport).toBe('')
+    expect(r.trucks[0].pendingEdits).toBe(null)
+    expect(r.loads.map(l => l.id)).toEqual(['a'])
+    expect(r.deleteLoadIds).toEqual([])
+  })
+
+  it('camiones/cargas de otros trucks no se tocan', () => {
+    const trucks = [truck({ id: 't1', pendingEdits: { transport: 'X' } }), truck({ id: 't2', code: 'C431' })]
+    const loads = [load({ id: 'a', truckId: 't1' }), load({ id: 'b', truckId: 't2' })]
+    const r = commitPendingArrays(trucks, loads, 't1')
+    expect(r.trucks[1].id).toBe('t2')
+    expect(r.loads.find(l => l.id === 'b')!.truckId).toBe('t2')
   })
 })

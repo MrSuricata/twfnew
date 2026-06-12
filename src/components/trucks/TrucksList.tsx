@@ -41,11 +41,12 @@ import {
   hasDraftState,
   truckCostPerM3,
   costColor,
+  effectiveTruckLoads,
+  COST_STYLES,
 } from '@/lib/truckTypes'
 import { formatKg, formatM3, discardPendingArrays } from '@/lib/truckUtils'
 import { nextTruckCode } from '@/lib/dataClient'
 import { makeEmptyTruck } from '@/lib/truckUtils'
-import { COST_STYLES } from './TruckBuilder'
 
 interface TrucksListProps {
   trucks: Truck[]
@@ -152,9 +153,9 @@ export default function TrucksList({
     } else if (ds === 'pending') {
       if (!window.confirm(`¿Descartar los cambios sin guardar de ${t.code}?`)) return
       const r = discardPendingArrays(trucks, truckLoads, t.id)
+      r.deleteLoadIds.forEach(id => onDeleteTruckLoad(id))
       onUpdateTrucks(r.trucks)
       onUpdateTruckLoads(r.loads)
-      r.deleteLoadIds.forEach(id => onDeleteTruckLoad(id))
     }
   }
 
@@ -218,7 +219,7 @@ export default function TrucksList({
       {/* Cards grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {filtered.map(t => {
-          const loads = loadsByTruck.get(t.id) || []
+          const loads = effectiveTruckLoads(truckLoads, t.id, { includePending: true })
           const totals = computeTruckTotals(t, loads)
           const limits = getTruckLimits(t.isSider)
           const ds = hasDraftState(t, truckLoads)

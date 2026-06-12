@@ -33,6 +33,7 @@ import {
   hasDraftState,
   truckCostPerM3,
   costColor,
+  COST_STYLES,
 } from '@/lib/truckTypes'
 import {
   formatKg,
@@ -42,6 +43,7 @@ import {
   prefillFclFromShipment,
   getTruckHealthIssues,
   discardPendingArrays,
+  commitPendingArrays,
 } from '@/lib/truckUtils'
 import AvailableLoadsPanel from './AvailableLoadsPanel'
 import { exportTruckPdf } from '@/lib/truckExport'
@@ -256,12 +258,11 @@ export default function TruckBuilder(props: TruckBuilderProps) {
     if (isDraft) {
       onUpdateTrucks(trucks.map(t => (t.id === truck.id ? { ...t, draft: false, updatedAt: Date.now() } : t)))
     } else {
-      const final = { ...applyTruckPending(truck), pendingEdits: null, updatedAt: Date.now() }
-      onUpdateTrucks(trucks.map(t => (t.id === truck.id ? final : t)))
-      const removes = truckLoads.filter(l => l.truckId === truck.id && l.pending === 'remove')
-      const hasAdds = truckLoads.some(l => l.truckId === truck.id && l.pending === 'add')
-      if (hasAdds) onUpdateTruckLoads(truckLoads.map(l => (l.truckId === truck.id && l.pending === 'add' ? { ...l, pending: null } : l)))
-      removes.forEach(r => onDeleteTruckLoad(r.id))
+      // Deletes FIRST, loads array LAST — evita carreras y resurrección de filas.
+      const r = commitPendingArrays(trucks, truckLoads, truck.id)
+      r.deleteLoadIds.forEach(id => onDeleteTruckLoad(id))
+      onUpdateTrucks(r.trucks)
+      onUpdateTruckLoads(r.loads)
     }
     toast.success(`Camión ${truck.code} guardado`)
   }
@@ -275,9 +276,9 @@ export default function TruckBuilder(props: TruckBuilderProps) {
       return
     }
     const r = discardPendingArrays(trucks, truckLoads, truck.id)
+    r.deleteLoadIds.forEach(id => onDeleteTruckLoad(id))
     onUpdateTrucks(r.trucks)
     onUpdateTruckLoads(r.loads)
-    r.deleteLoadIds.forEach(id => onDeleteTruckLoad(id))
     toast.info('Cambios descartados')
   }
 
@@ -299,7 +300,7 @@ export default function TruckBuilder(props: TruckBuilderProps) {
           <ArrowLeft size={16} className="mr-1.5" />
           Volver
         </Button>
-        <h2 className="text-2xl font-bold">{truck.code}</h2>
+        <h2 className="text-2xl font-bold">{merged.code}</h2>
         <Badge variant="outline" className={derivedInfo.hoy ? 'animate-pulse font-semibold border-amber-400 text-amber-700' : ''} title="Estado automático: derivado de las fechas de carga/salida/arribo">
           {derivedInfo.label}
         </Badge>
@@ -566,12 +567,6 @@ export default function TruckBuilder(props: TruckBuilderProps) {
 }
 
 // ── Cost indicator component ──
-
-const COST_STYLES: Record<'green' | 'yellow' | 'red', string> = {
-  green: 'bg-green-50 border-green-300 text-green-700',
-  yellow: 'bg-amber-50 border-amber-300 text-amber-700',
-  red: 'bg-red-50 border-red-300 text-red-700',
-}
 
 function CostPerM3Indicator({ truck, truckLoads }: { truck: Truck; truckLoads: TruckLoad[] }) {
   const { total, m3, perM3 } = truckCostPerM3(truck, truckLoads)
@@ -868,5 +863,3 @@ function AlertBanner({ kind, children }: { kind: 'error' | 'warning' | 'info'; c
 
 // Re-export so unused import warning doesn't trigger
 void CheckCircle
-// Re-export COST_STYLES for potential reuse
-export { COST_STYLES }

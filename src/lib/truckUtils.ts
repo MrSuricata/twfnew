@@ -13,6 +13,7 @@ import type {
   LclAirShipment,
   LoadSource,
 } from './truckTypes'
+import { applyTruckPending } from './truckTypes'
 
 // Generate a stable, unique id for new records.
 export function newId(prefix: string): string {
@@ -274,6 +275,30 @@ export function discardPendingArrays(
     loads: loads
       .filter(l => !(l.truckId === truckId && l.pending === 'add'))
       .map(l => (l.truckId === truckId && l.pending === 'remove' ? { ...l, pending: null } : l)),
+    deleteLoadIds,
+  }
+}
+
+/** Guardar los cambios de un camión publicado: aplica el overlay, confirma las
+ *  cargas 'add' y saca las 'remove' (a deleteLoadIds). Pura: el caller debe
+ *  ejecutar los deletes PRIMERO y persistir el array de loads DESPUÉS (último
+ *  setState gana → estado local determinístico, y el POST ya no contiene las
+ *  filas borradas → sin resurrección por carrera con los DELETE). */
+export function commitPendingArrays(
+  trucks: Truck[],
+  loads: TruckLoad[],
+  truckId: string
+): { trucks: Truck[]; loads: TruckLoad[]; deleteLoadIds: string[] } {
+  const deleteLoadIds = loads.filter(l => l.truckId === truckId && l.pending === 'remove').map(l => l.id)
+  return {
+    trucks: trucks.map(t => {
+      if (t.id !== truckId) return t
+      const merged = applyTruckPending(t)
+      return { ...merged, pendingEdits: null, updatedAt: Date.now() }
+    }),
+    loads: loads
+      .filter(l => !(l.truckId === truckId && l.pending === 'remove'))
+      .map(l => (l.truckId === truckId && l.pending === 'add' ? { ...l, pending: null } : l)),
     deleteLoadIds,
   }
 }

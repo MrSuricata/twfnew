@@ -23,6 +23,7 @@ export const TRUCK_LIMITS = {
 
 // ── Campos editables del camión (usados en el overlay pendingEdits) ──
 export interface TruckEditableFields {
+  code: string
   status: TruckStatus
   isSider: boolean
   transport: string
@@ -258,4 +259,11 @@ export function costColor(perM3: number): 'green' | 'yellow' | 'red' {
   if (perM3 > 80) return 'red'
   if (perM3 >= 75) return 'yellow'
   return 'green'
+}
+
+/** Clases Tailwind para el chip/indicador de costo por m³. */
+export const COST_STYLES: Record<'green' | 'yellow' | 'red', string> = {
+  green: 'bg-green-50 border-green-300 text-green-700',
+  yellow: 'bg-amber-50 border-amber-300 text-amber-700',
+  red: 'bg-red-50 border-red-300 text-red-700',
 }
