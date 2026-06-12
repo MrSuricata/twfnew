@@ -449,12 +449,14 @@ function App() {
 
   // Refresco liviano SOLO de camiones (al entrar a la pestaña / volver el foco):
   // trae la verdad de la DB sin pisar escrituras en vuelo.
-  const refreshTrucksFromDb = useCallback(async () => {
-    if (!isAdminLoggedIn) return
+  // Devuelve true si el round-trip fue exitoso (o se saltó por generación),
+  // false si hubo un error de red — el caller usa esto para el throttle.
+  const refreshTrucksFromDb = useCallback(async (): Promise<boolean> => {
+    if (!isAdminLoggedIn) return true
     try {
       const gen = trucksWriteGenRef.current
       const [freshTrucks, freshLoads] = await Promise.all([fetchTrucks(), fetchTruckLoads()])
-      if (trucksWriteGenRef.current !== gen) return // hubo escrituras mientras tanto: snapshot viejo
+      if (trucksWriteGenRef.current !== gen) return true // hubo escrituras mientras tanto: snapshot viejo, pero el fetch fue OK
       if (pendingTrucksWritesRef.current === 0) {
         setTrucks(freshTrucks)
         saveToStorage('twf-trucks', freshTrucks)
@@ -463,8 +465,10 @@ function App() {
         setTruckLoads(freshLoads)
         saveToStorage('twf-truck-loads', freshLoads)
       }
+      return true
     } catch (err) {
       console.warn('[DB] refresh trucks failed:', err)
+      return false
     }
   }, [isAdminLoggedIn])
 

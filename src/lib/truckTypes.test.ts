@@ -88,6 +88,7 @@ describe('discardPendingArrays — cancelar overlay de un publicado', () => {
     expect(r.loads.map(l => l.id)).toEqual(['a', 'c'])
     expect(r.loads.find(l => l.id === 'c')!.pending).toBe(null)
     expect(r.deleteLoadIds).toEqual(['b'])
+    expect(r.changedLoadIds).toEqual(['c'])
     expect(r.trucks.find(t => t.id === 't2')).toEqual(trucks[1])
   })
 })
@@ -102,6 +103,7 @@ describe('commitPendingArrays — guardar overlay de un publicado', () => {
     expect(r.loads.map(l => l.id)).toEqual(['a', 'b'])      // la 'remove' NO está
     expect(r.loads.find(l => l.id === 'b')!.pending).toBe(null)
     expect(r.deleteLoadIds).toEqual(['c'])
+    expect(r.changedLoadIds).toEqual(['b'])
   })
 
   it('sin pendingEdits: el camión queda intacto (sin crashear)', () => {

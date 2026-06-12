@@ -870,7 +870,10 @@ async function handleTrucks(req: VercelRequest, res: VercelResponse, db: any, pa
 
   if (req.method === 'POST') {
     const v = validateBatch(TruckRowSchema, req.body)
-    if (!v.ok) return res.status(400).json({ error: v.error })
+    if (!v.ok) {
+      logAudit(db, payload, 'guardado_rechazado', 'camion', 'batch', { error: v.error, filas: Array.isArray(req.body) ? req.body.length : 1 })
+      return res.status(400).json({ error: v.error })
+    }
     const now = Date.now()
     const rows = v.items.map((t) => {
       const code = t.code || ''

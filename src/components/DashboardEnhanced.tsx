@@ -72,7 +72,7 @@ interface DashboardEnhancedProps {
   onUpdateTrucks?: (trucks: Truck[], changedIds?: string[]) => void
   onDeleteTruck?: (id: string) => void
   onUpdateTruckLoads?: (loads: TruckLoad[], changedIds?: string[]) => void
-  onRefreshTrucks?: () => void
+  onRefreshTrucks?: () => Promise<boolean>
   onDeleteTruckLoad?: (id: string) => void
   onUpdateLclAir?: (shipments: LclAirShipment[]) => void
   onDeleteLclAir?: (id: string) => void

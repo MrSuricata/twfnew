@@ -20,7 +20,7 @@ interface TrucksManagementProps {
   onDeleteTruckLoad: (id: string) => void
   onUpdateLclAir: (shipments: LclAirShipment[]) => void
   onDeleteLclAir: (id: string) => void
-  onRefreshTrucks?: () => void
+  onRefreshTrucks?: () => Promise<boolean>
 }
 
 export default function TrucksManagement(props: TrucksManagementProps) {
@@ -30,10 +30,10 @@ export default function TrucksManagement(props: TrucksManagementProps) {
   // a la ventana, ídem con throttle de 60s.
   const { onRefreshTrucks } = props
   const lastRefresh = useRef(0)
-  const doRefresh = useCallback(() => {
+  const doRefresh = useCallback(async () => {
     if (Date.now() - lastRefresh.current < 60_000) return
-    lastRefresh.current = Date.now()
-    onRefreshTrucks?.()
+    const ok = await (onRefreshTrucks?.() ?? Promise.resolve(true))
+    if (ok) lastRefresh.current = Date.now()
   }, [onRefreshTrucks])
   useEffect(() => { doRefresh() }, [doRefresh])
   useEffect(() => {

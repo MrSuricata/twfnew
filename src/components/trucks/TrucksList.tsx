@@ -154,9 +154,8 @@ export default function TrucksList({
       if (!window.confirm(`¿Descartar los cambios sin guardar de ${t.code}?`)) return
       const r = discardPendingArrays(trucks, truckLoads, t.id)
       r.deleteLoadIds.forEach(id => onDeleteTruckLoad(id))
-      const loadsOfThisTruck = r.loads.filter(l => l.truckId === t.id).map(l => l.id)
       onUpdateTrucks(r.trucks, [t.id])
-      onUpdateTruckLoads(r.loads, loadsOfThisTruck)
+      onUpdateTruckLoads(r.loads, r.changedLoadIds)
     }
   }
 

@@ -261,9 +261,8 @@ export default function TruckBuilder(props: TruckBuilderProps) {
       // Deletes FIRST, loads array LAST — evita carreras y resurrección de filas.
       const r = commitPendingArrays(trucks, truckLoads, truck.id)
       r.deleteLoadIds.forEach(id => onDeleteTruckLoad(id))
-      const loadsOfThisTruck = r.loads.filter(l => l.truckId === truck.id).map(l => l.id)
       onUpdateTrucks(r.trucks, [truck.id])
-      onUpdateTruckLoads(r.loads, loadsOfThisTruck)
+      onUpdateTruckLoads(r.loads, r.changedLoadIds)
     }
     toast.success(`Camión ${truck.code} guardado`)
   }
@@ -278,9 +277,8 @@ export default function TruckBuilder(props: TruckBuilderProps) {
     }
     const r = discardPendingArrays(trucks, truckLoads, truck.id)
     r.deleteLoadIds.forEach(id => onDeleteTruckLoad(id))
-    const loadsOfThisTruck = r.loads.filter(l => l.truckId === truck.id).map(l => l.id)
     onUpdateTrucks(r.trucks, [truck.id])
-    onUpdateTruckLoads(r.loads, loadsOfThisTruck)
+    onUpdateTruckLoads(r.loads, r.changedLoadIds)
     toast.info('Cambios descartados')
   }
 
