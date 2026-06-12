@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useCallback, memo } from 'react'
+import { useMemo, useState, useEffect, useCallback, memo, useRef } from 'react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -36,6 +36,7 @@ import { toast } from 'sonner'
 import OperatorsManager from './OperatorsManager'
 import PasteImportDialog from './PasteImportDialog'
 import NewShipmentDialog from './NewShipmentDialog'
+import OperationDetailPanel from './OperationDetailPanel'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
 import type { Operator, OperatorAssignment, Modality, UnifiedOperation, DbShipment } from '@/lib/operationsTypes'
 import type { Truck, TruckLoad } from '@/lib/truckTypes'
@@ -47,10 +48,7 @@ import {
   operatorsForMode,
   deriveTruckCargoStatus,
   OPERATION_COLUMNS,
-  EDITABLE_FIELDS,
-  EDITABLE_FCL_FIELDS,
   STATUS_LABEL,
-  STATUS_OPTIONS,
   MODALITY_LABELS,
   MODALITY_COLORS,
 } from '@/lib/operationsTypes'
@@ -76,7 +74,7 @@ interface OperationsGridProps {
 
 type ModeFilter = 'all' | Modality
 type ZonaFilter = 'all' | 'UY' | 'AR' | 'CL' | 'OTRO'
-const COLS_STORAGE_KEY = 'twf-ops-columns'     // per-user visible columns
+const COLS_STORAGE_KEY = 'twf-ops-columns-v2'  // v2: default angosto 12 cols (12/06/2026)
 const COL_ORDER_KEY = 'twf-ops-col-order'      // per-user column order (drag & drop)
 const ACTIVE_ONLY_KEY = 'twf-ops-active-only'  // toggle "Solo activas"
 
@@ -141,6 +139,9 @@ export default function OperationsGrid({
   const [deleteTarget, setDeleteTarget] = useState<UnifiedOperation | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState('')
 
+  // Panel de detalle uid state (selectedOp derived below, after operations is declared).
+  const [selectedUid, setSelectedUid] = useState<string | null>(null)
+
   // Per-user visible columns (localStorage). Default from column defs.
   const [visibleCols, setVisibleCols] = useState<Set<string>>(() => {
     try {
@@ -171,12 +172,34 @@ export default function OperationsGrid({
   const [dragKey, setDragKey] = useState<string | null>(null)
   const [overKey, setOverKey] = useState<string | null>(null)
 
+  // Render incremental: con 1.176 filas montar todo el DOM congela el cambio
+  // de filtros. Se montan ROWS_STEP y el sentinel agrega más al scrollear.
+  // Totales/CSV siguen usando sorted/filtered COMPLETOS.
+  const ROWS_STEP = 150
+  const [rowLimit, setRowLimit] = useState(ROWS_STEP)
+
   const assignMap = useMemo(() => indexAssignments(assignments), [assignments])
   const operations = useMemo(
     () => buildOperations(shipments, dbShipments, assignMap, showArchived),
     [shipments, dbShipments, assignMap, showArchived]
   )
   const archivedCount = useMemo(() => dbShipments.filter(s => s.archived).length, [dbShipments])
+
+  // Panel de detalle: la op se busca fresca en cada render
+  // (derive-on-read: un patch refresca el panel solo).
+  const selectedOp = useMemo(
+    () => (selectedUid ? operations.find(o => o.uid === selectedUid) ?? null : null),
+    [operations, selectedUid]
+  )
+  // Ghost reopen: si la op seleccionada desaparece de `operations` (archivada
+  // con "Ver archivadas" OFF, o eliminada), limpiar selectedUid para que el
+  // panel no reaparezca más adelante si se vuelve a cargar esa op.
+  useEffect(() => {
+    if (selectedUid && !selectedOp) setSelectedUid(null)
+  }, [selectedUid, selectedOp])
+
+  // "Hoy" una sola vez por montaje (antes se creaba un Date POR FILA por render).
+  const hoy = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d }, [])
 
   // Próxima ref FCL sugerida: máximo A#### entre TODAS las cargas + 1.
   // El espacio de numeración "A" es compartido con los aéreos, así que se
@@ -375,6 +398,31 @@ export default function OperationsGrid({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtered, sort, operatorById])
 
+  // Reset SINCRONO al cambiar filtros/orden: si fuera useEffect, el primer
+  // render post-filtro montaría rowLimit viejo (el lag que vinimos a matar).
+  const filterSig = JSON.stringify([search, modeFilter, zonaFilter, originFilter, destFilter, kgMin, kgMax, m3Min, m3Max, segFilter, operatorFilter, activeOnly, showArchived, sort])
+  const [prevFilterSig, setPrevFilterSig] = useState(filterSig)
+  if (filterSig !== prevFilterSig) {
+    setPrevFilterSig(filterSig)
+    setRowLimit(ROWS_STEP)
+  }
+
+  const visibleRows = useMemo(() => sorted.slice(0, rowLimit), [sorted, rowLimit])
+  const hasMore = sorted.length > rowLimit
+
+  const sentinelDesktopRef = useRef<HTMLTableRowElement | null>(null)
+  const sentinelMobileRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    if (!hasMore) return
+    const io = new IntersectionObserver(
+      entries => { if (entries.some(e => e.isIntersecting)) setRowLimit(n => n + ROWS_STEP) },
+      { rootMargin: '400px' }
+    )
+    if (sentinelDesktopRef.current) io.observe(sentinelDesktopRef.current)
+    if (sentinelMobileRef.current) io.observe(sentinelMobileRef.current)
+    return () => io.disconnect()
+  }, [hasMore, rowLimit])
+
   const toggleSort = (key: string) => {
     setSort(prev => {
       if (!prev || prev.key !== key) return { key, dir: 'asc' }
@@ -493,18 +541,6 @@ export default function OperationsGrid({
           <span className="font-medium">Ver archivadas</span>
           <span className="text-[10px] tabular-nums">{archivedCount}</span>
         </button>
-        {segVencidos > 0 && (
-          <button
-            onClick={() => setSegFilter(v => !v)}
-            title="Cargas activas con 7+ días sin actualizar el seguimiento — click para ver solo esas"
-            className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 border text-xs transition-all hover:shadow-sm ${
-              segFilter ? 'bg-red-100 border-red-400 text-red-800 font-semibold' : 'bg-red-50 border-red-300 text-red-700'
-            }`}
-          >
-            ⏰ Seguimiento vencido
-            <span className="text-[10px] tabular-nums font-bold">{segVencidos}</span>
-          </button>
-        )}
       </div>
 
       {/* Toolbar */}
@@ -644,7 +680,7 @@ export default function OperationsGrid({
           <tbody className="divide-y">
             {sorted.length === 0 ? (
               <tr><td colSpan={cols.length + 1} className="text-center py-12 text-muted-foreground">Sin operaciones para los filtros actuales.</td></tr>
-            ) : sorted.map((op) => (
+            ) : visibleRows.map((op) => (
               <OperationRow
                 key={op.uid}
                 op={op}
@@ -652,12 +688,20 @@ export default function OperationsGrid({
                 operators={operators}
                 operatorById={operatorById}
                 truckStatus={truckByRef.get(op.ref)}
+                hoy={hoy}
                 onAssign={assignOp}
                 onPatch={onPatchShipment}
-                onPatchFcl={onPatchFclField}
                 onDelete={requestDelete}
+                onOpen={setSelectedUid}
               />
             ))}
+            {hasMore && (
+              <tr ref={sentinelDesktopRef}>
+                <td colSpan={cols.length + 1} className="text-center py-3 text-xs text-muted-foreground">
+                  Mostrando {visibleRows.length.toLocaleString('es-UY')} de {sorted.length.toLocaleString('es-UY')} — desplazate para ver más
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -666,7 +710,7 @@ export default function OperationsGrid({
       <div className="md:hidden space-y-2">
         {sorted.length === 0 ? (
           <div className="text-center py-10 text-muted-foreground text-sm border rounded-lg bg-card">Sin operaciones para los filtros actuales.</div>
-        ) : sorted.map(op => (
+        ) : visibleRows.map(op => (
           <OperationCard
             key={op.uid}
             op={op}
@@ -674,10 +718,16 @@ export default function OperationsGrid({
             operatorById={operatorById}
             truckStatus={truckByRef.get(op.ref)}
             onAssign={assignOp}
-            onPatch={onPatchShipment}
+            onOpen={setSelectedUid}
           />
         ))}
       </div>
+
+      {hasMore && (
+        <div ref={sentinelMobileRef} className="md:hidden text-center py-3 text-xs text-muted-foreground">
+          Mostrando {visibleRows.length.toLocaleString('es-UY')} de {sorted.length.toLocaleString('es-UY')} — desplazate para ver más
+        </div>
+      )}
 
       {/* Totals for the current filter */}
       <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs">
@@ -688,7 +738,7 @@ export default function OperationsGrid({
       </div>
 
       <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-        <LockSimple size={12} /> <strong>Click en una celda</strong> para editarla (Enter guarda · Esc cancela). FCL: se editan los datos del buque/ruta (✏️ = pisa a la planilla); salida/fiscal/LIBRE siguen viniendo de la planilla hasta el flip. La REF no se edita.
+        <LockSimple size={12} /> <strong>Click en una fila</strong> para ver y editar el detalle. FCL: se editan los datos del buque/ruta (✏️ = pisa a la planilla); salida/fiscal/LIBRE siguen viniendo de la planilla hasta el flip. La REF no se edita.
       </p>
 
       <OperatorsManager
@@ -752,6 +802,18 @@ export default function OperationsGrid({
           </div>
         </DialogContent>
       </Dialog>
+      <OperationDetailPanel
+        op={selectedOp}
+        truckStatus={selectedOp ? truckByRef.get(selectedOp.ref) : undefined}
+        operators={operators}
+        operatorById={operatorById}
+        hoy={hoy}
+        onAssign={assignOp}
+        onPatch={onPatchShipment}
+        onPatchFcl={onPatchFclField}
+        onRequestDelete={onDeleteShipment ? requestDelete : undefined}
+        onClose={() => setSelectedUid(null)}
+      />
     </div>
   )
 }
@@ -764,30 +826,27 @@ const OperationRow = memo(function OperationRow({
   operators,
   operatorById,
   truckStatus,
+  hoy,
   onAssign,
   onPatch,
-  onPatchFcl,
   onDelete,
+  onOpen,
 }: {
   op: UnifiedOperation
   cols: typeof OPERATION_COLUMNS
   operators: Operator[]
   operatorById: Map<string, Operator>
   truckStatus?: TruckRefInfo
+  hoy: Date
   onAssign: (op: UnifiedOperation, operatorId: string | null) => void
   onPatch: (id: string, fields: Record<string, unknown>) => void
-  onPatchFcl?: (dbId: string, edits: Record<string, unknown>) => void
   onDelete?: (op: UnifiedOperation) => void
+  onOpen: (uid: string) => void
 }) {
   const eligible = operatorsForMode(operators, op.mode)
   const assigned = op.operatorId ? operatorById.get(op.operatorId) : null
-  // DB rows (LCL/aéreo/terrestre) are inline-editable; FCL is a read-only mirror.
-  const editable = op.source === 'db' && !!op.dbId && !op.readOnly
-  // FCL espejo (Etapa 3): campos del nivel SG editables vía overlay web_edits.
-  const fclEditable = op.source === 'fcl' && !!op.dbId && !!onPatchFcl
   // Seguimiento vencido: 7+ días sin actualizar y la carga sigue activa.
-  const hoyRow = new Date(); hoyRow.setHours(0, 0, 0, 0)
-  const segVencido = isSeguimientoVencido(op, truckStatus?.status, hoyRow)
+  const segVencido = isSeguimientoVencido(op, truckStatus?.status, hoy)
 
   const cell = (key: string) => {
     switch (key) {
@@ -796,7 +855,7 @@ const OperationRow = memo(function OperationRow({
           <span className="inline-flex items-center gap-1.5 font-semibold">
             <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: MODALITY_COLORS[op.mode] }} />
             {op.ref}
-            {op.readOnly && !fclEditable && <LockSimple size={11} className="text-muted-foreground" />}
+            {op.readOnly && <LockSimple size={11} className="text-muted-foreground" />}
             {op.webEdited && op.webEdited.length > 0 && (
               <span title={`Editada en la web: ${op.webEdited.join(', ')} (pisa a la planilla)`} className="text-[10px]">✏️</span>
             )}
@@ -808,6 +867,7 @@ const OperationRow = memo(function OperationRow({
           <select
             value={op.operatorId || ''}
             onChange={e => onAssign(op, e.target.value || null)}
+            onClick={e => e.stopPropagation()}
             className="h-6 max-w-[130px] text-xs rounded border border-transparent hover:border-border bg-transparent px-1 cursor-pointer focus:border-primary"
             style={assigned ? { color: assigned.color || undefined } : undefined}
           >
@@ -837,9 +897,8 @@ const OperationRow = memo(function OperationRow({
   return (
     // Zebra via CSS (even:) instead of an index prop → rows don't re-render on
     // sort/reorder, only the DOM nodes move (memo stays valid).
-    <tr className="bg-card even:bg-muted/30 hover:bg-primary/5">
+    <tr onClick={() => onOpen(op.uid)} className="bg-card even:bg-muted/30 hover:bg-primary/5 cursor-pointer">
       {cols.map((c) => {
-        const ef = editable ? EDITABLE_FIELDS[c.key as keyof UnifiedOperation] : undefined
         // Seguimiento 7+ días sin actualizar (carga activa) → celda en rojo.
         const segRojo = c.key === 'seguimiento' && segVencido
         const tdClass = `px-2 py-1.5 align-top ${c.w || ''} ${c.numeric ? 'text-right tabular-nums' : ''} ${c.wrap ? 'whitespace-normal break-words' : 'whitespace-nowrap'} ${c.sticky ? 'sticky left-0 bg-inherit' : ''} ${segRojo ? 'bg-red-50 text-red-700 font-semibold' : ''}`
@@ -852,35 +911,6 @@ const OperationRow = memo(function OperationRow({
                 <TruckIcon size={10} weight="fill" className="text-primary" />
                 {truckStatus.truckCode} · {STATUS_LABEL[truckStatus.status] || truckStatus.status}
               </Badge>
-            </td>
-          )
-        }
-
-        if (ef) {
-          return (
-            <td key={c.key} className={tdClass}>
-              <EditableCell
-                value={(op as unknown as Record<string, unknown>)[c.key] as string | number | boolean}
-                type={ef.type}
-                options={ef.options}
-                wrap={c.wrap}
-                onCommit={v => onPatch(op.dbId!, { [ef.col]: v })}
-              />
-            </td>
-          )
-        }
-
-        // FCL espejo: edición por overlay (campos SG; operativas siguen en la planilla)
-        const ffKey = fclEditable ? EDITABLE_FCL_FIELDS[c.key as keyof UnifiedOperation] : undefined
-        if (ffKey) {
-          return (
-            <td key={c.key} className={tdClass}>
-              <EditableCell
-                value={(op as unknown as Record<string, unknown>)[c.key] as string}
-                type="text"
-                wrap={c.wrap}
-                onCommit={v => onPatchFcl!(op.dbId!, { [ffKey]: v })}
-              />
             </td>
           )
         }
@@ -901,7 +931,7 @@ const OperationRow = memo(function OperationRow({
             <button
               type="button"
               title={op.archived ? 'Restaurar carga' : 'Archivar carga (reversible)'}
-              onClick={() => onPatch(op.dbId!, { archived: !op.archived })}
+              onClick={(e) => { e.stopPropagation(); onPatch(op.dbId!, { archived: !op.archived }) }}
               className="p-1 rounded text-muted-foreground/60 hover:text-amber-600 hover:bg-amber-50"
             >
               {op.archived ? <ArrowCounterClockwise size={13} /> : <Archive size={13} />}
@@ -910,7 +940,7 @@ const OperationRow = memo(function OperationRow({
               <button
                 type="button"
                 title="Eliminar definitivamente…"
-                onClick={() => onDelete(op)}
+                onClick={(e) => { e.stopPropagation(); onDelete(op) }}
                 className="p-1 rounded text-muted-foreground/60 hover:text-red-600 hover:bg-red-50"
               >
                 <Trash size={13} />
@@ -943,38 +973,26 @@ const OperationCard = memo(function OperationCard({
   operatorById,
   truckStatus,
   onAssign,
-  onPatch,
+  onOpen,
 }: {
   op: UnifiedOperation
   operators: Operator[]
   operatorById: Map<string, Operator>
   truckStatus?: TruckRefInfo
   onAssign: (op: UnifiedOperation, operatorId: string | null) => void
-  onPatch: (id: string, fields: Record<string, unknown>) => void
+  onOpen: (uid: string) => void
 }) {
-  const editable = op.source === 'db' && !!op.dbId && !op.readOnly
   const eligible = operatorsForMode(operators, op.mode)
   const assigned = op.operatorId ? operatorById.get(op.operatorId) : null
 
   const renderVal = (key: keyof UnifiedOperation) => {
-    const ef = editable ? EDITABLE_FIELDS[key] : undefined
-    if (ef) {
-      return (
-        <EditableCell
-          value={(op as unknown as Record<string, unknown>)[key] as string | number | boolean}
-          type={ef.type}
-          options={ef.options}
-          onCommit={v => onPatch(op.dbId!, { [ef.col]: v })}
-        />
-      )
-    }
     const num = key === 'pkgs' || key === 'kg' || key === 'm3'
     const raw = (op as unknown as Record<string, unknown>)[key]
     return <span>{num ? fmtNum(Number(raw) || 0) : (String(raw ?? '') || '—')}</span>
   }
 
   return (
-    <div className="rounded-lg border bg-card p-3 shadow-sm">
+    <div className="rounded-lg border bg-card p-3 shadow-sm cursor-pointer" onClick={() => onOpen(op.uid)}>
       {/* Header: ref + estado */}
       <div className="flex items-center justify-between gap-2">
         <span className="inline-flex items-center gap-1.5 font-semibold text-sm">
@@ -984,14 +1002,6 @@ const OperationCard = memo(function OperationCard({
         </span>
         {truckStatus ? (
           <Badge variant="outline" className="text-[10px] gap-1"><TruckIcon size={11} weight="fill" className="text-primary" />{truckStatus.truckCode} · {STATUS_LABEL[truckStatus.status] || truckStatus.status}</Badge>
-        ) : editable ? (
-          <select
-            value={op.status || ''}
-            onChange={e => onPatch(op.dbId!, { status: e.target.value })}
-            className="h-7 max-w-[150px] text-xs rounded border border-border bg-card px-1.5"
-          >
-            {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
         ) : (
           op.status && <Badge variant="outline" className="text-[10px]">{op.status}</Badge>
         )}
@@ -1002,6 +1012,7 @@ const OperationCard = memo(function OperationCard({
         <select
           value={op.operatorId || ''}
           onChange={e => onAssign(op, e.target.value || null)}
+          onClick={e => e.stopPropagation()}
           className="w-full h-8 text-sm rounded-md border border-border bg-card px-2"
           style={assigned ? { color: assigned.color || undefined } : undefined}
         >
@@ -1023,91 +1034,3 @@ const OperationCard = memo(function OperationCard({
   )
 })
 
-// ── Inline-editable cell (DB rows only) ──
-// text/number → click to edit, Enter/blur saves, Esc cancels.
-// bool → click toggles SI/— and saves immediately.
-function EditableCell({
-  value,
-  type,
-  options,
-  wrap,
-  onCommit,
-}: {
-  value: string | number | boolean
-  type: 'text' | 'number' | 'bool' | 'select'
-  options?: { value: string; label: string }[]
-  wrap?: boolean
-  onCommit: (v: string | number | boolean | null) => void
-}) {
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState('')
-
-  if (type === 'select') {
-    const cur = String(value ?? '')
-    return (
-      <select
-        value={cur}
-        onChange={e => onCommit(e.target.value)}
-        className="h-6 w-full max-w-[128px] text-xs rounded border border-transparent hover:border-border bg-transparent px-1 cursor-pointer focus:border-primary"
-      >
-        {(options || []).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
-    )
-  }
-
-  if (type === 'bool') {
-    const on = value === 'SI' || value === true
-    return (
-      <button
-        type="button"
-        onClick={() => onCommit(!on)}
-        title="Click para cambiar"
-        className={`h-5 px-1.5 rounded text-[10px] font-semibold transition-colors ${on ? 'text-green-600 hover:bg-green-50' : 'text-muted-foreground/50 hover:bg-muted'}`}
-      >
-        {on ? 'SI' : '—'}
-      </button>
-    )
-  }
-
-  if (editing) {
-    const commit = () => {
-      setEditing(false)
-      const t = draft.trim()
-      if (type === 'number') {
-        if (t === '') { if (value !== 0 && value !== '') onCommit(null); return }
-        const n = parseFloat(t.replace(',', '.'))
-        if (isFinite(n) && n !== Number(value)) onCommit(n)
-      } else {
-        if (draft !== (value ?? '')) onCommit(draft)
-      }
-    }
-    return (
-      <input
-        autoFocus
-        value={draft}
-        onChange={e => setDraft(e.target.value)}
-        onFocus={e => e.target.select()}
-        onBlur={commit}
-        onKeyDown={e => {
-          if (e.key === 'Enter') { e.preventDefault(); commit() }
-          else if (e.key === 'Escape') { e.preventDefault(); setEditing(false) }
-        }}
-        inputMode={type === 'number' ? 'decimal' : undefined}
-        className="w-full h-6 px-1 rounded border border-primary bg-background text-xs outline-none"
-      />
-    )
-  }
-
-  const display = type === 'number'
-    ? (value === 0 || value === '' ? '' : fmtNum(Number(value)))
-    : ((value as string) || '')
-  return (
-    <div
-      onClick={() => { setDraft(value === 0 || value == null ? '' : String(value)); setEditing(true) }}
-      title="Click para editar"
-      className={`min-h-[20px] cursor-text rounded px-1 -mx-1 hover:bg-primary/10 ${wrap ? 'line-clamp-2 leading-snug' : ''}`}
-    >
-      {display || <span className="text-muted-foreground/30">—</span>}
-    </div>
-  )
-}
