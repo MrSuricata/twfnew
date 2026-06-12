@@ -191,6 +191,13 @@ export default function OperationsGrid({
     () => (selectedUid ? operations.find(o => o.uid === selectedUid) ?? null : null),
     [operations, selectedUid]
   )
+  // Ghost reopen: si la op seleccionada desaparece de `operations` (archivada
+  // con "Ver archivadas" OFF, o eliminada), limpiar selectedUid para que el
+  // panel no reaparezca más adelante si se vuelve a cargar esa op.
+  useEffect(() => {
+    if (selectedUid && !selectedOp) setSelectedUid(null)
+  }, [selectedUid, selectedOp])
+
   // "Hoy" una sola vez por montaje (antes se creaba un Date POR FILA por render).
   const hoy = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d }, [])
 
@@ -391,22 +398,28 @@ export default function OperationsGrid({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtered, sort, operatorById])
 
-  useEffect(() => {
+  // Reset SINCRONO al cambiar filtros/orden: si fuera useEffect, el primer
+  // render post-filtro montaría rowLimit viejo (el lag que vinimos a matar).
+  const filterSig = JSON.stringify([search, modeFilter, zonaFilter, originFilter, destFilter, kgMin, kgMax, m3Min, m3Max, segFilter, operatorFilter, activeOnly, showArchived, sort])
+  const [prevFilterSig, setPrevFilterSig] = useState(filterSig)
+  if (filterSig !== prevFilterSig) {
+    setPrevFilterSig(filterSig)
     setRowLimit(ROWS_STEP)
-  }, [search, modeFilter, zonaFilter, originFilter, destFilter, kgMin, kgMax, m3Min, m3Max, segFilter, operatorFilter, activeOnly, showArchived, sort])
+  }
 
   const visibleRows = useMemo(() => sorted.slice(0, rowLimit), [sorted, rowLimit])
   const hasMore = sorted.length > rowLimit
 
-  const sentinelRef = useRef<HTMLDivElement | null>(null)
+  const sentinelDesktopRef = useRef<HTMLTableRowElement | null>(null)
+  const sentinelMobileRef = useRef<HTMLDivElement | null>(null)
   useEffect(() => {
-    const el = sentinelRef.current
-    if (!el || !hasMore) return
+    if (!hasMore) return
     const io = new IntersectionObserver(
-      entries => { if (entries[0].isIntersecting) setRowLimit(n => n + ROWS_STEP) },
-      { rootMargin: '600px' }
+      entries => { if (entries.some(e => e.isIntersecting)) setRowLimit(n => n + ROWS_STEP) },
+      { rootMargin: '400px' }
     )
-    io.observe(el)
+    if (sentinelDesktopRef.current) io.observe(sentinelDesktopRef.current)
+    if (sentinelMobileRef.current) io.observe(sentinelMobileRef.current)
     return () => io.disconnect()
   }, [hasMore, rowLimit])
 
@@ -682,6 +695,13 @@ export default function OperationsGrid({
                 onOpen={setSelectedUid}
               />
             ))}
+            {hasMore && (
+              <tr ref={sentinelDesktopRef}>
+                <td colSpan={cols.length + 1} className="text-center py-3 text-xs text-muted-foreground">
+                  Mostrando {visibleRows.length.toLocaleString('es-UY')} de {sorted.length.toLocaleString('es-UY')} — desplazate para ver más
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -704,7 +724,7 @@ export default function OperationsGrid({
       </div>
 
       {hasMore && (
-        <div ref={sentinelRef} className="text-center py-3 text-xs text-muted-foreground">
+        <div ref={sentinelMobileRef} className="md:hidden text-center py-3 text-xs text-muted-foreground">
           Mostrando {visibleRows.length.toLocaleString('es-UY')} de {sorted.length.toLocaleString('es-UY')} — desplazate para ver más
         </div>
       )}

@@ -21,6 +21,16 @@ const NUM_FMT = new Intl.NumberFormat('es-UY', { maximumFractionDigits: 2 })
 // no boolean — ver FieldRow para el manejo especial.
 const SECTIONS: { title: string; fields: { key: keyof UnifiedOperation; label: string; kind?: 'bool' | 'number' }[] }[] = [
   {
+    title: 'Identificación',
+    fields: [
+      { key: 'cliente', label: 'Cliente / Cnee' },
+      { key: 'clientRef', label: 'Ref cliente' },
+      { key: 'shipper', label: 'Shipper' },
+      { key: 'agente', label: 'Agente' },
+      { key: 'incoterm', label: 'Incoterm' },
+    ],
+  },
+  {
     title: 'Documental',
     fields: [
       { key: 'docNumber', label: 'BL / MAWB / CRT' },
@@ -363,10 +373,10 @@ function FieldRow({
   const save = () => {
     setEditing(false)
     if (kind === 'number') {
+      if (draft.trim() === '') { if (raw !== null && raw !== 0) onCommit(fieldKey, null); return }
       const n = parseFloat(draft.replace(',', '.'))
-      const v = draft.trim() === '' ? 0 : n
-      if (!isFinite(v)) return            // basura tipeada → no comitear nada
-      if (String(raw ?? '') !== String(v)) onCommit(fieldKey, v)
+      if (!isFinite(n)) return            // basura tipeada → no comitear nada
+      if (String(raw ?? '') !== String(n)) onCommit(fieldKey, n)
       return
     }
     const v = draft.trim()
