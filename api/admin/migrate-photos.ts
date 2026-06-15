@@ -20,6 +20,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .from('origin_photos')
       .select('id, shipment_ref, file_data, thumbnail_data')
       .is('storage_path', null)
+      .order('created_at_ts', { ascending: true })
       .limit(BATCH)
     if (error) throw error
     const rows = pend || []

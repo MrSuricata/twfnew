@@ -632,9 +632,9 @@ async function handleOriginPhotos(req: VercelRequest, res: VercelResponse, db: a
     if (shipmentRef) query = query.eq('shipment_ref', shipmentRef)
     const { data, error } = await query
     if (error) throw error
-    const thumbPaths = (data || []).map((p: any) => p.thumb_path).filter(Boolean)
+    const thumbPaths = (data || []).map((p: { thumb_path: string | null }) => p.thumb_path).filter(Boolean)
     const signed = await signPhotoUrls(db, thumbPaths, THUMB_TTL)
-    const photos = (data || []).map((p: any) => ({
+    const photos = (data || []).map((p: { id: string; shipment_ref: string; container_number: string | null; caption: string | null; photo_type: string | null; file_name: string; file_type: string; thumb_path: string | null; storage_path: string | null; thumbnail_data: string | null; created_at_ts: number; created_by: string }) => ({
       id: p.id,
       shipmentRef: p.shipment_ref,
       containerNumber: p.container_number || '',

@@ -370,7 +370,7 @@ En `OriginPhotoLightbox.tsx` (~43):
 - [ ] **Step 5: Gates + commit**
 
 Run: `npm run typecheck && npm run test:run && npm run build && npm run lint`
-Expected: verde, 129 tests (126 + 3 de Task 1), sin warnings nuevos.
+Expected: verde, 135 tests (126 + 3 de Task 1), sin warnings nuevos.
 
 ```bash
 git add src/lib/quotationTypes.ts src/lib/dataClient.ts src/components/OriginPhotoGallery.tsx src/components/OriginPhotoLightbox.tsx
@@ -489,7 +489,7 @@ git commit -m "feat(fotos): endpoint de migracion idempotente + boton en Equipo"
 
 ### Task 6: gates finales + push + PR
 
-- [ ] **Step 1** Suite completa (`typecheck && test:run && build && lint`) → 129 tests, sin warnings nuevos.
+- [ ] **Step 1** Suite completa (`typecheck && test:run && build && lint`) → 135 tests, sin warnings nuevos.
 - [ ] **Step 2** `git push -u origin feat/fotos-storage`
 - [ ] **Step 3** Link de PR a Brian: `https://github.com/MrSuricata/twfnew/pull/new/feat/fotos-storage`
 

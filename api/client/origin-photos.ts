@@ -116,7 +116,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Filter by client's shipment refs BEFORE signing (no firmar de más)
     if (shipmentRefs) {
-      rawPhotos = rawPhotos.filter((p: any) => shipmentRefs!.has(p.shipment_ref))
+      rawPhotos = rawPhotos.filter((p: { shipment_ref: string }) => shipmentRefs!.has(p.shipment_ref))
     }
 
     const thumbPaths = rawPhotos.map((p: any) => p.thumb_path).filter(Boolean)
