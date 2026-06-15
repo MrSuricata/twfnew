@@ -120,6 +120,13 @@ describe('viabilidad — desconsol y entregaPlanta', () => {
     expect(EDITABLE_FIELDS.desconsol).toEqual({ col: 'desconsol_date', type: 'text' })
     expect(EDITABLE_FIELDS.entregaPlanta).toEqual({ col: 'entrega_planta', type: 'bool' })
   })
+  it('EDITABLE_FIELDS incluye los campos de Operativas (editables tras el flip)', () => {
+    expect(EDITABLE_FIELDS.libre).toEqual({ col: 'libre', type: 'text' })
+    expect(EDITABLE_FIELDS.salida).toEqual({ col: 'salida', type: 'text' })
+    expect(EDITABLE_FIELDS.etaFisc).toEqual({ col: 'eta_fiscal', type: 'text' })
+    expect(EDITABLE_FIELDS.operativa).toEqual({ col: 'operativa', type: 'text' })
+    expect(EDITABLE_FIELDS.terminal).toEqual({ col: 'terminal', type: 'text' })
+  })
   it('DEPOSITOS_UY trae los conocidos', () => {
     expect(DEPOSITOS_UY).toContain('GODILCO')
     expect(DEPOSITOS_UY).toContain('TCP')
