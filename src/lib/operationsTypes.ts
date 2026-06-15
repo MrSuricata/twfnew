@@ -319,7 +319,22 @@ export function fclToColumns(s: ParsedShipment): Partial<DbShipment> {
   }
 }
 
-/** Map a DB shipment (LCL/aéreo/terrestre) into a unified grid row. */
+/** Estado de una FCL horneada: se DERIVA de las columnas de operativa (no se
+ *  guarda — derive-on-read), reusando getShipmentStatus con un ParsedShipment
+ *  mínimo de 1 operativa. Si la FCL no tiene datos de operativa (Chile/BA,
+ *  históricas), va sin operativas y el estado sale de ETA como en la planilla. */
+function fclColumnsStatus(s: DbShipment): string {
+  const hasOp = !!(s.salida || s.eta_fiscal || s.dev || s.descarga || s.operativa)
+  const parsed = {
+    REF: s.ref, ETD: s.etd, ETA: s.eta,
+    operativas: hasOp
+      ? [{ SALIDA: s.salida, ETA_FISC: s.eta_fiscal, DEV: s.dev, DESCARGA: s.descarga, OPERATIVA: s.operativa }]
+      : [],
+  } as unknown as ParsedShipment
+  return getShipmentStatus(parsed).label
+}
+
+/** Map a DB shipment (LCL/aéreo/terrestre + FCL horneada) into a unified grid row. */
 export function dbShipmentToOperation(s: DbShipment): UnifiedOperation {
   return {
     uid: s.id,
@@ -375,7 +390,9 @@ export function dbShipmentToOperation(s: DbShipment): UnifiedOperation {
     certi: !!s.certi,
     impresa: !!s.impresa,
     archived: !!s.archived,
-    status: s.status || '',
+    // FCL: estado derivado de las columnas de operativa (label, como la planilla).
+    // Resto: código editable guardado en la columna status.
+    status: s.mode === 'fcl' ? fclColumnsStatus(s) : (s.status || ''),
   }
 }
 
@@ -436,7 +453,10 @@ export function isSeguimientoVencido(op: UnifiedOperation, truckStatus: string |
  *  terrestre): estado terminal — en fiscal o entregado — derivado del camión
  *  si está cargada en uno. */
 export function isOperationActive(op: UnifiedOperation, truckStatus: string | undefined, today: Date): boolean {
-  if (op.source === 'db') {
+  // No-FCL (LCL/aéreo/terrestre): estado terminal por código (derivado del camión
+  // si va en uno). Se basa en `mode` (no en source) para que la FCL horneada (que
+  // pasa a source='db') siga usando la lógica FCL de abajo.
+  if (op.mode !== 'fcl') {
     const eff = truckStatus || op.status
     return eff !== 'en_fiscal' && eff !== 'devuelto'
   }

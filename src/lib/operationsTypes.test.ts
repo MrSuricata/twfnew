@@ -33,7 +33,7 @@ describe('buildOperations — refs duplicadas en la planilla', () => {
 const TODAY = new Date(2026, 5, 10) // 10/06/2026
 
 const op = (over: Partial<UnifiedOperation>): UnifiedOperation =>
-  ({ source: 'fcl', ref: 'A1', libre: '', salida: '', etaFisc: '', eta: '', status: '', ...over }) as UnifiedOperation
+  ({ source: 'fcl', mode: 'fcl', ref: 'A1', libre: '', salida: '', etaFisc: '', eta: '', status: '', ...over }) as UnifiedOperation
 
 describe('isOperationActive — criterio devuelta + en fiscal', () => {
   it('FCL devuelta Y en fiscal → inactiva', () => {
@@ -54,13 +54,13 @@ describe('isOperationActive — criterio devuelta + en fiscal', () => {
     expect(isOperationActive(op({}), undefined, TODAY)).toBe(true)
   })
   it('DB: estado terminal (en fiscal / entregado) → inactiva; en tránsito → activa', () => {
-    expect(isOperationActive(op({ source: 'db', status: 'en_fiscal' }), undefined, TODAY)).toBe(false)
-    expect(isOperationActive(op({ source: 'db', status: 'devuelto' }), undefined, TODAY)).toBe(false)
-    expect(isOperationActive(op({ source: 'db', status: 'en_transito' }), undefined, TODAY)).toBe(true)
+    expect(isOperationActive(op({ source: 'db', mode: 'lcl', status: 'en_fiscal' }), undefined, TODAY)).toBe(false)
+    expect(isOperationActive(op({ source: 'db', mode: 'lcl', status: 'devuelto' }), undefined, TODAY)).toBe(false)
+    expect(isOperationActive(op({ source: 'db', mode: 'lcl', status: 'en_transito' }), undefined, TODAY)).toBe(true)
   })
   it('DB en camión: el estado derivado del camión manda', () => {
-    expect(isOperationActive(op({ source: 'db', status: 'en_transito' }), 'en_fiscal', TODAY)).toBe(false)
-    expect(isOperationActive(op({ source: 'db', status: 'en_fiscal' }), 'en_frontera', TODAY)).toBe(true)
+    expect(isOperationActive(op({ source: 'db', mode: 'lcl', status: 'en_transito' }), 'en_fiscal', TODAY)).toBe(false)
+    expect(isOperationActive(op({ source: 'db', mode: 'lcl', status: 'en_fiscal' }), 'en_frontera', TODAY)).toBe(true)
   })
 })
 
@@ -209,5 +209,25 @@ describe('fclToColumns — horneado FCL a columnas (PR-C flip)', () => {
   it('split A/B: origin_ref = ref sin sufijo; sin split queda vacío', () => {
     expect(fclToColumns({ REF: 'A6902 A', operativas: [] } as unknown as ParsedShipment).origin_ref).toBe('A6902')
     expect(fclToColumns({ REF: 'A7900', operativas: [] } as unknown as ParsedShipment).origin_ref).toBe('')
+  })
+})
+
+// PR-C: post-flip la FCL es una fila DB (source='db', mode='fcl') pero conserva
+// su comportamiento — estado DERIVADO de columnas y activa por devuelta+fiscal.
+describe('FCL horneada (source=db, mode=fcl) — comportamiento preservado', () => {
+  it('dbShipmentToOperation deriva el estado FCL desde las columnas de operativa', () => {
+    const arribFiscal = dbShipmentToOperation({
+      id: 'shp-fcl-1', ref: 'A7900', mode: 'fcl', eta: '2026-06-01',
+      salida: '2026-06-03', eta_fiscal: '2026-06-04',
+    } as never)
+    expect(arribFiscal.status).toBe('En Depósito Fiscal')
+    const sinOperativa = dbShipmentToOperation({
+      id: 'shp-fcl-2', ref: 'A7901', mode: 'fcl', eta: '2026-06-01',
+    } as never)
+    expect(sinOperativa.status).toBe('En Puerto')
+  })
+  it('isOperationActive usa la lógica FCL aunque source=db (devuelta + en fiscal → inactiva)', () => {
+    const o = op({ source: 'db', mode: 'fcl', libre: 'DEVUELTO', etaFisc: '2025-12-17' })
+    expect(isOperationActive(o, undefined, TODAY)).toBe(false)
   })
 })
