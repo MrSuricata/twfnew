@@ -11,6 +11,7 @@ import { applyWebEdits } from './shipmentTypes'
 import type { Truck, TruckLoad, LclAirShipment } from './truckTypes'
 import type { BillingRecord } from './billingTypes'
 import type { Operator, OperatorAssignment, DbShipment } from './operationsTypes'
+import { fclToColumns } from './operationsTypes'
 import { matchesPattern } from './clientMatching'
 
 // ── Shipments FCL (espejo en `shipments` → fallback cache JSON) ──
@@ -222,6 +223,32 @@ export async function migratePhotos(): Promise<{ migradas: number; restantes: nu
   const res = await authFetch('/api/data/origin-photos?mode=migrate', { method: 'POST' })
   if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || `HTTP ${res.status}`) }
   return res.json()
+}
+
+/** Hornear FCL (flip Etapa 4): lee el espejo con su estado efectivo (sheet_raw +
+ *  web_edits), lo mapea a columnas reales y lo upsertea como filas source='fcl'.
+ *  Idempotente. Correr durante el cutover (con FCL_SOURCE_OF_TRUTH=db ya seteado;
+ *  usa ?raw=1 para leer el espejo aunque el flip oculte la lectura normal). */
+export async function bakeFclToColumns(): Promise<{ horneadas: number }> {
+  const res = await authFetch('/api/data/shipments?includeMirror=only&raw=1')
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const data = await res.json()
+  const rows = (data.shipments || []).filter((r: { sheet_raw?: unknown }) => r.sheet_raw)
+  const payload = rows.map((r: { id: string; sheet_raw: unknown; web_edits: unknown; created_at_ts?: number }) => ({
+    id: r.id,
+    created_at_ts: r.created_at_ts,
+    ...fclToColumns(applyWebEdits(r.sheet_raw as never, r.web_edits as never, r.id)),
+  }))
+  for (let i = 0; i < payload.length; i += 200) {
+    const batch = payload.slice(i, i + 200)
+    const r = await authFetch('/api/data/shipments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(batch),
+    })
+    if (!r.ok) { const e = await r.json().catch(() => ({})); throw new Error(e.error || `HTTP ${r.status}`) }
+  }
+  return { horneadas: payload.length }
 }
 
 // ── Notification Tasks ──

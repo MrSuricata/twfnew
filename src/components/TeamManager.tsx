@@ -23,7 +23,7 @@ import {
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import { authFetch } from '@/lib/authClient'
-import { migratePhotos } from '@/lib/dataClient'
+import { migratePhotos, bakeFclToColumns } from '@/lib/dataClient'
 
 // ─── Equipo: usuarios individuales del admin + log de actividad ──────
 // Solo visible/usable por el OWNER (Brian). Los usuarios creados acá entran
@@ -60,6 +60,7 @@ export default function TeamManager({ refreshKey = 0 }: { refreshKey?: number })
   const [fEmail, setFEmail] = useState('')
   const [fPassword, setFPassword] = useState('')
   const [migrating, setMigrating] = useState(false)
+  const [baking, setBaking] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -151,6 +152,22 @@ export default function TeamManager({ refreshKey = 0 }: { refreshKey?: number })
       toast.error(`Error: ${(err as Error)?.message || 'falló la migración'}`, { id: t })
     } finally {
       setMigrating(false)
+    }
+  }
+
+  // Flip Etapa 4: hornear las FCL del espejo a columnas reales editables.
+  // Correr SOLO en el cutover, con FCL_SOURCE_OF_TRUTH=db ya seteado. Idempotente.
+  const runBakeFcl = async () => {
+    if (baking) return
+    setBaking(true)
+    const t = toast.loading('Horneando FCL a la base…')
+    try {
+      const r = await bakeFclToColumns()
+      toast.success(`Horneadas ${r.horneadas} FCL a columnas. Refrescá para verlas como filas editables.`, { id: t })
+    } catch (err) {
+      toast.error(`Error: ${(err as Error)?.message || 'falló el horneado'}`, { id: t })
+    } finally {
+      setBaking(false)
     }
   }
 
@@ -280,6 +297,9 @@ export default function TeamManager({ refreshKey = 0 }: { refreshKey?: number })
         <div className="flex flex-wrap gap-3">
           <Button onClick={runPhotoMigration} disabled={migrating} variant="outline">
             {migrating ? 'Migrando…' : 'Migrar fotos a Storage'}
+          </Button>
+          <Button onClick={runBakeFcl} disabled={baking} variant="outline">
+            {baking ? 'Horneando…' : 'Hornear FCL a la base (flip)'}
           </Button>
         </div>
       </div>
