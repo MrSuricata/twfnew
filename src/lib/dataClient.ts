@@ -203,7 +203,7 @@ export async function fetchOriginPhotoFile(photoId: string): Promise<string | nu
   const res = await authFetch(`/api/client/origin-photos?id=${encodeURIComponent(photoId)}`)
   if (!res.ok) return null
   const data = await res.json()
-  return data.photo?.fileData || null
+  return data.photo?.fullUrl || data.photo?.fileData || null   // URL firmada o base64 (fallback)
 }
 
 /** Fetch origin photos for the current client (filtered by their shipments). */

@@ -77,7 +77,7 @@ export default function OriginPhotoGallery({ photos, isAdmin = false, onDeletePh
             onClick={() => openLightbox(index)}
           >
             <img
-              src={photo.thumbnailData}
+              src={photo.thumbnailUrl || photo.thumbnailData}
               alt={photo.caption || photo.fileName}
               className="w-full h-full object-cover"
               loading="lazy"

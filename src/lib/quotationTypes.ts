@@ -69,6 +69,10 @@ export interface OriginPhoto {
   fileType: string            // "image/jpeg"
   fileData?: string           // base64 full (only in upload/download, NOT bulk)
   thumbnailData?: string      // base64 mini (~50KB, included in listings)
+  storagePath?: string | null
+  thumbPath?: string | null
+  thumbnailUrl?: string | null   // signed URL (reemplaza thumbnailData cuando está migrada)
+  fullUrl?: string | null        // signed URL del full (single fetch)
   createdAt: number
   createdBy: string
 }

@@ -40,7 +40,7 @@ export default function OriginPhotoLightbox({
 
   if (!photo) return null
 
-  const imageSrc = fullImages[photo.id] || photo.thumbnailData
+  const imageSrc = fullImages[photo.id] || photo.thumbnailUrl || photo.thumbnailData
   const isLoading = loadingId === photo.id
 
   return (
