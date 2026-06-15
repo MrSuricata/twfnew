@@ -10,7 +10,7 @@ import { Operator, OperatorAssignment, DbShipment, UnifiedOperation } from '@/li
 import { getDemoShipments } from '@/lib/demoShipments'
 import { filterShipments } from '@/lib/sheetsSync'
 import { verifySession, clearAuth, authFetch } from '@/lib/authClient'
-import { loadAdminData, saveQuotes, saveDocuments, saveReports, saveClients, saveTrucks, saveTruckLoads, saveLclAir, deleteTruck as apiDeleteTruck, deleteTruckLoad as apiDeleteTruckLoad, deleteLclAir as apiDeleteLclAir, saveBilling, deleteBilling as apiDeleteBilling, saveOperators, saveOperatorAssignment, deleteOperator as apiDeleteOperator, patchDbShipment, createDbShipment, deleteDbShipment, patchFclShipment } from '@/lib/dataClient'
+import { loadAdminData, saveQuotes, saveDocuments, saveReports, saveClients, saveTrucks, saveTruckLoads, saveLclAir, deleteTruck as apiDeleteTruck, deleteTruckLoad as apiDeleteTruckLoad, deleteLclAir as apiDeleteLclAir, saveBilling, deleteBilling as apiDeleteBilling, saveOperators, saveOperatorAssignment, deleteOperator as apiDeleteOperator, patchDbShipment, createDbShipment, deleteDbShipment, patchFclShipment, fetchTrucks, fetchTruckLoads } from '@/lib/dataClient'
 
 import Login from './components/Login'
 import ClientLogin from './components/ClientLogin'
@@ -112,6 +112,10 @@ function App() {
   const pendingQuotesWritesRef = useRef(0)
   const pendingTrucksWritesRef = useRef(0)
   const pendingTruckLoadsWritesRef = useRef(0)
+  // Generación de escrituras de camiones: si AVANZÓ mientras el refresh estaba
+  // en vuelo, el snapshot es viejo y NO se aplica (mata la carrera residual
+  // que resucitaba/duplicaba cargas).
+  const trucksWriteGenRef = useRef(0)
   const pendingLclAirWritesRef = useRef(0)
   const pendingBillingWritesRef = useRef(0)
 
@@ -387,12 +391,14 @@ function App() {
     // This handler is for local state sync only
   }
 
-  const handleUpdateTrucks = (updated: Truck[]) => {
+  const handleUpdateTrucks = (updated: Truck[], changedIds?: string[]) => {
+    trucksWriteGenRef.current += 1
     setTrucks(updated)
     saveToStorage('twf-trucks', updated)
-    if (isAdminLoggedIn && updated.length > 0) {
+    const toSave = changedIds ? updated.filter(t => changedIds.includes(t.id)) : updated
+    if (isAdminLoggedIn && toSave.length > 0) {
       pendingTrucksWritesRef.current += 1
-      saveTrucks(updated)
+      saveTrucks(toSave)
         .catch(err => {
           console.warn('[DB] Failed to save trucks:', err)
           // Mostrar el motivo REAL y fuerte: un guardado fallido silencioso
@@ -406,6 +412,7 @@ function App() {
   }
 
   const handleDeleteTruck = async (id: string) => {
+    trucksWriteGenRef.current += 1
     const next = trucks.filter(t => t.id !== id)
     const nextLoads = truckLoads.filter(l => l.truckId !== id)
     setTrucks(next)
@@ -422,12 +429,14 @@ function App() {
     }
   }
 
-  const handleUpdateTruckLoads = (updated: TruckLoad[]) => {
+  const handleUpdateTruckLoads = (updated: TruckLoad[], changedIds?: string[]) => {
+    trucksWriteGenRef.current += 1
     setTruckLoads(updated)
     saveToStorage('twf-truck-loads', updated)
-    if (isAdminLoggedIn && updated.length > 0) {
+    const toSave = changedIds ? updated.filter(l => changedIds.includes(l.id)) : updated
+    if (isAdminLoggedIn && toSave.length > 0) {
       pendingTruckLoadsWritesRef.current += 1
-      saveTruckLoads(updated)
+      saveTruckLoads(toSave)
         .catch((err: any) => {
           console.warn('[DB] Failed to save truck loads:', err)
           toast.error(`⚠️ Las cargas del camión NO se guardaron: ${err?.message || 'error de conexión'}`, { duration: 10000 })
@@ -438,7 +447,33 @@ function App() {
     }
   }
 
+  // Refresco liviano SOLO de camiones (al entrar a la pestaña / volver el foco):
+  // trae la verdad de la DB sin pisar escrituras en vuelo.
+  // Devuelve true si el round-trip fue exitoso (o se saltó por generación),
+  // false si hubo un error de red — el caller usa esto para el throttle.
+  const refreshTrucksFromDb = useCallback(async (): Promise<boolean> => {
+    if (!isAdminLoggedIn) return true
+    try {
+      const gen = trucksWriteGenRef.current
+      const [freshTrucks, freshLoads] = await Promise.all([fetchTrucks(), fetchTruckLoads()])
+      if (trucksWriteGenRef.current !== gen) return true // hubo escrituras mientras tanto: snapshot viejo, pero el fetch fue OK
+      if (pendingTrucksWritesRef.current === 0) {
+        setTrucks(freshTrucks)
+        saveToStorage('twf-trucks', freshTrucks)
+      }
+      if (pendingTruckLoadsWritesRef.current === 0) {
+        setTruckLoads(freshLoads)
+        saveToStorage('twf-truck-loads', freshLoads)
+      }
+      return true
+    } catch (err) {
+      console.warn('[DB] refresh trucks failed:', err)
+      return false
+    }
+  }, [isAdminLoggedIn])
+
   const handleDeleteTruckLoad = async (id: string) => {
+    trucksWriteGenRef.current += 1
     setTruckLoads(prev => {
       const next = prev.filter(l => l.id !== id)
       saveToStorage('twf-truck-loads', next)
@@ -811,6 +846,7 @@ function App() {
           onUpdateTrucks={handleUpdateTrucks}
           onDeleteTruck={handleDeleteTruck}
           onUpdateTruckLoads={handleUpdateTruckLoads}
+          onRefreshTrucks={refreshTrucksFromDb}
           onDeleteTruckLoad={handleDeleteTruckLoad}
           onUpdateLclAir={handleUpdateLclAir}
           onDeleteLclAir={handleDeleteLclAir}

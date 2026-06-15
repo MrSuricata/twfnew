@@ -56,8 +56,8 @@ interface TruckBuilderProps {
   dbShipments: DbShipment[]
   shipments: ParsedShipment[]
   onBack: () => void
-  onUpdateTrucks: (trucks: Truck[]) => void
-  onUpdateTruckLoads: (loads: TruckLoad[]) => void
+  onUpdateTrucks: (trucks: Truck[], changedIds?: string[]) => void
+  onUpdateTruckLoads: (loads: TruckLoad[], changedIds?: string[]) => void
   onDeleteTruckLoad: (id: string) => void
   onDeleteTruck: (id: string) => void
 }
@@ -106,11 +106,11 @@ export default function TruckBuilder(props: TruckBuilderProps) {
   const updateTruck = (patch: Partial<Truck>) => {
     if (isDraft) {
       const updated = { ...truck, ...patch, updatedAt: Date.now() }
-      onUpdateTrucks(trucks.map(t => (t.id === truck.id ? updated : t)))
+      onUpdateTrucks(trucks.map(t => (t.id === truck.id ? updated : t)), [truck.id])
     } else {
       // Publicado: el cambio va al overlay, las columnas reales no se tocan.
       const pendingEdits = { ...(truck.pendingEdits || {}), ...patch }
-      onUpdateTrucks(trucks.map(t => (t.id === truck.id ? { ...t, pendingEdits, updatedAt: Date.now() } : t)))
+      onUpdateTrucks(trucks.map(t => (t.id === truck.id ? { ...t, pendingEdits, updatedAt: Date.now() } : t)), [truck.id])
     }
   }
 
@@ -137,7 +137,7 @@ export default function TruckBuilder(props: TruckBuilderProps) {
       for (const k of markOverrides) overrides[k] = true
       return { ...l, ...patch, overrides }
     })
-    onUpdateTruckLoads(next)
+    onUpdateTruckLoads(next, [loadId])
   }
 
   // ── Add from panel ──
@@ -160,7 +160,7 @@ export default function TruckBuilder(props: TruckBuilderProps) {
       position: allMine.length,
       pending: isDraft ? null : 'add',
     }
-    onUpdateTruckLoads([...truckLoads, load])
+    onUpdateTruckLoads([...truckLoads, load], [load.id])
     toast.success(`${s.REF} agregado al camión`)
   }
 
@@ -182,7 +182,7 @@ export default function TruckBuilder(props: TruckBuilderProps) {
       position: allMine.length,
       pending: isDraft ? null : 'add',
     }
-    onUpdateTruckLoads([...truckLoads, load])
+    onUpdateTruckLoads([...truckLoads, load], [load.id])
     toast.success(`${s.ref} agregado al camión`)
   }
 
@@ -205,7 +205,7 @@ export default function TruckBuilder(props: TruckBuilderProps) {
       position: allMine.length,
       pending: isDraft ? null : 'add',
     }
-    onUpdateTruckLoads([...truckLoads, load])
+    onUpdateTruckLoads([...truckLoads, load], [load.id])
     toast.success(`${s.ref} agregado al camión`)
     // Aviso inmediato al agregar una carga especial
     if (s.no_apilable) toast.warning(`📦 ${s.ref} es NO APILABLE — va arriba de todo`, { duration: 6000 })
@@ -232,18 +232,18 @@ export default function TruckBuilder(props: TruckBuilderProps) {
     })
     // Clear all overrides — values now match planilla
     const next = truckLoads.map(l => l.id === load.id ? { ...l, overrides: {} } : l)
-    onUpdateTruckLoads(next)
+    onUpdateTruckLoads(next, [load.id])
     toast.success(`${load.sourceRef} re-sincronizado desde planilla`)
   }
 
   const removeLoad = (l: TruckLoad) => {
     if (isDraft || l.pending === 'add') { onDeleteTruckLoad(l.id); return }
     // Publicado: marcar para quitar (se concreta al Guardar)
-    onUpdateTruckLoads(truckLoads.map(x => (x.id === l.id ? { ...x, pending: 'remove' as const } : x)))
+    onUpdateTruckLoads(truckLoads.map(x => (x.id === l.id ? { ...x, pending: 'remove' as const } : x)), [l.id])
   }
 
   const undoRemoveLoad = (l: TruckLoad) => {
-    onUpdateTruckLoads(truckLoads.map(x => (x.id === l.id ? { ...x, pending: null } : x)))
+    onUpdateTruckLoads(truckLoads.map(x => (x.id === l.id ? { ...x, pending: null } : x)), [l.id])
   }
 
   // ── Draft state + Save/Cancel ──
@@ -256,13 +256,13 @@ export default function TruckBuilder(props: TruckBuilderProps) {
       return
     }
     if (isDraft) {
-      onUpdateTrucks(trucks.map(t => (t.id === truck.id ? { ...t, draft: false, updatedAt: Date.now() } : t)))
+      onUpdateTrucks(trucks.map(t => (t.id === truck.id ? { ...t, draft: false, updatedAt: Date.now() } : t)), [truck.id])
     } else {
       // Deletes FIRST, loads array LAST — evita carreras y resurrección de filas.
       const r = commitPendingArrays(trucks, truckLoads, truck.id)
       r.deleteLoadIds.forEach(id => onDeleteTruckLoad(id))
-      onUpdateTrucks(r.trucks)
-      onUpdateTruckLoads(r.loads)
+      onUpdateTrucks(r.trucks, [truck.id])
+      onUpdateTruckLoads(r.loads, r.changedLoadIds)
     }
     toast.success(`Camión ${truck.code} guardado`)
   }
@@ -277,8 +277,8 @@ export default function TruckBuilder(props: TruckBuilderProps) {
     }
     const r = discardPendingArrays(trucks, truckLoads, truck.id)
     r.deleteLoadIds.forEach(id => onDeleteTruckLoad(id))
-    onUpdateTrucks(r.trucks)
-    onUpdateTruckLoads(r.loads)
+    onUpdateTrucks(r.trucks, [truck.id])
+    onUpdateTruckLoads(r.loads, r.changedLoadIds)
     toast.info('Cambios descartados')
   }
 

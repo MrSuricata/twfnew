@@ -263,19 +263,23 @@ export function makeEmptyTruckLoad(
 
 /** Cancelar el overlay de un camión publicado: limpia pendingEdits, saca las
  *  cargas 'add' (van a deleteLoadIds para borrar en DB) y des-marca las 'remove'.
- *  Pura: devuelve los arrays nuevos, el caller persiste. */
+ *  Pura: devuelve los arrays nuevos, el caller persiste.
+ *  changedLoadIds: ids de filas que cambiaron de estado (pending 'remove' → null).
+ *  Las filas 'add' van a deleteLoadIds y NO deben incluirse en changedLoadIds. */
 export function discardPendingArrays(
   trucks: Truck[],
   loads: TruckLoad[],
   truckId: string
-): { trucks: Truck[]; loads: TruckLoad[]; deleteLoadIds: string[] } {
+): { trucks: Truck[]; loads: TruckLoad[]; deleteLoadIds: string[]; changedLoadIds: string[] } {
   const deleteLoadIds = loads.filter(l => l.truckId === truckId && l.pending === 'add').map(l => l.id)
+  const changedLoadIds = loads.filter(l => l.truckId === truckId && l.pending === 'remove').map(l => l.id)
   return {
     trucks: trucks.map(t => (t.id === truckId ? { ...t, pendingEdits: null, updatedAt: Date.now() } : t)),
     loads: loads
       .filter(l => !(l.truckId === truckId && l.pending === 'add'))
       .map(l => (l.truckId === truckId && l.pending === 'remove' ? { ...l, pending: null } : l)),
     deleteLoadIds,
+    changedLoadIds,
   }
 }
 
@@ -283,13 +287,16 @@ export function discardPendingArrays(
  *  cargas 'add' y saca las 'remove' (a deleteLoadIds). Pura: el caller debe
  *  ejecutar los deletes PRIMERO y persistir el array de loads DESPUÉS (último
  *  setState gana → estado local determinístico, y el POST ya no contiene las
- *  filas borradas → sin resurrección por carrera con los DELETE). */
+ *  filas borradas → sin resurrección por carrera con los DELETE).
+ *  changedLoadIds: ids de filas que cambiaron de estado (pending 'add' → null).
+ *  Las filas 'remove' van a deleteLoadIds y NO deben incluirse en changedLoadIds. */
 export function commitPendingArrays(
   trucks: Truck[],
   loads: TruckLoad[],
   truckId: string
-): { trucks: Truck[]; loads: TruckLoad[]; deleteLoadIds: string[] } {
+): { trucks: Truck[]; loads: TruckLoad[]; deleteLoadIds: string[]; changedLoadIds: string[] } {
   const deleteLoadIds = loads.filter(l => l.truckId === truckId && l.pending === 'remove').map(l => l.id)
+  const changedLoadIds = loads.filter(l => l.truckId === truckId && l.pending === 'add').map(l => l.id)
   return {
     trucks: trucks.map(t => {
       if (t.id !== truckId) return t
@@ -300,6 +307,7 @@ export function commitPendingArrays(
       .filter(l => !(l.truckId === truckId && l.pending === 'remove'))
       .map(l => (l.truckId === truckId && l.pending === 'add' ? { ...l, pending: null } : l)),
     deleteLoadIds,
+    changedLoadIds,
   }
 }
 

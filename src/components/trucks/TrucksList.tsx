@@ -51,8 +51,8 @@ import { makeEmptyTruck } from '@/lib/truckUtils'
 interface TrucksListProps {
   trucks: Truck[]
   truckLoads: TruckLoad[]
-  onUpdateTrucks: (trucks: Truck[]) => void
-  onUpdateTruckLoads: (loads: TruckLoad[]) => void
+  onUpdateTrucks: (trucks: Truck[], changedIds?: string[]) => void
+  onUpdateTruckLoads: (loads: TruckLoad[], changedIds?: string[]) => void
   onDeleteTruck: (id: string) => void
   onDeleteTruckLoad: (id: string) => void
   onOpenBuilder: (id: string) => void
@@ -128,7 +128,7 @@ export default function TrucksList({
         console.warn('[TrucksList] nextTruckCode fallback used:', code, err)
       }
       const truck = makeEmptyTruck(code)
-      onUpdateTrucks([...trucks, truck])
+      onUpdateTrucks([...trucks, truck], [truck.id])
       toast.success(`Camión ${code} creado`)
       onOpenBuilder(truck.id)
     } catch (err: any) {
@@ -154,8 +154,8 @@ export default function TrucksList({
       if (!window.confirm(`¿Descartar los cambios sin guardar de ${t.code}?`)) return
       const r = discardPendingArrays(trucks, truckLoads, t.id)
       r.deleteLoadIds.forEach(id => onDeleteTruckLoad(id))
-      onUpdateTrucks(r.trucks)
-      onUpdateTruckLoads(r.loads)
+      onUpdateTrucks(r.trucks, [t.id])
+      onUpdateTruckLoads(r.loads, r.changedLoadIds)
     }
   }
 
