@@ -124,8 +124,7 @@ export default function TruckBuilder(props: TruckBuilderProps) {
   const setStatusWithDate = (st: TruckStatus) => {
     const iso = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}-${String(hoy.getDate()).padStart(2, '0')}`
     const patch: Partial<Truck> = { status: st }
-    if (st === 'loaded' && !merged.loadDate) patch.loadDate = iso
-    if (st === 'in_transit' && !merged.departureDate) patch.departureDate = iso
+    if (st === 'in_transit' && !merged.departureDate) { patch.loadDate = iso; patch.departureDate = iso }
     if (st === 'delivered' && !merged.arrivalDate) patch.arrivalDate = iso
     updateTruck(patch)
   }
@@ -371,17 +370,26 @@ export default function TruckBuilder(props: TruckBuilderProps) {
                   un estado es un atajo que completa la fecha de hoy si falta. */}
               <div className="flex items-center gap-2 flex-wrap">
                 <Label className="text-xs text-muted-foreground">Estado:</Label>
-                {(['planning', 'loaded', 'in_transit', 'delivered'] as TruckStatus[]).map(st => (
-                  <Button
-                    key={st}
-                    size="sm"
-                    variant={derivedStatus === st ? 'default' : 'outline'}
-                    onClick={() => setStatusWithDate(st)}
-                    className="h-7 text-xs"
-                  >
-                    {TRUCK_STATUS_LABELS[st]}
-                  </Button>
-                ))}
+                {([
+                  { key: 'planning', label: 'Planificando' },
+                  { key: 'in_transit', label: 'Cargado / Salió' },
+                  { key: 'delivered', label: 'Entregado' },
+                ] as { key: TruckStatus; label: string }[]).map(step => {
+                  const active = step.key === 'in_transit'
+                    ? (derivedStatus === 'in_transit' || derivedStatus === 'loaded')
+                    : derivedStatus === step.key
+                  return (
+                    <Button
+                      key={step.key}
+                      size="sm"
+                      variant={active ? 'default' : 'outline'}
+                      onClick={() => setStatusWithDate(step.key)}
+                      className="h-7 text-xs"
+                    >
+                      {step.label}
+                    </Button>
+                  )
+                })}
                 <div className="ml-auto flex items-center gap-1.5">
                   <Switch
                     id="is-sider"
@@ -392,7 +400,7 @@ export default function TruckBuilder(props: TruckBuilderProps) {
                 </div>
               </div>
               <p className="text-[11px] text-muted-foreground -mt-2">
-                ⚡ Automático: al pasar la <strong>fecha de salida</strong> el camión (y sus cargas) pasan a En Ruta solos; al pasar el <strong>arribo a fiscal</strong>, a Entregado — y las cargas entran a Facturación. Tocar un estado completa la fecha de hoy.
+                ⚡ Automático: al pasar la <strong>fecha de carga/salida</strong> el camión (y sus cargas) pasan a En Ruta solos; al pasar el <strong>arribo a fiscal</strong>, a Entregado — y las cargas entran a Facturación. Tocar un estado completa la fecha de hoy.
               </p>
 
               <Separator />
@@ -417,14 +425,9 @@ export default function TruckBuilder(props: TruckBuilderProps) {
                   onChange={v => updateTruck({ plate: v })}
                 />
                 <FieldDate
-                  label="Fecha de carga"
-                  value={merged.loadDate}
-                  onChange={v => updateTruck({ loadDate: v })}
-                />
-                <FieldDate
-                  label="Fecha de salida"
-                  value={merged.departureDate}
-                  onChange={v => updateTruck({ departureDate: v })}
+                  label="Fecha de carga / salida"
+                  value={merged.departureDate || merged.loadDate}
+                  onChange={v => updateTruck({ loadDate: v, departureDate: v })}
                 />
                 <FieldDate
                   label="Arribo a fiscal"
