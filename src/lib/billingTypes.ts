@@ -120,6 +120,12 @@ export function hasReachedFinalDb(effectiveStatus: string | null | undefined): b
   return effectiveStatus === 'en_fiscal' || effectiveStatus === 'devuelto'
 }
 
+/** FCL horneada (flip Etapa 4): facturable cuando salida y eta_fiscal (columnas
+ *  colapsadas) ya llegaron — equivalente a hasReachedFiscal pero sobre columnas. */
+export function fclColumnsReachedFiscal(d: DbShipment): boolean {
+  return isDateReached(d.salida || '') && isDateReached(d.eta_fiscal || '')
+}
+
 /** ref → estado derivado del camión que la lleva (fuente de verdad).
  *  Borradores invisibles: camiones draft y loads pending='add' se ignoran.
  *  loads pending='remove' siguen contando (todavía están en el camión hasta guardar). */
@@ -173,19 +179,24 @@ export function buildBillableItems(
     out.push({ item: { ref: s.REF, cliente: s.CLIENTE || '', mode: 'fcl', arrival: getFiscalArrivalDate(s) }, state })
   }
 
-  // Cargas DB (LCL/aéreo/terrestre/FCL web) — incluye archivadas a propósito:
-  // archivar NO la saca de facturación (eso sería una fuga)
+  // Cargas DB (LCL/aéreo/terrestre + FCL horneada post-flip) — incluye archivadas a
+  // propósito: archivar NO la saca de facturación (eso sería una fuga).
   for (const d of dbShipments) {
     if (!d.ref) continue
     const rec = billingByRef.get(d.ref)
     const t = tByRef.get(d.ref)
-    const eff = t?.status || d.status
     let state: DerivedBillingState = null
     if (rec?.status === 'facturada' || rec?.status === 'no_aplica') state = rec.status
-    else if (hasReachedFinalDb(eff)) state = 'pendiente'
+    else if (d.mode === 'fcl') {
+      // FCL horneada: estado derivado; pendiente cuando llegó a fiscal (columnas).
+      if (fclColumnsReachedFiscal(d)) state = 'pendiente'
+    } else if (hasReachedFinalDb(t?.status || d.status)) state = 'pendiente'
     if (!state) continue
+    const arrival = d.mode === 'fcl'
+      ? parseLocalDate(d.eta_fiscal || '')
+      : (t?.arrival || parseLocalDate(d.eta || ''))
     out.push({
-      item: { ref: d.ref, cliente: d.cliente || '', mode: d.mode, arrival: t?.arrival || parseLocalDate(d.eta || ''), truckCode: t?.code },
+      item: { ref: d.ref, cliente: d.cliente || '', mode: d.mode, arrival, truckCode: d.mode === 'fcl' ? undefined : t?.code },
       state,
     })
   }
