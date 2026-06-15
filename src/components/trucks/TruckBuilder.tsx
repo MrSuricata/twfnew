@@ -23,7 +23,6 @@ import type { ParsedShipment } from '@/lib/shipmentTypes'
 import type { Truck, TruckLoad, LclAirShipment, TruckStatus } from '@/lib/truckTypes'
 import type { DbShipment } from '@/lib/operationsTypes'
 import {
-  TRUCK_STATUS_LABELS,
   computeTruckTotals,
   getTruckLimits,
   deriveTruckDisplayStatus,
