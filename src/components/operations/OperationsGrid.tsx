@@ -185,6 +185,12 @@ export default function OperationsGrid({
   )
   const archivedCount = useMemo(() => dbShipments.filter(s => s.archived).length, [dbShipments])
 
+  // Depósitos UY ya usados → alimentan el combobox del bloque de viabilidad.
+  const knownDepositos = useMemo(
+    () => Array.from(new Set(operations.map(o => o.deposito).filter(Boolean))),
+    [operations]
+  )
+
   // Panel de detalle: la op se busca fresca en cada render
   // (derive-on-read: un patch refresca el panel solo).
   const selectedOp = useMemo(
@@ -809,6 +815,7 @@ export default function OperationsGrid({
         operators={operators}
         operatorById={operatorById}
         hoy={hoy}
+        knownDepositos={knownDepositos}
         onAssign={assignOp}
         onPatch={onPatchShipment}
         onPatchFcl={onPatchFclField}
