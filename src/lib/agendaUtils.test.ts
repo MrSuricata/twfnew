@@ -17,6 +17,17 @@ const load = (over: Partial<TruckLoad> = {}): TruckLoad =>
     overrides: {}, position: 0, pending: null, ...over,
   }) as TruckLoad
 
+describe('trucksToEvents — fecha única cuando carga == salida', () => {
+  it('trucksToEvents: carga == salida → un solo evento', () => {
+    const t = truck({ loadDate: '2026-06-15', departureDate: '2026-06-15' })
+    expect(trucksToEvents([t], [])).toHaveLength(1)
+  })
+  it('trucksToEvents: fechas distintas (camión viejo) → dos eventos', () => {
+    const t = truck({ loadDate: '2026-06-15', departureDate: '2026-06-16' })
+    expect(trucksToEvents([t], [])).toHaveLength(2)
+  })
+})
+
 describe('trucksToEvents — borradores invisibles en agenda', () => {
   it('trucksToEvents ignora camiones draft aunque tengan fechas válidas', () => {
     const t = truck({ draft: true, loadDate: '2026-06-15', departureDate: '2026-06-16' })
