@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildOperations, isOperationActive, dbShipmentToOperation, newDbShipment, EDITABLE_FIELDS, DEPOSITOS_UY, type UnifiedOperation, type DbShipment } from './operationsTypes'
+import { buildOperations, isOperationActive, dbShipmentToOperation, fclToColumns, newDbShipment, EDITABLE_FIELDS, DEPOSITOS_UY, type UnifiedOperation, type DbShipment } from './operationsTypes'
 import type { ParsedShipment } from './shipmentTypes'
 
 // La planilla reutiliza refs (caso real: A6902 con dos clientes distintos,
@@ -158,5 +158,56 @@ describe('dbShipmentToOperation — columnas de Operativas (flip Etapa 4)', () =
     expect(s.libre).toBe('')
     expect(s.n_cntr).toBe(0)
     expect(s.origin_ref).toBe('')
+  })
+})
+
+// PR-C flip Etapa 4: hornear una FCL a columnas reales. El test clave es la
+// FIDELIDAD round-trip: leer las columnas (dbShipmentToOperation) debe reproducir
+// lo que hoy muestra la grilla (fclToOperation), así el cutover no cambia nada.
+describe('fclToColumns — horneado FCL a columnas (PR-C flip)', () => {
+  const parsed = {
+    REF: 'A7900', CLIENTE: 'PERETTI', MBL: 'BOOK123', ETD: '2026-05-01', ETA: '2026-06-01',
+    BUQUE: 'MSC LUNA', LINEA: 'MSC', POL: 'SHANGHAI', POD: 'MONTEVIDEO', PAIS: 'UY',
+    SEGUIMIENTO: '2026-06-05', CNTR: 'MSCU1', N: 2, TERMINAL: 'MONTECON', TIPO: '40HC',
+    LIBRE_HASTA: '2026-06-20',
+    operativas: [
+      { SALIDA: '2026-06-03', ETA_FISC: '2026-06-04', OPERATIVA: 'TRASIEGO', DEPOSITO: 'GODILCO',
+        DESCARGA: '2026-06-05', DEV: 'STL', FISCAL: 'DEP FISCAL AR', DESCRIPCION: 'BICIS',
+        KG: '1000', M3: '20', PKGS: '50', TRANSPORTE: 'OLAVERRY', WOOD: 'SI' },
+    ],
+  } as unknown as ParsedShipment
+
+  it('mapea los campos clave a columnas (incl. Operativas)', () => {
+    const c = fclToColumns(parsed)
+    expect(c.mode).toBe('fcl')
+    expect(c.source).toBe('fcl')
+    expect(c.ref).toBe('A7900')
+    expect(c.cliente).toBe('PERETTI')
+    expect(c.doc_number).toBe('BOOK123')
+    expect(c.salida).toBe('2026-06-03')
+    expect(c.eta_fiscal).toBe('2026-06-04')
+    expect(c.libre).toBe('2026-06-20')
+    expect(c.operativa).toBe('TRASIEGO')
+    expect(c.deposito).toBe('GODILCO')
+    expect(c.terminal).toBe('MONTECON')
+    expect(c.n_cntr).toBe(2)
+    expect(c.kg).toBe(1000)
+    expect(c.wood).toBe(true)
+    expect(c.dest_country).toBe('UY')
+  })
+
+  it('round-trip: leer las columnas reproduce fclToOperation en los campos visibles', () => {
+    const cols = { id: 'shp-fcl-a7900', ...fclToColumns(parsed) } as unknown as DbShipment
+    const viaCols = dbShipmentToOperation(cols)
+    const viaFcl = buildOperations([parsed], [], new Map())[0]
+    const campos = ['cliente','eta','salida','etaFisc','libre','operativa','deposito','terminal',
+      'n','kg','m3','dischargePort','pais','dev','descarga','fiscal','descripcion','docNumber',
+      'seguimiento','buque','linea','origin','tipo','wood'] as const
+    for (const k of campos) expect(viaCols[k], `campo ${k}`).toEqual(viaFcl[k])
+  })
+
+  it('split A/B: origin_ref = ref sin sufijo; sin split queda vacío', () => {
+    expect(fclToColumns({ REF: 'A6902 A', operativas: [] } as unknown as ParsedShipment).origin_ref).toBe('A6902')
+    expect(fclToColumns({ REF: 'A7900', operativas: [] } as unknown as ParsedShipment).origin_ref).toBe('')
   })
 })
