@@ -214,6 +214,13 @@ export async function fetchClientOriginPhotos(): Promise<OriginPhoto[]> {
   return data.photos || []
 }
 
+/** Migra un lote de fotos a Storage. Devuelve cuántas migró y cuántas faltan. */
+export async function migratePhotos(): Promise<{ migradas: number; restantes: number }> {
+  const res = await authFetch('/api/admin/migrate-photos', { method: 'POST' })
+  if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || `HTTP ${res.status}`) }
+  return res.json()
+}
+
 // ── Notification Tasks ──
 // The old task-based workflow (confirm → send email → mark completed) was replaced
 // in 2026-04 with the HOY dashboard (see TodayDashboard.tsx + todayFilters.ts) +
