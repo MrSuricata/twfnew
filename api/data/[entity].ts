@@ -1088,10 +1088,11 @@ async function handleTruckLoads(req: VercelRequest, res: VercelResponse, db: any
       const refsByTruck = new Map<string, string[]>()
       const pendingByTruck = new Map<string, string[]>()
       for (const r of newRows) {
-        const tid = r.truck_id
+        const tid = r.truck_id ?? ''
+        const ref = r.source_ref ?? ''
         if (!refsByTruck.has(tid)) { refsByTruck.set(tid, []); pendingByTruck.set(tid, []) }
-        refsByTruck.get(tid)!.push(r.source_ref)
-        if (r.pending) pendingByTruck.get(tid)!.push(r.source_ref)
+        refsByTruck.get(tid)!.push(ref)
+        if (r.pending) pendingByTruck.get(tid)!.push(ref)
       }
       for (const [tid, refs] of refsByTruck) {
         const code = codeByTruckId.get(tid) || tid
@@ -1113,7 +1114,8 @@ async function handleTruckLoads(req: VercelRequest, res: VercelResponse, db: any
       } catch { /* ignorar */ }
       for (const row of changedPendingRows) {
         const prev = prevLoadsById.get(row.id)!
-        const code = codeByTruckIdPending.get(row.truck_id) || row.truck_id
+        const tid = row.truck_id ?? ''
+        const code = codeByTruckIdPending.get(tid) || tid
         let action: string
         if (row.pending === 'remove') {
           action = 'marcar_quitar_carga'
@@ -1122,7 +1124,7 @@ async function handleTruckLoads(req: VercelRequest, res: VercelResponse, db: any
         } else {
           action = 'cambio_pending'
         }
-        logAudit(db, payload, action, 'camion', code, { ref: row.source_ref, de: prev.pending, a: row.pending })
+        logAudit(db, payload, action, 'camion', code, { ref: row.source_ref ?? '', de: prev.pending, a: row.pending })
       }
     }
 

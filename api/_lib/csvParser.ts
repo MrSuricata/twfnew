@@ -530,7 +530,7 @@ export function fclMirrorRows(shipments: ParsedShipment[], now: number): Record<
   for (const s of shipments) {
     if (!s.REF) continue
     const ops = s.operativas || []
-    const first = (key: string): string => String((ops as Array<Record<string, unknown>>).find(o => o[key])?.[key] ?? '')
+    const first = (key: string): string => String((ops as unknown as Array<Record<string, unknown>>).find(o => o[key])?.[key] ?? '')
     const id = ['shp-fcl', mirrorSlug(s.REF), mirrorSlug(s.MBL || ''), mirrorSlug(s.CLIENTE || '')]
       .filter(Boolean).join('-')
     if (seen.has(id)) continue // fila idéntica repetida en la planilla → una sola
@@ -552,14 +552,14 @@ export function fclMirrorRows(shipments: ParsedShipment[], now: number): Record<
       seguimiento: s.SEGUIMIENTO || '',
       etd: s.ETD || '',
       eta: s.ETA || '',
-      pkgs: ops.reduce((a, o) => a + toNum((o as Record<string, unknown>).PKGS), 0),
-      kg: ops.reduce((a, o) => a + toNum((o as Record<string, unknown>).KG), 0),
-      m3: ops.reduce((a, o) => a + toNum((o as Record<string, unknown>).M3), 0),
+      pkgs: ops.reduce((a, o) => a + toNum((o as unknown as Record<string, unknown>).PKGS), 0),
+      kg: ops.reduce((a, o) => a + toNum((o as unknown as Record<string, unknown>).KG), 0),
+      m3: ops.reduce((a, o) => a + toNum((o as unknown as Record<string, unknown>).M3), 0),
       deposito: first('DEPOSITO'),
       fiscal: first('FISCAL'),
       transporte: first('TRANSPORTE'),
       observacion: first('DESCRIPCION'),
-      wood: ops.some(o => String((o as Record<string, unknown>).WOOD || '').toUpperCase().startsWith('SI')),
+      wood: ops.some(o => String((o as unknown as Record<string, unknown>).WOOD || '').toUpperCase().startsWith('SI')),
       // Fidelidad completa: el ParsedShipment entero (operativas, checks, VTO,
       // costos...). Etapa 2: la app reconstruye las FCL desde acá en vez del
       // cache — mismos objetos, misma lógica derivada, otra fuente.

@@ -1,0 +1,15 @@
+{
+  "//": "Type-check de las funciones serverless de api/. El tsconfig.json principal solo incluye 'src', así que api/ se nos escapaba y rompía recién en el deploy de Vercel. Esto replica lo que Vercel valida: SIN strictNullChecks (Vercel no lo aplica a api/ — hay deuda pre-existente que tolera), pero SÍ detecta casts inválidos y errores duros. Se corre en `npm run typecheck`.",
+  "compilerOptions": {
+    "noEmit": true,
+    "skipLibCheck": true,
+    "target": "ES2020",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "strict": false,
+    "strictNullChecks": true
+  },
+  "include": ["api"]
+}
