@@ -82,10 +82,10 @@ const SECTIONS: { title: string; fields: { key: keyof UnifiedOperation; label: s
 // Flags que se muestran como chips interactivos en la sección Carga.
 // tlx es string 'SI'|'' en UnifiedOperation; el resto son boolean.
 // wood y noApilable se movieron al ViabilityBlock (toggles grandes).
+// Telex e IMO subieron al bloque de viabilidad como toggles grandes (junto a
+// Apilable/Madera/Entrega en planta). Acá quedan los flags secundarios.
 const FLAGS: { key: keyof UnifiedOperation; label: string }[] = [
-  { key: 'tlx', label: 'Telex' },
   { key: 'oog', label: 'OOG' },
-  { key: 'imo', label: 'IMO' },
   { key: 'seguro', label: 'Seguro' },
   { key: 'certi', label: 'Certi' },
   { key: 'impresa', label: 'Impresa' },
