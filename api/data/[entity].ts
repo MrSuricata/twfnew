@@ -26,6 +26,7 @@ import {
   OperatorAssignmentRowSchema,
 } from '../_lib/schemas.js'
 import { z } from 'zod'
+import { uploadPhotoObjects, deletePhotoObjects } from '../_lib/photoStorage.js'
 
 /** Validate `req.body` as either a single object or an array against `itemSchema`. */
 function validateBatch<T>(itemSchema: z.ZodSchema<T>, body: unknown): { ok: true; items: T[] } | { ok: false; error: string } {
@@ -652,16 +653,29 @@ async function handleOriginPhotos(req: VercelRequest, res: VercelResponse, db: a
     if (!vP.ok) return res.status(400).json({ error: vP.error })
     const p = vP.data
     if (!p.id) return res.status(400).json({ error: 'Photo object with id required' })
+    const ref = p.shipmentRef || p.shipment_ref || ''
+    // Subir a Storage; si falla, no escribimos la fila (evita huérfanos).
+    let storagePath: string | null = null
+    let thumbPathOut: string | null = null
+    try {
+      const up = await uploadPhotoObjects(db, ref, p.id, p.fileData || p.file_data || '', p.thumbnailData || p.thumbnail_data || '')
+      storagePath = up.storagePath
+      thumbPathOut = up.thumbPathOut
+    } catch (e: any) {
+      return res.status(500).json({ error: `No se pudo subir la foto a Storage: ${e?.message || 'error'}` })
+    }
     const row = {
       id: p.id,
-      shipment_ref: p.shipmentRef || p.shipment_ref,
+      shipment_ref: ref,
       container_number: p.containerNumber || p.container_number || '',
       caption: p.caption || '',
       photo_type: p.photoType || p.photo_type || 'origen',
       file_name: p.fileName || p.file_name || '',
       file_type: p.fileType || p.file_type || '',
-      file_data: p.fileData || p.file_data || '',
-      thumbnail_data: p.thumbnailData || p.thumbnail_data || '',
+      file_data: '',            // fotos nuevas: viven en Storage, no en la DB
+      thumbnail_data: '',
+      storage_path: storagePath,
+      thumb_path: thumbPathOut,
       created_at_ts: p.createdAt || p.created_at_ts || Date.now(),
       created_by: p.createdBy || p.created_by || '',
     }
@@ -673,6 +687,8 @@ async function handleOriginPhotos(req: VercelRequest, res: VercelResponse, db: a
   if (req.method === 'DELETE') {
     const id = req.query.id as string
     if (!id) return res.status(400).json({ error: 'id query parameter required' })
+    const { data: row } = await db.from('origin_photos').select('storage_path, thumb_path').eq('id', id).maybeSingle()
+    if (row) await deletePhotoObjects(db, [row.storage_path, row.thumb_path])
     const { error } = await db.from('origin_photos').delete().eq('id', id)
     if (error) throw error
     return res.status(200).json({ deleted: true })
