@@ -120,6 +120,17 @@ export interface DbShipment {
   discharge_port: string
   dest_port: string
   fiscal: string
+  // FCL operativas (PR-A flip Etapa 4): columnas reales para los campos de la hoja Operativas.
+  // Vacías en LCL/aéreo/terrestre; se pueblan al hornear las FCL (PR-C).
+  libre: string
+  salida: string
+  eta_fiscal: string
+  operativa: string
+  descarga: string
+  dev: string
+  terminal: string
+  n_cntr: number
+  origin_ref: string
   wood: boolean
   no_apilable: boolean
   oog: boolean
@@ -278,10 +289,10 @@ export function dbShipmentToOperation(s: DbShipment): UnifiedOperation {
     origin: s.origin || '',
     etd: s.etd || '',
     eta: s.eta || '',
-    salida: '',
-    etaFisc: '',
-    libre: '',
-    operativa: '',
+    salida: s.salida || '',
+    etaFisc: s.eta_fiscal || '',
+    libre: s.libre || '',
+    operativa: s.operativa || '',
     cntr: s.contenedor || '',
     docNumber: s.doc_number || '',
     buque: s.buque || '',
@@ -295,14 +306,14 @@ export function dbShipmentToOperation(s: DbShipment): UnifiedOperation {
     dischargePort: s.discharge_port || '',
     pais: s.dest_country || '',
     destPort: s.dest_port || '',
-    descarga: '',
+    descarga: s.descarga || '',
     desconsol: s.desconsol_date || '',
     entregaPlanta: !!s.entrega_planta,
-    dev: '',
+    dev: s.dev || '',
     despacho: s.despacho || '',
     tipo: MODALITY_LABELS[s.mode] || '',
-    terminal: '',
-    n: 0,
+    terminal: s.terminal || '',
+    n: s.n_cntr || 0,
     wood: !!s.wood,
     noApilable: !!s.no_apilable,
     oog: !!s.oog,
@@ -539,6 +550,7 @@ export function newDbShipment(fields: Partial<DbShipment> & { mode: Modality }):
     certi: false, telex: false, impresa: false, despacho: '', deposito: '', fecha_consol: '',
     transporte: '', camion: '', dest_country: '', discharge_port: '', dest_port: '',
     fiscal: '', wood: false, no_apilable: false, oog: false, imo: false,
+    libre: '', salida: '', eta_fiscal: '', operativa: '', descarga: '', dev: '', terminal: '', n_cntr: 0, origin_ref: '',
     ftl_ltl: '', costo_extra: '', observacion: '', status: 'en_origen', operator_id: null,
     notes: '', source: 'web', archived: false,
     ...fields,

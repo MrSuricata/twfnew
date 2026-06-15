@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildOperations, isOperationActive, dbShipmentToOperation, EDITABLE_FIELDS, DEPOSITOS_UY, type UnifiedOperation, type DbShipment } from './operationsTypes'
+import { buildOperations, isOperationActive, dbShipmentToOperation, newDbShipment, EDITABLE_FIELDS, DEPOSITOS_UY, type UnifiedOperation, type DbShipment } from './operationsTypes'
 import type { ParsedShipment } from './shipmentTypes'
 
 // La planilla reutiliza refs (caso real: A6902 con dos clientes distintos,
@@ -124,5 +124,39 @@ describe('viabilidad — desconsol y entregaPlanta', () => {
     expect(DEPOSITOS_UY).toContain('GODILCO')
     expect(DEPOSITOS_UY).toContain('TCP')
     expect(DEPOSITOS_UY).toContain('MONTECON')
+  })
+})
+
+// PR-A flip Etapa 4: columnas reales de Operativas en la tabla shipments
+// (hoy vacías en LCL/aéreo; se pueblan al hornear las FCL en PR-C).
+describe('dbShipmentToOperation — columnas de Operativas (flip Etapa 4)', () => {
+  it('mapea libre/salida/eta_fiscal/operativa/descarga/dev/terminal/n_cntr desde columnas', () => {
+    const op = dbShipmentToOperation({
+      id: 'shp-fcl-a7900', ref: 'A7900', mode: 'fcl',
+      libre: '2026-07-01', salida: '2026-06-20', eta_fiscal: '2026-06-25',
+      operativa: 'TRASIEGO', descarga: '2026-06-22', dev: 'STL',
+      terminal: 'MONTECON', n_cntr: 2,
+    } as never)
+    expect(op.libre).toBe('2026-07-01')
+    expect(op.salida).toBe('2026-06-20')
+    expect(op.etaFisc).toBe('2026-06-25')
+    expect(op.operativa).toBe('TRASIEGO')
+    expect(op.descarga).toBe('2026-06-22')
+    expect(op.dev).toBe('STL')
+    expect(op.terminal).toBe('MONTECON')
+    expect(op.n).toBe(2)
+  })
+  it('defaults vacíos sin esas columnas', () => {
+    const op = dbShipmentToOperation({ id: 'x', ref: 'LCL-9', mode: 'lcl' } as never)
+    expect(op.libre).toBe('')
+    expect(op.salida).toBe('')
+    expect(op.terminal).toBe('')
+    expect(op.n).toBe(0)
+  })
+  it('newDbShipment inicializa las columnas nuevas', () => {
+    const s = newDbShipment({ mode: 'fcl' })
+    expect(s.libre).toBe('')
+    expect(s.n_cntr).toBe(0)
+    expect(s.origin_ref).toBe('')
   })
 })
