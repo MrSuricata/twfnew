@@ -23,6 +23,7 @@ import {
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import { authFetch } from '@/lib/authClient'
+import { migratePhotos } from '@/lib/dataClient'
 
 // ─── Equipo: usuarios individuales del admin + log de actividad ──────
 // Solo visible/usable por el OWNER (Brian). Los usuarios creados acá entran
@@ -58,6 +59,7 @@ export default function TeamManager({ refreshKey = 0 }: { refreshKey?: number })
   const [fName, setFName] = useState('')
   const [fEmail, setFEmail] = useState('')
   const [fPassword, setFPassword] = useState('')
+  const [migrating, setMigrating] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -129,6 +131,27 @@ export default function TeamManager({ refreshKey = 0 }: { refreshKey?: number })
       toast.success(`Usuario ${u.email} eliminado`)
       load()
     } catch { toast.error('No se pudo eliminar') }
+  }
+
+  const runPhotoMigration = async () => {
+    if (migrating) return
+    setMigrating(true)
+    const t = toast.loading('Migrando fotos a Storage…')
+    try {
+      let total = 0, restantes = Infinity
+      while (restantes > 0) {
+        const r = await migratePhotos()
+        total += r.migradas
+        restantes = r.restantes
+        toast.loading(`Migradas ${total} · faltan ${restantes}…`, { id: t })
+        if (r.migradas === 0 && restantes > 0) break   // nada migrable (data corrupta) → corta
+      }
+      toast.success(`Migración terminada: ${total} fotos en Storage`, { id: t })
+    } catch (err) {
+      toast.error(`Error: ${(err as Error)?.message || 'falló la migración'}`, { id: t })
+    } finally {
+      setMigrating(false)
+    }
   }
 
   return (
@@ -247,6 +270,19 @@ export default function TeamManager({ refreshKey = 0 }: { refreshKey?: number })
           )}
         </CardContent>
       </Card>
+
+      {/* ── Mantenimiento (solo owner) ── */}
+      <div>
+        <h3 className="text-lg font-semibold mb-1">Mantenimiento</h3>
+        <p className="text-xs text-muted-foreground mb-3">
+          Operaciones técnicas de infraestructura. Idempotentes — se pueden correr más de una vez sin problema.
+        </p>
+        <div className="flex flex-wrap gap-3">
+          <Button onClick={runPhotoMigration} disabled={migrating} variant="outline">
+            {migrating ? 'Migrando…' : 'Migrar fotos a Storage'}
+          </Button>
+        </div>
+      </div>
 
       {/* ── Crear / editar usuario ── */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
