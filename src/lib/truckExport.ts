@@ -6,7 +6,7 @@
 // ───────────────────────────────────────────────────────────────────
 
 import type { Truck, TruckLoad, TruckTotals } from './truckTypes'
-import { TRUCK_STATUS_LABELS, getTruckLimits } from './truckTypes'
+import { TRUCK_STATUS_LABELS, getTruckLimits, truckCostPerM3, costColor } from './truckTypes'
 import { formatKg, formatM3, formatPkgs } from './truckUtils'
 
 function fmtDate(iso: string): string {
@@ -57,6 +57,41 @@ export async function exportTruckPdf(
     ? `<div class="warn err">⚠ ${totals.overKg ? 'Peso' : ''}${totals.overKg && totals.overM3 ? ' y ' : ''}${totals.overM3 ? 'Volumen' : ''} por encima del límite del camión</div>`
     : ''
 
+  // ── Costos del flete ──────────────────────────────────────────────────
+  const costInfo = truckCostPerM3(truck, loads)
+  const fmtUSD = (v: number) =>
+    v.toLocaleString('es-UY', { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+
+  let costsBlockHtml = ''
+  if (costInfo.total > 0) {
+    const lineItems: string[] = []
+    if (truck.costDespacho > 0)
+      lineItems.push(`<div class="costs-row"><span class="item-label">Despacho</span><span class="item-value">USD ${fmtUSD(truck.costDespacho)}</span></div>`)
+    if (truck.costFlete > 0)
+      lineItems.push(`<div class="costs-row"><span class="item-label">Flete terrestre</span><span class="item-value">USD ${fmtUSD(truck.costFlete)}</span></div>`)
+    if (truck.costCarga > 0)
+      lineItems.push(`<div class="costs-row"><span class="item-label">Carga sobre camión</span><span class="item-value">USD ${fmtUSD(truck.costCarga)}</span></div>`)
+
+    const perM3Html = costInfo.perM3 !== null
+      ? (() => {
+          const color = costColor(costInfo.perM3)
+          const perM3Str = costInfo.perM3.toLocaleString('es-UY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+          return `<div class="costs-perm3 ${color}">USD/m³: ${perM3Str}</div>`
+        })()
+      : ''
+
+    costsBlockHtml = `
+    <div class="costs">
+      <div class="section-title">Costos del flete</div>
+      ${lineItems.join('\n      ')}
+      <div class="costs-total">
+        <span>Total</span>
+        <span>USD ${fmtUSD(costInfo.total)}</span>
+      </div>
+      ${perM3Html}
+    </div>`
+  }
+
   const html = `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -102,6 +137,17 @@ export async function exportTruckPdf(
   .notes .label { font-size: 9px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; }
   .notes .value { font-size: 10px; color: #111827; white-space: pre-wrap; margin-top: 2px; }
   footer { margin-top: 20px; padding-top: 8px; border-top: 1px solid #e5e7eb; text-align: center; font-size: 9px; color: #9ca3af; }
+  .costs { margin-top: 14px; padding: 10px 14px; background: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0; }
+  .costs .section-title { font-size: 10px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; margin-bottom: 8px; }
+  .costs-row { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px dashed #e5e7eb; font-size: 10px; }
+  .costs-row:last-child { border-bottom: none; }
+  .costs-row .item-label { color: #374151; }
+  .costs-row .item-value { font-variant-numeric: tabular-nums; font-weight: 600; color: #111827; }
+  .costs-total { display: flex; justify-content: space-between; padding: 6px 0 4px; margin-top: 4px; border-top: 2px solid #d1d5db; font-size: 11px; font-weight: 700; color: #111827; }
+  .costs-perm3 { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; padding: 5px 12px; border-radius: 6px; border: 1px solid; font-size: 11px; font-weight: 700; }
+  .costs-perm3.green { background: #f0fdf4; border-color: #86efac; color: #15803d; }
+  .costs-perm3.yellow { background: #fffbeb; border-color: #fcd34d; color: #92400e; }
+  .costs-perm3.red { background: #fef2f2; border-color: #fca5a5; color: #991b1b; }
   @media print { .no-print { display: none; } body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }
 </style>
 </head>
@@ -175,6 +221,8 @@ export async function exportTruckPdf(
       <div class="value">${esc(truck.notes)}</div>
     </div>
   ` : ''}
+
+  ${costsBlockHtml}
 
   <footer>
     Transit World Forwarding SAS — Documento confidencial — Generado el ${esc(fmtNow)}
