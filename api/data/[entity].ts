@@ -26,7 +26,7 @@ import {
   OperatorAssignmentRowSchema,
 } from '../_lib/schemas.js'
 import { z } from 'zod'
-import { uploadPhotoObjects, deletePhotoObjects } from '../_lib/photoStorage.js'
+import { uploadPhotoObjects, deletePhotoObjects, signPhotoUrls, signPhotoUrl, THUMB_TTL, FULL_TTL } from '../_lib/photoStorage.js'
 
 /** Validate `req.body` as either a single object or an array against `itemSchema`. */
 function validateBatch<T>(itemSchema: z.ZodSchema<T>, body: unknown): { ok: true; items: T[] } | { ok: false; error: string } {
@@ -612,7 +612,10 @@ async function handleOriginPhotos(req: VercelRequest, res: VercelResponse, db: a
           photoType: data.photo_type || 'origen',
           fileName: data.file_name,
           fileType: data.file_type,
-          fileData: data.file_data,
+          storagePath: data.storage_path || null,
+          thumbPath: data.thumb_path || null,
+          fullUrl: data.storage_path ? await signPhotoUrl(db, data.storage_path, FULL_TTL) : null,
+          fileData: data.storage_path ? '' : data.file_data,   // fallback si no migrada
           thumbnailData: data.thumbnail_data,
           createdAt: data.created_at_ts,
           createdBy: data.created_by,
@@ -622,13 +625,15 @@ async function handleOriginPhotos(req: VercelRequest, res: VercelResponse, db: a
 
     // Bulk list — thumbnails included, file_data excluded
     let query = db.from('origin_photos')
-      .select('id, shipment_ref, container_number, caption, photo_type, file_name, file_type, thumbnail_data, created_at_ts, created_by')
+      .select('id, shipment_ref, container_number, caption, photo_type, file_name, file_type, thumbnail_data, storage_path, thumb_path, created_at_ts, created_by')
       .order('created_at_ts', { ascending: false })
       .limit(500)
     const shipmentRef = req.query.shipmentRef as string
     if (shipmentRef) query = query.eq('shipment_ref', shipmentRef)
     const { data, error } = await query
     if (error) throw error
+    const thumbPaths = (data || []).map((p: any) => p.thumb_path).filter(Boolean)
+    const signed = await signPhotoUrls(db, thumbPaths, THUMB_TTL)
     const photos = (data || []).map((p: any) => ({
       id: p.id,
       shipmentRef: p.shipment_ref,
@@ -637,7 +642,10 @@ async function handleOriginPhotos(req: VercelRequest, res: VercelResponse, db: a
       photoType: p.photo_type || 'origen',
       fileName: p.file_name,
       fileType: p.file_type,
-      thumbnailData: p.thumbnail_data,
+      thumbPath: p.thumb_path || null,
+      storagePath: p.storage_path || null,
+      thumbnailUrl: p.thumb_path ? (signed.get(p.thumb_path) || null) : null,
+      thumbnailData: p.thumb_path ? '' : p.thumbnail_data,   // fallback solo si no migrada
       createdAt: p.created_at_ts,
       createdBy: p.created_by,
     }))
