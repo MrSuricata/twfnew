@@ -78,7 +78,7 @@ function StatBox({
   const save = () => {
     setEditing(false)
     if (kind === 'number') {
-      if (draft.trim() === '') { onCommit(null); return }
+      if (draft.trim() === '') { if (Number(value)) onCommit(null); return }
       const n = parseFloat(draft.replace(',', '.'))
       if (!isFinite(n)) return
       if (String(value ?? '') !== String(n)) onCommit(n)
