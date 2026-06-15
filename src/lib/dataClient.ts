@@ -216,7 +216,7 @@ export async function fetchClientOriginPhotos(): Promise<OriginPhoto[]> {
 
 /** Migra un lote de fotos a Storage. Devuelve cuántas migró y cuántas faltan. */
 export async function migratePhotos(): Promise<{ migradas: number; restantes: number }> {
-  const res = await authFetch('/api/admin/migrate-photos', { method: 'POST' })
+  const res = await authFetch('/api/data/origin-photos?mode=migrate', { method: 'POST' })
   if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || `HTTP ${res.status}`) }
   return res.json()
 }

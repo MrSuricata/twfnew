@@ -654,6 +654,32 @@ async function handleOriginPhotos(req: VercelRequest, res: VercelResponse, db: a
 
   if (req.method === 'POST') {
     const mode = req.query.mode as string
+    // Migración idempotente base64 → Storage. Vive acá (y no como función
+    // aparte) por el límite de 12 serverless functions del plan Hobby de Vercel.
+    // El handler de /api/data ya validó rol admin antes de llegar acá.
+    if (mode === 'migrate') {
+      const MIGRATE_BATCH = 25
+      const { data: pend, error: pErr } = await db
+        .from('origin_photos')
+        .select('id, shipment_ref, file_data, thumbnail_data')
+        .is('storage_path', null)
+        .order('created_at_ts', { ascending: true })
+        .limit(MIGRATE_BATCH)
+      if (pErr) throw pErr
+      let migradas = 0
+      for (const ph of (pend || [])) {
+        try {
+          const up = await uploadPhotoObjects(db, ph.shipment_ref || '', ph.id, ph.file_data || '', ph.thumbnail_data || '')
+          if (!up.storagePath && !up.thumbPathOut) continue
+          await db.from('origin_photos').update({ storage_path: up.storagePath, thumb_path: up.thumbPathOut }).eq('id', ph.id)
+          migradas++
+        } catch (err) {
+          console.warn('[migrate-photos] foto', ph.id, 'falló:', (err as Error)?.message)
+        }
+      }
+      const { count } = await db.from('origin_photos').select('id', { count: 'exact', head: true }).is('storage_path', null)
+      return res.status(200).json({ migradas, restantes: count ?? 0 })
+    }
     if (mode !== 'file') {
       return res.status(400).json({ error: 'Use ?mode=file to upload a photo' })
     }
