@@ -348,13 +348,20 @@ export function trucksToEvents(trucks: Truck[], truckLoads: TruckLoad[]): Calend
     // hoy/en frontera"). El arribo no se agenda (pedido de Brian) — ese
     // mueve estados y facturación, no la agenda. Si solo tiene arribo,
     // se usa como último recurso para que el camión nunca quede invisible.
-    const carga = make('carga', t.loadDate || '')
-    if (carga) events.push(carga)
-    const salida = make('salida', t.departureDate || '')
-    if (salida) events.push(salida)
-    if (!carga && !salida) {
-      const arribo = make('eta_fisc', t.arrivalDate || '')
-      if (arribo) events.push(arribo)
+    const ld = t.loadDate || ''
+    const dd = t.departureDate || ''
+    if (ld && dd && ld === dd) {
+      const ev = make('salida', dd)
+      if (ev) events.push(ev)
+    } else {
+      const carga = make('carga', ld)
+      if (carga) events.push(carga)
+      const salida = make('salida', dd)
+      if (salida) events.push(salida)
+      if (!carga && !salida) {
+        const arribo = make('eta_fisc', t.arrivalDate || '')
+        if (arribo) events.push(arribo)
+      }
     }
   }
 

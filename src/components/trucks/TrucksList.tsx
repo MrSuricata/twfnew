@@ -332,9 +332,14 @@ export default function TrucksList({
                     <div className="flex items-start gap-1.5">
                       <CalendarBlank size={12} className="mt-0.5 shrink-0" />
                       <span className="truncate">
-                        {t.loadDate && `Carga ${formatDateShort(t.loadDate)}`}
-                        {t.departureDate && ` · Sale ${formatDateShort(t.departureDate)}`}
-                        {t.arrivalDate && ` · Arribo ${formatDateShort(t.arrivalDate)}`}
+                        {(() => {
+                          const ld = t.loadDate, dd = t.departureDate
+                          const same = ld && dd && ld === dd
+                          const cargaSale = same
+                            ? `Carga/Sale ${formatDateShort(ld)}`
+                            : [ld && `Carga ${formatDateShort(ld)}`, dd && `Sale ${formatDateShort(dd)}`].filter(Boolean).join(' · ')
+                          return [cargaSale, t.arrivalDate && `Arribo ${formatDateShort(t.arrivalDate)}`].filter(Boolean).join(' · ')
+                        })()}
                       </span>
                     </div>
                   )}
