@@ -9,6 +9,7 @@ import {
   STATUS_LABEL, STATUS_OPTIONS, operatorsForMode, isSeguimientoVencido,
 } from '@/lib/operationsTypes'
 import { parseCntr, serializeCntr, normalizeCntr, isStandardCntr } from '@/lib/cntrUtils'
+import ViabilityBlock from './ViabilityBlock'
 
 interface TruckRefInfo { truckCode: string; status: string }
 
@@ -57,15 +58,11 @@ const SECTIONS: { title: string; fields: { key: keyof UnifiedOperation; label: s
       { key: 'etaFisc', label: 'ETA fiscal' },
       { key: 'libre', label: 'LIBRE' },
       { key: 'seguimiento', label: 'Seguimiento' },
-      { key: 'descarga', label: 'Descarga' },
     ],
   },
   {
     title: 'Carga',
     fields: [
-      { key: 'pkgs', label: 'Bultos', kind: 'number' },
-      { key: 'kg', label: 'Kg', kind: 'number' },
-      { key: 'm3', label: 'M³', kind: 'number' },
       { key: 'descripcion', label: 'Descripción', wide: true },
       { key: 'tipo', label: 'Tipo' },
     ],
@@ -73,9 +70,7 @@ const SECTIONS: { title: string; fields: { key: keyof UnifiedOperation; label: s
   {
     title: 'Operativa',
     fields: [
-      { key: 'deposito', label: 'Depósito' },
       { key: 'operativa', label: 'Operativa' },
-      { key: 'fiscal', label: 'Fiscal' },
       { key: 'transporte', label: 'Transporte' },
       { key: 'camion', label: 'Camión' },
       { key: 'despacho', label: 'Despacho' },
@@ -86,12 +81,11 @@ const SECTIONS: { title: string; fields: { key: keyof UnifiedOperation; label: s
 
 // Flags que se muestran como chips interactivos en la sección Carga.
 // tlx es string 'SI'|'' en UnifiedOperation; el resto son boolean.
+// wood y noApilable se movieron al ViabilityBlock (toggles grandes).
 const FLAGS: { key: keyof UnifiedOperation; label: string }[] = [
   { key: 'tlx', label: 'Telex' },
-  { key: 'wood', label: 'Wood' },
   { key: 'oog', label: 'OOG' },
   { key: 'imo', label: 'IMO' },
-  { key: 'noApilable', label: 'No apilable' },
   { key: 'seguro', label: 'Seguro' },
   { key: 'certi', label: 'Certi' },
   { key: 'impresa', label: 'Impresa' },
@@ -120,6 +114,7 @@ export default function OperationDetailPanel({
   operators,
   operatorById,
   hoy,
+  knownDepositos = [],
   onAssign,
   onPatch,
   onPatchFcl,
@@ -131,6 +126,7 @@ export default function OperationDetailPanel({
   operators: Operator[]
   operatorById: Map<string, Operator>
   hoy: Date
+  knownDepositos?: string[]
   onAssign: (op: UnifiedOperation, operatorId: string | null) => void
   onPatch: (id: string, fields: Record<string, unknown>) => void
   onPatchFcl?: (dbId: string, edits: Record<string, unknown>) => void
@@ -220,6 +216,14 @@ export default function OperationDetailPanel({
               {eligible.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
             </select>
           </div>
+
+          {/* Bloque de viabilidad */}
+          <ViabilityBlock
+            op={op}
+            editable={op.source === 'db' && !!op.dbId && !op.readOnly}
+            knownDepositos={knownDepositos}
+            onCommit={commit}
+          />
 
           {/* Contenedores */}
           <section>
