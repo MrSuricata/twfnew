@@ -25,6 +25,9 @@ export async function fetchShipmentsFromDB(): Promise<{ shipments: ParsedShipmen
     const res = await authFetch('/api/data/shipments?includeMirror=only')
     if (res.ok) {
       const data = await res.json()
+      // Flip Etapa 4: la web es master → las FCL vienen como dbShipments (source='fcl'),
+      // no por acá. NO caer al cache (mostraría las FCL duplicadas).
+      if (data.flipped) return { shipments: [], syncedAt: null }
       const rows = (data.shipments || []).filter((r: any) => r.sheet_raw)
       if (rows.length > 0) {
         const maxTs = Math.max(...rows.map((r: any) => Number(r.updated_at_ts) || 0))

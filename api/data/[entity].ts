@@ -1435,6 +1435,12 @@ async function handleShipments(req: VercelRequest, res: VercelResponse, db: any,
     // ?includeMirror=only → SOLO el espejo, payload mínimo (sheet_raw): es la
     // fuente FCL de la app desde la Etapa 2. ?includeMirror=1 → todo junto.
     if (req.query.includeMirror === 'only') {
+      // Flip Etapa 4: con la web como master, las FCL viven como filas DB normales
+      // (source='fcl') y no hay espejo que leer. `flipped` evita que el cliente caiga
+      // al cache (que mostraría las FCL duplicadas).
+      if (process.env.FCL_SOURCE_OF_TRUTH === 'db') {
+        return res.status(200).json({ shipments: [], flipped: true })
+      }
       const { data, error } = await db.from('shipments')
         .select('id, sheet_raw, web_edits, updated_at_ts')
         .eq('source', 'sheet')
