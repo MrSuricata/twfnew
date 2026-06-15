@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildOperations, isOperationActive, type UnifiedOperation, type DbShipment } from './operationsTypes'
+import { buildOperations, isOperationActive, dbShipmentToOperation, EDITABLE_FIELDS, DEPOSITOS_UY, type UnifiedOperation, type DbShipment } from './operationsTypes'
 import type { ParsedShipment } from './shipmentTypes'
 
 // La planilla reutiliza refs (caso real: A6902 con dos clientes distintos,
@@ -99,5 +99,30 @@ describe('UnifiedOperation — terminal y n para analíticas', () => {
     expect(out[0].n).toBe(3)
     expect(out[1].terminal).toBe('')
     expect(out[1].n).toBe(0)
+  })
+})
+
+describe('viabilidad — desconsol y entregaPlanta', () => {
+  it('dbShipmentToOperation mapea desconsol_date y entrega_planta', () => {
+    const op = dbShipmentToOperation({
+      id: 'shp-lcl-1', ref: 'LCL-1', mode: 'lcl', desconsol_date: '2026-06-18',
+      entrega_planta: true,
+    } as never)
+    expect(op.desconsol).toBe('2026-06-18')
+    expect(op.entregaPlanta).toBe(true)
+  })
+  it('dbShipmentToOperation: defaults vacíos sin esos campos', () => {
+    const op = dbShipmentToOperation({ id: 'x', ref: 'LCL-2', mode: 'lcl' } as never)
+    expect(op.desconsol).toBe('')
+    expect(op.entregaPlanta).toBe(false)
+  })
+  it('EDITABLE_FIELDS incluye desconsol y entregaPlanta', () => {
+    expect(EDITABLE_FIELDS.desconsol).toEqual({ col: 'desconsol_date', type: 'text' })
+    expect(EDITABLE_FIELDS.entregaPlanta).toEqual({ col: 'entrega_planta', type: 'bool' })
+  })
+  it('DEPOSITOS_UY trae los conocidos', () => {
+    expect(DEPOSITOS_UY).toContain('GODILCO')
+    expect(DEPOSITOS_UY).toContain('TCP')
+    expect(DEPOSITOS_UY).toContain('MONTECON')
   })
 })

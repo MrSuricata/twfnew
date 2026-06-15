@@ -64,6 +64,10 @@ export const MODALITY_COLORS: Record<Modality, string> = {
   land: '#f59e0b',
 }
 
+// Depósitos UY conocidos para el combobox del bloque de viabilidad.
+// El input igual acepta uno nuevo (datalist) + se le suman los ya usados.
+export const DEPOSITOS_UY = ['GODILCO', 'PLANIR', 'LOBRAUS', 'TCP', 'MONTECON', 'STL']
+
 // ── Operativo (lista editable; base de cuentas nombradas en C1b) ──
 export interface Operator {
   id: string
@@ -119,6 +123,8 @@ export interface DbShipment {
   wood: boolean
   no_apilable: boolean
   oog: boolean
+  desconsol_date?: string
+  entrega_planta?: boolean
   imo: boolean
   ftl_ltl: string
   costo_extra: string
@@ -167,6 +173,8 @@ export interface UnifiedOperation {
   pais: string                   // zona derivada del POD (UY/AR/CL/OTRO) · DB: dest_country
   destPort: string
   descarga: string
+  desconsol: string              // fecha de desconsolidación (DB: desconsol_date · FCL: = descarga)
+  entregaPlanta: boolean         // entrega en planta (sí/no)
   dev: string
   despacho: string
   tipo: string
@@ -196,7 +204,7 @@ const EMPTY = {
   buque: '', linea: '', camion: '', docNumber: '', destPort: '', despacho: '',
   dischargePort: '', pais: '', noApilable: false, oog: false, imo: false,
   seguimiento: '', seguro: false, certi: false, impresa: false,
-  archived: false,
+  archived: false, desconsol: '', entregaPlanta: false,
 }
 
 /** Collapse a FCL ParsedShipment (1+ operativas) into a single unified row. */
@@ -238,6 +246,8 @@ function fclToOperation(s: ParsedShipment, operatorId: string | null, uid: strin
     descripcion: firstWith('DESCRIPCION'),
     fiscal: firstWith('FISCAL'),
     descarga: firstWith('DESCARGA'),
+    desconsol: firstWith('DESCARGA'),   // misma fuente que descarga
+    // entregaPlanta queda en false (viene de EMPTY) — no hay dato en el Sheet
     dev: firstWith('DEV'),
     tipo: s.TIPO || firstWith('TIPO') || 'FCL',
     terminal: s.TERMINAL || '',
@@ -286,6 +296,8 @@ export function dbShipmentToOperation(s: DbShipment): UnifiedOperation {
     pais: s.dest_country || '',
     destPort: s.dest_port || '',
     descarga: '',
+    desconsol: s.desconsol_date || '',
+    entregaPlanta: !!s.entrega_planta,
     dev: '',
     despacho: s.despacho || '',
     tipo: MODALITY_LABELS[s.mode] || '',
@@ -483,6 +495,8 @@ export const EDITABLE_FIELDS: Partial<Record<keyof UnifiedOperation, EditableFie
   despacho: { col: 'despacho', type: 'text' },
   transporte: { col: 'transporte', type: 'text' },
   seguimiento: { col: 'seguimiento', type: 'text' },
+  desconsol: { col: 'desconsol_date', type: 'text' },
+  entregaPlanta: { col: 'entrega_planta', type: 'bool' },
   tlx: { col: 'telex', type: 'bool' },
   wood: { col: 'wood', type: 'bool' },
   noApilable: { col: 'no_apilable', type: 'bool' },

@@ -303,6 +303,15 @@ export const OperatorAssignmentRowSchema = z.object({
   operator_id: z.string().max(100).nullable().optional(),
 })
 
+/** Unified shipment row (LCL/aéreo/terrestre — admin CRUD) */
+export const ShipmentRowSchema = z.object({
+  id: z.string().min(1).max(100),
+  ref: z.string().min(1).max(100),
+  mode: z.enum(['fcl', 'lcl', 'air', 'land']),
+  desconsol_date: z.string().max(20).optional().nullable(),
+  entrega_planta: z.boolean().optional(),
+})
+
 /** Admin login body */
 export const AdminLoginSchema = z.object({
   username: z.string().min(1).max(200),
