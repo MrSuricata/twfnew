@@ -46,6 +46,9 @@ export default function ViabilityBlock({
         <Toggle label="Apilable" on={!op.noApilable} editable={editable} onToggle={() => onCommit('noApilable', !op.noApilable)} />
         <Toggle label="Madera" on={op.wood} editable={editable} onToggle={() => onCommit('wood', !op.wood)} />
         <Toggle label="Entrega en planta" on={op.entregaPlanta} editable={editable} onToggle={() => onCommit('entregaPlanta', !op.entregaPlanta)} />
+        {/* tlx es string 'SI'|'' en el modelo; el commit envía boolean (col telex) */}
+        <Toggle label="Telex" on={op.tlx === 'SI'} editable={editable} onToggle={() => onCommit('tlx', op.tlx !== 'SI')} />
+        <Toggle label="IMO" on={op.imo} editable={editable} onToggle={() => onCommit('imo', !op.imo)} />
       </div>
     </section>
   )
