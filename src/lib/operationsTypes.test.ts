@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildOperations, isOperationActive, dbShipmentToOperation, fclToColumns, dbFclToParsedShipment, newDbShipment, EDITABLE_FIELDS, DEPOSITOS_UY, type UnifiedOperation, type DbShipment } from './operationsTypes'
+import { buildOperations, isOperationActive, dbShipmentToOperation, fclToColumns, dbFclToParsedShipment, mergeFclShipments, newDbShipment, EDITABLE_FIELDS, DEPOSITOS_UY, type UnifiedOperation, type DbShipment } from './operationsTypes'
 import type { ParsedShipment } from './shipmentTypes'
 
 // La planilla reutiliza refs (caso real: A6902 con dos clientes distintos,
@@ -7,6 +7,27 @@ import type { ParsedShipment } from './shipmentTypes'
 // (sin uid único, React colisiona keys y deja filas "fantasma" entre filtros).
 const fcl = (over: Partial<ParsedShipment> = {}): ParsedShipment =>
   ({ REF: 'A6902', CLIENTE: 'X', ETD: '', ETA: '', operativas: [], ...over }) as ParsedShipment
+
+describe('mergeFclShipments — dedupe por REF (anti doble-conteo post-flip)', () => {
+  const dbFcl = (ref: string): DbShipment => ({ id: ref, ref, mode: 'fcl', source: 'fcl' } as unknown as DbShipment)
+  it('cache contaminado con FCL que ya está en la DB → no duplica (gana la DB)', () => {
+    const cache = [{ REF: 'A1' }, { REF: 'A2' }] as unknown as ParsedShipment[]
+    const merged = mergeFclShipments(cache, [dbFcl('A1'), dbFcl('A2')])
+    expect(merged).toHaveLength(2)
+    expect(merged.map(s => s.REF).sort()).toEqual(['A1', 'A2'])
+  })
+  it('post-flip: cache vacío + FCL de la DB → solo la DB', () => {
+    expect(mergeFclShipments([], [dbFcl('A1')])).toHaveLength(1)
+  })
+  it('pre-flip: cache con FCL + sin FCL en la DB → cache intacto', () => {
+    const cache = [{ REF: 'A1' }, { REF: 'A2' }] as unknown as ParsedShipment[]
+    expect(mergeFclShipments(cache, [])).toHaveLength(2)
+  })
+  it('conserva entradas del cache cuya REF no está en la DB', () => {
+    const merged = mergeFclShipments([{ REF: 'X' }] as unknown as ParsedShipment[], [dbFcl('A1')])
+    expect(merged.map(s => s.REF).sort()).toEqual(['A1', 'X'])
+  })
+})
 
 describe('buildOperations — refs duplicadas en la planilla', () => {
   it('mantiene ambas filas (son operaciones reales) con uid único', () => {

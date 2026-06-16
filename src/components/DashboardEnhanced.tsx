@@ -26,7 +26,7 @@ import TeamManager from './TeamManager'
 
 import TodayDashboard from './TodayDashboard'
 import AgendaCalendar from './agenda/AgendaCalendar'
-import { dbFclToParsedShipment } from '@/lib/operationsTypes'
+import { mergeFclShipments } from '@/lib/operationsTypes'
 import ShipmentTracking from './ShipmentTracking'
 import ExcelImport from './ExcelImport'
 import CaseStudiesEditor from './CaseStudiesEditor'
@@ -98,7 +98,7 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
   // ParsedShipment para los consumidores que aún esperan ese modelo (HOY, Agenda,
   // búsqueda, clientes). Pre-flip dbShipments no tiene FCL → queda igual a shipments.
   const fclShipments = useMemo(
-    () => [...(shipments || []), ...dbShipments.filter(d => d.mode === 'fcl').map(dbFclToParsedShipment)],
+    () => mergeFclShipments(shipments || [], dbShipments),
     [shipments, dbShipments],
   )
   // TWF brand has no ops tabs → land on the first content tab.

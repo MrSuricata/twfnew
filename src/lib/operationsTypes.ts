@@ -386,6 +386,17 @@ export function dbFclToParsedShipment(d: DbShipment): ParsedShipment {
   }
 }
 
+/** Une la FCL del cache legacy de la planilla (vacío post-flip) con la FCL de la
+ *  DB (source='fcl', master post-flip), DEDUPLICANDO por REF — la versión de la
+ *  DB gana. Evita el doble conteo si el cache se contamina con FCL de la DB
+ *  (p.ej. el onSave de HOY que reescribe la lista completa). Una sola carga por REF. */
+export function mergeFclShipments(cache: ParsedShipment[], dbShipments: DbShipment[]): ParsedShipment[] {
+  const fromDb = dbShipments.filter(d => d.mode === 'fcl').map(dbFclToParsedShipment)
+  const dbRefs = new Set(fromDb.map(s => s.REF))
+  const fromCache = (cache || []).filter(s => !dbRefs.has(s.REF))
+  return [...fromCache, ...fromDb]
+}
+
 /** Map a DB shipment (LCL/aéreo/terrestre + FCL horneada) into a unified grid row. */
 export function dbShipmentToOperation(s: DbShipment): UnifiedOperation {
   return {
