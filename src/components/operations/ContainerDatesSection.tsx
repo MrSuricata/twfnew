@@ -2,8 +2,9 @@
 // Se monta entre ViabilityBlock y la sección "Contenedores".
 // Editable solo cuando la operación es una fila DB (FCL horneada) no read-only.
 
+import { useState } from 'react'
 import type { UnifiedOperation } from '@/lib/operationsTypes'
-import type { OperativasRecord } from '@/lib/shipmentTypes'
+import type { ParsedShipment, OperativasRecord } from '@/lib/shipmentTypes'
 import { getShipmentStatus } from '@/lib/shipmentTypes'
 import { parseCntr } from '@/lib/cntrUtils'
 
@@ -17,7 +18,8 @@ const LUGAR_OPTIONS = [
 
 /** Micro-status para un contenedor individual derivado de su OperativasRecord. */
 function microStatus(op: UnifiedOperation, record: OperativasRecord): string {
-  const mini = {
+  // Fix 4: annotate as ParsedShipment (no `as` cast) so schema changes fail at compile time.
+  const mini: ParsedShipment = {
     REF: op.ref,
     CLIENTE: op.cliente || '',
     ETA: op.eta,
@@ -34,7 +36,7 @@ function microStatus(op: UnifiedOperation, record: OperativasRecord): string {
     C_DEV: 0,
     LOCALES: 0,
     FLETE: 0,
-    FORMA_DE_PAGO: 'al arribo' as const,
+    FORMA_DE_PAGO: 'al arribo',
     VTO: '',
     CR: false,
     BL: false,
@@ -42,7 +44,7 @@ function microStatus(op: UnifiedOperation, record: OperativasRecord): string {
     AT: false,
     POL: '',
     POD: '',
-    PAIS: 'OTRO' as const,
+    PAIS: 'OTRO',
     SEGUIMIENTO: '',
     TIPO: '',
     containers: [],
@@ -51,6 +53,82 @@ function microStatus(op: UnifiedOperation, record: OperativasRecord): string {
     operativas: [record],
   }
   return getShipmentStatus(mini).label
+}
+
+/**
+ * Resolves the existing OperativasRecord for container at index `i`.
+ *
+ * Fix 1+2: match by CNTR_OP first (not by array index) to prevent silent data
+ * clobber when the cntr string has more entries than op.operativas has elements.
+ * Falls back to existing[i] only when no CNTR match is found, and finally to a
+ * synthetic blank (with CNTR_OP pre-filled) for genuinely-new containers.
+ */
+export function resolveRecord(
+  cntrs: string[],
+  existing: OperativasRecord[],
+  i: number,
+  op: UnifiedOperation
+): OperativasRecord {
+  const cntrKey = (cntrs[i] || '').trim().toUpperCase()
+
+  // Primary: match by container number
+  if (cntrKey) {
+    const byNumber = existing.find(
+      o => (o.CNTR_OP || '').trim().toUpperCase() === cntrKey
+    )
+    if (byNumber) return byNumber
+  }
+
+  // Fallback: positional match (only if no CNTR_OP is set on either side)
+  const byIndex = existing[i]
+  if (byIndex && !(byIndex.CNTR_OP || '').trim()) return byIndex
+
+  // New container: synthetic blank (CNTR_OP set so future edits match by number)
+  return {
+    REF: op.ref,
+    TLX: '',
+    DEPOSITO: op.deposito || '',
+    ETA_OP: op.eta || '',
+    SALIDA: '',
+    ETA_FISC: '',
+    LIBRE: op.libre || '',
+    OPERATIVA: op.operativa || '',
+    CNTR_OP: cntrs[i] || '',
+    PKGS: 0,
+    KG: 0,
+    M3: 0,
+    DESCRIPCION: '',
+    FISCAL: op.fiscal || '',
+    DESCARGA: '',
+    DEV: '',
+    CLIENTE_OP: op.cliente || '',
+    TIPO: op.tipo || '',
+    WOOD: op.wood ? 'SI' : '',
+    TRANSPORTE: op.transporte || '',
+    HORARIO: '',
+    LUGAR_SALIDA: '',
+  }
+}
+
+/**
+ * Builds the full updated operativas array when one field of one container changes.
+ *
+ * Fix 1+2: spreads the resolved record (which is matched by CNTR_OP) and only
+ * overlays the changed field — all other fields (DESCARGA, DEV, KG, M3, etc.)
+ * on matched records are preserved.
+ */
+export function buildNextOperativas(
+  cntrs: string[],
+  existing: OperativasRecord[],
+  op: UnifiedOperation,
+  idx: number,
+  patch: Partial<Pick<OperativasRecord, 'SALIDA' | 'ETA_FISC' | 'LUGAR_SALIDA'>>
+): OperativasRecord[] {
+  return cntrs.map((_, i) => {
+    const base = resolveRecord(cntrs, existing, i, op)
+    if (i === idx) return { ...base, ...patch }
+    return base
+  })
 }
 
 export default function ContainerDatesSection({
@@ -71,54 +149,32 @@ export default function ContainerDatesSection({
 
   const existing = op.operativas || []
 
-  /** Devuelve el OperativasRecord para el índice i, o un registro vacío. */
-  const recordFor = (i: number): OperativasRecord => {
-    const found = existing[i]
-    if (found) return found
-    return {
-      REF: op.ref,
-      TLX: '',
-      DEPOSITO: op.deposito || '',
-      ETA_OP: op.eta || '',
-      SALIDA: '',
-      ETA_FISC: '',
-      LIBRE: op.libre || '',
-      OPERATIVA: op.operativa || '',
-      CNTR_OP: cntrs[i] || '',
-      PKGS: 0,
-      KG: 0,
-      M3: 0,
-      DESCRIPCION: '',
-      FISCAL: op.fiscal || '',
-      DESCARGA: '',
-      DEV: '',
-      CLIENTE_OP: op.cliente || '',
-      TIPO: op.tipo || '',
-      WOOD: op.wood ? 'SI' : '',
-      TRANSPORTE: op.transporte || '',
-      HORARIO: '',
-      LUGAR_SALIDA: '',
-    }
+  // Fix 3: local draft state so date inputs commit on onBlur, not per-keystroke.
+  // Key: `${cntr}-SALIDA` or `${cntr}-ETA_FISC`; value: string draft.
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
+
+  const draftKey = (i: number, field: string) => `${cntrs[i]}-${i}-${field}`
+
+  const getDraft = (i: number, field: 'SALIDA' | 'ETA_FISC', committed: string) => {
+    const k = draftKey(i, field)
+    return k in drafts ? drafts[k] : committed
   }
 
-  /** Construye el array completo actualizado cuando se edita un campo de un contenedor. */
-  const buildNext = (
-    idx: number,
-    patch: Partial<Pick<OperativasRecord, 'SALIDA' | 'ETA_FISC' | 'LUGAR_SALIDA'>>
-  ): OperativasRecord[] => {
-    return cntrs.map((_, i) => {
-      const base = recordFor(i)
-      if (i === idx) return { ...base, ...patch }
-      return base
-    })
+  const setDraft = (i: number, field: 'SALIDA' | 'ETA_FISC', value: string) => {
+    setDrafts(prev => ({ ...prev, [draftKey(i, field)]: value }))
   }
 
-  const handleChange = (
-    idx: number,
-    field: 'SALIDA' | 'ETA_FISC' | 'LUGAR_SALIDA',
-    value: string
-  ) => {
-    onCommitOperativas(buildNext(idx, { [field]: value }))
+  const commitDraft = (i: number, field: 'SALIDA' | 'ETA_FISC') => {
+    const k = draftKey(i, field)
+    if (!(k in drafts)) return
+    const value = drafts[k]
+    setDrafts(prev => { const next = { ...prev }; delete next[k]; return next })
+    onCommitOperativas(buildNextOperativas(cntrs, existing, op, i, { [field]: value }))
+  }
+
+  // Fix 3: LUGAR_SALIDA is a discrete pick — commit onChange (no draft needed).
+  const handleLugarChange = (i: number, value: string) => {
+    onCommitOperativas(buildNextOperativas(cntrs, existing, op, i, { LUGAR_SALIDA: value }))
   }
 
   return (
@@ -131,7 +187,7 @@ export default function ContainerDatesSection({
 
       <div className="space-y-3">
         {cntrs.map((cntr, i) => {
-          const rec = recordFor(i)
+          const rec = resolveRecord(cntrs, existing, i, op)
           const status = microStatus(op, rec)
 
           return (
@@ -150,8 +206,10 @@ export default function ContainerDatesSection({
                 {editable ? (
                   <input
                     type="date"
-                    value={rec.SALIDA || ''}
-                    onChange={e => handleChange(i, 'SALIDA', e.target.value)}
+                    value={getDraft(i, 'SALIDA', rec.SALIDA || '')}
+                    onChange={e => setDraft(i, 'SALIDA', e.target.value)}
+                    onBlur={() => commitDraft(i, 'SALIDA')}
+                    onKeyDown={e => { if (e.key === 'Enter') commitDraft(i, 'SALIDA') }}
                     className="h-7 rounded border border-input bg-background px-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                   />
                 ) : (
@@ -167,8 +225,10 @@ export default function ContainerDatesSection({
                 {editable ? (
                   <input
                     type="date"
-                    value={rec.ETA_FISC || ''}
-                    onChange={e => handleChange(i, 'ETA_FISC', e.target.value)}
+                    value={getDraft(i, 'ETA_FISC', rec.ETA_FISC || '')}
+                    onChange={e => setDraft(i, 'ETA_FISC', e.target.value)}
+                    onBlur={() => commitDraft(i, 'ETA_FISC')}
+                    onKeyDown={e => { if (e.key === 'Enter') commitDraft(i, 'ETA_FISC') }}
                     className="h-7 rounded border border-input bg-background px-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                   />
                 ) : (
@@ -178,13 +238,13 @@ export default function ContainerDatesSection({
                 )}
               </div>
 
-              {/* Lugar de salida */}
+              {/* Lugar de salida — discrete pick: commit onChange */}
               <div className="flex flex-col gap-0.5">
                 <span className="text-[10px] text-muted-foreground leading-none">Lugar</span>
                 {editable ? (
                   <select
                     value={rec.LUGAR_SALIDA || ''}
-                    onChange={e => handleChange(i, 'LUGAR_SALIDA', e.target.value)}
+                    onChange={e => handleLugarChange(i, e.target.value)}
                     className="h-7 rounded border border-input bg-background px-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                   >
                     {LUGAR_OPTIONS.map(o => (
