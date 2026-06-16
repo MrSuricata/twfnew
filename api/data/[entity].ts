@@ -25,6 +25,7 @@ import {
   OperatorRowSchema,
   OperatorAssignmentRowSchema,
 } from '../_lib/schemas.js'
+import { rollupFromOperativasApi } from '../_lib/operativasRollup.js'
 import { z } from 'zod'
 import { uploadPhotoObjects, deletePhotoObjects, signPhotoUrls, signPhotoUrl, THUMB_TTL, FULL_TTL } from '../_lib/photoStorage.js'
 
@@ -1427,6 +1428,7 @@ const SHIPMENT_COLS = new Set([
   'dest_country','discharge_port','dest_port','fiscal','wood','no_apilable','oog','imo','tipo','ftl_ltl','costo_extra','observacion','status',
   'operator_id','notes','archived','source','desconsol_date','entrega_planta',
   'libre','salida','eta_fiscal','operativa','descarga','dev','terminal','n_cntr','origin_ref',
+  'operativas',
 ])
 
 async function handleShipments(req: VercelRequest, res: VercelResponse, db: any, payload: TokenPayload | null) {
@@ -1511,6 +1513,19 @@ async function handleShipments(req: VercelRequest, res: VercelResponse, db: any,
     const updates: Record<string, unknown> = {}
     for (const [k, v] of Object.entries(body)) {
       if (SHIPMENT_COLS.has(k)) updates[k] = v
+    }
+    // When operativas[] is written, recompute the flat rollup columns so the
+    // grid / agenda / billing / tracking (which read the scalar columns) stay
+    // in sync without requiring a separate PATCH.
+    if (Array.isArray(updates.operativas) && updates.operativas.length > 0) {
+      const r = rollupFromOperativasApi(updates.operativas as Record<string, unknown>[])
+      updates.salida = r.salida
+      updates.eta_fiscal = r.eta_fiscal
+      updates.deposito = r.deposito
+      updates.operativa = r.operativa
+      updates.descarga = r.descarga
+      updates.dev = r.dev
+      updates.contenedor = r.contenedor
     }
     if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No valid fields' })
     updates.updated_at_ts = Date.now()
