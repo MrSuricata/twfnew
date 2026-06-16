@@ -18,6 +18,7 @@ import {
   type LibreAlert,
 } from '@/lib/todayFilters'
 import ShipmentDetailsDialog from './ShipmentDetailsDialog'
+import ContainerQuickEdit from './operations/ContainerQuickEdit'
 import type { ShipmentDocument, OperativeReport, OriginPhoto } from '@/lib/quotationTypes'
 import type { Truck as TruckType, TruckLoad } from '@/lib/truckTypes'
 import { deriveTruckDisplayInfo, deriveTruckDisplayStatus } from '@/lib/truckTypes'
@@ -32,6 +33,10 @@ interface TodayDashboardProps {
   originPhotos?: OriginPhoto[]
   onUpdateShipments?: (shipments: ParsedShipment[]) => void
   onUpdateOriginPhotos?: (photos: OriginPhoto[]) => void
+  /** PATCH callback threaded from DashboardEnhanced — writes to /api/data/shipments (FCL only). */
+  onPatchShipment?: (id: string, fields: Record<string, unknown>) => void
+  /** Opens the OperationDetailPanel for the given FCL ref (navigates to operaciones tab). */
+  onOpenDetail?: (ref: string) => void
 }
 
 /**
@@ -49,9 +54,15 @@ export default function TodayDashboard({
   originPhotos = [],
   onUpdateShipments,
   onUpdateOriginPhotos,
+  onPatchShipment,
+  onOpenDetail,
 }: TodayDashboardProps) {
   const [selected, setSelected] = useState<ParsedShipment | null>(null)
   const [open, setOpen] = useState(false)
+
+  // Quick-edit state for FCL rows (opened via ContainerQuickEdit)
+  const [quickEditMatch, setQuickEditMatch] = useState<OpMatch | null>(null)
+  const [quickEditOpen, setQuickEditOpen] = useState(false)
 
   const snapshot = useMemo(() => buildTodaySnapshot(shipments), [shipments])
 
@@ -74,9 +85,22 @@ export default function TodayDashboard({
       .filter(x => x.info.hoy || (x.status === 'in_transit'))
   }, [trucks, truckLoads])
 
+  // For LIBRE alert rows (only have a ParsedShipment, no op)
   const openShipment = (s: ParsedShipment) => {
     setSelected(s)
     setOpen(true)
+  }
+
+  // For TodayCard rows (have both shipment + op). FCL rows with __dbId go to
+  // ContainerQuickEdit; all others go to the read-only ShipmentDetailsDialog.
+  const openOpMatch = (match: OpMatch) => {
+    if (onPatchShipment && match.shipment.__dbId) {
+      setQuickEditMatch(match)
+      setQuickEditOpen(true)
+    } else {
+      setSelected(match.shipment)
+      setOpen(true)
+    }
   }
 
   const todayLabel = new Date().toLocaleDateString('es-UY', {
@@ -188,7 +212,7 @@ export default function TodayDashboard({
           barColor="var(--chart-2)"
           matches={snapshot.salientes}
           emptyLabel="Sin salidas hoy"
-          onRowClick={openShipment}
+          onRowClick={openOpMatch}
         />
         <TodayCard
           title="En frontera hoy"
@@ -198,7 +222,7 @@ export default function TodayDashboard({
           barColor="oklch(0.75 0.15 70)"
           matches={snapshot.frontera}
           emptyLabel="Sin cargas en frontera"
-          onRowClick={openShipment}
+          onRowClick={openOpMatch}
         />
         <TodayCard
           title="Llegando a fiscal hoy"
@@ -208,20 +232,43 @@ export default function TodayDashboard({
           barColor="var(--chart-3)"
           matches={snapshot.llegandoFiscal}
           emptyLabel="Sin arribos fiscales hoy"
-          onRowClick={openShipment}
+          onRowClick={openOpMatch}
         />
       </div>
 
-      {/* Details dialog — same one used in rest of the app */}
+      {/* FCL quick-edit popover (admin, when onPatchShipment is provided + row has __dbId) */}
+      {quickEditMatch?.shipment.__dbId && (
+        <ContainerQuickEdit
+          shipment={quickEditMatch.shipment}
+          cntr={quickEditMatch.op.CNTR_OP || quickEditMatch.shipment.CNTR || ''}
+          editable={!!onPatchShipment}
+          open={quickEditOpen}
+          onOpenChange={(o) => {
+            setQuickEditOpen(o)
+            if (!o) setQuickEditMatch(null)
+          }}
+          onPatch={(dbId, fields) => onPatchShipment?.(dbId, fields)}
+          onMasDatos={() => {
+            setQuickEditOpen(false)
+            setQuickEditMatch(null)
+            onOpenDetail?.(quickEditMatch.shipment.REF)
+          }}
+          onSaved={() => {
+            setQuickEditOpen(false)
+            setQuickEditMatch(null)
+          }}
+        />
+      )}
+
+      {/* Read-only details dialog — non-FCL rows (no __dbId) or LIBRE alert rows */}
       {selected && (
         <ShipmentDetailsDialog
           shipment={selected}
           open={open}
           onOpenChange={setOpen}
-          onSave={(updated) => {
-            if (onUpdateShipments) {
-              onUpdateShipments(shipments.map((s) => (s.REF === updated.REF ? updated : s)))
-            }
+          onSave={() => {
+            // Read-only from HOY: FCL edits must go through ContainerQuickEdit→onPatchShipment.
+            // Non-FCL (LCL/air/land) have no onPatchShipment path — dialog is read-only here.
           }}
           documents={documents}
           reports={reports}
@@ -261,7 +308,7 @@ interface TodayCardProps {
   barColor: string
   matches: OpMatch[]
   emptyLabel: string
-  onRowClick: (s: ParsedShipment) => void
+  onRowClick: (match: OpMatch) => void
 }
 
 function TodayCard({ title, subtitle, icon, iconBg, barColor, matches, emptyLabel, onRowClick }: TodayCardProps) {
@@ -285,10 +332,12 @@ function TodayCard({ title, subtitle, icon, iconBg, barColor, matches, emptyLabe
           <div className="py-8 text-center text-xs text-muted-foreground italic">{emptyLabel}</div>
         ) : (
           <div className="divide-y divide-border/60">
-            {matches.map(({ shipment, op }, idx) => (
+            {matches.map((match, idx) => {
+              const { shipment, op } = match
+              return (
               <button
                 key={`${shipment.REF}-${op.CNTR_OP || idx}`}
-                onClick={() => onRowClick(shipment)}
+                onClick={() => onRowClick(match)}
                 className="row-hover w-full text-left py-2.5 px-2 -mx-2 rounded-md hover:bg-muted/60 cursor-pointer flex items-start gap-2 group"
               >
                 <div className="flex-1 min-w-0">
@@ -321,7 +370,8 @@ function TodayCard({ title, subtitle, icon, iconBg, barColor, matches, emptyLabe
                 </div>
                 <CaretRight size={14} className="row-caret text-muted-foreground mt-1 shrink-0" />
               </button>
-            ))}
+              )
+            })}
           </div>
         )}
       </CardContent>
