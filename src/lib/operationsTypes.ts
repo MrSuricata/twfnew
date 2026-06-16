@@ -322,9 +322,14 @@ export function fclToColumns(s: ParsedShipment): Partial<DbShipment> {
 
 /** Estado de una FCL horneada: se DERIVA de las columnas de operativa (no se
  *  guarda — derive-on-read), reusando getShipmentStatus con un ParsedShipment
- *  mínimo de 1 operativa. Si la FCL no tiene datos de operativa (Chile/BA,
- *  históricas), va sin operativas y el estado sale de ETA como en la planilla. */
+ *  mínimo. Si la fila tiene el array por contenedor (post Fase 1), lo usa;
+ *  si no, reconstruye 1 operativa sintética. Si la FCL no tiene datos de
+ *  operativa (Chile/BA, históricas), el estado sale de ETA como en la planilla. */
 function fclColumnsStatus(s: DbShipment): string {
+  if (Array.isArray(s.operativas) && s.operativas.length) {
+    return getShipmentStatus({ REF: s.ref, ETD: s.etd, ETA: s.eta, operativas: s.operativas } as any).label
+  }
+  // …fallback colapsado actual…
   const hasOp = !!(s.salida || s.eta_fiscal || s.dev || s.descarga || s.operativa)
   const parsed = {
     REF: s.ref, ETD: s.etd, ETA: s.eta,
