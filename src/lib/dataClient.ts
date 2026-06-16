@@ -251,6 +251,15 @@ export async function bakeFclToColumns(): Promise<{ horneadas: number }> {
   return { horneadas: payload.length }
 }
 
+/** Renombrar la REF de una carga (flip Etapa 4): PIN 0000 + cascada atómica server-side.
+ *  Tira error con mensaje amigable si el PIN está mal (403) o la ref ya existe (409). */
+export async function renameShipmentRef(id: string, newRef: string, pin: string): Promise<{ oldRef: string; newRef: string }> {
+  const qs = `id=${encodeURIComponent(id)}&renameRef=${encodeURIComponent(newRef)}&pin=${encodeURIComponent(pin)}`
+  const res = await authFetch(`/api/data/shipments?${qs}`, { method: 'PATCH' })
+  if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || `HTTP ${res.status}`) }
+  return res.json()
+}
+
 // ── Notification Tasks ──
 // The old task-based workflow (confirm → send email → mark completed) was replaced
 // in 2026-04 with the HOY dashboard (see TodayDashboard.tsx + todayFilters.ts) +

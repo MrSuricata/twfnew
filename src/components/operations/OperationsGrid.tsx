@@ -68,6 +68,7 @@ interface OperationsGridProps {
   onCreateShipment?: (row: DbShipment) => void
   onDeleteShipment?: (op: UnifiedOperation) => void
   onPatchFclField?: (dbId: string, edits: Record<string, unknown>) => void
+  onRenameRef?: (op: UnifiedOperation, newRef: string, pin: string) => Promise<void>
   onUpdateOperators: (operators: Operator[]) => void
   onDeleteOperator: (id: string) => void
 }
@@ -107,6 +108,7 @@ export default function OperationsGrid({
   onCreateShipment,
   onDeleteShipment,
   onPatchFclField,
+  onRenameRef,
   onUpdateOperators,
   onDeleteOperator,
 }: OperationsGridProps) {
@@ -819,6 +821,7 @@ export default function OperationsGrid({
         onAssign={assignOp}
         onPatch={onPatchShipment}
         onPatchFcl={onPatchFclField}
+        onRenameRef={onRenameRef}
         onRequestDelete={onDeleteShipment ? requestDelete : undefined}
         onClose={() => setSelectedUid(null)}
       />
