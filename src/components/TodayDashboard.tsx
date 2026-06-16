@@ -239,6 +239,7 @@ export default function TodayDashboard({
       {/* FCL quick-edit popover (admin, when onPatchShipment is provided + row has __dbId) */}
       {quickEditMatch?.shipment.__dbId && (
         <ContainerQuickEdit
+          key={`${quickEditMatch.op.CNTR_OP || quickEditMatch.shipment.CNTR || ''}-${quickEditMatch.shipment.REF}`}
           shipment={quickEditMatch.shipment}
           cntr={quickEditMatch.op.CNTR_OP || quickEditMatch.shipment.CNTR || ''}
           editable={!!onPatchShipment}
@@ -260,16 +261,16 @@ export default function TodayDashboard({
         />
       )}
 
-      {/* Read-only details dialog — non-FCL rows (no __dbId) or LIBRE alert rows */}
+      {/* Read-only details dialog — non-FCL rows (no __dbId) or LIBRE alert rows.
+          clientView=true hides the "Guardar Cambios" button so the no-op onSave
+          doesn't show a misleading enabled save action (Fix 5). */}
       {selected && (
         <ShipmentDetailsDialog
           shipment={selected}
           open={open}
           onOpenChange={setOpen}
-          onSave={() => {
-            // Read-only from HOY: FCL edits must go through ContainerQuickEdit→onPatchShipment.
-            // Non-FCL (LCL/air/land) have no onPatchShipment path — dialog is read-only here.
-          }}
+          onSave={() => {}}
+          clientView
           documents={documents}
           reports={reports}
           originPhotos={originPhotos}

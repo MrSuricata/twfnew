@@ -1,7 +1,7 @@
 // ContainerQuickEdit — Radix Popover para editar las fechas de UN contenedor.
 // Salida MVD + Arribo fiscal + Lugar. Botón "Más datos →" abre el panel completo.
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { X } from '@phosphor-icons/react'
 import {
   Popover,
@@ -140,18 +140,37 @@ export default function ContainerQuickEdit({
   const [lugar, setLugar] = useState<string>(currentOp.LUGAR_SALIDA || '')
   const [saving, setSaving] = useState(false)
 
+  // Fix 2: guard against double-save (Enter+blur fires two commitSave calls).
+  // We track the last-committed serialized value; commitSave is a no-op when
+  // nothing changed since the last successful persist.
+  const lastCommittedRef = useRef<string>('')
+
   const canSave = editable && !!shipment.__dbId
 
-  const commitSave = async () => {
+  /**
+   * Commit the current draft values to the DB.
+   * Accepts explicit overrides so the lugar onChange can pass the NEW lugar
+   * value before the useState update has settled (Fix 3).
+   * Returns early if nothing changed since the last commit (Fix 2).
+   */
+  const commitSave = async (
+    overrides?: { salida?: string; etaFisc?: string; lugar?: string }
+  ) => {
     if (!canSave) return
+    const salida = overrides?.salida ?? drafts.salida
+    const etaFisc = overrides?.etaFisc ?? drafts.etaFisc
+    const lugarVal = overrides?.lugar ?? lugar
+    const serialized = JSON.stringify({ salida, etaFisc, lugar: lugarVal })
+    if (serialized === lastCommittedRef.current) return // no change → skip
     setSaving(true)
     try {
       const next = buildPatchedOperativas(shipment, cntr, {
-        SALIDA: drafts.salida,
-        ETA_FISC: drafts.etaFisc,
-        LUGAR_SALIDA: lugar,
+        SALIDA: salida,
+        ETA_FISC: etaFisc,
+        LUGAR_SALIDA: lugarVal,
       })
       await onPatch(shipment.__dbId!, { operativas: next })
+      lastCommittedRef.current = serialized
       onSaved?.()
       onOpenChange(false)
     } finally {
@@ -261,16 +280,11 @@ export default function ContainerQuickEdit({
               <select
                 value={lugar}
                 onChange={e => {
-                  setLugar(e.target.value)
-                  // Lugar is discrete — commit immediately on change
-                  const next = buildPatchedOperativas(shipment, cntr, {
-                    SALIDA: drafts.salida,
-                    ETA_FISC: drafts.etaFisc,
-                    LUGAR_SALIDA: e.target.value,
-                  })
-                  if (shipment.__dbId) {
-                    void onPatch(shipment.__dbId, { operativas: next })
-                  }
+                  const newLugar = e.target.value
+                  setLugar(newLugar)
+                  // Fix 3: pass the new lugar explicitly so commitSave reads
+                  // the just-typed draft dates (not a stale closure snapshot).
+                  void commitSave({ lugar: newLugar })
                 }}
                 disabled={saving || !shipment.__dbId}
                 className="h-8 w-full rounded border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"

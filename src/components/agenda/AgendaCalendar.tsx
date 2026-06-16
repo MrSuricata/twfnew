@@ -349,6 +349,7 @@ export default function AgendaCalendar({
       {/* Admin quick-edit popover — ContainerQuickEdit (editable=true only) */}
       {editable && quickEditEvent?.shipment && quickEditEvent.cntr && (
         <ContainerQuickEdit
+          key={`${quickEditEvent.cntr}-${quickEditEvent.shipment.REF}`}
           shipment={quickEditEvent.shipment}
           cntr={quickEditEvent.cntr}
           editable={!!onPatchShipment}
@@ -370,13 +371,15 @@ export default function AgendaCalendar({
         />
       )}
 
-      {/* Read-only shipment details dialog — client/partner views + truck events */}
+      {/* Read-only shipment details dialog — client/partner views + truck/non-FCL events.
+          Always rendered as clientView so the no-op onSave doesn't show a misleading
+          enabled "Guardar Cambios" button (Fix 5). FCL edits use ContainerQuickEdit above. */}
       <ShipmentDetailsDialog
         shipment={selectedShipment}
         open={dialogOpen}
         onOpenChange={setDialogOpen}
-        onSave={() => {}} // Read-only from agenda
-        clientView={clientView}
+        onSave={() => {}}
+        clientView
         partnerView={partnerView}
         highlightCntr={selectedCntr}
       />
