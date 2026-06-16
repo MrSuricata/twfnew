@@ -12,42 +12,74 @@ interface AgendaWeekViewProps {
   editable?: boolean
 }
 
-// ─── Droppable day cell ────────────────────────────────────────────────────
+// ─── Shared cell content ───────────────────────────────────────────────────
 
-interface WeekDayCellProps {
-  dateKey: string          // YYYY-MM-DD — used as droppable id
+interface CellContentProps {
   dayEvents: CalendarEvent[]
-  today: boolean
   editable: boolean
   onSelectShipment: (event: CalendarEvent) => void
 }
 
-function WeekDayCell({ dateKey, dayEvents, today, editable, onSelectShipment }: WeekDayCellProps) {
+function WeekDayCellContent({ dayEvents, editable, onSelectShipment }: CellContentProps) {
+  return (
+    <div className="space-y-1.5 max-h-[600px] overflow-y-auto">
+      {dayEvents.map(event => (
+        <AgendaEventCard
+          key={event.id}
+          event={event}
+          compact={true}
+          onClick={() => onSelectShipment(event)}
+          draggable={editable}
+        />
+      ))}
+      {dayEvents.length === 0 && (
+        <div className="h-16 flex items-center justify-center">
+          <span className="text-xs text-muted-foreground/40">—</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Droppable day cell (only rendered inside DndContext when editable) ────
+
+interface DroppableWeekDayCellProps {
+  dateKey: string          // YYYY-MM-DD — used as droppable id
+  dayEvents: CalendarEvent[]
+  today: boolean
+  onSelectShipment: (event: CalendarEvent) => void
+}
+
+function DroppableWeekDayCell({ dateKey, dayEvents, today, onSelectShipment }: DroppableWeekDayCellProps) {
   const { setNodeRef, isOver } = useDroppable({ id: dateKey })
 
   return (
     <div
-      ref={editable ? setNodeRef : undefined}
+      ref={setNodeRef}
       className={`border-r border-border last:border-r-0 p-1.5 transition-colors
         ${today ? 'bg-accent/5' : ''}
-        ${editable && isOver ? 'bg-[#1e3a8a]/5 ring-1 ring-inset ring-[#1e3a8a]/30' : ''}`}
+        ${isOver ? 'bg-[#1e3a8a]/5 ring-1 ring-inset ring-[#1e3a8a]/30' : ''}`}
     >
-      <div className="space-y-1.5 max-h-[600px] overflow-y-auto">
-        {dayEvents.map(event => (
-          <AgendaEventCard
-            key={event.id}
-            event={event}
-            compact={true}
-            onClick={() => onSelectShipment(event)}
-            draggable={editable}
-          />
-        ))}
-        {dayEvents.length === 0 && (
-          <div className="h-16 flex items-center justify-center">
-            <span className="text-xs text-muted-foreground/40">—</span>
-          </div>
-        )}
-      </div>
+      <WeekDayCellContent dayEvents={dayEvents} editable={true} onSelectShipment={onSelectShipment} />
+    </div>
+  )
+}
+
+// ─── Plain (non-droppable) day cell — used when !editable ─────────────────
+
+interface PlainWeekDayCellProps {
+  dayEvents: CalendarEvent[]
+  today: boolean
+  onSelectShipment: (event: CalendarEvent) => void
+}
+
+function PlainWeekDayCell({ dayEvents, today, onSelectShipment }: PlainWeekDayCellProps) {
+  return (
+    <div
+      className={`border-r border-border last:border-r-0 p-1.5 transition-colors
+        ${today ? 'bg-accent/5' : ''}`}
+    >
+      <WeekDayCellContent dayEvents={dayEvents} editable={false} onSelectShipment={onSelectShipment} />
     </div>
   )
 }
@@ -109,13 +141,19 @@ export default function AgendaWeekView({ date, events, onSelectShipment, onDayCl
           })
           const today = isToday(d)
 
-          return (
-            <WeekDayCell
+          return editable ? (
+            <DroppableWeekDayCell
               key={i}
               dateKey={dateKey}
               dayEvents={dayEvents}
               today={today}
-              editable={editable}
+              onSelectShipment={onSelectShipment}
+            />
+          ) : (
+            <PlainWeekDayCell
+              key={i}
+              dayEvents={dayEvents}
+              today={today}
               onSelectShipment={onSelectShipment}
             />
           )

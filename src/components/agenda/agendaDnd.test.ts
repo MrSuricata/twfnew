@@ -195,6 +195,26 @@ describe('dropPatch', () => {
     expect(result).toBeNull()
   })
 
+  it('non-movable event type (dev) → returns null', () => {
+    const op = makeOp(CNTR)
+    const shipment = makeShipment('db-row-abc', [op])
+    const event = makeEvent('dev', '2026-06-20', CNTR, shipment)
+
+    const result = dropPatch(event, '2026-06-21', buildPatchedOperativas)
+
+    expect(result).toBeNull()
+  })
+
+  it('non-movable event type (carga) → returns null', () => {
+    const op = makeOp(CNTR)
+    const shipment = makeShipment('db-row-abc', [op])
+    const event = makeEvent('carga', '2026-06-20', CNTR, shipment)
+
+    const result = dropPatch(event, '2026-06-21', buildPatchedOperativas)
+
+    expect(result).toBeNull()
+  })
+
   it('missing cntr → returns null', () => {
     const op = makeOp('')
     const shipment = makeShipment('db-row-abc', [op])

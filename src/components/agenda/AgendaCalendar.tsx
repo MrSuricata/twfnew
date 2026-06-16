@@ -340,6 +340,7 @@ export default function AgendaCalendar({
           sensors={sensors}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
+          onDragCancel={() => setDragActiveEvent(null)}
         >
           <div className="flex overflow-hidden rounded-xl border bg-card shadow-sm">
             {/* Main calendar area */}
