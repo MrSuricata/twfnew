@@ -1,3 +1,4 @@
+import { useDroppable } from '@dnd-kit/core'
 import type { CalendarEvent } from '@/lib/agendaTypes'
 import { DAY_NAMES } from '@/lib/agendaTypes'
 import { getWeekDates, toDateKey, isToday } from '@/lib/agendaUtils'
@@ -8,9 +9,52 @@ interface AgendaWeekViewProps {
   events: CalendarEvent[]
   onSelectShipment: (event: CalendarEvent) => void
   onDayClick: (date: Date) => void
+  editable?: boolean
 }
 
-export default function AgendaWeekView({ date, events, onSelectShipment, onDayClick }: AgendaWeekViewProps) {
+// ─── Droppable day cell ────────────────────────────────────────────────────
+
+interface WeekDayCellProps {
+  dateKey: string          // YYYY-MM-DD — used as droppable id
+  dayEvents: CalendarEvent[]
+  today: boolean
+  editable: boolean
+  onSelectShipment: (event: CalendarEvent) => void
+}
+
+function WeekDayCell({ dateKey, dayEvents, today, editable, onSelectShipment }: WeekDayCellProps) {
+  const { setNodeRef, isOver } = useDroppable({ id: dateKey })
+
+  return (
+    <div
+      ref={editable ? setNodeRef : undefined}
+      className={`border-r border-border last:border-r-0 p-1.5 transition-colors
+        ${today ? 'bg-accent/5' : ''}
+        ${editable && isOver ? 'bg-[#1e3a8a]/5 ring-1 ring-inset ring-[#1e3a8a]/30' : ''}`}
+    >
+      <div className="space-y-1.5 max-h-[600px] overflow-y-auto">
+        {dayEvents.map(event => (
+          <AgendaEventCard
+            key={event.id}
+            event={event}
+            compact={true}
+            onClick={() => onSelectShipment(event)}
+            draggable={editable}
+          />
+        ))}
+        {dayEvents.length === 0 && (
+          <div className="h-16 flex items-center justify-center">
+            <span className="text-xs text-muted-foreground/40">—</span>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+// ─── Week view ─────────────────────────────────────────────────────────────
+
+export default function AgendaWeekView({ date, events, onSelectShipment, onDayClick, editable = false }: AgendaWeekViewProps) {
   const weekDates = getWeekDates(date)
   const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
 
@@ -66,27 +110,14 @@ export default function AgendaWeekView({ date, events, onSelectShipment, onDayCl
           const today = isToday(d)
 
           return (
-            <div
+            <WeekDayCell
               key={i}
-              className={`border-r border-border last:border-r-0 p-1.5
-                ${today ? 'bg-accent/5' : ''}`}
-            >
-              <div className="space-y-1.5 max-h-[600px] overflow-y-auto">
-                {dayEvents.map(event => (
-                  <AgendaEventCard
-                    key={event.id}
-                    event={event}
-                    compact={true}
-                    onClick={() => onSelectShipment(event)}
-                  />
-                ))}
-                {dayEvents.length === 0 && (
-                  <div className="h-16 flex items-center justify-center">
-                    <span className="text-xs text-muted-foreground/40">—</span>
-                  </div>
-                )}
-              </div>
-            </div>
+              dateKey={dateKey}
+              dayEvents={dayEvents}
+              today={today}
+              editable={editable}
+              onSelectShipment={onSelectShipment}
+            />
           )
         })}
       </div>
