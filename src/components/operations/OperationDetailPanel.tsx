@@ -163,7 +163,9 @@ export default function OperationDetailPanel({
 
   const assigned = op.operatorId ? operatorById.get(op.operatorId) : null
   const eligible = operatorsForMode(operators, op.mode)
-  const statusEditable = op.source === 'db' && !!op.dbId && !truckStatus
+  // El estado de la FCL es DERIVADO (de las fechas de operativa) — read-only, como
+  // en la planilla. Editable solo en LCL/aéreo/terrestre sin camión.
+  const statusEditable = op.source === 'db' && op.mode !== 'fcl' && !!op.dbId && !truckStatus
   const segVencido = isSeguimientoVencido(op, truckStatus?.status, hoy)
 
   return (

@@ -1426,6 +1426,7 @@ const SHIPMENT_COLS = new Set([
   'seguro','certi','telex','impresa','despacho','deposito','fecha_consol','transporte','camion',
   'dest_country','discharge_port','dest_port','fiscal','wood','no_apilable','oog','imo','tipo','ftl_ltl','costo_extra','observacion','status',
   'operator_id','notes','archived','source','desconsol_date','entrega_planta',
+  'libre','salida','eta_fiscal','operativa','descarga','dev','terminal','n_cntr','origin_ref',
 ])
 
 async function handleShipments(req: VercelRequest, res: VercelResponse, db: any, payload: TokenPayload | null) {
@@ -1434,8 +1435,15 @@ async function handleShipments(req: VercelRequest, res: VercelResponse, db: any,
     // ?includeMirror=only → SOLO el espejo, payload mínimo (sheet_raw): es la
     // fuente FCL de la app desde la Etapa 2. ?includeMirror=1 → todo junto.
     if (req.query.includeMirror === 'only') {
+      // Flip Etapa 4: con la web como master, las FCL viven como filas DB normales
+      // (source='fcl') y no hay espejo que leer. `flipped` evita que el cliente caiga
+      // al cache (que mostraría las FCL duplicadas). raw=1 omite el flip: lo usa el
+      // horneado para leer el estado efectivo del espejo durante el cutover.
+      if (process.env.FCL_SOURCE_OF_TRUTH === 'db' && req.query.raw !== '1') {
+        return res.status(200).json({ shipments: [], flipped: true })
+      }
       const { data, error } = await db.from('shipments')
-        .select('id, sheet_raw, web_edits, updated_at_ts')
+        .select('id, sheet_raw, web_edits, created_at_ts, updated_at_ts')
         .eq('source', 'sheet')
         .not('sheet_raw', 'is', null)
         .limit(5000)

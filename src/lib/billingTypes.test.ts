@@ -72,6 +72,21 @@ describe('buildBillableItems — universal', () => {
     expect(out).toHaveLength(1)
     expect(out[0].item.mode).toBe('fcl')
   })
+
+  // PR-C flip: post-horneado la FCL es una fila DB (mode=fcl, status derivado).
+  // El "pendiente" sale de las columnas salida+eta_fiscal, no de status.
+  it('FCL horneada (mode=fcl en DB) → pendiente cuando salida y eta_fiscal llegaron', () => {
+    const fclDb = db({ id: 'shp-fcl-a7900', ref: 'A7900', mode: 'fcl', status: '', salida: '2026-06-03', eta_fiscal: '2026-06-04' })
+    const out = buildBillableItems([], [fclDb], [], [], noBilling)
+    expect(out).toHaveLength(1)
+    expect(out[0].state).toBe('pendiente')
+    expect(out[0].item.mode).toBe('fcl')
+  })
+
+  it('FCL horneada sin salida/eta_fiscal → todavía NO facturable', () => {
+    const fclDb = db({ ref: 'A7901', mode: 'fcl', status: '', salida: '', eta_fiscal: '' })
+    expect(buildBillableItems([], [fclDb], [], [], noBilling)).toHaveLength(0)
+  })
 })
 
 describe('borradores invisibles para facturación', () => {

@@ -44,12 +44,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(429).json({ error: 'Demasiadas búsquedas. Reintentá más tarde.' })
   }
 
+  // Flip Etapa 4: con la web como master, las FCL viven en la tabla shipments
+  // (source='fcl') y se buscan junto al resto — NO se lee el cache de la planilla
+  // (mostraría las FCL duplicadas y/o desactualizadas).
+  const fclFromDb = process.env.FCL_SOURCE_OF_TRUTH === 'db'
+
   // Strategy: try Google Sheets live first, fallback to Supabase cache
   let allShipments: any[] | null = null
   let source = 'google-sheets'
 
   const sheetsUrl = process.env.GOOGLE_SHEETS_CSV_URL
-  if (sheetsUrl) {
+  if (sheetsUrl && !fclFromDb) {
     try {
       allShipments = await performServerSync(sheetsUrl)
 
@@ -65,8 +70,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
   }
 
-  // Fallback: Supabase cache
-  if (!allShipments) {
+  // Fallback: Supabase cache (omitido tras el flip — las FCL salen de la tabla)
+  if (!allShipments && !fclFromDb) {
     try {
       const db = getSupabase()
       const { data, error } = await db
@@ -127,8 +132,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const db = getSupabase()
     const { data: rows, error } = await db
       .from('shipments')
-      .select('ref,client_ref,doc_number,contenedor,buque,linea,etd,eta,dest_port,status,mode,archived')
-      .neq('source', 'sheet') // filas espejo de la migración FCL: el tracking FCL sigue saliendo del cache
+      .select('ref,client_ref,doc_number,contenedor,buque,linea,etd,eta,dest_port,status,mode,archived,libre,terminal,n_cntr,salida,eta_fiscal')
+      .neq('source', 'sheet') // espejo viejo (Etapa 1-3); las FCL horneadas son source='fcl' y SÍ entran
       .limit(5000)
     if (!error && rows && rows.length) {
       const norm = (v: unknown) => String(v ?? '').toUpperCase().trim()
@@ -156,22 +161,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       )
       dbResults = hits.map((r: any) => {
         const containers = parseContainers(r.contenedor || '')
+        // FCL horneada (flip): campos ricos desde columnas + una operativa mínima
+        // (SALIDA/ETA_FISC) para que el stepper del card derive la etapa como antes.
+        const isFcl = r.mode === 'fcl'
         return {
           REF: r.ref || '',
           ETD: r.etd || '',
           ETA: r.eta || '',
           FT: 0,
-          LIBRE_HASTA: '',
+          LIBRE_HASTA: isFcl ? (r.libre || '') : '',
           CNTR: r.contenedor || '',
-          N: containers.length,
+          N: isFcl ? (r.n_cntr || containers.length) : containers.length,
           MBL: r.doc_number || '',
           LINEA: r.linea || '',
           BUQUE: r.buque || '',
-          TERMINAL: r.dest_port || '',
+          TERMINAL: isFcl ? (r.terminal || '') : (r.dest_port || ''),
           containers,
-          calculatedN: containers.length,
-          calculatedLibreHasta: '',
-          operativas: [],
+          calculatedN: isFcl ? (r.n_cntr || containers.length) : containers.length,
+          calculatedLibreHasta: isFcl ? (r.libre || '') : '',
+          operativas: isFcl && (r.salida || r.eta_fiscal)
+            ? [{ SALIDA: r.salida || '', ETA_FISC: r.eta_fiscal || '' }]
+            : [],
           mode: r.mode || '',
           status: r.status || '',
         }

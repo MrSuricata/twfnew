@@ -120,12 +120,24 @@ export interface DbShipment {
   discharge_port: string
   dest_port: string
   fiscal: string
+  // FCL operativas (PR-A flip Etapa 4): columnas reales para los campos de la hoja Operativas.
+  // Vacías en LCL/aéreo/terrestre; se pueblan al hornear las FCL (PR-C).
+  libre: string
+  salida: string
+  eta_fiscal: string
+  operativa: string
+  descarga: string
+  dev: string
+  terminal: string
+  n_cntr: number
+  origin_ref: string
   wood: boolean
   no_apilable: boolean
   oog: boolean
   desconsol_date?: string
   entrega_planta?: boolean
   imo: boolean
+  tipo: string
   ftl_ltl: string
   costo_extra: string
   observacion: string
@@ -258,7 +270,71 @@ function fclToOperation(s: ParsedShipment, operatorId: string | null, uid: strin
   }
 }
 
-/** Map a DB shipment (LCL/aéreo/terrestre) into a unified grid row. */
+/** Hornear (flip Etapa 4): mapea una FCL (estado efectivo = sheet_raw + web_edits
+ *  ya aplicados) a columnas reales de `shipments`. Colapsa N operativas igual que
+ *  fclToOperation (suma kg/m³/bultos, junta CNTR, firstWith para fechas). El detalle
+ *  por contenedor queda en sheet_raw de respaldo. El estado NO se hornea: se sigue
+ *  derivando al leer (derive-on-read) desde las columnas salida/eta_fiscal/dev/...
+ *  Devuelve columnas; el id y sheet_raw se conservan en el upsert. */
+export function fclToColumns(s: ParsedShipment): Partial<DbShipment> {
+  const ops = s.operativas || []
+  const firstWith = (key: keyof NonNullable<ParsedShipment['operativas']>[number]): string =>
+    (ops.find(o => o[key])?.[key] as string) || ''
+  const ref = s.REF || ''
+  const baseRef = ref.replace(/\s*[AB]$/i, '').trim()
+  return {
+    mode: 'fcl',
+    source: 'fcl',
+    ref,
+    origin_ref: baseRef && baseRef !== ref ? baseRef : '',
+    cliente: s.CLIENTE || firstWith('CLIENTE_OP'),
+    doc_number: s.MBL || '',
+    etd: s.ETD || '',
+    eta: s.ETA || firstWith('ETA_OP'),
+    buque: s.BUQUE || '',
+    linea: s.LINEA || '',
+    origin: s.POL || '',
+    discharge_port: s.POD || '',
+    dest_country: s.PAIS || 'OTRO',
+    seguimiento: s.SEGUIMIENTO || '',
+    contenedor: s.CNTR || ops.map(o => o.CNTR_OP).filter(Boolean).join(', '),
+    pkgs: ops.reduce((a, o) => a + num(o.PKGS), 0),
+    kg: ops.reduce((a, o) => a + num(o.KG), 0),
+    m3: ops.reduce((a, o) => a + num(o.M3), 0),
+    observacion: firstWith('DESCRIPCION'),
+    fiscal: firstWith('FISCAL'),
+    deposito: firstWith('DEPOSITO'),
+    telex: !!firstWith('TLX'),
+    libre: s.LIBRE_HASTA || firstWith('LIBRE'),
+    salida: firstWith('SALIDA'),
+    eta_fiscal: firstWith('ETA_FISC'),
+    operativa: firstWith('OPERATIVA'),
+    descarga: firstWith('DESCARGA'),
+    dev: firstWith('DEV'),
+    terminal: s.TERMINAL || '',
+    n_cntr: num(s.N),
+    tipo: s.TIPO || firstWith('TIPO') || 'FCL',
+    wood: ops.some(o => (o.WOOD || '').toUpperCase().startsWith('SI')),
+    transporte: firstWith('TRANSPORTE'),
+  }
+}
+
+/** Estado de una FCL horneada: se DERIVA de las columnas de operativa (no se
+ *  guarda — derive-on-read), reusando getShipmentStatus con un ParsedShipment
+ *  mínimo de 1 operativa. Si la FCL no tiene datos de operativa (Chile/BA,
+ *  históricas), va sin operativas y el estado sale de ETA como en la planilla. */
+function fclColumnsStatus(s: DbShipment): string {
+  const hasOp = !!(s.salida || s.eta_fiscal || s.dev || s.descarga || s.operativa)
+  const parsed = {
+    REF: s.ref, ETD: s.etd, ETA: s.eta,
+    operativas: hasOp
+      ? [{ SALIDA: s.salida, ETA_FISC: s.eta_fiscal, DEV: s.dev, DESCARGA: s.descarga, OPERATIVA: s.operativa }]
+      : [],
+  } as unknown as ParsedShipment
+  return getShipmentStatus(parsed).label
+}
+
+/** Map a DB shipment (LCL/aéreo/terrestre + FCL horneada) into a unified grid row. */
 export function dbShipmentToOperation(s: DbShipment): UnifiedOperation {
   return {
     uid: s.id,
@@ -278,10 +354,10 @@ export function dbShipmentToOperation(s: DbShipment): UnifiedOperation {
     origin: s.origin || '',
     etd: s.etd || '',
     eta: s.eta || '',
-    salida: '',
-    etaFisc: '',
-    libre: '',
-    operativa: '',
+    salida: s.salida || '',
+    etaFisc: s.eta_fiscal || '',
+    libre: s.libre || '',
+    operativa: s.operativa || '',
     cntr: s.contenedor || '',
     docNumber: s.doc_number || '',
     buque: s.buque || '',
@@ -295,14 +371,15 @@ export function dbShipmentToOperation(s: DbShipment): UnifiedOperation {
     dischargePort: s.discharge_port || '',
     pais: s.dest_country || '',
     destPort: s.dest_port || '',
-    descarga: '',
+    descarga: s.descarga || '',
     desconsol: s.desconsol_date || '',
     entregaPlanta: !!s.entrega_planta,
-    dev: '',
+    dev: s.dev || '',
     despacho: s.despacho || '',
-    tipo: MODALITY_LABELS[s.mode] || '',
-    terminal: '',
-    n: 0,
+    // FCL muestra el tipo de contenedor (40HC/20DRY…); el resto, el label de modalidad.
+    tipo: s.mode === 'fcl' ? (s.tipo || 'FCL') : (MODALITY_LABELS[s.mode] || ''),
+    terminal: s.terminal || '',
+    n: s.n_cntr || 0,
     wood: !!s.wood,
     noApilable: !!s.no_apilable,
     oog: !!s.oog,
@@ -313,7 +390,9 @@ export function dbShipmentToOperation(s: DbShipment): UnifiedOperation {
     certi: !!s.certi,
     impresa: !!s.impresa,
     archived: !!s.archived,
-    status: s.status || '',
+    // FCL: estado derivado de las columnas de operativa (label, como la planilla).
+    // Resto: código editable guardado en la columna status.
+    status: s.mode === 'fcl' ? fclColumnsStatus(s) : (s.status || ''),
   }
 }
 
@@ -374,7 +453,10 @@ export function isSeguimientoVencido(op: UnifiedOperation, truckStatus: string |
  *  terrestre): estado terminal — en fiscal o entregado — derivado del camión
  *  si está cargada en uno. */
 export function isOperationActive(op: UnifiedOperation, truckStatus: string | undefined, today: Date): boolean {
-  if (op.source === 'db') {
+  // No-FCL (LCL/aéreo/terrestre): estado terminal por código (derivado del camión
+  // si va en uno). Se basa en `mode` (no en source) para que la FCL horneada (que
+  // pasa a source='db') siga usando la lógica FCL de abajo.
+  if (op.mode !== 'fcl') {
     const eff = truckStatus || op.status
     return eff !== 'en_fiscal' && eff !== 'devuelto'
   }
@@ -497,6 +579,14 @@ export const EDITABLE_FIELDS: Partial<Record<keyof UnifiedOperation, EditableFie
   seguimiento: { col: 'seguimiento', type: 'text' },
   desconsol: { col: 'desconsol_date', type: 'text' },
   entregaPlanta: { col: 'entrega_planta', type: 'bool' },
+  // Campos de Operativas (editables tras el flip; columnas reales en shipments)
+  libre: { col: 'libre', type: 'text' },
+  salida: { col: 'salida', type: 'text' },
+  etaFisc: { col: 'eta_fiscal', type: 'text' },
+  operativa: { col: 'operativa', type: 'text' },
+  descarga: { col: 'descarga', type: 'text' },
+  dev: { col: 'dev', type: 'text' },
+  terminal: { col: 'terminal', type: 'text' },
   tlx: { col: 'telex', type: 'bool' },
   wood: { col: 'wood', type: 'bool' },
   noApilable: { col: 'no_apilable', type: 'bool' },
@@ -538,7 +628,8 @@ export function newDbShipment(fields: Partial<DbShipment> & { mode: Modality }):
     seguimiento: '', contenedor: '', buque: '', linea: '', transbordo: '', seguro: false,
     certi: false, telex: false, impresa: false, despacho: '', deposito: '', fecha_consol: '',
     transporte: '', camion: '', dest_country: '', discharge_port: '', dest_port: '',
-    fiscal: '', wood: false, no_apilable: false, oog: false, imo: false,
+    fiscal: '', wood: false, no_apilable: false, oog: false, imo: false, tipo: '',
+    libre: '', salida: '', eta_fiscal: '', operativa: '', descarga: '', dev: '', terminal: '', n_cntr: 0, origin_ref: '',
     ftl_ltl: '', costo_extra: '', observacion: '', status: 'en_origen', operator_id: null,
     notes: '', source: 'web', archived: false,
     ...fields,

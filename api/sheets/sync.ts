@@ -42,23 +42,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Espejo FCL → tabla shipments (Etapa 1 migración): corre en paralelo;
     // la app ignora estas filas (source='sheet') hasta el flip. Non-fatal.
     let mirror: Record<string, unknown> = { upserted: 0 }
-    try {
-      const db = getSupabase()
-      const now = Date.now()
-      const rows = fclMirrorRows(shipments, now)
-      for (let i = 0; i < rows.length; i += 500) {
-        const { error } = await db.from('shipments').upsert(rows.slice(i, i + 500), { onConflict: 'id' })
-        if (error) throw error
+    if (process.env.FCL_SOURCE_OF_TRUTH === 'db') {
+      // Flip Etapa 4: la WEB es master de las FCL. El sync de entrada NO escribe el
+      // espejo — si lo hiciera reviviría filas source='sheet' y pisaría lo horneado
+      // (las FCL ya viven como filas source='fcl' editables en la web).
+      mirror = { skipped: 'flip:db' }
+    } else {
+      try {
+        const db = getSupabase()
+        const now = Date.now()
+        const rows = fclMirrorRows(shipments, now)
+        for (let i = 0; i < rows.length; i += 500) {
+          const { error } = await db.from('shipments').upsert(rows.slice(i, i + 500), { onConflict: 'id' })
+          if (error) throw error
+        }
+        // Espejo = reflejo exacto: filas que ya no están en la planilla se van
+        // (solo source='sheet'; las cargas de la web nunca se tocan acá).
+        const { error: staleErr } = await db.from('shipments')
+          .delete().eq('source', 'sheet').lt('updated_at_ts', now)
+        if (staleErr) console.warn('Mirror stale cleanup failed:', staleErr.message)
+        mirror = { upserted: rows.length }
+      } catch (mirrorError: any) {
+        console.warn('FCL mirror upsert failed:', mirrorError?.message || mirrorError)
+        mirror = { error: mirrorError?.message || 'mirror failed' }
       }
-      // Espejo = reflejo exacto: filas que ya no están en la planilla se van
-      // (solo source='sheet'; las cargas de la web nunca se tocan acá).
-      const { error: staleErr } = await db.from('shipments')
-        .delete().eq('source', 'sheet').lt('updated_at_ts', now)
-      if (staleErr) console.warn('Mirror stale cleanup failed:', staleErr.message)
-      mirror = { upserted: rows.length }
-    } catch (mirrorError: any) {
-      console.warn('FCL mirror upsert failed:', mirrorError?.message || mirrorError)
-      mirror = { error: mirrorError?.message || 'mirror failed' }
     }
 
     return res.status(200).json({
