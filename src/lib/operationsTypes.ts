@@ -159,6 +159,7 @@ export interface UnifiedOperation {
   dbId?: string                  // id en la tabla shipments (para editar/asignar)
   readOnly: boolean              // FCL = espejo de la Sheet (read-only) hasta C2
   operatorId: string | null
+  operativas?: OperativasRecord[] // array por contenedor (FCL horneada + FCL espejo con datos)
   cliente: string
   shipper: string
   agente: string
@@ -268,6 +269,7 @@ function fclToOperation(s: ParsedShipment, operatorId: string | null, uid: strin
     wood,
     transporte: firstWith('TRANSPORTE'),
     status: getShipmentStatus(s).label,   // derivado de la planilla (read-only)
+    operativas: ops.length > 0 ? ops : undefined,
   }
 }
 
@@ -443,6 +445,11 @@ export function dbShipmentToOperation(s: DbShipment): UnifiedOperation {
     // FCL: estado derivado de las columnas de operativa (label, como la planilla).
     // Resto: código editable guardado en la columna status.
     status: s.mode === 'fcl' ? fclColumnsStatus(s) : (s.status || ''),
+    // Array por contenedor: presente en FCL horneada post Fase 1 (jsonb operativas).
+    // Permitimos que LCL/aéreo/terrestre lo lleve vacío (no usan este bloque).
+    operativas: Array.isArray(s.operativas) && s.operativas.length > 0
+      ? s.operativas
+      : undefined,
   }
 }
 

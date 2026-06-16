@@ -11,6 +11,7 @@ import {
 } from '@/lib/operationsTypes'
 import { parseCntr, serializeCntr, normalizeCntr, isStandardCntr } from '@/lib/cntrUtils'
 import ViabilityBlock from './ViabilityBlock'
+import ContainerDatesSection from './ContainerDatesSection'
 
 interface TruckRefInfo { truckCode: string; status: string }
 
@@ -268,6 +269,15 @@ export default function OperationDetailPanel({
             editable={op.source === 'db' && !!op.dbId && !op.readOnly}
             knownDepositos={knownDepositos}
             onCommit={commit}
+          />
+
+          {/* Salidas y arribos por contenedor (FCL solamente) */}
+          <ContainerDatesSection
+            op={op}
+            editable={op.source === 'db' && !!op.dbId && !op.readOnly}
+            onCommitOperativas={next => {
+              if (op.dbId) onPatch(op.dbId, { operativas: next })
+            }}
           />
 
           {/* Contenedores */}
