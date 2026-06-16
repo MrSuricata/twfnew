@@ -1,3 +1,4 @@
+import { useDraggable } from '@dnd-kit/core'
 import type { CalendarEvent } from '@/lib/agendaTypes'
 import { getOperativaColor } from '@/lib/agendaTypes'
 import { formatDateShort, daysUntil } from '@/lib/agendaUtils'
@@ -15,9 +16,15 @@ interface AgendaEventCardProps {
   event: CalendarEvent
   compact?: boolean       // true for week/month views
   onClick?: () => void
+  draggable?: boolean     // enables DnD (week view, editable=true only)
 }
 
-export default function AgendaEventCard({ event, compact = true, onClick }: AgendaEventCardProps) {
+export default function AgendaEventCard({ event, compact = true, onClick, draggable = false }: AgendaEventCardProps) {
+  const { setNodeRef, listeners, attributes, isDragging } = useDraggable({
+    id: event.id,
+    data: { event },
+    disabled: !draggable,
+  })
   const opColor = getOperativaColor(event.operativa)
   const libreRemaining = event.libre ? daysUntil(event.libre) : null
 
@@ -25,9 +32,14 @@ export default function AgendaEventCard({ event, compact = true, onClick }: Agen
     const hasCargoInfo = event.kg > 0 || event.pkgs > 0
     const cardButton = (
       <button
+        ref={draggable ? setNodeRef : undefined}
         onClick={onClick}
+        {...(draggable ? listeners : {})}
+        {...(draggable ? attributes : {})}
         className={`w-full text-left rounded-md border border-border/50 overflow-hidden
-          hover:shadow-sm hover:border-border hover:-translate-y-0.5 transition-all cursor-pointer group ${opColor.bg}`}
+          hover:shadow-sm hover:border-border hover:-translate-y-0.5 transition-all group ${opColor.bg}
+          ${draggable ? 'cursor-grab' : 'cursor-pointer'}
+          ${isDragging ? 'opacity-50' : ''}`}
       >
         {/* Color strip */}
         <div className={`h-1 ${opColor.color}`} />
