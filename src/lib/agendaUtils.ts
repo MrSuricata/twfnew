@@ -270,15 +270,10 @@ export function shipmentsToEvents(
         }
       }
 
-      // Show on SALIDA date, or today if no date assigned (for depot/transport views)
+      // Show on SALIDA date only — ETA_FISC is no longer shown on the calendar.
       if (isValidDateStr(op.SALIDA)) {
         const salidaEvent = makeEvent('salida', op.SALIDA)
         if (salidaEvent) events.push(salidaEvent)
-      }
-      // Show on ETA_FISC date (arrival at fiscal deposit)
-      if (isValidDateStr(op.ETA_FISC)) {
-        const etaFiscEvent = makeEvent('eta_fisc', op.ETA_FISC)
-        if (etaFiscEvent) events.push(etaFiscEvent)
       }
       // Ops without SALIDA are shown in the Pending sidebar, not on the calendar
     }

@@ -91,7 +91,7 @@ const makeShipment = (over: Partial<ParsedShipment> = {}): ParsedShipment => ({
 })
 
 describe('shipmentsToEvents — eta_fisc events', () => {
-  it('op with both SALIDA and ETA_FISC produces 2 events: one salida and one eta_fisc', () => {
+  it('op with both SALIDA and ETA_FISC produces 1 event: only salida (eta_fisc no longer shown)', () => {
     const shipment = makeShipment({
       operativas: [
         {
@@ -110,18 +110,12 @@ describe('shipmentsToEvents — eta_fisc events', () => {
     })
 
     const events = shipmentsToEvents([shipment])
-    expect(events).toHaveLength(2)
+    expect(events).toHaveLength(1)
 
     const salida = events.find(e => e.type === 'salida')
-    const etaFisc = events.find(e => e.type === 'eta_fisc')
-
     expect(salida).toBeDefined()
     expect(salida?.date).toBe('2026-06-16')
     expect(salida?.cntr).toBe('TEST1234567')
-
-    expect(etaFisc).toBeDefined()
-    expect(etaFisc?.date).toBe('2026-06-18')
-    expect(etaFisc?.cntr).toBe('TEST1234567')
   })
 
   it('op with only SALIDA (no ETA_FISC) produces 1 event', () => {
@@ -143,7 +137,7 @@ describe('shipmentsToEvents — eta_fisc events', () => {
     expect(events[0].type).toBe('salida')
   })
 
-  it('op with only ETA_FISC (no SALIDA) produces 1 eta_fisc event', () => {
+  it('op with only ETA_FISC (no SALIDA) produces 0 events (eta_fisc no longer shown on calendar)', () => {
     const shipment = makeShipment({
       operativas: [
         {
@@ -158,8 +152,6 @@ describe('shipmentsToEvents — eta_fisc events', () => {
       ],
     })
     const events = shipmentsToEvents([shipment])
-    expect(events).toHaveLength(1)
-    expect(events[0].type).toBe('eta_fisc')
-    expect(events[0].date).toBe('2026-06-18')
+    expect(events).toHaveLength(0)
   })
 })
