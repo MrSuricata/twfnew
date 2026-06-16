@@ -1,14 +1,12 @@
-// ContainerQuickEdit — Radix Popover para editar las fechas de UN contenedor.
+// ContainerQuickEdit — centered modal Dialog para editar las fechas de UN contenedor.
 // Salida MVD + Arribo fiscal + Lugar. Botón "Más datos →" abre el panel completo.
+// Convertido de Popover a Dialog (2026-06) — centrado en pantalla, visualmente limpio.
 
 import { useState, useRef } from 'react'
-import { X } from '@phosphor-icons/react'
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-  PopoverAnchor,
-} from '@/components/ui/popover'
+  Dialog,
+  DialogContent,
+} from '@/components/ui/dialog'
 import type { ParsedShipment, OperativasRecord } from '@/lib/shipmentTypes'
 import { getShipmentStatus } from '@/lib/shipmentTypes'
 
@@ -89,6 +87,17 @@ function containerMicroStatus(shipment: ParsedShipment, op: OperativasRecord): s
   return getShipmentStatus(mini).label
 }
 
+// ─── Status badge color ───────────────────────────────────────────────────
+
+function statusBadgeClass(label: string): string {
+  const l = label.toLowerCase()
+  if (l.includes('fiscal') || l.includes('devuelto')) return 'bg-green-100 text-green-700'
+  if (l.includes('hoy') || l.includes('salió')) return 'bg-blue-100 text-blue-700'
+  if (l.includes('frontera')) return 'bg-orange-100 text-orange-700'
+  if (l.includes('embarcado') || l.includes('viaje')) return 'bg-sky-100 text-sky-700'
+  return 'bg-slate-100 text-slate-600'
+}
+
 // ─── Props ────────────────────────────────────────────────────────────────
 
 export interface ContainerQuickEditProps {
@@ -97,7 +106,7 @@ export interface ContainerQuickEditProps {
   editable: boolean
   open: boolean
   onOpenChange: (open: boolean) => void
-  /** trigger element — wrap it with PopoverTrigger or use anchorRef */
+  /** Unused in Dialog mode — kept for API compatibility with call sites. */
   children?: React.ReactNode
   onPatch: (dbId: string, fields: Record<string, unknown>) => void | Promise<void>
   onMasDatos: () => void
@@ -112,7 +121,6 @@ export default function ContainerQuickEdit({
   editable,
   open,
   onOpenChange,
-  children,
   onPatch,
   onMasDatos,
   onSaved,
@@ -180,7 +188,7 @@ export default function ContainerQuickEdit({
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') void commitSave()
-    if (e.key === 'Escape') onOpenChange(false)
+    // Escape is handled natively by the Dialog (Radix closes on Escape)
   }
 
   const status = containerMicroStatus(shipment, {
@@ -190,46 +198,39 @@ export default function ContainerQuickEdit({
     LUGAR_SALIDA: lugar,
   })
 
+  const lugarLabel = LUGAR_OPTIONS.find(o => o.value === lugar)?.label ?? lugar
+
   return (
-    <Popover open={open} onOpenChange={onOpenChange}>
-      {children ? (
-        <PopoverTrigger asChild>{children}</PopoverTrigger>
-      ) : (
-        <PopoverAnchor />
-      )}
-      <PopoverContent
-        className="w-80 p-0 shadow-lg"
-        align="start"
-        sideOffset={6}
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        className="max-w-sm w-[calc(100%-2rem)] p-0 gap-0 overflow-hidden"
         onKeyDown={handleKeyDown}
       >
-        {/* Header */}
-        <div className="flex items-center justify-between border-b px-3 py-2 bg-muted/40">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="text-[12px] font-semibold text-foreground truncate">
+        {/* ── Header ─────────────────────────────────────────────────── */}
+        <div className="px-5 pt-5 pb-4 border-b bg-[#1e3a8a]/5">
+          {/* REF + CNTR row */}
+          <div className="flex items-baseline gap-2 min-w-0 mb-2">
+            <span className="text-[15px] font-bold text-foreground leading-none">
               {shipment.REF}
             </span>
-            <span className="text-[11px] font-mono text-muted-foreground truncate">
+            <span className="text-[12px] font-mono text-muted-foreground truncate">
               {cntr}
             </span>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <span className="text-[11px] text-muted-foreground">{status}</span>
-            <button
-              onClick={() => onOpenChange(false)}
-              className="text-muted-foreground hover:text-foreground transition-colors"
-              aria-label="Cerrar"
-            >
-              <X size={14} />
-            </button>
-          </div>
+          {/* Micro-status chip */}
+          <span
+            className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full ${statusBadgeClass(status)}`}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" />
+            {status}
+          </span>
         </div>
 
-        {/* Fields */}
-        <div className="px-3 pt-3 pb-2 space-y-2.5">
+        {/* ── Fields ─────────────────────────────────────────────────── */}
+        <div className="px-5 pt-4 pb-3 space-y-3.5">
           {/* Salida MVD */}
-          <div className="flex flex-col gap-0.5">
-            <label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
               Salida MVD
             </label>
             {editable ? (
@@ -240,18 +241,18 @@ export default function ContainerQuickEdit({
                 onBlur={() => void commitSave()}
                 onKeyDown={e => { if (e.key === 'Enter') void commitSave() }}
                 disabled={saving}
-                className="h-8 w-full rounded border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-[#1e3a8a]/40 disabled:opacity-50 transition-shadow"
               />
             ) : (
-              <span className={`text-sm font-medium ${drafts.salida ? '' : 'text-muted-foreground'}`}>
+              <span className={`text-sm font-medium ${drafts.salida ? 'text-foreground' : 'text-muted-foreground'}`}>
                 {drafts.salida || '—'}
               </span>
             )}
           </div>
 
           {/* Arribo fiscal */}
-          <div className="flex flex-col gap-0.5">
-            <label className="text-[10px] uppercase tracking-wide text-muted-foreground">
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
               Arribo fiscal
             </label>
             {editable ? (
@@ -262,19 +263,19 @@ export default function ContainerQuickEdit({
                 onBlur={() => void commitSave()}
                 onKeyDown={e => { if (e.key === 'Enter') void commitSave() }}
                 disabled={saving}
-                className="h-8 w-full rounded border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-[#1e3a8a]/40 disabled:opacity-50 transition-shadow"
               />
             ) : (
-              <span className={`text-sm font-medium ${drafts.etaFisc ? '' : 'text-muted-foreground'}`}>
+              <span className={`text-sm font-medium ${drafts.etaFisc ? 'text-foreground' : 'text-muted-foreground'}`}>
                 {drafts.etaFisc || '—'}
               </span>
             )}
           </div>
 
-          {/* Lugar */}
-          <div className="flex flex-col gap-0.5">
-            <label className="text-[10px] uppercase tracking-wide text-muted-foreground">
-              Lugar
+          {/* Lugar de salida */}
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              Lugar de salida
             </label>
             {editable ? (
               <select
@@ -287,35 +288,50 @@ export default function ContainerQuickEdit({
                   void commitSave({ lugar: newLugar })
                 }}
                 disabled={saving || !shipment.__dbId}
-                className="h-8 w-full rounded border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-[#1e3a8a]/40 disabled:opacity-50 transition-shadow"
               >
                 {LUGAR_OPTIONS.map(o => (
                   <option key={o.value} value={o.value}>{o.label}</option>
                 ))}
               </select>
             ) : (
-              <span className={`text-sm font-medium ${lugar ? '' : 'text-muted-foreground'}`}>
-                {(LUGAR_OPTIONS.find(o => o.value === lugar)?.label ?? lugar) || '—'}
+              <span className={`text-sm font-medium ${lugar ? 'text-foreground' : 'text-muted-foreground'}`}>
+                {lugarLabel || '—'}
               </span>
             )}
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="flex items-center justify-between border-t px-3 py-2">
-          {!shipment.__dbId && (
-            <span className="text-[11px] text-destructive">Sin ID DB — edición no disponible</span>
-          )}
-          <div className="ml-auto flex gap-2">
+        {/* ── Footer ─────────────────────────────────────────────────── */}
+        <div className="flex items-center justify-between border-t px-5 py-3 bg-muted/20">
+          <div className="flex items-center gap-2">
+            {!shipment.__dbId && (
+              <span className="text-[11px] text-destructive font-medium">
+                Sin ID — edición no disponible
+              </span>
+            )}
+            {saving && (
+              <span className="text-[11px] text-muted-foreground animate-pulse">
+                Guardando…
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
             <button
               onClick={onMasDatos}
-              className="text-[12px] text-primary hover:underline font-medium"
+              className="text-[12px] font-semibold text-[#1e3a8a] hover:underline underline-offset-2 transition-colors"
             >
               Más datos →
             </button>
+            <button
+              onClick={() => onOpenChange(false)}
+              className="px-3 py-1.5 text-[12px] font-medium rounded-md border border-input bg-background hover:bg-muted transition-colors"
+            >
+              {saving ? 'Cancelar' : 'Listo'}
+            </button>
           </div>
         </div>
-      </PopoverContent>
-    </Popover>
+      </DialogContent>
+    </Dialog>
   )
 }

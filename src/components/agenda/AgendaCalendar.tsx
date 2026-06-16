@@ -346,7 +346,7 @@ export default function AgendaCalendar({
         )}
       </div>
 
-      {/* Admin quick-edit popover — ContainerQuickEdit (editable=true only) */}
+      {/* Admin quick-edit modal — ContainerQuickEdit (editable=true only) */}
       {editable && quickEditEvent?.shipment && quickEditEvent.cntr && (
         <ContainerQuickEdit
           key={`${quickEditEvent.cntr}-${quickEditEvent.shipment.REF}`}
