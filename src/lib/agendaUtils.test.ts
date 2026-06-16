@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { Truck, TruckLoad } from './truckTypes'
-import { trucksToEvents, shipmentsToEvents } from './agendaUtils'
-import type { ParsedShipment } from './shipmentTypes'
+import { trucksToEvents, shipmentsToEvents, pendingSalida } from './agendaUtils'
+import type { ParsedShipment, OperativasRecord } from './shipmentTypes'
 
 const truck = (over: Partial<Truck> = {}): Truck =>
   ({
@@ -91,7 +91,7 @@ const makeShipment = (over: Partial<ParsedShipment> = {}): ParsedShipment => ({
 })
 
 describe('shipmentsToEvents — eta_fisc events', () => {
-  it('op with both SALIDA and ETA_FISC produces 2 events: one salida and one eta_fisc', () => {
+  it('op with both SALIDA and ETA_FISC produces 1 event: only salida (eta_fisc no longer shown)', () => {
     const shipment = makeShipment({
       operativas: [
         {
@@ -110,18 +110,12 @@ describe('shipmentsToEvents — eta_fisc events', () => {
     })
 
     const events = shipmentsToEvents([shipment])
-    expect(events).toHaveLength(2)
+    expect(events).toHaveLength(1)
 
     const salida = events.find(e => e.type === 'salida')
-    const etaFisc = events.find(e => e.type === 'eta_fisc')
-
     expect(salida).toBeDefined()
     expect(salida?.date).toBe('2026-06-16')
     expect(salida?.cntr).toBe('TEST1234567')
-
-    expect(etaFisc).toBeDefined()
-    expect(etaFisc?.date).toBe('2026-06-18')
-    expect(etaFisc?.cntr).toBe('TEST1234567')
   })
 
   it('op with only SALIDA (no ETA_FISC) produces 1 event', () => {
@@ -143,7 +137,7 @@ describe('shipmentsToEvents — eta_fisc events', () => {
     expect(events[0].type).toBe('salida')
   })
 
-  it('op with only ETA_FISC (no SALIDA) produces 1 eta_fisc event', () => {
+  it('op with only ETA_FISC (no SALIDA) produces 0 events (eta_fisc no longer shown on calendar)', () => {
     const shipment = makeShipment({
       operativas: [
         {
@@ -158,8 +152,85 @@ describe('shipmentsToEvents — eta_fisc events', () => {
       ],
     })
     const events = shipmentsToEvents([shipment])
-    expect(events).toHaveLength(1)
-    expect(events[0].type).toBe('eta_fisc')
-    expect(events[0].date).toBe('2026-06-18')
+    expect(events).toHaveLength(0)
+  })
+})
+
+// ── pendingSalida ───────────────────────────────────────────────────────────
+
+const TODAY_PS = new Date(2026, 5, 16) // June 16, 2026 (month index 5 = June)
+const YESTERDAY_PS = '2026-06-15'
+const TOMORROW_PS = '2026-06-17'
+
+function mkOp(partial: Partial<OperativasRecord> = {}): OperativasRecord {
+  return {
+    REF: 'A7999', TLX: '', DEPOSITO: 'GODILCO',
+    ETA_OP: YESTERDAY_PS, SALIDA: '', ETA_FISC: '',
+    LIBRE: '', OPERATIVA: 'TRASIEGO', CNTR_OP: 'TEST1234567',
+    PKGS: 100, KG: 1000, M3: 10, DESCRIPCION: '',
+    FISCAL: '', DESCARGA: '', DEV: '',
+    CLIENTE_OP: 'PERETTI', TIPO: '40HC', WOOD: '',
+    TRANSPORTE: '', HORARIO: '',
+    ...partial,
+  }
+}
+
+function mkShipPS(over: Partial<ParsedShipment> = {}): ParsedShipment {
+  return {
+    REF: 'A7999', CLIENTE: 'PERETTI',
+    ETD: '2026-06-01', ETA: YESTERDAY_PS,
+    FT: 0, LIBRE_HASTA: '', CNTR: 'TEST1234567', N: 1,
+    MBL: '', LINEA: '', BUQUE: '', TERMINAL: '',
+    C_TERMINAL: 0, C_DEV: 0, LOCALES: 0, FLETE: 0,
+    FORMA_DE_PAGO: 'al arribo', VTO: '',
+    CR: false, BL: false, AD: false, AT: false,
+    POL: '', POD: '', PAIS: 'AR', SEGUIMIENTO: '', TIPO: '',
+    containers: [], calculatedN: 1, calculatedLibreHasta: '',
+    ...over,
+  }
+}
+
+describe('pendingSalida', () => {
+  it('arrived + no salida → included', () => {
+    const s = mkShipPS({ operativas: [mkOp()] })
+    const result = pendingSalida([s], TODAY_PS)
+    expect(result).toHaveLength(1)
+    expect(result[0].op.CNTR_OP).toBe('TEST1234567')
+  })
+
+  it('has SALIDA → excluded', () => {
+    const s = mkShipPS({ operativas: [mkOp({ SALIDA: '2026-06-15' })] })
+    expect(pendingSalida([s], TODAY_PS)).toHaveLength(0)
+  })
+
+  it('future ETA → excluded', () => {
+    const s = mkShipPS({ ETA: TOMORROW_PS, operativas: [mkOp({ ETA_OP: TOMORROW_PS })] })
+    expect(pendingSalida([s], TODAY_PS)).toHaveLength(0)
+  })
+
+  it('ETA exactly today → included (arrived today counts)', () => {
+    const s = mkShipPS({ ETA: '2026-06-16', operativas: [mkOp({ ETA_OP: '2026-06-16' })] })
+    expect(pendingSalida([s], TODAY_PS)).toHaveLength(1)
+  })
+
+  it('no container number → excluded', () => {
+    const s = mkShipPS({
+      CNTR: '',
+      operativas: [mkOp({ CNTR_OP: '' })],
+    })
+    expect(pendingSalida([s], TODAY_PS)).toHaveLength(0)
+  })
+
+  it('sorted by LIBRE urgency: overdue first, then soonest, no-LIBRE last', () => {
+    const opOverdue = mkOp({ CNTR_OP: 'C1', ETA_OP: YESTERDAY_PS, LIBRE: '2026-06-14' }) // 2d overdue
+    const opSoon    = mkOp({ CNTR_OP: 'C2', ETA_OP: YESTERDAY_PS, LIBRE: '2026-06-20' }) // 4d away
+    const opNoLibre = mkOp({ CNTR_OP: 'C3', ETA_OP: YESTERDAY_PS, LIBRE: '' })           // no LIBRE
+
+    const s = mkShipPS({ operativas: [opNoLibre, opSoon, opOverdue] })
+    const result = pendingSalida([s], TODAY_PS)
+    expect(result).toHaveLength(3)
+    expect(result[0].op.CNTR_OP).toBe('C1') // overdue → first
+    expect(result[1].op.CNTR_OP).toBe('C2') // soonest LIBRE
+    expect(result[2].op.CNTR_OP).toBe('C3') // no LIBRE → last
   })
 })
