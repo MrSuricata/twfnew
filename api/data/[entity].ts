@@ -1460,6 +1460,28 @@ async function handleShipments(req: VercelRequest, res: VercelResponse, db: any,
   if (req.method === 'PATCH') {
     const id = req.query.id as string
     if (!id) return res.status(400).json({ error: 'id required' })
+
+    // Renombrar la REF (flip Etapa 4): flujo aparte con PIN 0000 + cascada atómica
+    // (RPC rename_shipment_ref: shipments + truck_loads/origin_photos/documents/
+    // reports/notification_tasks/shipment_billing/operator_assignments en una sola
+    // transacción). Anti-duplicados server-side. La REF nunca se toca por el PATCH
+    // normal de columnas (no está en SHIPMENT_COLS).
+    if (typeof req.query.renameRef === 'string') {
+      const newRef = (req.query.renameRef as string).trim()
+      const pin = String(req.query.pin || '')
+      const { data: oldRef, error } = await db.rpc('rename_shipment_ref', { p_id: id, p_new_ref: newRef, p_pin: pin })
+      if (error) {
+        const msg = String(error.message || '')
+        if (/PIN/i.test(msg)) return res.status(403).json({ error: 'PIN incorrecto' })
+        if (/ya existe/i.test(msg)) return res.status(409).json({ error: 'Ya existe una carga activa con esa REF — usá un sufijo A/B.' })
+        if (/vac[ií]a/i.test(msg)) return res.status(400).json({ error: 'La REF no puede quedar vacía.' })
+        if (/no encontrada/i.test(msg)) return res.status(404).json({ error: 'Carga no encontrada.' })
+        throw error
+      }
+      logAudit(db, payload, 'renombrar REF', 'shipments', newRef, { old_ref: oldRef, new_ref: newRef })
+      return res.status(200).json({ renamed: true, oldRef, newRef })
+    }
+
     const body = (req.body || {}) as Record<string, unknown>
 
     // Etapa 3 migración: edición de una FCL espejo → overlay por campo en

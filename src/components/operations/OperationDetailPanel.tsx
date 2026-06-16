@@ -3,6 +3,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { LockSimple, Truck as TruckIcon, Archive, ArrowCounterClockwise, Trash, Plus, X, PencilSimple } from '@phosphor-icons/react'
+import { toast } from 'sonner'
 import type { Operator, UnifiedOperation } from '@/lib/operationsTypes'
 import {
   EDITABLE_FIELDS, EDITABLE_FCL_FIELDS, MODALITY_COLORS, MODALITY_LABELS,
@@ -118,6 +119,7 @@ export default function OperationDetailPanel({
   onAssign,
   onPatch,
   onPatchFcl,
+  onRenameRef,
   onRequestDelete,
   onClose,
 }: {
@@ -130,15 +132,21 @@ export default function OperationDetailPanel({
   onAssign: (op: UnifiedOperation, operatorId: string | null) => void
   onPatch: (id: string, fields: Record<string, unknown>) => void
   onPatchFcl?: (dbId: string, edits: Record<string, unknown>) => void
+  onRenameRef?: (op: UnifiedOperation, newRef: string, pin: string) => Promise<void>
   onRequestDelete?: (op: UnifiedOperation) => void
   onClose: () => void
 }) {
   const [newCntr, setNewCntr] = useState('')
   const [addingCntr, setAddingCntr] = useState(false)
+  // Renombrado de REF (flip Etapa 4): form inline con PIN.
+  const [renaming, setRenaming] = useState(false)
+  const [refDraft, setRefDraft] = useState('')
+  const [pinDraft, setPinDraft] = useState('')
+  const [renameBusy, setRenameBusy] = useState(false)
 
   // El panel no se desmonta al cambiar de operación: limpiar el borrador.
   const opUid = op?.uid
-  useEffect(() => { setNewCntr(''); setAddingCntr(false) }, [opUid])
+  useEffect(() => { setNewCntr(''); setAddingCntr(false); setRenaming(false); setRefDraft(''); setPinDraft('') }, [opUid])
 
   if (!op) return <Sheet open={false}><SheetContent side="right" /></Sheet>
 
@@ -168,6 +176,23 @@ export default function OperationDetailPanel({
   const statusEditable = op.source === 'db' && op.mode !== 'fcl' && !!op.dbId && !truckStatus
   const segVencido = isSeguimientoVencido(op, truckStatus?.status, hoy)
 
+  // Renombrar la REF: solo cargas DB editables (incl. FCL horneada). PIN 0000 + cascada.
+  const canRenameRef = op.source === 'db' && !!op.dbId && !op.readOnly && !!onRenameRef
+  const submitRename = async () => {
+    if (!onRenameRef || renameBusy) return
+    const nr = refDraft.trim()
+    if (!nr || nr === op.ref) { setRenaming(false); return }
+    setRenameBusy(true)
+    try {
+      await onRenameRef(op, nr, pinDraft)
+      setRenaming(false); setRefDraft(''); setPinDraft('')
+    } catch (e) {
+      toast.error((e as Error)?.message || 'No se pudo renombrar la REF')
+    } finally {
+      setRenameBusy(false)
+    }
+  }
+
   return (
     <Sheet open={!!op} onOpenChange={(v) => { if (!v) onClose() }}>
       <SheetContent side="right" className="w-full sm:w-[480px] sm:max-w-[90vw] overflow-y-auto p-0" onEscapeKeyDown={e => { if ((e.target as HTMLElement)?.tagName === 'INPUT') e.preventDefault() }}>
@@ -178,6 +203,16 @@ export default function OperationDetailPanel({
             {op.readOnly && <LockSimple size={14} className="text-muted-foreground" />}
             {op.webEdited && op.webEdited.length > 0 && (
               <span title={`Editada en la web: ${op.webEdited.join(', ')} (pisa a la planilla)`} className="text-sm">✏️</span>
+            )}
+            {canRenameRef && !renaming && (
+              <button
+                type="button"
+                onClick={() => { setRefDraft(op.ref); setRenaming(true) }}
+                title="Renombrar REF (con PIN)"
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <PencilSimple size={13} />
+              </button>
             )}
           </SheetTitle>
           <SheetDescription className="text-left">{op.cliente || '—'}</SheetDescription>
@@ -202,6 +237,14 @@ export default function OperationDetailPanel({
             )}
             {op.archived && <Badge variant="outline" className="h-5 text-[9px] text-amber-700 border-amber-300">ARCHIVADA</Badge>}
           </div>
+          {renaming && (
+            <div className="flex items-center gap-1.5 flex-wrap pt-1">
+              <Input value={refDraft} onChange={e => setRefDraft(e.target.value)} placeholder="Nueva REF" className="h-7 w-28 text-xs" autoFocus />
+              <Input value={pinDraft} onChange={e => setPinDraft(e.target.value)} placeholder="PIN" type="password" className="h-7 w-16 text-xs" />
+              <button type="button" onClick={submitRename} disabled={renameBusy} className="text-[11px] px-2 py-1 rounded bg-primary text-primary-foreground disabled:opacity-50">{renameBusy ? '…' : 'Cambiar'}</button>
+              <button type="button" onClick={() => setRenaming(false)} className="text-[11px] px-2 py-1 rounded border border-border">Cancelar</button>
+            </div>
+          )}
         </SheetHeader>
 
         <div className="p-4 space-y-4 text-sm">

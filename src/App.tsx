@@ -10,7 +10,7 @@ import { Operator, OperatorAssignment, DbShipment, UnifiedOperation } from '@/li
 import { getDemoShipments } from '@/lib/demoShipments'
 import { filterShipments } from '@/lib/sheetsSync'
 import { verifySession, clearAuth, authFetch } from '@/lib/authClient'
-import { loadAdminData, saveQuotes, saveDocuments, saveReports, saveClients, saveTrucks, saveTruckLoads, saveLclAir, deleteTruck as apiDeleteTruck, deleteTruckLoad as apiDeleteTruckLoad, deleteLclAir as apiDeleteLclAir, saveBilling, deleteBilling as apiDeleteBilling, saveOperators, saveOperatorAssignment, deleteOperator as apiDeleteOperator, patchDbShipment, createDbShipment, deleteDbShipment, patchFclShipment, fetchTrucks, fetchTruckLoads } from '@/lib/dataClient'
+import { loadAdminData, saveQuotes, saveDocuments, saveReports, saveClients, saveTrucks, saveTruckLoads, saveLclAir, deleteTruck as apiDeleteTruck, deleteTruckLoad as apiDeleteTruckLoad, deleteLclAir as apiDeleteLclAir, saveBilling, deleteBilling as apiDeleteBilling, saveOperators, saveOperatorAssignment, deleteOperator as apiDeleteOperator, patchDbShipment, createDbShipment, deleteDbShipment, patchFclShipment, renameShipmentRef, fetchTrucks, fetchTruckLoads } from '@/lib/dataClient'
 
 import Login from './components/Login'
 import ClientLogin from './components/ClientLogin'
@@ -593,6 +593,16 @@ function App() {
     }
   }
 
+  // Renombrar la REF de una carga (flip Etapa 4): PIN 0000 + cascada server-side.
+  // Tira el error (PIN/duplicado) para que el panel lo muestre; al éxito recarga
+  // todo (la ref cambió en varias tablas: camiones, fotos, billing…).
+  const handleRenameRef = async (op: UnifiedOperation, newRef: string, pin: string): Promise<void> => {
+    if (!op.dbId) return
+    await renameShipmentRef(op.dbId, newRef, pin)
+    await loadDataFromDB()
+    toast.success(`REF cambiada: ${op.ref} → ${newRef}`)
+  }
+
   // Create a new DB shipment (LCL/aéreo/terrestre/FCL) from the web.
   const handleCreateShipment = (row: DbShipment) => {
     const next = [row, ...dbShipments]
@@ -859,6 +869,7 @@ function App() {
           onCreateShipment={handleCreateShipment}
           onDeleteShipment={handleDeleteShipment}
           onPatchFclField={handlePatchFclField}
+          onRenameRef={handleRenameRef}
         />
       </>
     )
