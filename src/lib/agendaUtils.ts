@@ -1,4 +1,5 @@
 import type { ParsedShipment, OperativasRecord } from './shipmentTypes'
+import { parseLocalDate } from './shipmentTypes'
 import type { CalendarEvent, AlertEmoji, EventType } from './agendaTypes'
 import { getShipmentStatus, processShipmentRecord } from './shipmentTypes'
 import type { Truck, TruckLoad } from './truckTypes'
@@ -386,4 +387,75 @@ export function groupEventsByDate(events: CalendarEvent[]): Map<string, Calendar
  */
 export function countAlertsInRange(events: CalendarEvent[]): number {
   return events.filter(e => e.alerts.length > 0).length
+}
+
+// ─── Pending Salida Filter ────────────────────────────────────────────
+
+export interface PendingSalidaItem {
+  shipment: ParsedShipment
+  op: OperativasRecord
+}
+
+/**
+ * Returns operativas that have ALREADY ARRIVED at Montevideo (ETA ≤ today)
+ * but still have NO SALIDA scheduled.
+ *
+ * Criteria (all must be true):
+ *  - Container number present (CNTR_OP or shipment.CNTR)
+ *  - SALIDA is empty
+ *  - ETA (op.ETA_OP or shipment.ETA) is today-or-past (already arrived)
+ *
+ * Sorted by LIBRE urgency: overdue/earliest LIBRE first; rows without a
+ * parseable LIBRE go last.
+ */
+export function pendingSalida(
+  shipments: ParsedShipment[],
+  today: Date
+): PendingSalidaItem[] {
+  const todayNorm = new Date(today)
+  todayNorm.setHours(0, 0, 0, 0)
+
+  const items: PendingSalidaItem[] = []
+
+  for (const s of shipments) {
+    if (!s.operativas || s.operativas.length === 0) continue
+
+    for (const op of s.operativas) {
+      // Must have a container number
+      const cntr = (op.CNTR_OP || s.CNTR || '').trim()
+      if (!cntr) continue
+
+      // Must have no SALIDA yet
+      if ((op.SALIDA || '').trim() !== '') continue
+
+      // ETA must be today-or-past (already arrived in Montevideo)
+      const etaStr = (op.ETA_OP || s.ETA || '').trim()
+      const etaDate = parseLocalDate(etaStr)
+      if (!etaDate) continue
+
+      etaDate.setHours(0, 0, 0, 0)
+      if (etaDate.getTime() > todayNorm.getTime()) continue // future ETA — not arrived yet
+
+      items.push({ shipment: s, op })
+    }
+  }
+
+  // Sort by LIBRE urgency: overdue/earliest first; no parseable LIBRE → last
+  items.sort((a, b) => {
+    const libreStrA = (a.op.LIBRE || a.shipment.LIBRE_HASTA || '').trim()
+    const libreStrB = (b.op.LIBRE || b.shipment.LIBRE_HASTA || '').trim()
+    const libreA = parseLocalDate(libreStrA)
+    const libreB = parseLocalDate(libreStrB)
+
+    const noA = libreA === null
+    const noB = libreB === null
+
+    if (noA && noB) return 0
+    if (noA) return 1   // no LIBRE → sort last
+    if (noB) return -1  // no LIBRE → sort last
+
+    return libreA!.getTime() - libreB!.getTime() // earliest LIBRE first (most urgent)
+  })
+
+  return items
 }

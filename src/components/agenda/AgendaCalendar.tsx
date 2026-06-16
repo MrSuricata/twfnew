@@ -25,6 +25,7 @@ import AgendaMonthView from './AgendaMonthView'
 import AgendaAnnualView from './AgendaAnnualView'
 import AgendaPendingSidebar from './AgendaPendingSidebar'
 import AgendaEventCard from './AgendaEventCard'
+import PendingSalidaSection from './PendingSalidaSection'
 import ShipmentDetailsDialog from '../ShipmentDetailsDialog'
 import ContainerQuickEdit, { buildPatchedOperativas } from '../operations/ContainerQuickEdit'
 import { dropPatch } from './agendaDnd'
@@ -260,6 +261,39 @@ export default function AgendaCalendar({
     setDialogOpen(true)
   }, [])
 
+  // Opens ContainerQuickEdit for a pending-salida card.
+  // Builds a minimal synthetic CalendarEvent with all required CalendarEvent fields.
+  const openQuickEditFor = useCallback((shipment: ParsedShipment, cntr: string) => {
+    if (!editable || !shipment.__dbId || !cntr) return
+    const op = (shipment.operativas ?? []).find(o => (o.CNTR_OP || shipment.CNTR) === cntr)
+    if (!op) return
+    const synthEvent: CalendarEvent = {
+      id: `${shipment.REF}-${cntr}-salida`,
+      date: '',
+      type: 'salida',
+      ref: shipment.REF,
+      operativa: op.OPERATIVA || 'CONTENEDOR',
+      cntr,
+      tipo: op.TIPO || '',
+      cliente: op.CLIENTE_OP || shipment.CLIENTE || '',
+      fiscal: op.FISCAL || '',
+      deposito: op.DEPOSITO || '',
+      libre: op.LIBRE || shipment.LIBRE_HASTA || '',
+      descripcion: op.DESCRIPCION || '',
+      kg: op.KG || 0,
+      pkgs: op.PKGS || 0,
+      m3: op.M3 || 0,
+      transporte: op.TRANSPORTE || '',
+      alerts: [],
+      shipment,
+      op,
+      statusColor: 'blue',
+      statusLabel: 'Pendiente',
+    }
+    setQuickEditEvent(synthEvent)
+    setQuickEditOpen(true)
+  }, [editable])
+
   // Day click from week/month → switch to day view
   const handleDayClick = useCallback((date: Date) => {
     setCurrentDate(date)
@@ -456,6 +490,15 @@ export default function AgendaCalendar({
             />
           )}
         </div>
+      )}
+
+      {/* Pending salida section — arrived shipments with no departure scheduled yet (admin only) */}
+      {editable && (
+        <PendingSalidaSection
+          shipments={shipments}
+          editable={editable}
+          onCoordinar={openQuickEditFor}
+        />
       )}
 
       {/* Admin quick-edit modal — ContainerQuickEdit (editable=true only) */}
