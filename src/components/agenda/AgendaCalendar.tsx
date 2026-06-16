@@ -1,4 +1,13 @@
 import { useState, useMemo, useCallback } from 'react'
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from '@dnd-kit/core'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
 import { parseLocalDate } from '@/lib/shipmentTypes'
 import type { AgendaView, CalendarEvent } from '@/lib/agendaTypes'
@@ -15,8 +24,10 @@ import AgendaWeekView from './AgendaWeekView'
 import AgendaMonthView from './AgendaMonthView'
 import AgendaAnnualView from './AgendaAnnualView'
 import AgendaPendingSidebar from './AgendaPendingSidebar'
+import AgendaEventCard from './AgendaEventCard'
 import ShipmentDetailsDialog from '../ShipmentDetailsDialog'
-import ContainerQuickEdit from '../operations/ContainerQuickEdit'
+import ContainerQuickEdit, { buildPatchedOperativas } from '../operations/ContainerQuickEdit'
+import { dropPatch } from './agendaDnd'
 
 interface AgendaCalendarProps {
   shipments: ParsedShipment[]
@@ -65,6 +76,15 @@ export default function AgendaCalendar({
   const [showPendingSidebar, setShowPendingSidebar] = useState(false)
   // Filtro "Consolidados": ver SOLO los hitos de camiones 🚛 en el calendario.
   const [onlyTrucks, setOnlyTrucks] = useState(false)
+
+  // DnD state — tracks the event being dragged for DragOverlay preview
+  const [dragActiveEvent, setDragActiveEvent] = useState<CalendarEvent | null>(null)
+
+  // PointerSensor with distance:8 so a short tap fires onClick (quick-edit),
+  // and only a deliberate drag (≥8px movement) activates DnD.
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
+  )
 
   // Transform all shipments into calendar events (+ hitos de camiones)
   const allEvents = useMemo(() => {
@@ -257,6 +277,24 @@ export default function AgendaCalendar({
     setView('month')
   }, [])
 
+  // DnD handlers (week view, editable only)
+  const handleDragStart = useCallback((e: DragStartEvent) => {
+    const ev = e.active.data.current?.event as CalendarEvent | undefined
+    setDragActiveEvent(ev ?? null)
+  }, [])
+
+  const handleDragEnd = useCallback((e: DragEndEvent) => {
+    setDragActiveEvent(null)
+    const result = dropPatch(
+      e.active.data.current?.event as CalendarEvent | undefined,
+      e.over?.id as string | undefined,
+      buildPatchedOperativas
+    )
+    if (result) {
+      onPatchShipment?.(result.dbId, result.fields)
+    }
+  }, [onPatchShipment])
+
   return (
     <div className="space-y-4">
       <AgendaToolbar
@@ -295,56 +333,129 @@ export default function AgendaCalendar({
         </div>
       )}
 
-      <div className="flex overflow-hidden rounded-xl border bg-card shadow-sm">
-        {/* Main calendar area */}
-        <div className={`flex-1 min-w-0 transition-all ${showPendingSidebar ? '' : ''}`}>
-          {view === 'day' && (
-            <AgendaDayView
-              date={currentDate}
-              events={filteredEvents}
-              onSelectShipment={handleSelectShipment}
-            />
-          )}
+      {/* DndContext wraps the grid only when editable (week view DnD).
+          Non-editable views render the grid directly — no DnD overhead. */}
+      {editable ? (
+        <DndContext
+          sensors={sensors}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+        >
+          <div className="flex overflow-hidden rounded-xl border bg-card shadow-sm">
+            {/* Main calendar area */}
+            <div className={`flex-1 min-w-0 transition-all ${showPendingSidebar ? '' : ''}`}>
+              {view === 'day' && (
+                <AgendaDayView
+                  date={currentDate}
+                  events={filteredEvents}
+                  onSelectShipment={handleSelectShipment}
+                />
+              )}
 
-          {view === 'week' && (
-            <AgendaWeekView
-              date={currentDate}
-              events={filteredEvents}
-              onSelectShipment={handleSelectShipment}
-              onDayClick={handleDayClick}
-            />
-          )}
+              {view === 'week' && (
+                <AgendaWeekView
+                  date={currentDate}
+                  events={filteredEvents}
+                  onSelectShipment={handleSelectShipment}
+                  onDayClick={handleDayClick}
+                  editable={editable}
+                />
+              )}
 
-          {view === 'month' && (
-            <AgendaMonthView
-              date={currentDate}
-              events={filteredEvents}
-              onSelectShipment={handleSelectShipment}
-              onDayClick={handleDayClick}
-            />
-          )}
+              {view === 'month' && (
+                <AgendaMonthView
+                  date={currentDate}
+                  events={filteredEvents}
+                  onSelectShipment={handleSelectShipment}
+                  onDayClick={handleDayClick}
+                />
+              )}
 
-          {view === 'annual' && (
-            <AgendaAnnualView
-              date={currentDate}
-              events={filteredEvents}
-              onMonthClick={handleMonthClick}
-              onDayClick={handleDayClick}
+              {view === 'annual' && (
+                <AgendaAnnualView
+                  date={currentDate}
+                  events={filteredEvents}
+                  onMonthClick={handleMonthClick}
+                  onDayClick={handleDayClick}
+                />
+              )}
+            </div>
+
+            {/* Pending coordination sidebar */}
+            {showPendingSidebar && !partnerView && !clientView && (
+              <AgendaPendingSidebar
+                shipments={shipments}
+                windowDays={PENDING_WINDOW_DAYS}
+                onClose={() => setShowPendingSidebar(false)}
+                onSelectShipment={handleSelectShipmentDirect}
+              />
+            )}
+          </div>
+
+          {/* DragOverlay: clean floating preview of the card being dragged */}
+          <DragOverlay dropAnimation={null}>
+            {dragActiveEvent && (
+              <div className="w-44 rotate-1 shadow-xl opacity-90 pointer-events-none">
+                <AgendaEventCard
+                  event={dragActiveEvent}
+                  compact={true}
+                  draggable={false}
+                />
+              </div>
+            )}
+          </DragOverlay>
+        </DndContext>
+      ) : (
+        <div className="flex overflow-hidden rounded-xl border bg-card shadow-sm">
+          {/* Main calendar area */}
+          <div className={`flex-1 min-w-0 transition-all ${showPendingSidebar ? '' : ''}`}>
+            {view === 'day' && (
+              <AgendaDayView
+                date={currentDate}
+                events={filteredEvents}
+                onSelectShipment={handleSelectShipment}
+              />
+            )}
+
+            {view === 'week' && (
+              <AgendaWeekView
+                date={currentDate}
+                events={filteredEvents}
+                onSelectShipment={handleSelectShipment}
+                onDayClick={handleDayClick}
+              />
+            )}
+
+            {view === 'month' && (
+              <AgendaMonthView
+                date={currentDate}
+                events={filteredEvents}
+                onSelectShipment={handleSelectShipment}
+                onDayClick={handleDayClick}
+              />
+            )}
+
+            {view === 'annual' && (
+              <AgendaAnnualView
+                date={currentDate}
+                events={filteredEvents}
+                onMonthClick={handleMonthClick}
+                onDayClick={handleDayClick}
+              />
+            )}
+          </div>
+
+          {/* Pending coordination sidebar */}
+          {showPendingSidebar && !partnerView && !clientView && (
+            <AgendaPendingSidebar
+              shipments={shipments}
+              windowDays={PENDING_WINDOW_DAYS}
+              onClose={() => setShowPendingSidebar(false)}
+              onSelectShipment={handleSelectShipmentDirect}
             />
           )}
         </div>
-
-        {/* Pending coordination sidebar — admin-only (meaningless to a
-            single partner or client since they only see their own data). */}
-        {showPendingSidebar && !partnerView && !clientView && (
-          <AgendaPendingSidebar
-            shipments={shipments}
-            windowDays={PENDING_WINDOW_DAYS}
-            onClose={() => setShowPendingSidebar(false)}
-            onSelectShipment={handleSelectShipmentDirect}
-          />
-        )}
-      </div>
+      )}
 
       {/* Admin quick-edit modal — ContainerQuickEdit (editable=true only) */}
       {editable && quickEditEvent?.shipment && quickEditEvent.cntr && (
