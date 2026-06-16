@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildOperations, isOperationActive, dbShipmentToOperation, fclToColumns, newDbShipment, EDITABLE_FIELDS, DEPOSITOS_UY, type UnifiedOperation, type DbShipment } from './operationsTypes'
+import { buildOperations, isOperationActive, dbShipmentToOperation, fclToColumns, dbFclToParsedShipment, newDbShipment, EDITABLE_FIELDS, DEPOSITOS_UY, type UnifiedOperation, type DbShipment } from './operationsTypes'
 import type { ParsedShipment } from './shipmentTypes'
 
 // La planilla reutiliza refs (caso real: A6902 con dos clientes distintos,
@@ -216,6 +216,22 @@ describe('fclToColumns — horneado FCL a columnas (PR-C flip)', () => {
   it('split A/B: origin_ref = ref sin sufijo; sin split queda vacío', () => {
     expect(fclToColumns({ REF: 'A6902 A', operativas: [] } as unknown as ParsedShipment).origin_ref).toBe('A6902')
     expect(fclToColumns({ REF: 'A7900', operativas: [] } as unknown as ParsedShipment).origin_ref).toBe('')
+  })
+
+  // Post-flip la Agenda/HOY reconstruyen la FCL desde columnas: la operativa
+  // sintética debe traer las fechas para que se generen los eventos.
+  it('dbFclToParsedShipment reconstruye operativas con fechas (Agenda/HOY post-flip)', () => {
+    const cols = { id: 'shp-fcl-x', ...fclToColumns(parsed) } as unknown as DbShipment
+    const reb = dbFclToParsedShipment(cols)
+    expect(reb.REF).toBe('A7900')
+    expect(reb.CLIENTE).toBe('PERETTI')
+    expect(reb.operativas?.[0]?.SALIDA).toBe('2026-06-03')
+    expect(reb.operativas?.[0]?.ETA_FISC).toBe('2026-06-04')
+    expect(reb.__dbId).toBe('shp-fcl-x')
+  })
+  it('dbFclToParsedShipment: FCL sin datos de operativa → operativas vacías', () => {
+    const reb = dbFclToParsedShipment({ id: 'y', ref: 'A1', mode: 'fcl', eta: '2026-01-01' } as never)
+    expect(reb.operativas).toEqual([])
   })
 })
 

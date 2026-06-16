@@ -6,7 +6,7 @@
 // ref (operator_assignments), sin tocar la planilla.
 // ──────────────────────────────────────────────────────────────────────
 
-import type { ParsedShipment } from './shipmentTypes'
+import type { ParsedShipment, OperativasRecord } from './shipmentTypes'
 import { getShipmentStatus, parseLocalDate } from './shipmentTypes'
 
 // ── Truck-driven status derivation (LCL/aéreo on a truck) ──────────────
@@ -332,6 +332,35 @@ function fclColumnsStatus(s: DbShipment): string {
       : [],
   } as unknown as ParsedShipment
   return getShipmentStatus(parsed).label
+}
+
+/** Inverso de fclToColumns: reconstruye un ParsedShipment desde una FCL horneada
+ *  (columnas) para los consumidores que todavía esperan el modelo de la planilla
+ *  (Agenda, HOY, búsqueda, vista de clientes). Una operativa sintética colapsada
+ *  desde las columnas; si la FCL no tiene datos de operativa, va sin operativas. */
+export function dbFclToParsedShipment(d: DbShipment): ParsedShipment {
+  const hasOp = !!(d.salida || d.eta_fiscal || d.libre || d.operativa || d.deposito || d.descarga || d.dev)
+  const op: OperativasRecord = {
+    REF: d.ref, TLX: '', DEPOSITO: d.deposito || '', ETA_OP: '', SALIDA: d.salida || '',
+    ETA_FISC: d.eta_fiscal || '', LIBRE: d.libre || '', OPERATIVA: d.operativa || '',
+    CNTR_OP: d.contenedor || '', PKGS: d.pkgs || 0, KG: d.kg || 0, M3: d.m3 || 0,
+    DESCRIPCION: d.observacion || '', FISCAL: d.fiscal || '', DESCARGA: d.descarga || '',
+    DEV: d.dev || '', CLIENTE_OP: d.cliente || '', TIPO: d.tipo || '',
+    WOOD: d.wood ? 'SI' : '', TRANSPORTE: d.transporte || '', HORARIO: '',
+  }
+  return {
+    REF: d.ref, CLIENTE: d.cliente || '', ETD: d.etd || '', ETA: d.eta || '',
+    FT: 0, LIBRE_HASTA: d.libre || '', CNTR: d.contenedor || '', N: d.n_cntr || 0,
+    MBL: d.doc_number || '', LINEA: d.linea || '', BUQUE: d.buque || '', TERMINAL: d.terminal || '',
+    C_TERMINAL: 0, C_DEV: 0, LOCALES: 0, FLETE: 0, FORMA_DE_PAGO: 'al arribo', VTO: '',
+    CR: false, BL: false, AD: false, AT: false,
+    POL: d.origin || '', POD: d.discharge_port || '',
+    PAIS: (d.dest_country as ParsedShipment['PAIS']) || 'OTRO',
+    SEGUIMIENTO: d.seguimiento || '', TIPO: d.tipo || '',
+    containers: [], calculatedN: d.n_cntr || 0, calculatedLibreHasta: d.libre || '',
+    operativas: hasOp ? [op] : [],
+    __dbId: d.id,
+  }
 }
 
 /** Map a DB shipment (LCL/aéreo/terrestre + FCL horneada) into a unified grid row. */
