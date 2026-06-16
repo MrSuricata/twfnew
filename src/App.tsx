@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { Toaster, toast } from 'sonner'
 import { Language, getStoredLanguage, setStoredLanguage } from '@/lib/i18n'
 import { QuoteFormData, ClientAccount, ShipmentDocument, OperativeReport, OriginPhoto } from '@/lib/quotationTypes'
@@ -6,7 +6,7 @@ import { ParsedShipment } from '@/lib/shipmentTypes'
 import { Truck, TruckLoad, LclAirShipment } from '@/lib/truckTypes'
 import { getBrand } from '@/lib/brand'
 import { BillingRecord } from '@/lib/billingTypes'
-import { Operator, OperatorAssignment, DbShipment, UnifiedOperation } from '@/lib/operationsTypes'
+import { Operator, OperatorAssignment, DbShipment, UnifiedOperation, dbFclToParsedShipment } from '@/lib/operationsTypes'
 import { getDemoShipments } from '@/lib/demoShipments'
 import { filterShipments } from '@/lib/sheetsSync'
 import { verifySession, clearAuth, authFetch } from '@/lib/authClient'
@@ -208,6 +208,14 @@ function App() {
       setIsDataLoading(false)
     }
   }, [])
+
+  // Flip Etapa 4: FCL reconstruidas desde dbShipments para las vistas que esperan
+  // el modelo de la planilla (Portal Cliente). Pre-flip dbShipments no trae FCL →
+  // queda idéntico a `shipments`.
+  const fclShipments = useMemo(
+    () => [...shipments, ...dbShipments.filter(d => d.mode === 'fcl').map(dbFclToParsedShipment)],
+    [shipments, dbShipments],
+  )
 
   // ── Session restore on mount ──
   useEffect(() => {
@@ -935,7 +943,7 @@ function App() {
         onLogout={handleClientLogout}
         clients={clients}
         reports={reports}
-        shipments={shipments}
+        shipments={fclShipments}
       />
     )
   }
