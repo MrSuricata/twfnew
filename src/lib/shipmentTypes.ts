@@ -283,8 +283,17 @@ export function getShipmentStatus(shipment: ParsedShipment): ShipmentStatus {
     return { code: 'salio_montevideo', label: 'Parcialmente en Frontera', color: 'blue', progress: 40 }
   }
 
-  // Has operativas but no SALIDA → in port/terminal
+  // Llegó pero ningún contenedor salió aún:
   if (ops.length > 0) {
+    // Si TODOS tienen un lugar de salida marcado (depósito/terminal) → "En [lugar]".
+    const lugares = ops.map(o => (o.LUGAR_SALIDA || '').trim().toUpperCase()).filter(Boolean)
+    if (lugares.length === ops.length && new Set(lugares).size === 1) {
+      return { code: 'en_puerto', label: `En ${lugares[0]}`, color: 'yellow', progress: 30 }
+    }
+    if (lugares.length > 0) {
+      return { code: 'en_puerto', label: 'En depósito (parcial)', color: 'yellow', progress: 28 }
+    }
+    // Sin lugar marcado → en el terminal de arribo (con nombre si lo hay).
     return { code: 'en_puerto', label: 'En Terminal', color: 'yellow', progress: 25 }
   }
 
