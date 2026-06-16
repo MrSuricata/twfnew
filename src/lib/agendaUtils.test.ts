@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { Truck, TruckLoad } from './truckTypes'
-import { trucksToEvents } from './agendaUtils'
+import { trucksToEvents, shipmentsToEvents } from './agendaUtils'
+import type { ParsedShipment } from './shipmentTypes'
 
 const truck = (over: Partial<Truck> = {}): Truck =>
   ({
@@ -50,5 +51,115 @@ describe('trucksToEvents — borradores invisibles en agenda', () => {
     expect(events[0].m3).toBe(5)
     expect(events[0].kg).toBe(100)
     expect(events[0].pkgs).toBe(2)
+  })
+})
+
+// ── shipmentsToEvents — eta_fisc events ────────────────────────────────────
+
+const makeShipment = (over: Partial<ParsedShipment> = {}): ParsedShipment => ({
+  REF: 'A7999',
+  CLIENTE: 'PERETTI',
+  ETD: '2026-06-01',
+  ETA: '2026-06-10',
+  FT: 0,
+  LIBRE_HASTA: '',
+  CNTR: 'TEST1234567',
+  N: 1,
+  MBL: '',
+  LINEA: '',
+  BUQUE: '',
+  TERMINAL: '',
+  C_TERMINAL: 0,
+  C_DEV: 0,
+  LOCALES: 0,
+  FLETE: 0,
+  FORMA_DE_PAGO: 'al arribo',
+  VTO: '',
+  CR: false,
+  BL: false,
+  AD: false,
+  AT: false,
+  POL: '',
+  POD: '',
+  PAIS: 'AR',
+  SEGUIMIENTO: '',
+  TIPO: '',
+  containers: [],
+  calculatedN: 1,
+  calculatedLibreHasta: '',
+  ...over,
+})
+
+describe('shipmentsToEvents — eta_fisc events', () => {
+  it('op with both SALIDA and ETA_FISC produces 2 events: one salida and one eta_fisc', () => {
+    const shipment = makeShipment({
+      operativas: [
+        {
+          REF: 'A7999',
+          TLX: '', DEPOSITO: 'GODILCO', ETA_OP: '2026-06-10',
+          SALIDA: '2026-06-16',
+          ETA_FISC: '2026-06-18',
+          LIBRE: '', OPERATIVA: 'TRASIEGO',
+          CNTR_OP: 'TEST1234567',
+          PKGS: 100, KG: 1000, M3: 10, DESCRIPCION: 'BICIS',
+          FISCAL: 'ZP RAFAELA', DESCARGA: '', DEV: '',
+          CLIENTE_OP: 'PERETTI', TIPO: '40HC', WOOD: '',
+          TRANSPORTE: 'OLAVERRY', HORARIO: '', LUGAR_SALIDA: '',
+        }
+      ],
+    })
+
+    const events = shipmentsToEvents([shipment])
+    expect(events).toHaveLength(2)
+
+    const salida = events.find(e => e.type === 'salida')
+    const etaFisc = events.find(e => e.type === 'eta_fisc')
+
+    expect(salida).toBeDefined()
+    expect(salida?.date).toBe('2026-06-16')
+    expect(salida?.cntr).toBe('TEST1234567')
+
+    expect(etaFisc).toBeDefined()
+    expect(etaFisc?.date).toBe('2026-06-18')
+    expect(etaFisc?.cntr).toBe('TEST1234567')
+  })
+
+  it('op with only SALIDA (no ETA_FISC) produces 1 event', () => {
+    const shipment = makeShipment({
+      operativas: [
+        {
+          REF: 'A7999',
+          TLX: '', DEPOSITO: 'GODILCO', ETA_OP: '2026-06-10',
+          SALIDA: '2026-06-16', ETA_FISC: '',
+          LIBRE: '', OPERATIVA: 'TRASIEGO', CNTR_OP: 'TEST1234567',
+          PKGS: 100, KG: 1000, M3: 10, DESCRIPCION: '',
+          FISCAL: '', DESCARGA: '', DEV: '', CLIENTE_OP: 'PERETTI',
+          TIPO: '40HC', WOOD: '', TRANSPORTE: '', HORARIO: '', LUGAR_SALIDA: '',
+        }
+      ],
+    })
+    const events = shipmentsToEvents([shipment])
+    expect(events).toHaveLength(1)
+    expect(events[0].type).toBe('salida')
+  })
+
+  it('op with only ETA_FISC (no SALIDA) produces 1 eta_fisc event', () => {
+    const shipment = makeShipment({
+      operativas: [
+        {
+          REF: 'A7999',
+          TLX: '', DEPOSITO: 'GODILCO', ETA_OP: '2026-06-10',
+          SALIDA: '', ETA_FISC: '2026-06-18',
+          LIBRE: '', OPERATIVA: 'TRASIEGO', CNTR_OP: 'TEST1234567',
+          PKGS: 100, KG: 1000, M3: 10, DESCRIPCION: '',
+          FISCAL: '', DESCARGA: '', DEV: '', CLIENTE_OP: 'PERETTI',
+          TIPO: '40HC', WOOD: '', TRANSPORTE: '', HORARIO: '', LUGAR_SALIDA: '',
+        }
+      ],
+    })
+    const events = shipmentsToEvents([shipment])
+    expect(events).toHaveLength(1)
+    expect(events[0].type).toBe('eta_fisc')
+    expect(events[0].date).toBe('2026-06-18')
   })
 })
