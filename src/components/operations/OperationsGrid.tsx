@@ -71,6 +71,10 @@ interface OperationsGridProps {
   onRenameRef?: (op: UnifiedOperation, newRef: string, pin: string) => Promise<void>
   onUpdateOperators: (operators: Operator[]) => void
   onDeleteOperator: (id: string) => void
+  /** Controlled detail-panel uid. If provided together with onSelectedUidChange,
+   *  the parent owns the state; otherwise the internal state is used (backward-compat). */
+  selectedUid?: string | null
+  onSelectedUidChange?: (uid: string | null) => void
 }
 
 type ModeFilter = 'all' | Modality
@@ -111,6 +115,8 @@ export default function OperationsGrid({
   onRenameRef,
   onUpdateOperators,
   onDeleteOperator,
+  selectedUid: controlledSelectedUid,
+  onSelectedUidChange,
 }: OperationsGridProps) {
   const [search, setSearch] = useState('')
   const [modeFilter, setModeFilter] = useState<ModeFilter>('all')
@@ -142,7 +148,13 @@ export default function OperationsGrid({
   const [deleteConfirm, setDeleteConfirm] = useState('')
 
   // Panel de detalle uid state (selectedOp derived below, after operations is declared).
-  const [selectedUid, setSelectedUid] = useState<string | null>(null)
+  // If the parent passes controlled props, use them; otherwise own the state internally.
+  const isControlled = controlledSelectedUid !== undefined && onSelectedUidChange !== undefined
+  const [internalSelectedUid, setInternalSelectedUid] = useState<string | null>(null)
+  const selectedUid = isControlled ? controlledSelectedUid : internalSelectedUid
+  const setSelectedUid = isControlled
+    ? onSelectedUidChange
+    : setInternalSelectedUid
 
   // Per-user visible columns (localStorage). Default from column defs.
   const [visibleCols, setVisibleCols] = useState<Set<string>>(() => {

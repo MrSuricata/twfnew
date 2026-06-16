@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
@@ -108,6 +108,14 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
   const [isRefreshing, setIsRefreshing] = useState(false)
   // Tick que sube con cada Refrescar global → recarga la Actividad del Equipo.
   const [refreshTick, setRefreshTick] = useState(0)
+
+  // Elevated detail-panel state — lets Agenda/HOY open the panel via "Más datos".
+  const [detailUid, setDetailUid] = useState<string | null>(null)
+  // Opens the OperationDetailPanel for a given FCL ref (the uid pattern is fcl-${REF}).
+  const onOpenDetail = useCallback((ref: string) => {
+    setActiveTab('operaciones')
+    setDetailUid(`fcl-${ref}`)
+  }, [])
 
   // Manual refresh from the navbar — pulls fresh data from Google Sheets via
   // /api/sheets/sync (drops it into shipments_cache and updates local state).
@@ -340,11 +348,20 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
               originPhotos={originPhotos}
               onUpdateShipments={onUpdateShipments}
               onUpdateOriginPhotos={onUpdateOriginPhotos}
+              onPatchShipment={onPatchShipment}
+              onOpenDetail={onOpenDetail}
             />
           </TabsContent>
 
           <TabsContent value="agenda">
-            <AgendaCalendar shipments={fclShipments} trucks={trucks} truckLoads={truckLoads} />
+            <AgendaCalendar
+              shipments={fclShipments}
+              trucks={trucks}
+              truckLoads={truckLoads}
+              editable
+              onPatchShipment={onPatchShipment}
+              onOpenDetail={onOpenDetail}
+            />
           </TabsContent>
 
           <TabsContent value="analytics">
@@ -427,6 +444,8 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
               onRenameRef={onRenameRef}
               onUpdateOperators={(o) => { if (onUpdateOperators) onUpdateOperators(o) }}
               onDeleteOperator={(id) => { if (onDeleteOperator) onDeleteOperator(id) }}
+              selectedUid={detailUid}
+              onSelectedUidChange={setDetailUid}
             />
           </TabsContent>
 
