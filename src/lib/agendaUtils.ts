@@ -425,8 +425,9 @@ export function pendingSalida(
       const cntr = (op.CNTR_OP || s.CNTR || '').trim()
       if (!cntr) continue
 
-      // Must have no SALIDA yet
-      if ((op.SALIDA || '').trim() !== '') continue
+      // Must have no SALIDA yet — treat empty string, 'CONFIRMAR', and '#N/A' as "not coordinated"
+      const salidaNorm = (op.SALIDA || '').trim().toUpperCase()
+      if (salidaNorm !== '' && salidaNorm !== 'CONFIRMAR' && salidaNorm !== '#N/A') continue
 
       // ETA must be today-or-past (already arrived in Montevideo)
       const etaStr = (op.ETA_OP || s.ETA || '').trim()
