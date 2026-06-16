@@ -24,6 +24,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(500).json({ error: 'Google Sheets URL not configured' })
   }
 
+  // Flip Etapa 4: con la web como master de FCL, el sync de entrada está apagado.
+  // No leer el Sheet ni devolver sus FCL — repoblaría el cache local de FCL-espejo
+  // (filas read-only conviviendo con las horneadas editables).
+  if (process.env.FCL_SOURCE_OF_TRUTH === 'db') {
+    return res.status(200).json({ shipments: [], count: 0, syncedAt: null, flipped: true })
+  }
+
   try {
     const shipments = await performServerSync(sheetsUrl)
     const syncedAt = new Date().toISOString()

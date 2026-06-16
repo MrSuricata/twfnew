@@ -128,8 +128,14 @@ function App() {
       const data = await loadAdminData()
       dbLoadedRef.current = true
 
-      // Update state with DB data (overrides localStorage cache)
-      if (data.shipments.length > 0) {
+      // Update state with DB data (overrides localStorage cache).
+      // Flip Etapa 4: si la web es master de FCL (flipped), las FCL llegan como
+      // dbShipments → vaciar el cache de FCL-espejo (si no, quedan filas viejas
+      // read-only conviviendo con las horneadas editables).
+      if (data.shipmentsFlipped) {
+        setShipments([])
+        saveToStorage('twf-shipments', [])
+      } else if (data.shipments.length > 0) {
         const filtered = filterShipments(data.shipments)
         setShipments(filtered)
         saveToStorage('twf-shipments', filtered)
@@ -269,11 +275,18 @@ function App() {
       }
 
       const data = await res.json()
-      const synced = data.shipments || []
-      if (synced.length > 0) {
-        setShipments(synced)
-        saveToStorage('twf-shipments', synced)
-        // Note: sync endpoint already caches to Supabase
+      // Flip Etapa 4: con la web como master, el Sheet ya no manda las FCL → vaciar
+      // el cache de FCL-espejo en vez de repoblarlo.
+      if (data.flipped) {
+        setShipments([])
+        saveToStorage('twf-shipments', [])
+      } else {
+        const synced = data.shipments || []
+        if (synced.length > 0) {
+          setShipments(synced)
+          saveToStorage('twf-shipments', synced)
+          // Note: sync endpoint already caches to Supabase
+        }
       }
       markSuccess()
     } catch (error) {

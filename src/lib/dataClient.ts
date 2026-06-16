@@ -21,14 +21,15 @@ import { matchesPattern } from './clientMatching'
 // LIBRE, facturación, Solo activas) funciona idéntica. Si el espejo todavía
 // no tiene sheet_raw (falta un sync) o falla, se cae al cache como siempre.
 
-export async function fetchShipmentsFromDB(): Promise<{ shipments: ParsedShipment[]; syncedAt: string | null }> {
+export async function fetchShipmentsFromDB(): Promise<{ shipments: ParsedShipment[]; syncedAt: string | null; flipped?: boolean }> {
   try {
     const res = await authFetch('/api/data/shipments?includeMirror=only')
     if (res.ok) {
       const data = await res.json()
       // Flip Etapa 4: la web es master → las FCL vienen como dbShipments (source='fcl'),
-      // no por acá. NO caer al cache (mostraría las FCL duplicadas).
-      if (data.flipped) return { shipments: [], syncedAt: null }
+      // no por acá. NO caer al cache (mostraría las FCL duplicadas). `flipped` le avisa
+      // al caller que vacíe el cache local de FCL-espejo.
+      if (data.flipped) return { shipments: [], syncedAt: null, flipped: true }
       const rows = (data.shipments || []).filter((r: any) => r.sheet_raw)
       if (rows.length > 0) {
         const maxTs = Math.max(...rows.map((r: any) => Number(r.updated_at_ts) || 0))
@@ -659,6 +660,7 @@ export interface AdminData {
   assignments: OperatorAssignment[]
   dbShipments: DbShipment[]
   syncedAt: string | null
+  shipmentsFlipped?: boolean   // flip Etapa 4: la web es master de FCL → vaciar cache espejo
 }
 
 /** Resolve to [] if the tables don't exist yet (deployed before the migration). */
@@ -694,6 +696,7 @@ export async function loadAdminData(): Promise<AdminData> {
 
   return {
     shipments: shipmentsRes.shipments,
+    shipmentsFlipped: shipmentsRes.flipped,
     quotes,
     documents,
     reports,
