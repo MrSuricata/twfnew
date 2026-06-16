@@ -391,19 +391,31 @@ export function countAlertsInRange(events: CalendarEvent[]): number {
 
 // ─── Pending Salida Filter ────────────────────────────────────────────
 
+/** Destination zone derived from POD/PAIS, used for the filter chips. */
+export type DestZone = 'UY' | 'AR' | 'CL' | 'OTRO'
+
 export interface PendingSalidaItem {
   shipment: ParsedShipment
   op: OperativasRecord
+  /** Destination zone for the filter chips (derived from shipment.PAIS). */
+  dest: DestZone
 }
 
+/** OPERATIVA values that mean the cargo was already deconsolidated/closed —
+ *  no trasiego-salida needs to be coordinated. */
+const CLOSED_OPERATIVAS = new Set(['CARGA A PISO', 'DESCONSOLIDACION', 'DESCONSOLIDACIÓN', 'DESCONSOLIDADO'])
+
 /**
- * Returns operativas that have ALREADY ARRIVED at Montevideo (ETA ≤ today)
- * but still have NO SALIDA scheduled.
+ * Returns operativas that have ALREADY ARRIVED (ETA ≤ today)
+ * but still have NO SALIDA scheduled, and are NOT yet closed/deconsolidated.
  *
  * Criteria (all must be true):
  *  - Container number present (CNTR_OP or shipment.CNTR)
- *  - SALIDA is empty
- *  - ETA (op.ETA_OP or shipment.ETA) is today-or-past (already arrived)
+ *  - SALIDA is empty, 'CONFIRMAR', or '#N/A' (not yet coordinated)
+ *  - ETA — preferring shipment.ETA over op.ETA_OP (op value can be junk) —
+ *    is today-or-past (already arrived)
+ *  - LIBRE does NOT contain 'DEVUELTO' (container already returned → done)
+ *  - OPERATIVA is not a closed/deconsolidated type (CARGA A PISO, etc.)
  *
  * Sorted by LIBRE urgency: overdue/earliest LIBRE first; rows without a
  * parseable LIBRE go last.
@@ -429,15 +441,27 @@ export function pendingSalida(
       const salidaNorm = (op.SALIDA || '').trim().toUpperCase()
       if (salidaNorm !== '' && salidaNorm !== 'CONFIRMAR' && salidaNorm !== '#N/A') continue
 
-      // ETA must be today-or-past (already arrived in Montevideo)
-      const etaStr = (op.ETA_OP || s.ETA || '').trim()
+      // EXCLUDE if container already returned (LIBRE contains 'DEVUELTO')
+      const libreUpper = (op.LIBRE || s.LIBRE_HASTA || '').toUpperCase()
+      if (libreUpper.includes('DEVUELTO')) continue
+
+      // EXCLUDE if operativa type is already closed/deconsolidated
+      const operativaUpper = (op.OPERATIVA || '').toUpperCase().trim()
+      if (CLOSED_OPERATIVAS.has(operativaUpper)) continue
+
+      // ETA must be today-or-past (already arrived).
+      // Prefer shipment.ETA — op.ETA_OP can contain junk dates like '2001-09-01'.
+      const etaStr = (s.ETA || op.ETA_OP || '').trim()
       const etaDate = parseLocalDate(etaStr)
       if (!etaDate) continue
 
       etaDate.setHours(0, 0, 0, 0)
       if (etaDate.getTime() > todayNorm.getTime()) continue // future ETA — not arrived yet
 
-      items.push({ shipment: s, op })
+      // Derive destination zone from shipment.PAIS (reliable enum: UY/AR/CL/OTRO)
+      const dest: DestZone = (s.PAIS === 'UY' || s.PAIS === 'AR' || s.PAIS === 'CL') ? s.PAIS : 'OTRO'
+
+      items.push({ shipment: s, op, dest })
     }
   }
 

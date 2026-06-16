@@ -204,8 +204,15 @@ describe('pendingSalida', () => {
   })
 
   it('future ETA → excluded', () => {
+    // shipment.ETA is preferred over op.ETA_OP; both future here
     const s = mkShipPS({ ETA: TOMORROW_PS, operativas: [mkOp({ ETA_OP: TOMORROW_PS })] })
     expect(pendingSalida([s], TODAY_PS)).toHaveLength(0)
+  })
+
+  it('shipment.ETA today-or-past wins over junk op.ETA_OP', () => {
+    // Real case: op.ETA_OP = '2001-09-01' (junk), shipment.ETA = yesterday (arrived)
+    const s = mkShipPS({ ETA: YESTERDAY_PS, operativas: [mkOp({ ETA_OP: '2001-09-01' })] })
+    expect(pendingSalida([s], TODAY_PS)).toHaveLength(1)
   })
 
   it('ETA exactly today → included (arrived today counts)', () => {
@@ -235,6 +242,93 @@ describe('pendingSalida', () => {
     const s = mkShipPS({ operativas: [mkOp({ SALIDA: '2026-06-18' })] })
     expect(pendingSalida([s], TODAY_PS)).toHaveLength(0)
   })
+
+  // ── New exclusion: A6820-like — LIBRE contains 'DEVUELTO' ──────────────
+
+  it('LIBRE = "DEVUELTO" (container returned) → excluded', () => {
+    // Real case: A6820, libre='DEVUELTO', operativa='CARGA A PISO', salida='CONFIRMAR'
+    const s = mkShipPS({
+      operativas: [mkOp({ SALIDA: 'CONFIRMAR', LIBRE: 'DEVUELTO', OPERATIVA: 'CARGA A PISO' })],
+    })
+    expect(pendingSalida([s], TODAY_PS)).toHaveLength(0)
+  })
+
+  it('LIBRE contains "DEVUELTO" text (case-insensitive) → excluded', () => {
+    const s = mkShipPS({
+      operativas: [mkOp({ SALIDA: 'CONFIRMAR', LIBRE: 'devuelto' })],
+    })
+    expect(pendingSalida([s], TODAY_PS)).toHaveLength(0)
+  })
+
+  it('LIBRE_HASTA on shipment containing "DEVUELTO" → excluded', () => {
+    const s = mkShipPS({
+      LIBRE_HASTA: 'DEVUELTO',
+      operativas: [mkOp({ SALIDA: 'CONFIRMAR', LIBRE: '' })],
+    })
+    expect(pendingSalida([s], TODAY_PS)).toHaveLength(0)
+  })
+
+  // ── New exclusion: CARGA A PISO / DESCONSOLIDACION ────────────────────
+
+  it('OPERATIVA = "CARGA A PISO" → excluded (deconsolidated, no trasiego needed)', () => {
+    const s = mkShipPS({
+      operativas: [mkOp({ SALIDA: 'CONFIRMAR', OPERATIVA: 'CARGA A PISO' })],
+    })
+    expect(pendingSalida([s], TODAY_PS)).toHaveLength(0)
+  })
+
+  it('OPERATIVA = "DESCONSOLIDACION" → excluded', () => {
+    const s = mkShipPS({
+      operativas: [mkOp({ SALIDA: 'CONFIRMAR', OPERATIVA: 'DESCONSOLIDACION' })],
+    })
+    expect(pendingSalida([s], TODAY_PS)).toHaveLength(0)
+  })
+
+  it('OPERATIVA = "DESCONSOLIDACIÓN" (accented) → excluded', () => {
+    const s = mkShipPS({
+      operativas: [mkOp({ SALIDA: 'CONFIRMAR', OPERATIVA: 'DESCONSOLIDACIÓN' })],
+    })
+    expect(pendingSalida([s], TODAY_PS)).toHaveLength(0)
+  })
+
+  it('OPERATIVA = "DESCONSOLIDADO" → excluded', () => {
+    const s = mkShipPS({
+      operativas: [mkOp({ SALIDA: 'CONFIRMAR', OPERATIVA: 'DESCONSOLIDADO' })],
+    })
+    expect(pendingSalida([s], TODAY_PS)).toHaveLength(0)
+  })
+
+  it('OPERATIVA = "TRASIEGO" (active) + arrived + no salida → still included', () => {
+    const s = mkShipPS({
+      operativas: [mkOp({ OPERATIVA: 'TRASIEGO', SALIDA: '' })],
+    })
+    expect(pendingSalida([s], TODAY_PS)).toHaveLength(1)
+  })
+
+  // ── dest zone field ───────────────────────────────────────────────────
+
+  it('dest = UY when PAIS = UY', () => {
+    const s = mkShipPS({ PAIS: 'UY', operativas: [mkOp()] })
+    const result = pendingSalida([s], TODAY_PS)
+    expect(result[0].dest).toBe('UY')
+  })
+
+  it('dest = AR when PAIS = AR', () => {
+    const s = mkShipPS({ PAIS: 'AR', operativas: [mkOp()] })
+    expect(pendingSalida([s], TODAY_PS)[0].dest).toBe('AR')
+  })
+
+  it('dest = CL when PAIS = CL', () => {
+    const s = mkShipPS({ PAIS: 'CL', operativas: [mkOp()] })
+    expect(pendingSalida([s], TODAY_PS)[0].dest).toBe('CL')
+  })
+
+  it('dest = OTRO when PAIS is unrecognized', () => {
+    const s = mkShipPS({ PAIS: 'OTRO', operativas: [mkOp()] })
+    expect(pendingSalida([s], TODAY_PS)[0].dest).toBe('OTRO')
+  })
+
+  // ── Sorting ───────────────────────────────────────────────────────────
 
   it('sorted by LIBRE urgency: overdue first, then soonest, no-LIBRE last', () => {
     const opOverdue = mkOp({ CNTR_OP: 'C1', ETA_OP: YESTERDAY_PS, LIBRE: '2026-06-14' }) // 2d overdue
