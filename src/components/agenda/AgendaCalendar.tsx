@@ -16,6 +16,7 @@ import AgendaMonthView from './AgendaMonthView'
 import AgendaAnnualView from './AgendaAnnualView'
 import AgendaPendingSidebar from './AgendaPendingSidebar'
 import ShipmentDetailsDialog from '../ShipmentDetailsDialog'
+import ContainerQuickEdit from '../operations/ContainerQuickEdit'
 
 interface AgendaCalendarProps {
   shipments: ParsedShipment[]
@@ -29,6 +30,12 @@ interface AgendaCalendarProps {
   clientView?: boolean
   /** Initial calendar view. Defaults to 'week'. Clients prefer 'month' for monthly overview. */
   defaultView?: AgendaView
+  /** Admin-only: enables ContainerQuickEdit on event click instead of read-only dialog. */
+  editable?: boolean
+  /** PATCH callback threaded from DashboardEnhanced — writes to /api/data/shipments. */
+  onPatchShipment?: (id: string, fields: Record<string, unknown>) => void
+  /** Opens the OperationDetailPanel for the given FCL ref (navigates to operaciones tab). */
+  onOpenDetail?: (ref: string) => void
 }
 
 export default function AgendaCalendar({
@@ -40,12 +47,19 @@ export default function AgendaCalendar({
   partnerView = false,
   clientView = false,
   defaultView = 'week',
+  editable = false,
+  onPatchShipment,
+  onOpenDetail,
 }: AgendaCalendarProps) {
   const [view, setView] = useState<AgendaView>(defaultView)
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedShipment, setSelectedShipment] = useState<ParsedShipment | null>(null)
   const [selectedCntr, setSelectedCntr] = useState<string | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
+
+  // Quick-edit popover state (admin only, editable=true)
+  const [quickEditEvent, setQuickEditEvent] = useState<CalendarEvent | null>(null)
+  const [quickEditOpen, setQuickEditOpen] = useState(false)
   const [activeDepots, setActiveDepots] = useState<Set<string>>(new Set())
   const [activeTransports, setActiveTransports] = useState<Set<string>>(new Set())
   const [showPendingSidebar, setShowPendingSidebar] = useState(false)
@@ -207,12 +221,18 @@ export default function AgendaCalendar({
     return count
   }, [shipments])
 
-  // Event selection → open shipment details
+  // Event selection → admin: open ContainerQuickEdit for FCL containers (have __dbId);
+  // read-only views or truck/non-FCL events: open ShipmentDetailsDialog.
   const handleSelectShipment = useCallback((event: CalendarEvent) => {
-    setSelectedShipment(event.shipment)
-    setSelectedCntr(event.cntr || null)
-    setDialogOpen(true)
-  }, [])
+    if (editable && event.shipment?.__dbId && event.cntr) {
+      setQuickEditEvent(event)
+      setQuickEditOpen(true)
+    } else {
+      setSelectedShipment(event.shipment)
+      setSelectedCntr(event.cntr || null)
+      setDialogOpen(true)
+    }
+  }, [editable])
 
   const handleSelectShipmentDirect = useCallback((shipment: ParsedShipment) => {
     setSelectedShipment(shipment)
@@ -326,7 +346,31 @@ export default function AgendaCalendar({
         )}
       </div>
 
-      {/* Reuse existing shipment details dialog */}
+      {/* Admin quick-edit popover — ContainerQuickEdit (editable=true only) */}
+      {editable && quickEditEvent?.shipment && quickEditEvent.cntr && (
+        <ContainerQuickEdit
+          shipment={quickEditEvent.shipment}
+          cntr={quickEditEvent.cntr}
+          editable={!!onPatchShipment}
+          open={quickEditOpen}
+          onOpenChange={(o) => {
+            setQuickEditOpen(o)
+            if (!o) setQuickEditEvent(null)
+          }}
+          onPatch={(dbId, fields) => onPatchShipment?.(dbId, fields)}
+          onMasDatos={() => {
+            setQuickEditOpen(false)
+            setQuickEditEvent(null)
+            onOpenDetail?.(quickEditEvent.ref)
+          }}
+          onSaved={() => {
+            setQuickEditOpen(false)
+            setQuickEditEvent(null)
+          }}
+        />
+      )}
+
+      {/* Read-only shipment details dialog — client/partner views + truck events */}
       <ShipmentDetailsDialog
         shipment={selectedShipment}
         open={dialogOpen}
