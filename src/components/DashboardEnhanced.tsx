@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
@@ -26,6 +26,7 @@ import TeamManager from './TeamManager'
 
 import TodayDashboard from './TodayDashboard'
 import AgendaCalendar from './agenda/AgendaCalendar'
+import { dbFclToParsedShipment } from '@/lib/operationsTypes'
 import ShipmentTracking from './ShipmentTracking'
 import ExcelImport from './ExcelImport'
 import CaseStudiesEditor from './CaseStudiesEditor'
@@ -93,6 +94,13 @@ const ONE_DAY_MS = 86_400_000
 export default function DashboardEnhanced({ onLogout, clients = [], shipments = [], documents = [], reports = [], originPhotos = [], quotes = [], trucks = [], truckLoads = [], lclAir = [], billing = [], operators = [], assignments = [], dbShipments = [], dbSyncError = null, onUpdateShipments, onUpdateClients, onUpdateDocuments, onUpdateReports, onUpdateOriginPhotos, onUpdateQuotes, onUpdateTrucks, onDeleteTruck, onUpdateTruckLoads, onDeleteTruckLoad, onUpdateLclAir, onDeleteLclAir, onUpdateBilling, onClearBilling, onUpdateOperators, onDeleteOperator, onAssignOperator, onPatchShipment, onCreateShipment, onDeleteShipment, onPatchFclField, onRenameRef, onRefreshTrucks }: DashboardEnhancedProps) {
   const brand = useBrand()
   const ops = brand.capabilities.opsAdmin
+  // Flip Etapa 4: post-flip las FCL viven en dbShipments. Reconstruirlas a
+  // ParsedShipment para los consumidores que aún esperan ese modelo (HOY, Agenda,
+  // búsqueda, clientes). Pre-flip dbShipments no tiene FCL → queda igual a shipments.
+  const fclShipments = useMemo(
+    () => [...(shipments || []), ...dbShipments.filter(d => d.mode === 'fcl').map(dbFclToParsedShipment)],
+    [shipments, dbShipments],
+  )
   // TWF brand has no ops tabs → land on the first content tab.
   const [activeTab, setActiveTab] = useState(ops ? 'hoy' : 'case-studies')
   // Pestaña Equipo: solo el owner (Brian) — el backend re-valida igual.
@@ -171,7 +179,7 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
   return (
     <div className="min-h-screen bg-background">
       <CommandPalette
-        shipments={shipments}
+        shipments={fclShipments}
         clients={clients}
         onNavigate={setActiveTab}
         onLogout={onLogout}
@@ -324,7 +332,7 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
 
           <TabsContent value="hoy">
             <TodayDashboard
-              shipments={shipments || []}
+              shipments={fclShipments}
               trucks={trucks}
               truckLoads={truckLoads}
               documents={documents}
@@ -336,7 +344,7 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
           </TabsContent>
 
           <TabsContent value="agenda">
-            <AgendaCalendar shipments={shipments || []} trucks={trucks} truckLoads={truckLoads} />
+            <AgendaCalendar shipments={fclShipments} trucks={trucks} truckLoads={truckLoads} />
           </TabsContent>
 
           <TabsContent value="analytics">
@@ -448,7 +456,7 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
               onUpdateClients={(updated) => {
                 if (onUpdateClients) onUpdateClients(updated)
               }}
-              shipments={shipments}
+              shipments={fclShipments}
             />
           </TabsContent>
 
