@@ -221,6 +221,21 @@ describe('pendingSalida', () => {
     expect(pendingSalida([s], TODAY_PS)).toHaveLength(0)
   })
 
+  it('SALIDA = "CONFIRMAR" → included (placeholder = not coordinated)', () => {
+    const s = mkShipPS({ operativas: [mkOp({ SALIDA: 'CONFIRMAR' })] })
+    expect(pendingSalida([s], TODAY_PS)).toHaveLength(1)
+  })
+
+  it('SALIDA = "#N/A" → included (placeholder = not coordinated)', () => {
+    const s = mkShipPS({ operativas: [mkOp({ SALIDA: '#N/A' })] })
+    expect(pendingSalida([s], TODAY_PS)).toHaveLength(1)
+  })
+
+  it('SALIDA = real date → still excluded', () => {
+    const s = mkShipPS({ operativas: [mkOp({ SALIDA: '2026-06-18' })] })
+    expect(pendingSalida([s], TODAY_PS)).toHaveLength(0)
+  })
+
   it('sorted by LIBRE urgency: overdue first, then soonest, no-LIBRE last', () => {
     const opOverdue = mkOp({ CNTR_OP: 'C1', ETA_OP: YESTERDAY_PS, LIBRE: '2026-06-14' }) // 2d overdue
     const opSoon    = mkOp({ CNTR_OP: 'C2', ETA_OP: YESTERDAY_PS, LIBRE: '2026-06-20' }) // 4d away
