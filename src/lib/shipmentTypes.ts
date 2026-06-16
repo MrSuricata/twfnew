@@ -20,6 +20,7 @@ export interface OperativasRecord {
   WOOD: string           // Wood marking (SI/NO)
   TRANSPORTE: string     // Transport/trasiego provider
   HORARIO: string        // Schedule
+  LUGAR_SALIDA?: string  // Por contenedor: TCP | MONTECON | GODILCO | PLANIR | '' (vacío = en terminal de arribo)
 }
 
 export interface ShipmentRecord {

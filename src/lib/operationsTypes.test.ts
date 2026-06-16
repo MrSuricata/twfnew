@@ -235,6 +235,18 @@ describe('fclToColumns — horneado FCL a columnas (PR-C flip)', () => {
   })
 })
 
+describe('operativas array model', () => {
+  it('dbFclToParsedShipment expone operativas[] con LUGAR_SALIDA', () => {
+    const row: any = {
+      id: 'x', ref: 'A1', mode: 'fcl', source: 'fcl',
+      operativas: [{ CNTR_OP: 'AAAU1111111', SALIDA: '2026-06-16', ETA_FISC: '2026-06-18', LUGAR_SALIDA: 'GODILCO' }],
+    }
+    const p = dbFclToParsedShipment(row)
+    expect(p.operativas?.[0].CNTR_OP).toBe('AAAU1111111')
+    expect(p.operativas?.[0].LUGAR_SALIDA).toBe('GODILCO')
+  })
+})
+
 // PR-C: post-flip la FCL es una fila DB (source='db', mode='fcl') pero conserva
 // su comportamiento — estado DERIVADO de columnas y activa por devuelta+fiscal.
 describe('FCL horneada (source=db, mode=fcl) — comportamiento preservado', () => {

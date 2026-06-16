@@ -146,6 +146,7 @@ export interface DbShipment {
   notes: string
   source: string
   archived: boolean
+  operativas?: OperativasRecord[] | null
 }
 
 // ── Fila unificada de la grilla ──
@@ -336,8 +337,9 @@ function fclColumnsStatus(s: DbShipment): string {
 
 /** Inverso de fclToColumns: reconstruye un ParsedShipment desde una FCL horneada
  *  (columnas) para los consumidores que todavía esperan el modelo de la planilla
- *  (Agenda, HOY, búsqueda, vista de clientes). Una operativa sintética colapsada
- *  desde las columnas; si la FCL no tiene datos de operativa, va sin operativas. */
+ *  (Agenda, HOY, búsqueda, vista de clientes). Si la fila tiene el array por
+ *  contenedor (post Fase 1), lo usa; si no (legacy/colapsado), reconstruye 1
+ *  operativa sintética desde las columnas sueltas. */
 export function dbFclToParsedShipment(d: DbShipment): ParsedShipment {
   const hasOp = !!(d.salida || d.eta_fiscal || d.libre || d.operativa || d.deposito || d.descarga || d.dev)
   const op: OperativasRecord = {
@@ -348,6 +350,20 @@ export function dbFclToParsedShipment(d: DbShipment): ParsedShipment {
     DEV: d.dev || '', CLIENTE_OP: d.cliente || '', TIPO: d.tipo || '',
     WOOD: d.wood ? 'SI' : '', TRANSPORTE: d.transporte || '', HORARIO: '',
   }
+  // Si la fila tiene el array por contenedor (post Fase 1), usarlo tal cual;
+  // si no (legacy/colapsado), reconstruir 1 operativa desde las columnas.
+  const ops: OperativasRecord[] = Array.isArray(d.operativas) && d.operativas.length
+    ? d.operativas.map(o => ({
+        REF: d.ref, TLX: '', DEPOSITO: o.DEPOSITO || d.deposito || '', ETA_OP: o.ETA_OP || '',
+        SALIDA: o.SALIDA || '', ETA_FISC: o.ETA_FISC || '', LIBRE: o.LIBRE || d.libre || '',
+        OPERATIVA: o.OPERATIVA || d.operativa || '', CNTR_OP: o.CNTR_OP || '',
+        PKGS: o.PKGS || 0, KG: o.KG || 0, M3: o.M3 || 0, DESCRIPCION: o.DESCRIPCION || '',
+        FISCAL: o.FISCAL || d.fiscal || '', DESCARGA: o.DESCARGA || '', DEV: o.DEV || '',
+        CLIENTE_OP: o.CLIENTE_OP || d.cliente || '', TIPO: o.TIPO || d.tipo || '',
+        WOOD: o.WOOD || '', TRANSPORTE: o.TRANSPORTE || d.transporte || '', HORARIO: '',
+        LUGAR_SALIDA: o.LUGAR_SALIDA || '',
+      }))
+    : (hasOp ? [op] : [])
   return {
     REF: d.ref, CLIENTE: d.cliente || '', ETD: d.etd || '', ETA: d.eta || '',
     FT: 0, LIBRE_HASTA: d.libre || '', CNTR: d.contenedor || '', N: d.n_cntr || 0,
@@ -358,7 +374,7 @@ export function dbFclToParsedShipment(d: DbShipment): ParsedShipment {
     PAIS: (d.dest_country as ParsedShipment['PAIS']) || 'OTRO',
     SEGUIMIENTO: d.seguimiento || '', TIPO: d.tipo || '',
     containers: [], calculatedN: d.n_cntr || 0, calculatedLibreHasta: d.libre || '',
-    operativas: hasOp ? [op] : [],
+    operativas: ops,
     __dbId: d.id,
   }
 }
