@@ -236,7 +236,7 @@ export default function TodayDashboard({
         />
       </div>
 
-      {/* FCL quick-edit popover (admin, when onPatchShipment is provided + row has __dbId) */}
+      {/* FCL quick-edit modal (admin, when onPatchShipment is provided + row has __dbId) */}
       {quickEditMatch?.shipment.__dbId && (
         <ContainerQuickEdit
           key={`${quickEditMatch.op.CNTR_OP || quickEditMatch.shipment.CNTR || ''}-${quickEditMatch.shipment.REF}`}
