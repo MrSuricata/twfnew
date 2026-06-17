@@ -5,6 +5,7 @@ import { QuoteFormData, ClientAccount, ShipmentDocument, OperativeReport, Origin
 import { ParsedShipment } from '@/lib/shipmentTypes'
 import { Truck, TruckLoad, LclAirShipment } from '@/lib/truckTypes'
 import { getBrand } from '@/lib/brand'
+import { canApplyTrucksRefresh } from '@/lib/trucksRefreshGuard'
 import { BillingRecord } from '@/lib/billingTypes'
 import { Operator, OperatorAssignment, DbShipment, UnifiedOperation, dbFclToParsedShipment } from '@/lib/operationsTypes'
 import { getDemoShipments } from '@/lib/demoShipments'
@@ -116,6 +117,12 @@ function App() {
   // en vuelo, el snapshot es viejo y NO se aplica (mata la carrera residual
   // que resucitaba/duplicaba cargas).
   const trucksWriteGenRef = useRef(0)
+  // Marca de tiempo de la última escritura local de camiones/cargas. Un refresh
+  // de fondo NO pisa el estado local si su fetch arrancó dentro de la ventana de
+  // recencia posterior a una escritura (el GET pudo leer la DB antes del commit
+  // del POST → datos stale que borrarían lo recién creado). Ver trucksRefreshGuard.
+  const lastTrucksWriteTsRef = useRef(0)
+  const lastTruckLoadsWriteTsRef = useRef(0)
   const pendingLclAirWritesRef = useRef(0)
   const pendingBillingWritesRef = useRef(0)
 
@@ -124,6 +131,7 @@ function App() {
     if (dbLoadedRef.current || dbLoadingRef.current) return
     dbLoadingRef.current = true
     setIsDataLoading(true)
+    const loadStartTs = Date.now()
     try {
       const data = await loadAdminData()
       dbLoadedRef.current = true
@@ -168,12 +176,12 @@ function App() {
         saveToStorage('twf-origin-photos', data.originPhotos)
       }
 
-      if (pendingTrucksWritesRef.current === 0) {
+      if (canApplyTrucksRefresh(pendingTrucksWritesRef.current, loadStartTs, lastTrucksWriteTsRef.current)) {
         setTrucks(data.trucks)
         saveToStorage('twf-trucks', data.trucks)
       }
 
-      if (pendingTruckLoadsWritesRef.current === 0) {
+      if (canApplyTrucksRefresh(pendingTruckLoadsWritesRef.current, loadStartTs, lastTruckLoadsWriteTsRef.current)) {
         setTruckLoads(data.truckLoads)
         saveToStorage('twf-truck-loads', data.truckLoads)
       }
@@ -414,6 +422,7 @@ function App() {
 
   const handleUpdateTrucks = (updated: Truck[], changedIds?: string[]) => {
     trucksWriteGenRef.current += 1
+    lastTrucksWriteTsRef.current = Date.now()
     setTrucks(updated)
     saveToStorage('twf-trucks', updated)
     const toSave = changedIds ? updated.filter(t => changedIds.includes(t.id)) : updated
@@ -428,12 +437,17 @@ function App() {
         })
         .finally(() => {
           pendingTrucksWritesRef.current = Math.max(0, pendingTrucksWritesRef.current - 1)
+          // Re-marcar al commitear: extiende la ventana de recencia desde el momento
+          // en que la DB realmente quedó consistente.
+          lastTrucksWriteTsRef.current = Date.now()
         })
     }
   }
 
   const handleDeleteTruck = async (id: string) => {
     trucksWriteGenRef.current += 1
+    lastTrucksWriteTsRef.current = Date.now()
+    lastTruckLoadsWriteTsRef.current = Date.now()
     const next = trucks.filter(t => t.id !== id)
     const nextLoads = truckLoads.filter(l => l.truckId !== id)
     setTrucks(next)
@@ -446,12 +460,16 @@ function App() {
       } catch (err) {
         console.warn('[DB] Failed to delete truck:', err)
         toast.warning('Error al borrar camión en la base de datos', { duration: 4000 })
+      } finally {
+        lastTrucksWriteTsRef.current = Date.now()
+        lastTruckLoadsWriteTsRef.current = Date.now()
       }
     }
   }
 
   const handleUpdateTruckLoads = (updated: TruckLoad[], changedIds?: string[]) => {
     trucksWriteGenRef.current += 1
+    lastTruckLoadsWriteTsRef.current = Date.now()
     setTruckLoads(updated)
     saveToStorage('twf-truck-loads', updated)
     const toSave = changedIds ? updated.filter(l => changedIds.includes(l.id)) : updated
@@ -464,6 +482,7 @@ function App() {
         })
         .finally(() => {
           pendingTruckLoadsWritesRef.current = Math.max(0, pendingTruckLoadsWritesRef.current - 1)
+          lastTruckLoadsWriteTsRef.current = Date.now()
         })
     }
   }
@@ -476,13 +495,17 @@ function App() {
     if (!isAdminLoggedIn) return true
     try {
       const gen = trucksWriteGenRef.current
+      const fetchStartTs = Date.now()
       const [freshTrucks, freshLoads] = await Promise.all([fetchTrucks(), fetchTruckLoads()])
       if (trucksWriteGenRef.current !== gen) return true // hubo escrituras mientras tanto: snapshot viejo, pero el fetch fue OK
-      if (pendingTrucksWritesRef.current === 0) {
+      // Guarda de recencia (además de pendingWrites): si el GET arrancó dentro de
+      // la ventana posterior a una escritura local, pudo leer la DB antes del
+      // commit del POST → no pisar el estado local con datos stale.
+      if (canApplyTrucksRefresh(pendingTrucksWritesRef.current, fetchStartTs, lastTrucksWriteTsRef.current)) {
         setTrucks(freshTrucks)
         saveToStorage('twf-trucks', freshTrucks)
       }
-      if (pendingTruckLoadsWritesRef.current === 0) {
+      if (canApplyTrucksRefresh(pendingTruckLoadsWritesRef.current, fetchStartTs, lastTruckLoadsWriteTsRef.current)) {
         setTruckLoads(freshLoads)
         saveToStorage('twf-truck-loads', freshLoads)
       }
@@ -495,6 +518,7 @@ function App() {
 
   const handleDeleteTruckLoad = async (id: string) => {
     trucksWriteGenRef.current += 1
+    lastTruckLoadsWriteTsRef.current = Date.now()
     setTruckLoads(prev => {
       const next = prev.filter(l => l.id !== id)
       saveToStorage('twf-truck-loads', next)
@@ -505,6 +529,8 @@ function App() {
         await apiDeleteTruckLoad(id)
       } catch (err) {
         console.warn('[DB] Failed to delete truck load:', err)
+      } finally {
+        lastTruckLoadsWriteTsRef.current = Date.now()
       }
     }
   }
