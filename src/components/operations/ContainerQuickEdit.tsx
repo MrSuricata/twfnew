@@ -123,7 +123,6 @@ export default function ContainerQuickEdit({
   onOpenChange,
   onPatch,
   onMasDatos,
-  onSaved,
 }: ContainerQuickEditProps) {
   // Resolve the current op for this container
   const existing = shipment.operativas || []
@@ -151,7 +150,15 @@ export default function ContainerQuickEdit({
   // Fix 2: guard against double-save (Enter+blur fires two commitSave calls).
   // We track the last-committed serialized value; commitSave is a no-op when
   // nothing changed since the last successful persist.
-  const lastCommittedRef = useRef<string>('')
+  // Init to the CURRENT values so a blur without edits (e.g. clicking from the
+  // auto-focused Salida MVD to another field) is a true no-op — no spurious patch.
+  const lastCommittedRef = useRef<string>(
+    JSON.stringify({
+      salida: currentOp.SALIDA || '',
+      etaFisc: currentOp.ETA_FISC || '',
+      lugar: currentOp.LUGAR_SALIDA || '',
+    })
+  )
 
   const canSave = editable && !!shipment.__dbId
 
@@ -179,8 +186,10 @@ export default function ContainerQuickEdit({
       })
       await onPatch(shipment.__dbId!, { operativas: next })
       lastCommittedRef.current = serialized
-      onSaved?.()
-      onOpenChange(false)
+      // NO cerrar al guardar: el usuario edita varios campos (salida → arribo →
+      // lugar) en el mismo modal. El cierre lo manejan "Listo" y Escape. Cerrar
+      // en cada commit (vía onBlur) hacía que al pasar de un campo a otro se
+      // cerrara el diálogo.
     } finally {
       setSaving(false)
     }
@@ -324,7 +333,7 @@ export default function ContainerQuickEdit({
               Más datos →
             </button>
             <button
-              onClick={() => onOpenChange(false)}
+              onClick={async () => { await commitSave(); onOpenChange(false) }}
               className="px-3 py-1.5 text-[12px] font-medium rounded-md border border-input bg-background hover:bg-muted transition-colors"
             >
               {saving ? 'Cancelar' : 'Listo'}
