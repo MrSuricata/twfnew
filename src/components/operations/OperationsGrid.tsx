@@ -46,7 +46,7 @@ import {
   isOperationActive,
   isSeguimientoVencido,
   operatorsForMode,
-  deriveTruckCargoStatus,
+  buildTruckByRef,
   OPERATION_COLUMNS,
   STATUS_LABEL,
   MODALITY_LABELS,
@@ -236,23 +236,11 @@ export default function OperationsGrid({
   // ref → { truckCode, derivedStatus } for cargas loaded on a truck. The truck
   // drives the cargo's status (its dates are the source of truth), so the Estado
   // cell becomes read-only for these. planning trucks (no advance) are skipped.
-  const truckByRef = useMemo(() => {
-    const m = new Map<string, TruckRefInfo>()
-    if (!trucks?.length || !truckLoads?.length) return m
-    const today = new Date(); today.setHours(0, 0, 0, 0)
-    const tById = new Map(trucks.map(t => [t.id, t]))
-    for (const l of truckLoads) {
-      if (l.pending === 'add') continue          // borrador: la carga aún no está en el camión
-      const t = tById.get(l.truckId)
-      if (!t || t.draft) continue               // camiones borrador: invisibles para estados
-      const status = deriveTruckCargoStatus(
-        { status: t.status, loadDate: t.loadDate, departureDate: t.departureDate, arrivalDate: t.arrivalDate },
-        today,
-      )
-      if (status) m.set(l.sourceRef, { truckCode: t.code, status })
-    }
-    return m
-  }, [trucks, truckLoads])
+  // Estado por ref derivado del camión (compartido con OperationDetailOverlay).
+  const truckByRef = useMemo(
+    () => buildTruckByRef(trucks, truckLoads, hoy),
+    [trucks, truckLoads, hoy],
+  )
 
   // Unified operator assignment: DB rows patch shipments.operator_id;
   // FCL (cache) rows use the operator_assignments overlay by ref.

@@ -250,9 +250,11 @@ export default function TodayDashboard({
           }}
           onPatch={(dbId, fields) => onPatchShipment?.(dbId, fields)}
           onMasDatos={() => {
+            // dbId resuelve la op exacta post-flip; REF como fallback.
+            const key = quickEditMatch.shipment.__dbId || quickEditMatch.shipment.REF
             setQuickEditOpen(false)
             setQuickEditMatch(null)
-            onOpenDetail?.(quickEditMatch.shipment.REF)
+            onOpenDetail?.(key)
           }}
           onSaved={() => {
             setQuickEditOpen(false)
