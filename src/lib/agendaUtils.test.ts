@@ -243,64 +243,80 @@ describe('pendingSalida', () => {
     expect(pendingSalida([s], TODAY_PS)).toHaveLength(0)
   })
 
-  // ── New exclusion: A6820-like — LIBRE contains 'DEVUELTO' ──────────────
+  // ── LIBRE='DEVUELTO' — container returned but cargo may still need salida ─
 
-  it('LIBRE = "DEVUELTO" (container returned) → excluded', () => {
-    // Real case: A6820, libre='DEVUELTO', operativa='CARGA A PISO', salida='CONFIRMAR'
+  it('LIBRE = "DEVUELTO" + no salida + arrived → INCLUDED (A6820 case)', () => {
+    // Container was returned but cargo is still at depot awaiting coordinated salida
     const s = mkShipPS({
-      operativas: [mkOp({ SALIDA: 'CONFIRMAR', LIBRE: 'DEVUELTO', OPERATIVA: 'CARGA A PISO' })],
+      operativas: [mkOp({ SALIDA: 'CONFIRMAR', LIBRE: 'DEVUELTO' })],
     })
-    expect(pendingSalida([s], TODAY_PS)).toHaveLength(0)
+    expect(pendingSalida([s], TODAY_PS)).toHaveLength(1)
   })
 
-  it('LIBRE contains "DEVUELTO" text (case-insensitive) → excluded', () => {
+  it('LIBRE contains "DEVUELTO" text (case-insensitive) + no salida → INCLUDED', () => {
     const s = mkShipPS({
       operativas: [mkOp({ SALIDA: 'CONFIRMAR', LIBRE: 'devuelto' })],
     })
-    expect(pendingSalida([s], TODAY_PS)).toHaveLength(0)
+    expect(pendingSalida([s], TODAY_PS)).toHaveLength(1)
   })
 
-  it('LIBRE_HASTA on shipment containing "DEVUELTO" → excluded', () => {
+  it('LIBRE_HASTA on shipment = "DEVUELTO" + no salida → INCLUDED', () => {
     const s = mkShipPS({
       LIBRE_HASTA: 'DEVUELTO',
       operativas: [mkOp({ SALIDA: 'CONFIRMAR', LIBRE: '' })],
     })
-    expect(pendingSalida([s], TODAY_PS)).toHaveLength(0)
+    expect(pendingSalida([s], TODAY_PS)).toHaveLength(1)
   })
 
-  // ── New exclusion: CARGA A PISO / DESCONSOLIDACION ────────────────────
+  // ── CARGA A PISO / DESCONSOLIDACION — cargo still needs salida coordination ─
 
-  it('OPERATIVA = "CARGA A PISO" → excluded (deconsolidated, no trasiego needed)', () => {
+  it('OPERATIVA = "CARGA A PISO" + no salida + arrived → INCLUDED', () => {
     const s = mkShipPS({
       operativas: [mkOp({ SALIDA: 'CONFIRMAR', OPERATIVA: 'CARGA A PISO' })],
     })
-    expect(pendingSalida([s], TODAY_PS)).toHaveLength(0)
+    expect(pendingSalida([s], TODAY_PS)).toHaveLength(1)
   })
 
-  it('OPERATIVA = "DESCONSOLIDACION" → excluded', () => {
+  it('OPERATIVA = "DESCONSOLIDACION" + no salida + arrived → INCLUDED', () => {
     const s = mkShipPS({
       operativas: [mkOp({ SALIDA: 'CONFIRMAR', OPERATIVA: 'DESCONSOLIDACION' })],
     })
-    expect(pendingSalida([s], TODAY_PS)).toHaveLength(0)
+    expect(pendingSalida([s], TODAY_PS)).toHaveLength(1)
   })
 
-  it('OPERATIVA = "DESCONSOLIDACIÓN" (accented) → excluded', () => {
+  it('OPERATIVA = "DESCONSOLIDACIÓN" (accented) + no salida + arrived → INCLUDED', () => {
     const s = mkShipPS({
       operativas: [mkOp({ SALIDA: 'CONFIRMAR', OPERATIVA: 'DESCONSOLIDACIÓN' })],
     })
-    expect(pendingSalida([s], TODAY_PS)).toHaveLength(0)
+    expect(pendingSalida([s], TODAY_PS)).toHaveLength(1)
   })
 
-  it('OPERATIVA = "DESCONSOLIDADO" → excluded', () => {
+  it('OPERATIVA = "DESCONSOLIDADO" + no salida + arrived → INCLUDED', () => {
     const s = mkShipPS({
       operativas: [mkOp({ SALIDA: 'CONFIRMAR', OPERATIVA: 'DESCONSOLIDADO' })],
     })
-    expect(pendingSalida([s], TODAY_PS)).toHaveLength(0)
+    expect(pendingSalida([s], TODAY_PS)).toHaveLength(1)
   })
 
-  it('OPERATIVA = "TRASIEGO" (active) + arrived + no salida → still included', () => {
+  it('OPERATIVA = "TRASIEGO" (active) + arrived + no salida → included', () => {
     const s = mkShipPS({
       operativas: [mkOp({ OPERATIVA: 'TRASIEGO', SALIDA: '' })],
+    })
+    expect(pendingSalida([s], TODAY_PS)).toHaveLength(1)
+  })
+
+  // ── A6820-shaped: DEVUELTO + CARGA A PISO + salida CONFIRMAR + past ETA ──
+
+  it('A6820-shaped: LIBRE=DEVUELTO + OPERATIVA=CARGA A PISO + SALIDA=CONFIRMAR + past ETA → INCLUDED', () => {
+    // Real case: container returned, cargo still at depot, no coordinated salida
+    const s = mkShipPS({
+      ETA: '2025-09-03',
+      operativas: [mkOp({
+        ETA_OP: '2025-09-03',
+        LIBRE: 'DEVUELTO',
+        OPERATIVA: 'CARGA A PISO',
+        SALIDA: 'CONFIRMAR',
+      })],
     })
     expect(pendingSalida([s], TODAY_PS)).toHaveLength(1)
   })

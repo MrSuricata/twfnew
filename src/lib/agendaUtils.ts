@@ -401,21 +401,20 @@ export interface PendingSalidaItem {
   dest: DestZone
 }
 
-/** OPERATIVA values that mean the cargo was already deconsolidated/closed —
- *  no trasiego-salida needs to be coordinated. */
-const CLOSED_OPERATIVAS = new Set(['CARGA A PISO', 'DESCONSOLIDACION', 'DESCONSOLIDACIÓN', 'DESCONSOLIDADO'])
-
 /**
  * Returns operativas that have ALREADY ARRIVED (ETA ≤ today)
- * but still have NO SALIDA scheduled, and are NOT yet closed/deconsolidated.
+ * but still have NO SALIDA scheduled.
  *
  * Criteria (all must be true):
  *  - Container number present (CNTR_OP or shipment.CNTR)
  *  - SALIDA is empty, 'CONFIRMAR', or '#N/A' (not yet coordinated)
  *  - ETA — preferring shipment.ETA over op.ETA_OP (op value can be junk) —
  *    is today-or-past (already arrived)
- *  - LIBRE does NOT contain 'DEVUELTO' (container already returned → done)
- *  - OPERATIVA is not a closed/deconsolidated type (CARGA A PISO, etc.)
+ *
+ * Note: LIBRE='DEVUELTO' (container returned) and OPERATIVA='CARGA A PISO' /
+ * DESCONSOLIDACION etc. are intentionally NOT excluded — the cargo may still
+ * be at the depot awaiting a coordinated salida even when the container has
+ * been returned or when the operativa type is deconsolidated (real case: A6820).
  *
  * Sorted by LIBRE urgency: overdue/earliest LIBRE first; rows without a
  * parseable LIBRE go last.
@@ -440,14 +439,6 @@ export function pendingSalida(
       // Must have no SALIDA yet — treat empty string, 'CONFIRMAR', and '#N/A' as "not coordinated"
       const salidaNorm = (op.SALIDA || '').trim().toUpperCase()
       if (salidaNorm !== '' && salidaNorm !== 'CONFIRMAR' && salidaNorm !== '#N/A') continue
-
-      // EXCLUDE if container already returned (LIBRE contains 'DEVUELTO')
-      const libreUpper = (op.LIBRE || s.LIBRE_HASTA || '').toUpperCase()
-      if (libreUpper.includes('DEVUELTO')) continue
-
-      // EXCLUDE if operativa type is already closed/deconsolidated
-      const operativaUpper = (op.OPERATIVA || '').toUpperCase().trim()
-      if (CLOSED_OPERATIVAS.has(operativaUpper)) continue
 
       // ETA must be today-or-past (already arrived).
       // Prefer shipment.ETA — op.ETA_OP can contain junk dates like '2001-09-01'.
