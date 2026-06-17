@@ -401,21 +401,24 @@ export interface PendingSalidaItem {
   dest: DestZone
 }
 
-/** OPERATIVA values that mean the cargo was already deconsolidated/closed —
- *  no trasiego-salida needs to be coordinated. */
-const CLOSED_OPERATIVAS = new Set(['CARGA A PISO', 'DESCONSOLIDACION', 'DESCONSOLIDACIÓN', 'DESCONSOLIDADO'])
-
 /**
- * Returns operativas that have ALREADY ARRIVED (ETA ≤ today)
- * but still have NO SALIDA scheduled, and are NOT yet closed/deconsolidated.
+ * Returns operativas that have ALREADY ARRIVED (ETA ≤ today) but still have
+ * NO SALIDA scheduled — la carga llegó y todavía no se coordinó su salida.
  *
  * Criteria (all must be true):
  *  - Container number present (CNTR_OP or shipment.CNTR)
  *  - SALIDA is empty, 'CONFIRMAR', or '#N/A' (not yet coordinated)
  *  - ETA — preferring shipment.ETA over op.ETA_OP (op value can be junk) —
  *    is today-or-past (already arrived)
- *  - LIBRE does NOT contain 'DEVUELTO' (container already returned → done)
- *  - OPERATIVA is not a closed/deconsolidated type (CARGA A PISO, etc.)
+ *
+ * NO se excluye por LIBRE='DEVUELTO' ni OPERATIVA='CARGA A PISO'/desconsolidado:
+ * esos estados son del CONTENEDOR (vacío ya devuelto) o de la mercadería que
+ * espera en el piso del depósito — la carga IGUAL necesita coordinar su salida
+ * al cliente (caso real A6820). Lo único que saca una carga de esta lista es
+ * tener una SALIDA real cargada (ahora editable por contenedor desde el quick-edit).
+ *
+ * Dedup por (REF, contenedor): el array `operativas` puede traer contenedores
+ * duplicados (bug de datos) → una sola tarjeta por contenedor.
  *
  * Sorted by LIBRE urgency: overdue/earliest LIBRE first; rows without a
  * parseable LIBRE go last.
@@ -428,6 +431,9 @@ export function pendingSalida(
   todayNorm.setHours(0, 0, 0, 0)
 
   const items: PendingSalidaItem[] = []
+  // Dedup por (REF, contenedor): el array `operativas` puede traer el mismo
+  // contenedor duplicado (bug de datos, ej. A6820) → una sola tarjeta.
+  const seen = new Set<string>()
 
   for (const s of shipments) {
     if (!s.operativas || s.operativas.length === 0) continue
@@ -441,14 +447,6 @@ export function pendingSalida(
       const salidaNorm = (op.SALIDA || '').trim().toUpperCase()
       if (salidaNorm !== '' && salidaNorm !== 'CONFIRMAR' && salidaNorm !== '#N/A') continue
 
-      // EXCLUDE if container already returned (LIBRE contains 'DEVUELTO')
-      const libreUpper = (op.LIBRE || s.LIBRE_HASTA || '').toUpperCase()
-      if (libreUpper.includes('DEVUELTO')) continue
-
-      // EXCLUDE if operativa type is already closed/deconsolidated
-      const operativaUpper = (op.OPERATIVA || '').toUpperCase().trim()
-      if (CLOSED_OPERATIVAS.has(operativaUpper)) continue
-
       // ETA must be today-or-past (already arrived).
       // Prefer shipment.ETA — op.ETA_OP can contain junk dates like '2001-09-01'.
       const etaStr = (s.ETA || op.ETA_OP || '').trim()
@@ -457,6 +455,11 @@ export function pendingSalida(
 
       etaDate.setHours(0, 0, 0, 0)
       if (etaDate.getTime() > todayNorm.getTime()) continue // future ETA — not arrived yet
+
+      // Una sola tarjeta por (REF, contenedor) aunque la operativa esté duplicada.
+      const dedupKey = `${s.REF}::${cntr.toUpperCase()}`
+      if (seen.has(dedupKey)) continue
+      seen.add(dedupKey)
 
       // Derive destination zone from shipment.PAIS (reliable enum: UY/AR/CL/OTRO)
       const dest: DestZone = (s.PAIS === 'UY' || s.PAIS === 'AR' || s.PAIS === 'CL') ? s.PAIS : 'OTRO'

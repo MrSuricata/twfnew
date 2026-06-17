@@ -243,66 +243,70 @@ describe('pendingSalida', () => {
     expect(pendingSalida([s], TODAY_PS)).toHaveLength(0)
   })
 
-  // ── New exclusion: A6820-like — LIBRE contains 'DEVUELTO' ──────────────
+  // ── A6820-like: DEVUELTO / CARGA A PISO siguen pendientes de coordinar salida ──
+  // El contenedor vacío devuelto (LIBRE='DEVUELTO') y la mercadería en piso
+  // (OPERATIVA='CARGA A PISO') NO significan que la carga ya salió: igual hay
+  // que coordinar su salida al cliente. Solo una SALIDA real la saca de la lista.
 
-  it('LIBRE = "DEVUELTO" (container returned) → excluded', () => {
-    // Real case: A6820, libre='DEVUELTO', operativa='CARGA A PISO', salida='CONFIRMAR'
+  it('LIBRE = "DEVUELTO" + CARGA A PISO (caso A6820) → INCLUDED (carga aún pendiente)', () => {
     const s = mkShipPS({
       operativas: [mkOp({ SALIDA: 'CONFIRMAR', LIBRE: 'DEVUELTO', OPERATIVA: 'CARGA A PISO' })],
     })
-    expect(pendingSalida([s], TODAY_PS)).toHaveLength(0)
+    expect(pendingSalida([s], TODAY_PS)).toHaveLength(1)
   })
 
-  it('LIBRE contains "DEVUELTO" text (case-insensitive) → excluded', () => {
+  it('LIBRE contains "DEVUELTO" (case-insensitive) → INCLUDED', () => {
     const s = mkShipPS({
       operativas: [mkOp({ SALIDA: 'CONFIRMAR', LIBRE: 'devuelto' })],
     })
-    expect(pendingSalida([s], TODAY_PS)).toHaveLength(0)
+    expect(pendingSalida([s], TODAY_PS)).toHaveLength(1)
   })
 
-  it('LIBRE_HASTA on shipment containing "DEVUELTO" → excluded', () => {
+  it('LIBRE_HASTA on shipment containing "DEVUELTO" → INCLUDED', () => {
     const s = mkShipPS({
       LIBRE_HASTA: 'DEVUELTO',
       operativas: [mkOp({ SALIDA: 'CONFIRMAR', LIBRE: '' })],
     })
-    expect(pendingSalida([s], TODAY_PS)).toHaveLength(0)
+    expect(pendingSalida([s], TODAY_PS)).toHaveLength(1)
   })
 
-  // ── New exclusion: CARGA A PISO / DESCONSOLIDACION ────────────────────
-
-  it('OPERATIVA = "CARGA A PISO" → excluded (deconsolidated, no trasiego needed)', () => {
+  it('OPERATIVA = "CARGA A PISO" → INCLUDED (mercadería en piso, falta coordinar salida)', () => {
     const s = mkShipPS({
       operativas: [mkOp({ SALIDA: 'CONFIRMAR', OPERATIVA: 'CARGA A PISO' })],
     })
-    expect(pendingSalida([s], TODAY_PS)).toHaveLength(0)
+    expect(pendingSalida([s], TODAY_PS)).toHaveLength(1)
   })
 
-  it('OPERATIVA = "DESCONSOLIDACION" → excluded', () => {
+  it('OPERATIVA = "DESCONSOLIDACION" → INCLUDED', () => {
     const s = mkShipPS({
       operativas: [mkOp({ SALIDA: 'CONFIRMAR', OPERATIVA: 'DESCONSOLIDACION' })],
     })
-    expect(pendingSalida([s], TODAY_PS)).toHaveLength(0)
+    expect(pendingSalida([s], TODAY_PS)).toHaveLength(1)
   })
 
-  it('OPERATIVA = "DESCONSOLIDACIÓN" (accented) → excluded', () => {
-    const s = mkShipPS({
-      operativas: [mkOp({ SALIDA: 'CONFIRMAR', OPERATIVA: 'DESCONSOLIDACIÓN' })],
-    })
-    expect(pendingSalida([s], TODAY_PS)).toHaveLength(0)
-  })
-
-  it('OPERATIVA = "DESCONSOLIDADO" → excluded', () => {
-    const s = mkShipPS({
-      operativas: [mkOp({ SALIDA: 'CONFIRMAR', OPERATIVA: 'DESCONSOLIDADO' })],
-    })
-    expect(pendingSalida([s], TODAY_PS)).toHaveLength(0)
-  })
-
-  it('OPERATIVA = "TRASIEGO" (active) + arrived + no salida → still included', () => {
+  it('OPERATIVA = "TRASIEGO" (active) + arrived + no salida → INCLUDED', () => {
     const s = mkShipPS({
       operativas: [mkOp({ OPERATIVA: 'TRASIEGO', SALIDA: '' })],
     })
     expect(pendingSalida([s], TODAY_PS)).toHaveLength(1)
+  })
+
+  // ── Dedup: operativa duplicada con el mismo contenedor (caso A6820) → 1 tarjeta ──
+
+  it('operativas duplicadas con el mismo CNTR → una sola tarjeta', () => {
+    const dupOp = mkOp({ SALIDA: 'CONFIRMAR', LIBRE: 'DEVUELTO', OPERATIVA: 'CARGA A PISO', CNTR_OP: 'TRHU6345230' })
+    const s = mkShipPS({ CNTR: 'TRHU6345230', operativas: [dupOp, { ...dupOp }] })
+    expect(pendingSalida([s], TODAY_PS)).toHaveLength(1)
+  })
+
+  it('operativas con contenedores DISTINTOS → una tarjeta por contenedor', () => {
+    const s = mkShipPS({
+      operativas: [
+        mkOp({ SALIDA: 'CONFIRMAR', CNTR_OP: 'AAAA1111111' }),
+        mkOp({ SALIDA: 'CONFIRMAR', CNTR_OP: 'BBBB2222222' }),
+      ],
+    })
+    expect(pendingSalida([s], TODAY_PS)).toHaveLength(2)
   })
 
   // ── dest zone field ───────────────────────────────────────────────────
