@@ -515,9 +515,11 @@ export default function AgendaCalendar({
           }}
           onPatch={(dbId, fields) => onPatchShipment?.(dbId, fields)}
           onMasDatos={() => {
+            // dbId resuelve la op exacta post-flip; ref como fallback.
+            const key = quickEditEvent.shipment?.__dbId || quickEditEvent.ref
             setQuickEditOpen(false)
             setQuickEditEvent(null)
-            onOpenDetail?.(quickEditEvent.ref)
+            onOpenDetail?.(key)
           }}
           onSaved={() => {
             setQuickEditOpen(false)

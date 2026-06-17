@@ -41,6 +41,7 @@ import BrandLogo from './BrandLogo'
 import { useBrand } from '@/lib/brand'
 import BillingManagement from './BillingManagement'
 import OperationsGrid from './operations/OperationsGrid'
+import OperationDetailOverlay from './operations/OperationDetailOverlay'
 import { ParsedShipment } from '@/lib/shipmentTypes'
 import { ClientAccount, ShipmentDocument, OperativeReport, OriginPhoto, QuoteFormData } from '@/lib/quotationTypes'
 import { Truck, TruckLoad, LclAirShipment } from '@/lib/truckTypes'
@@ -109,12 +110,18 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
   // Tick que sube con cada Refrescar global → recarga la Actividad del Equipo.
   const [refreshTick, setRefreshTick] = useState(0)
 
-  // Elevated detail-panel state — lets Agenda/HOY open the panel via "Más datos".
+  // Selección del panel de detalle DENTRO de la grilla de Operaciones (controlada).
   const [detailUid, setDetailUid] = useState<string | null>(null)
-  // Opens the OperationDetailPanel for a given FCL ref (the uid pattern is fcl-${REF}).
-  const onOpenDetail = useCallback((ref: string) => {
-    setActiveTab('operaciones')
-    setDetailUid(`fcl-${ref}`)
+  // "Más datos →" desde Agenda/HOY: abre el panel completo como OVERLAY sobre la
+  // pestaña actual (sin navegar a Operaciones). La clave es el dbId del shipment
+  // (shipment.__dbId) que resuelve la op exacta post-flip; el overlay también
+  // acepta uid o ref FCL como fallback.
+  const [overlayDetailKey, setOverlayDetailKey] = useState<string | null>(null)
+  const onOpenDetail = useCallback((key: string) => {
+    // Deseleccionar la grilla al abrir el overlay → los dos paneles (grilla y
+    // overlay) son mutuamente excluyentes, nunca se apilan dos Sheets.
+    setDetailUid(null)
+    setOverlayDetailKey(key)
   }, [])
 
   // Manual refresh from the navbar — pulls fresh data from Google Sheets via
@@ -255,7 +262,16 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
           onHomeClick={activeTab !== (ops ? 'hoy' : 'case-studies') ? () => setActiveTab(ops ? 'hoy' : 'case-studies') : undefined}
         />
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        <Tabs
+          value={activeTab}
+          onValueChange={(v) => {
+            // Cambiar de pestaña cierra el overlay de "Más datos" (es una acción
+            // contextual de Agenda/HOY) → nunca convive con el panel de la grilla.
+            setOverlayDetailKey(null)
+            setActiveTab(v)
+          }}
+          className="space-y-6"
+        >
           <TabsList className="tabs-list-underline">
             {ops && (<>
             <TabsTrigger value="hoy" className="tab-underline">
@@ -489,6 +505,23 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
             </TabsContent>
           )}
         </Tabs>
+
+        {/* Panel de detalle COMPLETO como overlay (drawer lateral) — lo abre
+            "Más datos →" del quick-edit de Agenda/HOY, sin navegar a Operaciones. */}
+        <OperationDetailOverlay
+          detailKey={overlayDetailKey}
+          shipments={shipments || []}
+          dbShipments={dbShipments || []}
+          trucks={trucks || []}
+          truckLoads={truckLoads || []}
+          operators={operators || []}
+          assignments={assignments || []}
+          onPatch={(id, fields) => { if (onPatchShipment) onPatchShipment(id, fields) }}
+          onPatchFcl={(id, edits) => { if (onPatchFclField) onPatchFclField(id, edits) }}
+          onAssignOperator={(ref, opId) => { if (onAssignOperator) onAssignOperator(ref, opId) }}
+          onRenameRef={onRenameRef}
+          onClose={() => setOverlayDetailKey(null)}
+        />
       </div>
     </div>
   )

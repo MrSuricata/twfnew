@@ -1,6 +1,53 @@
 import { describe, it, expect } from 'vitest'
-import { buildOperations, isOperationActive, dbShipmentToOperation, fclToColumns, dbFclToParsedShipment, mergeFclShipments, newDbShipment, EDITABLE_FIELDS, DEPOSITOS_UY, type UnifiedOperation, type DbShipment } from './operationsTypes'
+import { buildOperations, isOperationActive, dbShipmentToOperation, fclToColumns, dbFclToParsedShipment, mergeFclShipments, newDbShipment, buildTruckByRef, EDITABLE_FIELDS, DEPOSITOS_UY, type UnifiedOperation, type DbShipment } from './operationsTypes'
 import type { ParsedShipment } from './shipmentTypes'
+import type { Truck, TruckLoad } from './truckTypes'
+
+describe('buildTruckByRef — estado derivado del camión por ref de origen', () => {
+  const truck = (over: Partial<Truck> = {}): Truck =>
+    ({ id: 't1', code: 'C440', status: 'planning', draft: false,
+       loadDate: '', departureDate: '', arrivalDate: '', ...over } as unknown as Truck)
+  const load = (over: Partial<TruckLoad> = {}): TruckLoad =>
+    ({ id: 'l1', truckId: 't1', sourceRef: 'A7611', pending: null, ...over } as unknown as TruckLoad)
+  const hoy = new Date(2026, 5, 17)
+
+  it('sin camiones o sin cargas → mapa vacío', () => {
+    expect(buildTruckByRef([], [], hoy).size).toBe(0)
+    expect(buildTruckByRef([truck()], [], hoy).size).toBe(0)
+    expect(buildTruckByRef([], [load()], hoy).size).toBe(0)
+  })
+
+  it('camión cargado (loadDate pasada) → ref mapeada a su estado + código', () => {
+    const m = buildTruckByRef(
+      [{ ...truck(), loadDate: '2026-06-10' }],
+      [load()],
+      hoy,
+    )
+    expect(m.get('A7611')).toEqual({ truckCode: 'C440', status: 'arribado' })
+  })
+
+  it('ignora cargas borrador (pending="add")', () => {
+    const m = buildTruckByRef(
+      [{ ...truck(), loadDate: '2026-06-10' }],
+      [{ ...load(), pending: 'add' }],
+      hoy,
+    )
+    expect(m.size).toBe(0)
+  })
+
+  it('ignora camiones borrador (draft)', () => {
+    const m = buildTruckByRef(
+      [{ ...truck(), draft: true, loadDate: '2026-06-10' }],
+      [load()],
+      hoy,
+    )
+    expect(m.size).toBe(0)
+  })
+
+  it('camión en planning sin fechas → no aporta estado (deriveTruckCargoStatus null)', () => {
+    expect(buildTruckByRef([truck()], [load()], hoy).size).toBe(0)
+  })
+})
 
 // La planilla reutiliza refs (caso real: A6902 con dos clientes distintos,
 // A7095 split en dos filas). La grilla debe mostrar AMBAS con uid distinto

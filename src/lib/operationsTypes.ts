@@ -8,6 +8,7 @@
 
 import type { ParsedShipment, OperativasRecord } from './shipmentTypes'
 import { getShipmentStatus, parseLocalDate } from './shipmentTypes'
+import type { Truck, TruckLoad } from './truckTypes'
 
 // ── Truck-driven status derivation (LCL/aéreo on a truck) ──────────────
 // The truck a cargo is loaded on is, for LCL/aéreo, what the Sheet's operativas
@@ -29,6 +30,35 @@ export function deriveTruckCargoStatus(t: TruckLike, today: Date): string | null
   if (reached(t.departureDate) || t.status === 'in_transit') return 'en_frontera'
   if (reached(t.loadDate) || t.status === 'loaded') return 'arribado'
   return null // planning / no dates → cargo keeps its manual baseline status
+}
+
+// Estado de una carga DERIVADO del camión donde va, indexado por su ref de origen.
+export interface TruckRefInfo { truckCode: string; status: string }
+
+/** Mapa ref-de-origen → { truckCode, status-derivado } a partir de los camiones y
+ *  sus cargas. Mismo criterio que la grilla: ignora cargas borrador (pending==='add')
+ *  y camiones borrador (t.draft); el estado se DERIVA de las fechas del camión vía
+ *  deriveTruckCargoStatus (nunca se copia). Compartido por OperationsGrid y
+ *  OperationDetailOverlay para no duplicar la lógica. */
+export function buildTruckByRef(
+  trucks: Truck[] | undefined,
+  truckLoads: TruckLoad[] | undefined,
+  today: Date,
+): Map<string, TruckRefInfo> {
+  const m = new Map<string, TruckRefInfo>()
+  if (!trucks?.length || !truckLoads?.length) return m
+  const tById = new Map(trucks.map(t => [t.id, t]))
+  for (const l of truckLoads) {
+    if (l.pending === 'add') continue          // borrador: la carga aún no está en el camión
+    const t = tById.get(l.truckId)
+    if (!t || t.draft) continue                // camiones borrador: invisibles para estados
+    const status = deriveTruckCargoStatus(
+      { status: t.status, loadDate: t.loadDate, departureDate: t.departureDate, arrivalDate: t.arrivalDate },
+      today,
+    )
+    if (status) m.set(l.sourceRef, { truckCode: t.code, status })
+  }
+  return m
 }
 
 export type Modality = 'fcl' | 'lcl' | 'air' | 'land'
