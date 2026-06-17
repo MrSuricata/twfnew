@@ -8,6 +8,7 @@ import type { Operator, UnifiedOperation } from '@/lib/operationsTypes'
 import {
   EDITABLE_FIELDS, EDITABLE_FCL_FIELDS, MODALITY_COLORS, MODALITY_LABELS,
   STATUS_LABEL, STATUS_OPTIONS, operatorsForMode, isSeguimientoVencido,
+  buildOperativaPatch,
 } from '@/lib/operationsTypes'
 import { parseCntr, serializeCntr, normalizeCntr, isStandardCntr } from '@/lib/cntrUtils'
 import ViabilityBlock from './ViabilityBlock'
@@ -154,8 +155,18 @@ export default function OperationDetailPanel({
   const commit = (key: keyof UnifiedOperation, v: unknown) => {
     const mode = editModeFor(op, key)
     if (!mode || !op.dbId) return
-    if (mode.kind === 'db') onPatch(op.dbId, { [mode.col]: v })
-    else onPatchFcl?.(op.dbId, { [EDITABLE_FCL_FIELDS[key]!]: v })
+    if (mode.kind === 'db') {
+      // OPERATIVA vive en la columna Y en el array por contenedor — la Agenda/HOY
+      // pintan el color del chip desde op.OPERATIVA (por contenedor), no desde la
+      // columna. Propagamos a todos los contenedores para que el cambio se vea.
+      if (key === 'operativa') {
+        onPatch(op.dbId, buildOperativaPatch(op, typeof v === 'string' ? v : String(v ?? '')))
+      } else {
+        onPatch(op.dbId, { [mode.col]: v })
+      }
+    } else {
+      onPatchFcl?.(op.dbId, { [EDITABLE_FCL_FIELDS[key]!]: v })
+    }
   }
 
   // ── Contenedores ──

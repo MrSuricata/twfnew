@@ -1,7 +1,40 @@
 import { describe, it, expect } from 'vitest'
-import { buildOperations, isOperationActive, dbShipmentToOperation, fclToColumns, dbFclToParsedShipment, mergeFclShipments, newDbShipment, buildTruckByRef, EDITABLE_FIELDS, DEPOSITOS_UY, type UnifiedOperation, type DbShipment } from './operationsTypes'
+import { buildOperations, isOperationActive, dbShipmentToOperation, fclToColumns, dbFclToParsedShipment, mergeFclShipments, newDbShipment, buildTruckByRef, buildOperativaPatch, EDITABLE_FIELDS, DEPOSITOS_UY, type UnifiedOperation, type DbShipment } from './operationsTypes'
 import type { ParsedShipment } from './shipmentTypes'
+import type { OperativasRecord } from './shipmentTypes'
 import type { Truck, TruckLoad } from './truckTypes'
+
+describe('buildOperativaPatch — editar OPERATIVA propaga al array por contenedor', () => {
+  const op = (over: Partial<UnifiedOperation> = {}): UnifiedOperation =>
+    ({ uid: 'u', ref: 'A7000', mode: 'fcl', source: 'db', dbId: 'd1', operativa: 'TRASIEGO', ...over } as UnifiedOperation)
+  const rec = (over: Partial<OperativasRecord> = {}): OperativasRecord =>
+    ({ REF: 'A7000', CNTR_OP: 'C1', OPERATIVA: 'TRASIEGO', ...over } as OperativasRecord)
+
+  it('setea la columna operativa', () => {
+    const patch = buildOperativaPatch(op({ operativas: undefined }), 'CONTENEDOR')
+    expect(patch.operativa).toBe('CONTENEDOR')
+    expect(patch.operativas).toBeUndefined() // sin array → solo la columna
+  })
+
+  it('propaga OPERATIVA a TODOS los contenedores del array', () => {
+    const ops: OperativasRecord[] = [
+      { ...rec(), CNTR_OP: 'C1', OPERATIVA: 'TRASIEGO' },
+      { ...rec(), CNTR_OP: 'C2', OPERATIVA: 'TRASIEGO' },
+    ]
+    const patch = buildOperativaPatch(op({ operativas: ops }), 'CONTENEDOR')
+    expect(patch.operativa).toBe('CONTENEDOR')
+    const next = patch.operativas as OperativasRecord[]
+    expect(next.map(o => o.OPERATIVA)).toEqual(['CONTENEDOR', 'CONTENEDOR'])
+    // preserva el resto de cada contenedor
+    expect(next.map(o => o.CNTR_OP)).toEqual(['C1', 'C2'])
+  })
+
+  it('array vacío → solo la columna (sin operativas)', () => {
+    const patch = buildOperativaPatch(op({ operativas: [] }), 'CARGA A PISO')
+    expect(patch.operativa).toBe('CARGA A PISO')
+    expect(patch.operativas).toBeUndefined()
+  })
+})
 
 describe('buildTruckByRef — estado derivado del camión por ref de origen', () => {
   const truck = (over: Partial<Truck> = {}): Truck =>

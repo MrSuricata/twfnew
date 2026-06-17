@@ -715,6 +715,25 @@ export const EDITABLE_FCL_FIELDS: Partial<Record<keyof UnifiedOperation, string>
   tipo: 'TIPO',
 }
 
+/**
+ * Patch para editar la OPERATIVA de una FCL desde el panel de detalle.
+ *
+ * La OPERATIVA vive en DOS lados: la columna top-level `operativa` (la lee la
+ * grilla vía dbShipmentToOperation) Y el array por contenedor `operativas[]`
+ * (lo leen Agenda/HOY — el color del chip sale de op.OPERATIVA por contenedor).
+ * Editar solo la columna dejaba el chip de la agenda sin cambiar (caso real:
+ * cambiar TRASIEGO↔CONTENEDOR no pintaba el contenedor de rojo). Este patch
+ * setea la columna Y propaga el valor a TODOS los contenedores del array, así
+ * ambas vistas quedan consistentes. Si la op no tiene array, solo la columna.
+ */
+export function buildOperativaPatch(op: UnifiedOperation, value: string): Record<string, unknown> {
+  const patch: Record<string, unknown> = { operativa: value }
+  if (op.operativas && op.operativas.length > 0) {
+    patch.operativas = op.operativas.map(o => ({ ...o, OPERATIVA: value }))
+  }
+  return patch
+}
+
 // Build a new DB shipment row with sensible empty defaults. Only `mode` is
 // required; the rest is filled inline in the grid afterwards.
 export function newDbShipment(fields: Partial<DbShipment> & { mode: Modality }): DbShipment {
