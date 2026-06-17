@@ -420,8 +420,8 @@ export interface PendingSalidaItem {
  * Dedup por (REF, contenedor): el array `operativas` puede traer contenedores
  * duplicados (bug de datos) → una sola tarjeta por contenedor.
  *
- * Sorted by LIBRE urgency: overdue/earliest LIBRE first; rows without a
- * parseable LIBRE go last.
+ * Ordenado por LLEGADA (ETA ascendente): la carga que arribó primero va arriba
+ * (la que más tiempo lleva esperando coordinar salida). Desempate estable por REF.
  */
 export function pendingSalida(
   shipments: ParsedShipment[],
@@ -468,21 +468,16 @@ export function pendingSalida(
     }
   }
 
-  // Sort by LIBRE urgency: overdue/earliest first; no parseable LIBRE → last
+  // Orden de llegada: ETA ascendente (la que arribó primero, arriba). Todo item
+  // que pasó el filtro tiene ETA parseable; el guard Infinity es defensivo.
+  // Desempate estable por REF para un orden determinístico.
   items.sort((a, b) => {
-    const libreStrA = (a.op.LIBRE || a.shipment.LIBRE_HASTA || '').trim()
-    const libreStrB = (b.op.LIBRE || b.shipment.LIBRE_HASTA || '').trim()
-    const libreA = parseLocalDate(libreStrA)
-    const libreB = parseLocalDate(libreStrB)
-
-    const noA = libreA === null
-    const noB = libreB === null
-
-    if (noA && noB) return 0
-    if (noA) return 1   // no LIBRE → sort last
-    if (noB) return -1  // no LIBRE → sort last
-
-    return libreA!.getTime() - libreB!.getTime() // earliest LIBRE first (most urgent)
+    const etaA = parseLocalDate((a.shipment.ETA || a.op.ETA_OP || '').trim())
+    const etaB = parseLocalDate((b.shipment.ETA || b.op.ETA_OP || '').trim())
+    const ta = etaA ? etaA.getTime() : Infinity
+    const tb = etaB ? etaB.getTime() : Infinity
+    if (ta !== tb) return ta - tb
+    return a.shipment.REF.localeCompare(b.shipment.REF)
   })
 
   return items

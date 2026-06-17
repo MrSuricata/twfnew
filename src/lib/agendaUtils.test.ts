@@ -334,16 +334,20 @@ describe('pendingSalida', () => {
 
   // ── Sorting ───────────────────────────────────────────────────────────
 
-  it('sorted by LIBRE urgency: overdue first, then soonest, no-LIBRE last', () => {
-    const opOverdue = mkOp({ CNTR_OP: 'C1', ETA_OP: YESTERDAY_PS, LIBRE: '2026-06-14' }) // 2d overdue
-    const opSoon    = mkOp({ CNTR_OP: 'C2', ETA_OP: YESTERDAY_PS, LIBRE: '2026-06-20' }) // 4d away
-    const opNoLibre = mkOp({ CNTR_OP: 'C3', ETA_OP: YESTERDAY_PS, LIBRE: '' })           // no LIBRE
+  it('ordenado por llegada (ETA) ascendente: el que arribó primero va arriba', () => {
+    const s1 = mkShipPS({ REF: 'A1', ETA: '2026-06-14', operativas: [mkOp({ REF: 'A1', CNTR_OP: 'C1', ETA_OP: '2026-06-14' })] })
+    const s2 = mkShipPS({ REF: 'A2', ETA: '2026-06-10', operativas: [mkOp({ REF: 'A2', CNTR_OP: 'C2', ETA_OP: '2026-06-10' })] })
+    const s3 = mkShipPS({ REF: 'A3', ETA: '2026-06-16', operativas: [mkOp({ REF: 'A3', CNTR_OP: 'C3', ETA_OP: '2026-06-16' })] })
 
-    const s = mkShipPS({ operativas: [opNoLibre, opSoon, opOverdue] })
-    const result = pendingSalida([s], TODAY_PS)
-    expect(result).toHaveLength(3)
-    expect(result[0].op.CNTR_OP).toBe('C1') // overdue → first
-    expect(result[1].op.CNTR_OP).toBe('C2') // soonest LIBRE
-    expect(result[2].op.CNTR_OP).toBe('C3') // no LIBRE → last
+    const result = pendingSalida([s1, s2, s3], TODAY_PS)
+    expect(result.map(r => r.shipment.REF)).toEqual(['A2', 'A1', 'A3']) // 10 Jun → 14 Jun → 16 Jun
+  })
+
+  it('mismo ETA → desempata estable por REF', () => {
+    const sB = mkShipPS({ REF: 'A7900', ETA: YESTERDAY_PS, operativas: [mkOp({ REF: 'A7900', CNTR_OP: 'CB' })] })
+    const sA = mkShipPS({ REF: 'A7800', ETA: YESTERDAY_PS, operativas: [mkOp({ REF: 'A7800', CNTR_OP: 'CA' })] })
+
+    const result = pendingSalida([sB, sA], TODAY_PS)
+    expect(result.map(r => r.shipment.REF)).toEqual(['A7800', 'A7900'])
   })
 })
