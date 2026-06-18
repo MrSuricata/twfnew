@@ -172,6 +172,9 @@ export default function OperationDetailPanel({
   // ── Contenedores ──
   const cntrs = parseCntr(op.cntr)
   const cntrEditable = !!editModeFor(op, 'cntr')
+  // FCL con contenedores: Salida MVD y ETA fiscal se editan POR CONTENEDOR arriba
+  // (ContainerDatesSection) → no mostrarlas de nuevo (colapsadas) en "Fechas".
+  const hidePerContainerDates = op.mode === 'fcl' && cntrs.length > 0
   const removeCntr = (i: number) => commit('cntr', serializeCntr(cntrs.filter((_, j) => j !== i)))
   const addCntr = () => {
     const c = normalizeCntr(newCntr)
@@ -345,11 +348,15 @@ export default function OperationDetailPanel({
           </section>
 
           {/* Secciones de campos */}
-          {SECTIONS.map(sec => (
+          {SECTIONS.map(sec => {
+            const fields = (sec.title === 'Fechas' && hidePerContainerDates)
+              ? sec.fields.filter(f => f.key !== 'salida' && f.key !== 'etaFisc')
+              : sec.fields
+            return (
             <section key={sec.title}>
               <h4 className="text-[10px] uppercase tracking-wide text-muted-foreground mb-2 pb-1 border-b">{sec.title}</h4>
               <div className="grid grid-cols-2 gap-x-4 gap-y-2.5">
-                {sec.fields.map(f => (
+                {fields.map(f => (
                   <FieldRow
                     key={f.key}
                     label={f.label}
@@ -391,7 +398,8 @@ export default function OperationDetailPanel({
                 </div>
               )}
             </section>
-          ))}
+            )
+          })}
 
           {/* Acciones (solo filas DB) */}
           {op.source === 'db' && op.dbId && (
