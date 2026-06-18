@@ -23,3 +23,27 @@ export function rollupFromOperativas(ops: OperativasRecord[]) {
     etaFiscalVaria: new Set(fisc.map(x => x.s)).size > 1,
   }
 }
+
+/**
+ * Aumenta un patch de shipment con las columnas sueltas recomputadas a partir
+ * del array `operativas` (si viene en el patch). MISMO criterio que el servidor
+ * (api/data/[entity].ts → rollupFromOperativasApi), para que la actualización
+ * optimista local NO deje stale la grilla/billing/tracking (que leen las columnas
+ * salida/eta_fiscal/...) cuando se edita una fecha por contenedor desde el
+ * quick-edit. Sin operativas en el patch, lo devuelve sin cambios.
+ */
+export function withRollupColumns(fields: Record<string, unknown>): Record<string, unknown> {
+  const ops = fields.operativas
+  if (!Array.isArray(ops) || ops.length === 0) return fields
+  const r = rollupFromOperativas(ops as OperativasRecord[])
+  return {
+    ...fields,
+    salida: r.salida,
+    eta_fiscal: r.eta_fiscal,
+    deposito: r.deposito,
+    operativa: r.operativa,
+    descarga: r.descarga,
+    dev: r.dev,
+    contenedor: r.contenedor,
+  }
+}
