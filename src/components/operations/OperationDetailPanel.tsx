@@ -24,7 +24,7 @@ const NUM_FMT = new Intl.NumberFormat('es-UY', { maximumFractionDigits: 2 })
 // wide: true → col-span-2 en el grid de 2 columnas.
 // Nota: los campos bool (tlx, wood, oog, imo, noApilable, seguro, certi, impresa)
 // se sacan de las secciones y se renderizan como chips interactivos en la sección Carga.
-const SECTIONS: { title: string; fields: { key: keyof UnifiedOperation; label: string; kind?: 'number'; wide?: boolean }[] }[] = [
+const SECTIONS: { title: string; fields: { key: keyof UnifiedOperation; label: string; kind?: 'number' | 'date'; wide?: boolean }[] }[] = [
   {
     title: 'Identificación',
     fields: [
@@ -59,7 +59,7 @@ const SECTIONS: { title: string; fields: { key: keyof UnifiedOperation; label: s
       { key: 'eta', label: 'ETA' },
       { key: 'salida', label: 'Salida' },
       { key: 'etaFisc', label: 'ETA fiscal' },
-      { key: 'libre', label: 'LIBRE' },
+      { key: 'libre', label: 'LIBRE', kind: 'date' },
       { key: 'seguimiento', label: 'Seguimiento' },
     ],
   },
@@ -450,7 +450,7 @@ function FieldRow({
   label: string
   op: UnifiedOperation
   fieldKey: keyof UnifiedOperation
-  kind?: 'number'
+  kind?: 'number' | 'date'
   wide?: boolean
   segVencido?: boolean
   onCommit: (key: keyof UnifiedOperation, v: unknown) => void
@@ -490,6 +490,7 @@ function FieldRow({
       {editing ? (
         <Input
           autoFocus
+          type={kind === 'date' ? 'date' : undefined}
           value={draft}
           onChange={e => setDraft(e.target.value)}
           onFocus={e => e.target.select()}

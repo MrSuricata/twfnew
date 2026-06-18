@@ -101,8 +101,10 @@ export function libreAlerts(shipments: ParsedShipment[]): LibreAlert[] {
   const out: LibreAlert[] = []
   for (const s of shipments) {
     const libre = s.LIBRE_HASTA || s.calculatedLibreHasta
-    if (!libre || !isValidDate(libre)) continue
-    // Skip "DEVUELTO" / text markers — only care about real dates
+    // Solo fechas ISO estrictas (YYYY-MM-DD). Evita que un LIBRE en texto libre
+    // (ej. "2/7") se parsee suelto como 2001-02-07 → "vencido hace 9262d".
+    // DEVUELTO / otros placeholders quedan ignorados (no son fecha de devolución).
+    if (!libre || !/^\d{4}-\d{2}-\d{2}$/.test(libre.trim())) continue
     const days = daysSince(libre)
     if (days === null) continue
     if (days > 0) {
