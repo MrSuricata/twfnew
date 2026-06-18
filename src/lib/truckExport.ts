@@ -35,7 +35,7 @@ export async function exportTruckPdf(
   const fmtNow = today.toLocaleDateString('es-UY')
 
   const rowsHtml = loads.length === 0
-    ? `<tr><td colspan="9" class="empty">Sin cargas asignadas</td></tr>`
+    ? `<tr><td colspan="10" class="empty">Sin cargas asignadas</td></tr>`
     : loads.map(l => `
         <tr>
           <td><strong>${esc(l.sourceRef)}</strong><br/><span class="muted upper">${esc(l.sourceType)}</span></td>
@@ -44,8 +44,9 @@ export async function exportTruckPdf(
           <td class="num">${formatKg(l.kg)}</td>
           <td class="num">${formatM3(l.m3)}</td>
           <td class="num">${formatPkgs(l.pkgs)}</td>
-          <td>${fmtDate(l.mvdArrival)}</td>
-          <td>${fmtDate(l.desconsolDate)}</td>
+          <td>${esc(l.bl) || '—'}</td>
+          <td>${esc(l.stock) || '—'}</td>
+          <td>${l.wood ? 'Sí' : 'No'}</td>
           <td class="small">${esc(l.description)}</td>
         </tr>
       `).join('')
@@ -205,8 +206,9 @@ export async function exportTruckPdf(
         <th class="num">Kg</th>
         <th class="num">m³</th>
         <th class="num">Bultos</th>
-        <th>ETA MVD</th>
-        <th>Desconsol.</th>
+        <th>BL</th>
+        <th>Stock</th>
+        <th>Madera</th>
         <th>Descripción</th>
       </tr>
     </thead>
