@@ -35,7 +35,7 @@ const LUGAR_OPTIONS = [
 export function buildPatchedOperativas(
   shipment: ParsedShipment,
   cntr: string,
-  patch: Partial<Pick<OperativasRecord, 'SALIDA' | 'ETA_FISC' | 'LUGAR_SALIDA'>>
+  patch: Partial<Pick<OperativasRecord, 'SALIDA' | 'ETA_FISC' | 'LUGAR_SALIDA' | 'LIBRE'>>
 ): OperativasRecord[] {
   const existing = shipment.operativas || []
   const key = cntr.trim().toUpperCase()
@@ -141,9 +141,10 @@ export default function ContainerQuickEdit({
   }
 
   // Draft state for date inputs (commit on blur/Enter)
-  const [drafts, setDrafts] = useState<{ salida: string; etaFisc: string }>({
+  const [drafts, setDrafts] = useState<{ salida: string; etaFisc: string; libre: string }>({
     salida: currentOp.SALIDA || '',
     etaFisc: currentOp.ETA_FISC || '',
+    libre: currentOp.LIBRE || '',
   })
   const [lugar, setLugar] = useState<string>(currentOp.LUGAR_SALIDA || '')
   const [saving, setSaving] = useState(false)
@@ -158,6 +159,7 @@ export default function ContainerQuickEdit({
       salida: currentOp.SALIDA || '',
       etaFisc: currentOp.ETA_FISC || '',
       lugar: currentOp.LUGAR_SALIDA || '',
+      libre: currentOp.LIBRE || '',
     })
   )
 
@@ -172,13 +174,14 @@ export default function ContainerQuickEdit({
    * Returns early if nothing changed since the last commit (Fix 2).
    */
   const commitSave = async (
-    overrides?: { salida?: string; etaFisc?: string; lugar?: string }
+    overrides?: { salida?: string; etaFisc?: string; lugar?: string; libre?: string }
   ) => {
     if (!canSave) return
     const salida = overrides?.salida ?? drafts.salida
     const etaFisc = overrides?.etaFisc ?? drafts.etaFisc
     const lugarVal = overrides?.lugar ?? lugar
-    const serialized = JSON.stringify({ salida, etaFisc, lugar: lugarVal })
+    const libreVal = overrides?.libre ?? drafts.libre
+    const serialized = JSON.stringify({ salida, etaFisc, lugar: lugarVal, libre: libreVal })
     if (serialized === lastCommittedRef.current) return // no change → skip
     // Solo al COORDINAR la salida (cuando la fecha de salida CAMBIÓ): no puede ser
     // anterior a la llegada a MVD → avisar y pedir confirmación. Editar arribo/lugar
@@ -200,8 +203,11 @@ export default function ContainerQuickEdit({
         SALIDA: salida,
         ETA_FISC: etaFisc,
         LUGAR_SALIDA: lugarVal,
+        LIBRE: libreVal,
       })
-      await onPatch(shipment.__dbId!, { operativas: next })
+      // Set también la columna `libre`: HOY/grilla la leen (LIBRE_HASTA = d.libre),
+      // y el array (op.LIBRE) lo leen agenda/chips. Así ambas vistas quedan en sync.
+      await onPatch(shipment.__dbId!, { operativas: next, libre: libreVal })
       lastCommittedRef.current = serialized
       // NO cerrar al guardar: el usuario edita varios campos (salida → arribo →
       // lugar) en el mismo modal. El cierre lo manejan "Listo" y Escape. Cerrar
@@ -299,6 +305,28 @@ export default function ContainerQuickEdit({
             ) : (
               <span className={`text-sm font-medium ${drafts.etaFisc ? 'text-foreground' : 'text-muted-foreground'}`}>
                 {drafts.etaFisc || '—'}
+              </span>
+            )}
+          </div>
+
+          {/* LIBRE — día máximo de devolución del contenedor */}
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              Libre (máx. devolución)
+            </label>
+            {editable ? (
+              <input
+                type="date"
+                value={drafts.libre}
+                onChange={e => setDrafts(d => ({ ...d, libre: e.target.value }))}
+                onBlur={() => void commitSave()}
+                onKeyDown={e => { if (e.key === 'Enter') void commitSave() }}
+                disabled={saving}
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-[#1e3a8a]/40 disabled:opacity-50 transition-shadow"
+              />
+            ) : (
+              <span className={`text-sm font-medium ${drafts.libre ? 'text-foreground' : 'text-muted-foreground'}`}>
+                {drafts.libre || '—'}
               </span>
             )}
           </div>
