@@ -8,7 +8,7 @@ import type { Operator, UnifiedOperation } from '@/lib/operationsTypes'
 import {
   EDITABLE_FIELDS, EDITABLE_FCL_FIELDS, MODALITY_COLORS, MODALITY_LABELS,
   STATUS_LABEL, STATUS_OPTIONS, operatorsForMode, isSeguimientoVencido,
-  buildOperativaPatch,
+  buildPerContainerPatch,
 } from '@/lib/operationsTypes'
 import { parseCntr, serializeCntr, normalizeCntr, isStandardCntr } from '@/lib/cntrUtils'
 import ViabilityBlock from './ViabilityBlock'
@@ -158,14 +158,11 @@ export default function OperationDetailPanel({
     const mode = editModeFor(op, key)
     if (!mode || !op.dbId) return
     if (mode.kind === 'db') {
-      // OPERATIVA vive en la columna Y en el array por contenedor — la Agenda/HOY
-      // pintan el color del chip desde op.OPERATIVA (por contenedor), no desde la
-      // columna. Propagamos a todos los contenedores para que el cambio se vea.
-      if (key === 'operativa') {
-        onPatch(op.dbId, buildOperativaPatch(op, typeof v === 'string' ? v : String(v ?? '')))
-      } else {
-        onPatch(op.dbId, { [mode.col]: v })
-      }
+      // Campos que viven también por contenedor (operativa, libre, depósito, dev,
+      // descarga…) se propagan al array operativas: la Agenda/HOY/chips leen el
+      // valor POR CONTENEDOR, no la columna. El helper solo agrega `operativas`
+      // para esos campos; el resto setea solo la columna.
+      onPatch(op.dbId, buildPerContainerPatch(op, mode.col, v))
     } else {
       onPatchFcl?.(op.dbId, { [EDITABLE_FCL_FIELDS[key]!]: v })
     }

@@ -1,37 +1,46 @@
 import { describe, it, expect } from 'vitest'
-import { buildOperations, isOperationActive, dbShipmentToOperation, fclToColumns, dbFclToParsedShipment, mergeFclShipments, newDbShipment, buildTruckByRef, buildOperativaPatch, EDITABLE_FIELDS, DEPOSITOS_UY, type UnifiedOperation, type DbShipment } from './operationsTypes'
+import { buildOperations, isOperationActive, dbShipmentToOperation, fclToColumns, dbFclToParsedShipment, mergeFclShipments, newDbShipment, buildTruckByRef, buildPerContainerPatch, EDITABLE_FIELDS, DEPOSITOS_UY, type UnifiedOperation, type DbShipment } from './operationsTypes'
 import type { ParsedShipment } from './shipmentTypes'
 import type { OperativasRecord } from './shipmentTypes'
 import type { Truck, TruckLoad } from './truckTypes'
 
-describe('buildOperativaPatch — editar OPERATIVA propaga al array por contenedor', () => {
+describe('buildPerContainerPatch — propaga campos por-contenedor al array operativas', () => {
   const op = (over: Partial<UnifiedOperation> = {}): UnifiedOperation =>
     ({ uid: 'u', ref: 'A7000', mode: 'fcl', source: 'db', dbId: 'd1', operativa: 'TRASIEGO', ...over } as UnifiedOperation)
   const rec = (over: Partial<OperativasRecord> = {}): OperativasRecord =>
-    ({ REF: 'A7000', CNTR_OP: 'C1', OPERATIVA: 'TRASIEGO', ...over } as OperativasRecord)
+    ({ REF: 'A7000', CNTR_OP: 'C1', OPERATIVA: 'TRASIEGO', LIBRE: '2026-06-20', ...over } as OperativasRecord)
 
-  it('setea la columna operativa', () => {
-    const patch = buildOperativaPatch(op({ operativas: undefined }), 'CONTENEDOR')
+  it('campo sin array → solo la columna', () => {
+    const patch = buildPerContainerPatch(op({ operativas: undefined }), 'operativa', 'CONTENEDOR')
     expect(patch.operativa).toBe('CONTENEDOR')
-    expect(patch.operativas).toBeUndefined() // sin array → solo la columna
+    expect(patch.operativas).toBeUndefined()
   })
 
-  it('propaga OPERATIVA a TODOS los contenedores del array', () => {
-    const ops: OperativasRecord[] = [
-      { ...rec(), CNTR_OP: 'C1', OPERATIVA: 'TRASIEGO' },
-      { ...rec(), CNTR_OP: 'C2', OPERATIVA: 'TRASIEGO' },
-    ]
-    const patch = buildOperativaPatch(op({ operativas: ops }), 'CONTENEDOR')
+  it('OPERATIVA se propaga a TODOS los contenedores + setea la columna', () => {
+    const ops = [{ ...rec(), CNTR_OP: 'C1' }, { ...rec(), CNTR_OP: 'C2' }]
+    const patch = buildPerContainerPatch(op({ operativas: ops }), 'operativa', 'CONTENEDOR')
     expect(patch.operativa).toBe('CONTENEDOR')
     const next = patch.operativas as OperativasRecord[]
     expect(next.map(o => o.OPERATIVA)).toEqual(['CONTENEDOR', 'CONTENEDOR'])
-    // preserva el resto de cada contenedor
-    expect(next.map(o => o.CNTR_OP)).toEqual(['C1', 'C2'])
+    expect(next.map(o => o.CNTR_OP)).toEqual(['C1', 'C2']) // preserva el resto
   })
 
-  it('array vacío → solo la columna (sin operativas)', () => {
-    const patch = buildOperativaPatch(op({ operativas: [] }), 'CARGA A PISO')
-    expect(patch.operativa).toBe('CARGA A PISO')
+  it('LIBRE se propaga al array (caso del chip de Pendientes que no se actualizaba)', () => {
+    const ops = [{ ...rec(), CNTR_OP: 'C1', LIBRE: '2026-06-20' }]
+    const patch = buildPerContainerPatch(op({ operativas: ops }), 'libre', '2026-06-22')
+    expect(patch.libre).toBe('2026-06-22')
+    expect((patch.operativas as OperativasRecord[])[0].LIBRE).toBe('2026-06-22')
+  })
+
+  it('campo NO por-contenedor (ej. buque) → solo la columna, no toca operativas', () => {
+    const patch = buildPerContainerPatch(op({ operativas: [rec()] }), 'buque', 'COSCO X')
+    expect(patch.buque).toBe('COSCO X')
+    expect(patch.operativas).toBeUndefined()
+  })
+
+  it('array vacío → solo la columna', () => {
+    const patch = buildPerContainerPatch(op({ operativas: [] }), 'libre', '2026-06-22')
+    expect(patch.libre).toBe('2026-06-22')
     expect(patch.operativas).toBeUndefined()
   })
 })

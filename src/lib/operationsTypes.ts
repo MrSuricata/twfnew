@@ -717,20 +717,37 @@ export const EDITABLE_FCL_FIELDS: Partial<Record<keyof UnifiedOperation, string>
 }
 
 /**
- * Patch para editar la OPERATIVA de una FCL desde el panel de detalle.
- *
- * La OPERATIVA vive en DOS lados: la columna top-level `operativa` (la lee la
- * grilla vía dbShipmentToOperation) Y el array por contenedor `operativas[]`
- * (lo leen Agenda/HOY — el color del chip sale de op.OPERATIVA por contenedor).
- * Editar solo la columna dejaba el chip de la agenda sin cambiar (caso real:
- * cambiar TRASIEGO↔CONTENEDOR no pintaba el contenedor de rojo). Este patch
- * setea la columna Y propaga el valor a TODOS los contenedores del array, así
- * ambas vistas quedan consistentes. Si la op no tiene array, solo la columna.
+ * Columnas de shipments que TAMBIÉN viven por contenedor en el array `operativas`.
+ * Editarlas en el panel (a nivel carga) debe propagarse a TODOS los contenedores:
+ * la Agenda/HOY/chips leen el valor POR CONTENEDOR (op.OPERATIVA, op.LIBRE,
+ * op.DEPOSITO…), no la columna colapsada. (Mapa: columna DB → campo del array.)
  */
-export function buildOperativaPatch(op: UnifiedOperation, value: string): Record<string, unknown> {
-  const patch: Record<string, unknown> = { operativa: value }
-  if (op.operativas && op.operativas.length > 0) {
-    patch.operativas = op.operativas.map(o => ({ ...o, OPERATIVA: value }))
+const OP_ARRAY_FIELD_BY_COL: Partial<Record<string, keyof OperativasRecord>> = {
+  operativa: 'OPERATIVA',
+  libre: 'LIBRE',
+  salida: 'SALIDA',
+  eta_fiscal: 'ETA_FISC',
+  dev: 'DEV',
+  descarga: 'DESCARGA',
+  deposito: 'DEPOSITO',
+}
+
+/**
+ * Patch para editar un campo de una FCL desde el panel de detalle.
+ *
+ * Varios campos viven en DOS lados: la columna top-level (la lee la grilla vía
+ * dbShipmentToOperation) Y el array por contenedor `operativas[]` (lo leen
+ * Agenda/HOY/chips). Editar solo la columna dejaba esas vistas sin cambiar
+ * (casos reales: TRASIEGO↔CONTENEDOR no repintaba el chip; cambiar el LIBRE no
+ * actualizaba la tarjeta de "Pendientes de salida"). Para los campos del mapa,
+ * este patch setea la columna Y propaga el valor a TODOS los contenedores del
+ * array. Para el resto, solo la columna.
+ */
+export function buildPerContainerPatch(op: UnifiedOperation, col: string, value: unknown): Record<string, unknown> {
+  const patch: Record<string, unknown> = { [col]: value }
+  const opField = OP_ARRAY_FIELD_BY_COL[col]
+  if (opField && op.operativas && op.operativas.length > 0) {
+    patch.operativas = op.operativas.map(o => ({ ...o, [opField]: value }))
   }
   return patch
 }
