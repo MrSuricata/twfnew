@@ -9,6 +9,7 @@ import { canApplyTrucksRefresh } from '@/lib/trucksRefreshGuard'
 import { BillingRecord } from '@/lib/billingTypes'
 import { Operator, OperatorAssignment, DbShipment, UnifiedOperation, dbFclToParsedShipment } from '@/lib/operationsTypes'
 import { withRollupColumns } from '@/lib/operativasRollup'
+import { subscribeTrucksLive } from '@/lib/realtimeBus'
 import { getDemoShipments } from '@/lib/demoShipments'
 import { filterShipments } from '@/lib/sheetsSync'
 import { verifySession, clearAuth, authFetch } from '@/lib/authClient'
@@ -516,6 +517,20 @@ function App() {
       return false
     }
   }, [isAdminLoggedIn])
+
+  // Co-edición Fase 1: "timbre" Realtime → al recibir aviso de cambio de un
+  // camión/carga (de otro usuario), refetchar en vivo. Debounce para colapsar
+  // ráfagas (carga múltiple) en un solo refetch. Si no hay env vars de Realtime,
+  // subscribeTrucksLive es no-op → la app sigue con el refresco on-focus.
+  useEffect(() => {
+    if (!isAdminLoggedIn) return
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const unsub = subscribeTrucksLive(() => {
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(() => { void refreshTrucksFromDb() }, 400)
+    })
+    return () => { if (timer) clearTimeout(timer); unsub() }
+  }, [isAdminLoggedIn, refreshTrucksFromDb])
 
   const handleDeleteTruckLoad = async (id: string) => {
     trucksWriteGenRef.current += 1
