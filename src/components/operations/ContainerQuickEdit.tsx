@@ -180,13 +180,17 @@ export default function ContainerQuickEdit({
     const lugarVal = overrides?.lugar ?? lugar
     const serialized = JSON.stringify({ salida, etaFisc, lugar: lugarVal })
     if (serialized === lastCommittedRef.current) return // no change → skip
-    // La salida no puede ser anterior a la llegada a MVD: avisar y pedir confirmación.
-    if (isSalidaBeforeArrival(salida, etaArrival)) {
+    // Solo al COORDINAR la salida (cuando la fecha de salida CAMBIÓ): no puede ser
+    // anterior a la llegada a MVD → avisar y pedir confirmación. Editar arribo/lugar
+    // con una salida ya puesta NO vuelve a preguntar.
+    let prevSalida = ''
+    try { prevSalida = (JSON.parse(lastCommittedRef.current).salida as string) || '' } catch { /* sin commit previo */ }
+    if (salida !== prevSalida && isSalidaBeforeArrival(salida, etaArrival)) {
       const ok = window.confirm(
         `⏰ La salida de MVD (${fmtDMY(salida)}) queda ANTES de la llegada de la carga a MVD (${fmtDMY(etaArrival)}).\n\n¿Guardar igual?`
       )
       if (!ok) {
-        setDrafts(d => ({ ...d, salida: currentOp.SALIDA || '' })) // revertir, no guardar
+        setDrafts(d => ({ ...d, salida: prevSalida })) // revertir a la última salida confirmada, no guardar
         return
       }
     }
