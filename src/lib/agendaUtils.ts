@@ -1,5 +1,6 @@
 import type { ParsedShipment, OperativasRecord } from './shipmentTypes'
 import { parseLocalDate } from './shipmentTypes'
+import { isSalidaBeforeArrival } from './salidaCheck'
 import type { CalendarEvent, AlertEmoji, EventType } from './agendaTypes'
 import { getShipmentStatus, processShipmentRecord } from './shipmentTypes'
 import type { Truck, TruckLoad } from './truckTypes'
@@ -240,6 +241,15 @@ export function shipmentsToEvents(
       }
 
       const alerts = generateAlerts(op)
+      // Salida coordinada ANTES de la llegada a MVD: la ETA pudo correrse y dejar
+      // la salida "colgada" → alertar en el chip para revisar la fecha.
+      if (isSalidaBeforeArrival(op.SALIDA, op.ETA_OP || shipment.ETA)) {
+        alerts.push({
+          emoji: '⏰',
+          label: 'Salida ANTES de la llegada a MVD — revisar fecha',
+          type: 'salida_antes_llegada',
+        })
+      }
       const baseId = `${shipment.REF}-${op.CNTR_OP || 'NOCNTR'}`
 
       // Helper to create an event

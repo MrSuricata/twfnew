@@ -7,6 +7,7 @@ import type { UnifiedOperation } from '@/lib/operationsTypes'
 import type { ParsedShipment, OperativasRecord } from '@/lib/shipmentTypes'
 import { getShipmentStatus } from '@/lib/shipmentTypes'
 import { parseCntr } from '@/lib/cntrUtils'
+import { isSalidaBeforeArrival, fmtDMY } from '@/lib/salidaCheck'
 
 const LUGAR_OPTIONS = [
   { value: '', label: '— en terminal —' },
@@ -168,6 +169,20 @@ export default function ContainerDatesSection({
     const k = draftKey(i, field)
     if (!(k in drafts)) return
     const value = drafts[k]
+    // La salida no puede ser anterior a la llegada a MVD: avisar y pedir confirmación.
+    if (field === 'SALIDA') {
+      const rec = resolveRecord(cntrs, existing, i, op)
+      const eta = rec.ETA_OP || op.eta || ''
+      if (isSalidaBeforeArrival(value, eta)) {
+        const ok = window.confirm(
+          `⏰ La salida (${fmtDMY(value)}) del contenedor ${cntrs[i]} queda ANTES de la llegada a MVD (${fmtDMY(eta)}).\n\n¿Guardar igual?`
+        )
+        if (!ok) {
+          setDrafts(prev => { const next = { ...prev }; delete next[k]; return next }) // revertir, no guardar
+          return
+        }
+      }
+    }
     setDrafts(prev => { const next = { ...prev }; delete next[k]; return next })
     onCommitOperativas(buildNextOperativas(cntrs, existing, op, i, { [field]: value }))
   }
@@ -216,6 +231,9 @@ export default function ContainerDatesSection({
                   <span className={`text-[13px] font-medium ${rec.SALIDA ? '' : 'text-muted-foreground'}`}>
                     {rec.SALIDA || '—'}
                   </span>
+                )}
+                {isSalidaBeforeArrival(getDraft(i, 'SALIDA', rec.SALIDA || ''), rec.ETA_OP || op.eta || '') && (
+                  <span className="text-[10px] font-medium text-red-600 leading-tight">⏰ antes de llegada</span>
                 )}
               </div>
 
