@@ -1,4 +1,4 @@
-import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import { createClient } from '@supabase/supabase-js'
 
 // Bus de tiempo real para co-edición de camiones (Fase 1: solo "timbre").
 // El browser se conecta ÚNICAMENTE al canal Realtime para recibir avisos de
@@ -27,12 +27,20 @@ export function isTrucksLiveMessage(x: unknown): x is TrucksLiveMessage {
   return k === 'truck' || k === 'truck_load'
 }
 
-let _client: SupabaseClient | null = null
-
 /**
  * Se suscribe al canal `trucks-live` y llama `onMessage` por cada aviso válido.
  * Devuelve una función de cleanup. Si faltan las env vars, NO crea cliente y
  * devuelve un cleanup no-op (la app sigue con el refresco on-focus).
+ *
+ * Crea un cliente Realtime DEDICADO por suscripción y lo desconecta entero en el
+ * cleanup. Por qué no un singleton: `client.channel(topic)` de supabase-js reusa
+ * un canal existente con ese topic (aunque esté "leaving"), y la remoción es
+ * asíncrona. Reutilizar el cliente entre logout→login (o el doble-montaje de
+ * React StrictMode en dev) podía apilar un segundo `.on('broadcast')` sobre el
+ * canal anterior → `onMessage` disparaba doble (doble refetch) + binding colgado.
+ * Con un cliente fresco por suscripción el registro de canales nunca se comparte.
+ * El nombre del canal DEBE seguir siendo `trucks-live` (igual al topic del
+ * broadcast del backend), si no los mensajes no llegan.
  */
 export function subscribeTrucksLive(onMessage: (msg: TrucksLiveMessage) => void): () => void {
   const cfg = resolveRealtimeConfig(
@@ -41,19 +49,21 @@ export function subscribeTrucksLive(onMessage: (msg: TrucksLiveMessage) => void)
   )
   if (!cfg) return () => {}
   try {
-    if (!_client) {
-      _client = createClient(cfg.url, cfg.key, {
-        auth: { persistSession: false, autoRefreshToken: false },
-        realtime: { params: { eventsPerSecond: 5 } },
-      })
-    }
-    const channel = _client
+    const client = createClient(cfg.url, cfg.key, {
+      auth: { persistSession: false, autoRefreshToken: false },
+      realtime: { params: { eventsPerSecond: 5 } },
+    })
+    const channel = client
       .channel(TRUCKS_LIVE_CHANNEL)
       .on('broadcast', { event: 'change' }, (msg: { payload?: unknown }) => {
         if (isTrucksLiveMessage(msg.payload)) onMessage(msg.payload)
       })
       .subscribe()
-    return () => { try { _client?.removeChannel(channel) } catch { /* noop */ } }
+    return () => {
+      // Teardown completo: quitar el canal y cerrar el socket de ESTE cliente.
+      try { client.removeChannel(channel) } catch { /* noop */ }
+      try { client.realtime.disconnect() } catch { /* noop */ }
+    }
   } catch {
     // Nunca romper la app por Realtime → degradar a on-focus.
     return () => {}
