@@ -8,6 +8,7 @@ import { getBrand } from '@/lib/brand'
 import { canApplyTrucksRefresh } from '@/lib/trucksRefreshGuard'
 import { BillingRecord } from '@/lib/billingTypes'
 import { Operator, OperatorAssignment, DbShipment, UnifiedOperation, dbFclToParsedShipment } from '@/lib/operationsTypes'
+import { withRollupColumns } from '@/lib/operativasRollup'
 import { getDemoShipments } from '@/lib/demoShipments'
 import { filterShipments } from '@/lib/sheetsSync'
 import { verifySession, clearAuth, authFetch } from '@/lib/authClient'
@@ -629,7 +630,12 @@ function App() {
 
   // Patch a DB shipment row (operator_id, or future inline cell edits).
   const handlePatchShipment = (id: string, fields: Record<string, unknown>) => {
-    const next = dbShipments.map(s => s.id === id ? { ...s, ...fields } as DbShipment : s)
+    // Si el patch trae el array por contenedor, recomputar las columnas sueltas
+    // (salida/eta_fiscal/deposito/…) en el estado local — el servidor hace lo mismo
+    // (rollupFromOperativasApi). Sin esto, la grilla de Operaciones (que lee las
+    // columnas, no el array) quedaba stale hasta recargar la página.
+    const optimistic = withRollupColumns(fields)
+    const next = dbShipments.map(s => s.id === id ? { ...s, ...optimistic } as DbShipment : s)
     setDbShipments(next)
     saveToStorage('twf-db-shipments', next)
     if (isAdminLoggedIn) {
