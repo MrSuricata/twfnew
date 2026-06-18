@@ -154,6 +154,9 @@ export default function TruckBuilder(props: TruckBuilderProps) {
       description: prefill.description,
       mvdArrival: prefill.mvdArrival,
       desconsolDate: prefill.desconsolDate,
+      bl: prefill.bl,
+      stock: '',
+      wood: prefill.wood,
       overrides: {},
       position: allMine.length,
       pending: isDraft ? null : 'add',
@@ -176,6 +179,9 @@ export default function TruckBuilder(props: TruckBuilderProps) {
       description: s.description,
       mvdArrival: s.etaMvd,
       desconsolDate: s.desconsolDate,
+      bl: s.mblHbl || '',
+      stock: '',
+      wood: s.wood,
       overrides: {},
       position: allMine.length,
       pending: isDraft ? null : 'add',
@@ -199,6 +205,9 @@ export default function TruckBuilder(props: TruckBuilderProps) {
       description: s.observacion || '',
       mvdArrival: s.eta || '',
       desconsolDate: s.fecha_consol || '',
+      bl: s.doc_number || '',
+      stock: '',
+      wood: !!s.wood,
       overrides: {},
       position: allMine.length,
       pending: isDraft ? null : 'add',
@@ -227,6 +236,9 @@ export default function TruckBuilder(props: TruckBuilderProps) {
       description: prefill.description,
       mvdArrival: prefill.mvdArrival,
       desconsolDate: prefill.desconsolDate,
+      bl: prefill.bl,
+      wood: prefill.wood,
+      // stock NO se re-sincroniza: es dato manual del depósito, no viene de planilla.
     })
     // Clear all overrides — values now match planilla
     const next = truckLoads.map(l => l.id === load.id ? { ...l, overrides: {} } : l)
@@ -508,8 +520,9 @@ export default function TruckBuilder(props: TruckBuilderProps) {
                         <th className="text-right px-3 py-2">Kg</th>
                         <th className="text-right px-3 py-2">m³</th>
                         <th className="text-right px-3 py-2">Bultos</th>
-                        <th className="text-left px-3 py-2">ETA MVD</th>
-                        <th className="text-left px-3 py-2">Desconsol.</th>
+                        <th className="text-left px-3 py-2">BL</th>
+                        <th className="text-left px-3 py-2">Stock</th>
+                        <th className="text-center px-3 py-2">Madera</th>
                         <th className="px-3 py-2" />
                       </tr>
                     </thead>
@@ -672,22 +685,32 @@ function LoadRow({
       </td>
       <td className="px-3 py-2">
         <InlineInput
-          type="date"
-          value={load.mvdArrival}
-          onChange={v => onChange({ mvdArrival: v }, ['mvdArrival'])}
-          modified={ov.mvdArrival}
+          value={load.bl}
+          onChange={v => onChange({ bl: v }, ['bl'])}
+          modified={ov.bl}
+          placeholder="BL"
           className="w-32"
           disabled={isRemoved}
         />
       </td>
       <td className="px-3 py-2">
         <InlineInput
-          type="date"
-          value={load.desconsolDate}
-          onChange={v => onChange({ desconsolDate: v }, ['desconsolDate'])}
-          modified={ov.desconsolDate}
-          className="w-32"
+          value={load.stock}
+          onChange={v => onChange({ stock: v }, ['stock'])}
+          modified={ov.stock}
+          placeholder="Stock"
+          className="w-28"
           disabled={isRemoved}
+        />
+      </td>
+      <td className="px-3 py-2 text-center">
+        <input
+          type="checkbox"
+          checked={!!load.wood}
+          onChange={e => onChange({ wood: e.target.checked }, ['wood'])}
+          disabled={isRemoved}
+          title="¿Lleva madera?"
+          className="h-4 w-4 cursor-pointer accent-[#1e3a8a] disabled:cursor-not-allowed"
         />
       </td>
       <td className="px-3 py-2">

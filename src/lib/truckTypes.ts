@@ -76,8 +76,11 @@ export interface TruckLoad {
   m3: number
   pkgs: number
   description: string
-  mvdArrival: string                // YYYY-MM-DD
-  desconsolDate: string
+  mvdArrival: string                // YYYY-MM-DD (interno: validación llegada<carga; no se muestra en el armador)
+  desconsolDate: string             // YYYY-MM-DD (interno; ya no se muestra en el armador)
+  bl: string                        // Nº de BL/conocimiento (autocompleta del MBL/HBL de la carga)
+  stock: string                     // Nº/referencia de stock del depósito (manual)
+  wood: boolean                     // ¿Lleva madera? (autocompleta del WOOD de la operativa)
   overrides: Record<string, boolean>  // which fields were manually edited
   position: number
   // 'add' = agregada en un borrador de edición · 'remove' = marcada para quitar

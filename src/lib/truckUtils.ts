@@ -67,6 +67,8 @@ export interface FclPrefill {
   description: string
   mvdArrival: string
   desconsolDate: string
+  bl: string
+  wood: boolean
 }
 
 export function prefillFclFromShipment(shipment: ParsedShipment): FclPrefill {
@@ -87,6 +89,10 @@ export function prefillFclFromShipment(shipment: ParsedShipment): FclPrefill {
     mvdArrival: shipment.ETA || '',
     // For TRASIEGO/DESCONS, DESCARGA is the depot processing date.
     desconsolDate: firstWith('DESCARGA') || firstWith('SALIDA'),
+    // BL del HBL/MBL de la carga (el modelo trae MBL). Stock queda manual.
+    bl: shipment.MBL || '',
+    // Madera: SI si alguna operativa marca WOOD.
+    wood: ops.some(o => (o.WOOD || '').toUpperCase().startsWith('SI')),
   }
 }
 
@@ -255,6 +261,9 @@ export function makeEmptyTruckLoad(
     description: '',
     mvdArrival: '',
     desconsolDate: '',
+    bl: '',
+    stock: '',
+    wood: false,
     overrides: {},
     position,
     pending: null,
