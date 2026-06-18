@@ -169,6 +169,20 @@ describe('libreAlerts', () => {
     expect(alerts[2].severity).toBe('hoy')
     expect(alerts[3].severity).toBe('urgente')
   })
+
+  it('ignora LIBRE en texto libre no-ISO (ej. "2/7") — no genera "vencido hace 9262d"', () => {
+    const ships = [
+      mkShip('A7813', [], { LIBRE_HASTA: '2/7' }),       // texto libre → ignorar
+      mkShip('A7881', [], { LIBRE_HASTA: '2-7' }),       // tampoco ISO completo → ignorar
+      mkShip('A7900', [], { LIBRE_HASTA: '14/6/2026' }), // D/M/YYYY → ignorar
+      mkShip('A7901', [], { LIBRE_HASTA: YESTERDAY }),   // ISO real → sí alerta
+    ]
+    const alerts = libreAlerts(ships)
+    expect(alerts).toHaveLength(1)
+    expect(alerts[0].shipment.REF).toBe('A7901')
+    // ninguna alerta con días absurdos
+    expect(alerts.every(a => Math.abs(a.daysOverdue) < 400)).toBe(true)
+  })
 })
 
 describe('buildTodaySnapshot', () => {
