@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/dialog'
 import type { ParsedShipment, OperativasRecord } from '@/lib/shipmentTypes'
 import { getShipmentStatus } from '@/lib/shipmentTypes'
+import { isSalidaBeforeArrival, fmtDMY } from '@/lib/salidaCheck'
 
 // ─── Lugar options (mirrors ContainerDatesSection) ────────────────────────
 
@@ -161,6 +162,8 @@ export default function ContainerQuickEdit({
   )
 
   const canSave = editable && !!shipment.__dbId
+  // Llegada de la carga a MVD para este contenedor (per-op, si no la de la carga).
+  const etaArrival = currentOp.ETA_OP || shipment.ETA || ''
 
   /**
    * Commit the current draft values to the DB.
@@ -177,6 +180,20 @@ export default function ContainerQuickEdit({
     const lugarVal = overrides?.lugar ?? lugar
     const serialized = JSON.stringify({ salida, etaFisc, lugar: lugarVal })
     if (serialized === lastCommittedRef.current) return // no change → skip
+    // Solo al COORDINAR la salida (cuando la fecha de salida CAMBIÓ): no puede ser
+    // anterior a la llegada a MVD → avisar y pedir confirmación. Editar arribo/lugar
+    // con una salida ya puesta NO vuelve a preguntar.
+    let prevSalida = ''
+    try { prevSalida = (JSON.parse(lastCommittedRef.current).salida as string) || '' } catch { /* sin commit previo */ }
+    if (salida !== prevSalida && isSalidaBeforeArrival(salida, etaArrival)) {
+      const ok = window.confirm(
+        `⏰ La salida de MVD (${fmtDMY(salida)}) queda ANTES de la llegada de la carga a MVD (${fmtDMY(etaArrival)}).\n\n¿Guardar igual?`
+      )
+      if (!ok) {
+        setDrafts(d => ({ ...d, salida: prevSalida })) // revertir a la última salida confirmada, no guardar
+        return
+      }
+    }
     setSaving(true)
     try {
       const next = buildPatchedOperativas(shipment, cntr, {
@@ -255,6 +272,11 @@ export default function ContainerQuickEdit({
             ) : (
               <span className={`text-sm font-medium ${drafts.salida ? 'text-foreground' : 'text-muted-foreground'}`}>
                 {drafts.salida || '—'}
+              </span>
+            )}
+            {isSalidaBeforeArrival(drafts.salida, etaArrival) && (
+              <span className="text-[11px] font-medium text-red-600">
+                ⏰ Anterior a la llegada a MVD ({fmtDMY(etaArrival)})
               </span>
             )}
           </div>

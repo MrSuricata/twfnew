@@ -156,6 +156,29 @@ describe('shipmentsToEvents — eta_fisc events', () => {
   })
 })
 
+// ── shipmentsToEvents — alerta salida antes de la llegada ───────────────────
+
+describe('shipmentsToEvents — alerta salida antes de llegada', () => {
+  const opWith = (salida: string, etaOp: string): OperativasRecord => ({
+    REF: 'A7999', TLX: '', DEPOSITO: 'GODILCO', ETA_OP: etaOp,
+    SALIDA: salida, ETA_FISC: '', LIBRE: '', OPERATIVA: 'TRASIEGO', CNTR_OP: 'C1',
+    PKGS: 1, KG: 1, M3: 1, DESCRIPCION: '', FISCAL: '', DESCARGA: '', DEV: '',
+    CLIENTE_OP: 'PERETTI', TIPO: '40HC', WOOD: '', TRANSPORTE: '', HORARIO: '', LUGAR_SALIDA: '',
+  })
+
+  it('SALIDA anterior a la ETA → el evento de salida lleva alerta salida_antes_llegada', () => {
+    const shipment = makeShipment({ ETA: '2026-06-21', operativas: [opWith('2026-06-20', '2026-06-21')] })
+    const salida = shipmentsToEvents([shipment]).find(e => e.type === 'salida')
+    expect(salida?.alerts.some(a => a.type === 'salida_antes_llegada')).toBe(true)
+  })
+
+  it('SALIDA posterior a la ETA → sin alerta', () => {
+    const shipment = makeShipment({ ETA: '2026-06-20', operativas: [opWith('2026-06-22', '2026-06-20')] })
+    const salida = shipmentsToEvents([shipment]).find(e => e.type === 'salida')
+    expect(salida?.alerts.some(a => a.type === 'salida_antes_llegada')).toBe(false)
+  })
+})
+
 // ── pendingSalida ───────────────────────────────────────────────────────────
 
 const TODAY_PS = new Date(2026, 5, 16) // June 16, 2026 (month index 5 = June)
