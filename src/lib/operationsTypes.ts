@@ -671,7 +671,8 @@ export const EDITABLE_FIELDS: Partial<Record<keyof UnifiedOperation, EditableFie
   descripcion: { col: 'observacion', type: 'text' },
   fiscal: { col: 'fiscal', type: 'text' },
   destPort: { col: 'dest_port', type: 'text' },
-  camion: { col: 'camion', type: 'text' },
+  // 'camion' NO es editable: setear este texto NO sube la carga al camión (eso se
+  // hace en el armador → truck_loads). El camión real se deriva de las cargas.
   despacho: { col: 'despacho', type: 'text' },
   transporte: { col: 'transporte', type: 'text' },
   seguimiento: { col: 'seguimiento', type: 'text' },

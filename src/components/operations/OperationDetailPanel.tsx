@@ -75,7 +75,9 @@ const SECTIONS: { title: string; fields: { key: keyof UnifiedOperation; label: s
     fields: [
       { key: 'operativa', label: 'Operativa' },
       { key: 'transporte', label: 'Transporte' },
-      { key: 'camion', label: 'Camión' },
+      // 'camion' NO va acá: era un texto editable que confundía (setearlo NO sube
+      // la carga al camión — eso se hace en el armador → "cargas disponibles").
+      // El camión real se muestra derivado en el badge del header (truckStatus).
       { key: 'despacho', label: 'Despacho' },
       { key: 'dev', label: 'DEV' },
     ],
