@@ -96,6 +96,11 @@ export default function ClientManager({ clients, onUpdateClients, shipments = []
       return
     }
 
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setFormError('El email no tiene un formato válido')
+      return
+    }
+
     const emailExists = clients.some(c => c.email.trim().toLowerCase() === email.toLowerCase() && c.id !== editingId)
     if (emailExists) {
       setFormError(`Ya existe un cliente con el email "${email}"`)

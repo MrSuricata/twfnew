@@ -35,6 +35,7 @@ import {
   MagnifyingGlass,
   Funnel,
   Boat,
+  FilePdf,
 } from '@phosphor-icons/react'
 import { ParsedShipment, getShipmentStatus, generateShipmentAlerts, isShipmentCompleted, parseLocalDate } from '@/lib/shipmentTypes'
 import { statusColorToClass, getUrgencyMeta } from '@/lib/statusColors'
@@ -44,6 +45,8 @@ import { fetchClientReports, fetchClientOriginPhotos } from '@/lib/dataClient'
 import ShipmentDetailsDialog from './ShipmentDetailsDialog'
 import AgendaCalendar from './agenda/AgendaCalendar'
 import { matchesPattern } from '@/lib/clientMatching'
+import { useBrand } from '@/lib/brand'
+import { downloadClientStatusPdf } from '@/lib/clientStatusPdf'
 
 interface ClientPortalProps {
   onLogout: () => void
@@ -109,6 +112,7 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
   }, [clientEmail])
 
   const currentClient = clients?.find(c => c.email === clientEmail)
+  const brand = useBrand()
 
   // Use server data if available, fallback to props
   const clientShipments = serverShipments.length > 0
@@ -539,6 +543,17 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
                   {hasActiveFilters && (
                     <span className="bg-accent text-accent-foreground text-[10px] rounded-full w-4 h-4 flex items-center justify-center">!</span>
                   )}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => downloadClientStatusPdf(activeShipmentsRaw, currentClient?.name || clientEmail, brand)}
+                  disabled={activeShipmentsRaw.length === 0}
+                  className="gap-1.5 shrink-0"
+                  title="Descargar PDF con el estado de todas tus cargas activas"
+                >
+                  <FilePdf size={16} />
+                  <span className="hidden sm:inline">Estado (PDF)</span>
                 </Button>
                 {hasActiveFilters && (
                   <Button variant="ghost" size="sm" onClick={clearFilters} className="text-xs text-muted-foreground">

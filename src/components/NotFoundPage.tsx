@@ -47,7 +47,7 @@ export default function NotFoundPage({ onGoHome }: NotFoundPageProps) {
               Ir al inicio
             </Button>
             <Button asChild variant="outline" size="lg">
-              <a href="mailto:info@twf.uy">
+              <a href={`mailto:${brand.contact.email}`}>
                 <EnvelopeSimple size={18} className="mr-2" />
                 Contactar
               </a>
@@ -57,7 +57,7 @@ export default function NotFoundPage({ onGoHome }: NotFoundPageProps) {
       </main>
 
       <footer className="border-t py-6 text-center text-sm text-muted-foreground">
-        <p>&copy; {new Date().getFullYear()} Transit World Forwarding</p>
+        <p>&copy; {new Date().getFullYear()} {brand.legalName}</p>
       </footer>
     </div>
   )

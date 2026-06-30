@@ -41,7 +41,7 @@ export default function PrivacyPage({ onBack }: PrivacyPageProps) {
             </div>
 
             <p className="text-base leading-relaxed">
-              En Transit World Forwarding (&quot;TWF&quot;) nos tomamos en serio el cuidado de tus datos. Esta
+              En {brand.legalName} (&quot;{brand.name}&quot;) nos tomamos en serio el cuidado de tus datos. Esta
               política explica qué información recolectamos, para qué la usamos, con quién la
               compartimos y qué derechos tenés sobre ella.
             </p>
@@ -104,7 +104,7 @@ export default function PrivacyPage({ onBack }: PrivacyPageProps) {
                 Tenés derecho a acceder a los datos que tenemos sobre vos, pedir que los rectifiquemos
                 si están incorrectos y solicitar su eliminación cuando ya no sean necesarios (sujeto a
                 las obligaciones legales de retención). Para ejercer cualquiera de estos derechos,
-                escribinos a <a href="mailto:info@twf.uy" className="text-primary underline">info@twf.uy</a> desde
+                escribinos a <a href={`mailto:${brand.contact.email}`} className="text-primary underline">{brand.contact.email}</a> desde
                 la dirección registrada en tu cuenta.
               </p>
             </section>
@@ -141,10 +141,10 @@ export default function PrivacyPage({ onBack }: PrivacyPageProps) {
             <section className="space-y-2">
               <h2 className="text-xl font-semibold text-primary">8. Contacto del responsable</h2>
               <p className="leading-relaxed">
-                El responsable del tratamiento de datos es Transit World Forwarding, con domicilio en
+                El responsable del tratamiento de datos es {brand.legalName}, con domicilio en
                 la República Oriental del Uruguay. Para cualquier consulta sobre esta política o el
                 tratamiento de tus datos, contactanos a{' '}
-                <a href="mailto:info@twf.uy" className="text-primary underline">info@twf.uy</a>.
+                <a href={`mailto:${brand.contact.email}`} className="text-primary underline">{brand.contact.email}</a>.
               </p>
             </section>
           </CardContent>

@@ -546,7 +546,7 @@ export default function TruckBuilder(props: TruckBuilderProps) {
         </div>
 
         {/* RIGHT — Available loads panel */}
-        <Card className="lg:sticky lg:top-4 h-[calc(100vh-8rem)] flex flex-col">
+        <Card className="lg:sticky lg:top-4 lg:h-[calc(100vh-8rem)] flex flex-col">
           <AvailableLoadsPanel
             shipments={shipments}
             lclAir={lclAir}
@@ -677,8 +677,9 @@ function LoadRow({
       <td className="px-3 py-2 text-right">
         <InlineNumber
           value={load.pkgs}
-          onChange={v => onChange({ pkgs: v }, ['pkgs'])}
+          onChange={v => onChange({ pkgs: Math.round(v) }, ['pkgs'])}
           modified={ov.pkgs}
+          step={1}
           className="w-16 text-right"
           disabled={isRemoved}
         />

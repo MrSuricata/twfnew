@@ -179,13 +179,16 @@ function App() {
       }
 
       if (canApplyTrucksRefresh(pendingTrucksWritesRef.current, loadStartTs, lastTrucksWriteTsRef.current)) {
-        setTrucks(data.trucks)
-        saveToStorage('twf-trucks', data.trucks)
+        // softFetch devuelve [] si el GET de trucks falló (500/red): NO pisar un estado
+        // no-vacío con un snapshot vacío — reproducía el "las cargas desaparecieron".
+        // Mirror del guard de clients (línea ~171).
+        setTrucks(prev => (data.trucks.length === 0 && prev.length > 0) ? prev : data.trucks)
+        if (data.trucks.length > 0) saveToStorage('twf-trucks', data.trucks)
       }
 
       if (canApplyTrucksRefresh(pendingTruckLoadsWritesRef.current, loadStartTs, lastTruckLoadsWriteTsRef.current)) {
-        setTruckLoads(data.truckLoads)
-        saveToStorage('twf-truck-loads', data.truckLoads)
+        setTruckLoads(prev => (data.truckLoads.length === 0 && prev.length > 0) ? prev : data.truckLoads)
+        if (data.truckLoads.length > 0) saveToStorage('twf-truck-loads', data.truckLoads)
       }
 
       if (pendingLclAirWritesRef.current === 0) {
@@ -673,6 +676,13 @@ function App() {
 
   // Create a new DB shipment (LCL/aéreo/terrestre/FCL) from the web.
   const handleCreateShipment = (row: DbShipment) => {
+    // Anti-duplicado de REF: el alta NO chequeaba (a diferencia del rename con su RPC),
+    // así que crear "A7990" dos veces hacía 2 filas en silencio. Avisamos antes de crear.
+    const newRef = (row.ref || '').trim().toUpperCase()
+    if (newRef && dbShipments.some(s => (s.ref || '').trim().toUpperCase() === newRef)) {
+      const ok = window.confirm(`Ya existe una carga con la REF "${row.ref}".\n\n¿Crearla igual? Si es una carga partida, cancelá y usá un sufijo (ej. ${row.ref} A / ${row.ref} B).`)
+      if (!ok) return
+    }
     const next = [row, ...dbShipments]
     setDbShipments(next)
     saveToStorage('twf-db-shipments', next)

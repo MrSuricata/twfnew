@@ -421,7 +421,7 @@ export default function QuotesManagement({ quotes, onUpdateQuotes }: QuotesManag
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 min-h-[600px]">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 min-h-[400px] md:h-[calc(100vh-300px)]">
           {/* List (left) */}
           <div className={`md:col-span-5 ${selected && !showListMobile ? 'hidden md:block' : ''}`}>
             <Card className="h-full">

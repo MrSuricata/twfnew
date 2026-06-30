@@ -5,6 +5,7 @@ import { getSupabase } from '../_lib/supabase.js'
 import { sendMail } from '../_lib/mail.js'
 import { welcomeClientEmail, welcomePartnerEmail } from '../_lib/emailTemplates.js'
 import { hashPassword } from '../_lib/password.js'
+import { matchesClientePattern } from '../_lib/csvParser.js'
 import {
   validate,
   QuoteRowSchema,
@@ -798,7 +799,13 @@ async function handlePartnerShipments(req: VercelRequest, res: VercelResponse, d
       return false
     })
     if (matchingOps.length === 0) return null
-    return { ...shipment, operativas: matchingOps }
+    // Seguridad: depósito/transporte NO deben ver costos/flete de TWF (aunque la UI no
+    // los muestre, llegaban en el JSON crudo). Se quitan los financieros; se conserva
+    // CLIENTE + lo operativo (lo necesitan para operar).
+    const safe = { ...shipment }
+    delete safe.C_TERMINAL; delete safe.C_DEV; delete safe.LOCALES
+    delete safe.FLETE; delete safe.FORMA_DE_PAGO; delete safe.VTO
+    return { ...safe, operativas: matchingOps }
   }).filter(Boolean)
 
   return res.status(200).json({ shipments: filtered, syncedAt: data?.synced_at || null })
@@ -1294,20 +1301,12 @@ async function handleTruckCounter(req: VercelRequest, res: VercelResponse, db: a
   if (!v.ok) return res.status(400).json({ error: v.error })
   const { prefix } = v.data
 
-  // Read current value, increment, write back. Service-role bypasses RLS.
-  // For low write contention (1 admin) this is fine without a transaction.
-  const { data: current, error: readErr } = await db
-    .from('truck_counter')
-    .select('last_number')
-    .eq('prefix', prefix)
-    .single()
-  if (readErr && readErr.code !== 'PGRST116') throw readErr
-
-  const next = ((current?.last_number as number | undefined) ?? 0) + 1
-  const { error: upErr } = await db
-    .from('truck_counter')
-    .upsert({ prefix, last_number: next }, { onConflict: 'prefix' })
-  if (upErr) throw upErr
+  // Incremento ATÓMICO vía RPC (insert ... on conflict do update ... returning, una
+  // sola sentencia): evita la carrera de read-then-write que daba códigos de camión
+  // duplicados cuando 2 usuarios creaban a la vez.
+  const { data: nextData, error: rpcErr } = await db.rpc('next_truck_number', { p_prefix: prefix })
+  if (rpcErr) throw rpcErr
+  const next = nextData as number
 
   // Format code: C430, LCL-0001, AIR-0001
   const code = prefix === 'C'
@@ -1443,6 +1442,15 @@ const SHIPMENT_COLS = new Set([
   'operativas',
 ])
 
+// Scoping por cliente para usuarios level=admin acotados: solo ven las cargas cuyo
+// CLIENTE matchea su patrón (clientePattern del JWT). Owner / tokens sin patrón → ven
+// TODO (sin filtro). Reusa matchesClientePattern (misma semántica que el portal cliente).
+function scopeByAdminPattern(rows: any[], payload: TokenPayload | null): any[] {
+  if (!payload || payload.role !== 'admin' || !payload.clientePattern) return rows
+  const pattern = payload.clientePattern
+  return rows.filter((r: any) => matchesClientePattern(r.cliente || '', pattern))
+}
+
 async function handleShipments(req: VercelRequest, res: VercelResponse, db: any, payload: TokenPayload | null) {
   if (req.method === 'GET') {
     // source='sheet' = filas espejo de la migración FCL: por defecto invisibles.
@@ -1468,7 +1476,7 @@ async function handleShipments(req: VercelRequest, res: VercelResponse, db: any,
     if (req.query.includeMirror !== '1') q = q.neq('source', 'sheet')
     const { data, error } = await q
     if (error) throw error
-    return res.status(200).json({ shipments: data || [] })
+    return res.status(200).json({ shipments: scopeByAdminPattern(data || [], payload) })
   }
 
   if (req.method === 'PATCH') {
@@ -1616,7 +1624,7 @@ async function handleAdminUsers(req: VercelRequest, res: VercelResponse, db: any
 
   if (req.method === 'GET') {
     const { data, error } = await db.from('admin_users')
-      .select('id, email, name, level, active, created_at, last_login')
+      .select('id, email, name, level, active, created_at, last_login, cliente_pattern')
       .order('created_at', { ascending: true })
     if (error) throw error
     return res.status(200).json({ users: data || [] })
@@ -1628,9 +1636,10 @@ async function handleAdminUsers(req: VercelRequest, res: VercelResponse, db: any
       email: z.string().email(),
       name: z.string().min(1),
       password: z.string().min(8).optional(),
+      clientePattern: z.string().optional(),
     }), req.body)
     if (!v.ok) return res.status(400).json({ error: v.error })
-    const { id, email, name, password } = v.data
+    const { id, email, name, password, clientePattern } = v.data
     const emailNorm = email.toLowerCase().trim()
 
     if (!id) {
@@ -1645,6 +1654,7 @@ async function handleAdminUsers(req: VercelRequest, res: VercelResponse, db: any
         password_hash: await hashPassword(password),
         level: 'admin',
         active: true,
+        cliente_pattern: (clientePattern || '').trim() || null,
       }
       const { error } = await db.from('admin_users').insert(row)
       if (error) throw error
@@ -1655,6 +1665,7 @@ async function handleAdminUsers(req: VercelRequest, res: VercelResponse, db: any
     // Editar nombre/email (+ contraseña si viene)
     const updates: Record<string, unknown> = { email: emailNorm, name: name.trim() }
     if (password) updates.password_hash = await hashPassword(password)
+    if (clientePattern !== undefined) updates.cliente_pattern = (clientePattern || '').trim() || null
     const { error } = await db.from('admin_users').update(updates).eq('id', id)
     if (error) throw error
     logAudit(db, payload, password ? 'editar usuario + contraseña' : 'editar usuario', 'admin_users', emailNorm)

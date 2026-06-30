@@ -70,6 +70,8 @@ export default function Login({ onLogin, onBack }: LoginProps) {
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   placeholder="admin"
+                  autoComplete="username"
+                  autoFocus
                   required
                 />
               </div>
@@ -81,6 +83,7 @@ export default function Login({ onLogin, onBack }: LoginProps) {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
+                  autoComplete="current-password"
                   required
                 />
               </div>

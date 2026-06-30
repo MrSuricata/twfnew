@@ -308,7 +308,7 @@ export default function MediterraneaLanding() {
   )
 
   return (
-    <div className="min-h-screen bg-white text-[#1a1530]" style={{ fontFamily: "'Jost', sans-serif" }}>
+    <div className="min-h-screen overflow-x-hidden bg-white text-[#1a1530]" style={{ fontFamily: "'Jost', sans-serif" }}>
       {/* ── Nav ── */}
       <header
         className={`fixed top-0 inset-x-0 z-50 transition-all duration-500 ${
@@ -377,7 +377,7 @@ export default function MediterraneaLanding() {
                 </span>
               </Reveal>
               <Reveal delay={80}>
-                <h1 className="text-white font-bold tracking-tight leading-[1.02] text-5xl sm:text-6xl lg:text-7xl">
+                <h1 className="text-white font-bold tracking-tight leading-[1.02] text-4xl sm:text-6xl lg:text-7xl break-words">
                   Una sola casa para<br />
                   <span className="text-[#9bd1e5]">toda tu logística</span> internacional.
                 </h1>

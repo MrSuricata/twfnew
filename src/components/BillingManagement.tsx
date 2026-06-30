@@ -284,7 +284,7 @@ export default function BillingManagement({ shipments, dbShipments = [], trucks 
                 : 'Ninguna carga marcada como "no aplica"'}
             </div>
           ) : (
-            <table className="w-full text-sm">
+            <table className="w-full min-w-[640px] text-sm">
               <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
                 <tr>
                   <Th k="ref">Ref</Th>

@@ -38,6 +38,7 @@ interface AdminUser {
   active: boolean
   created_at: string | null
   last_login: string | null
+  cliente_pattern?: string | null
 }
 
 interface AuditEntry {
@@ -59,6 +60,8 @@ export default function TeamManager({ refreshKey = 0 }: { refreshKey?: number })
   const [fName, setFName] = useState('')
   const [fEmail, setFEmail] = useState('')
   const [fPassword, setFPassword] = useState('')
+  const [fPattern, setFPattern] = useState('')
+  const [saving, setSaving] = useState(false)
   const [migrating, setMigrating] = useState(false)
   const [baking, setBaking] = useState(false)
 
@@ -81,13 +84,16 @@ export default function TeamManager({ refreshKey = 0 }: { refreshKey?: number })
   // refreshKey: el botón Refrescar global del navbar también recarga esto.
   useEffect(() => { load() }, [load, refreshKey])
 
-  const openCreate = () => { setEditing(null); setFName(''); setFEmail(''); setFPassword(''); setDialogOpen(true) }
-  const openEdit = (u: AdminUser) => { setEditing(u); setFName(u.name); setFEmail(u.email); setFPassword(''); setDialogOpen(true) }
+  const openCreate = () => { setEditing(null); setFName(''); setFEmail(''); setFPassword(''); setFPattern(''); setDialogOpen(true) }
+  const openEdit = (u: AdminUser) => { setEditing(u); setFName(u.name); setFEmail(u.email); setFPassword(''); setFPattern(u.cliente_pattern || ''); setDialogOpen(true) }
 
   const save = async () => {
     if (!fName.trim() || !fEmail.trim()) { toast.error('Nombre y email son obligatorios'); return }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fEmail.trim())) { toast.error('El email no tiene un formato válido'); return }
     if (!editing && fPassword.length < 8) { toast.error('La contraseña necesita al menos 8 caracteres'); return }
     if (editing && fPassword && fPassword.length < 8) { toast.error('La contraseña nueva necesita al menos 8 caracteres'); return }
+    if (saving) return
+    setSaving(true)
     try {
       const res = await authFetch('/api/data/admin-users', {
         method: 'POST',
@@ -96,6 +102,7 @@ export default function TeamManager({ refreshKey = 0 }: { refreshKey?: number })
           ...(editing ? { id: editing.id } : {}),
           email: fEmail.trim(),
           name: fName.trim(),
+          clientePattern: fPattern.trim(),
           ...(fPassword ? { password: fPassword } : {}),
         }),
       })
@@ -108,6 +115,8 @@ export default function TeamManager({ refreshKey = 0 }: { refreshKey?: number })
       load()
     } catch (e: any) {
       toast.error(e?.message || 'Error al guardar')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -201,8 +210,9 @@ export default function TeamManager({ refreshKey = 0 }: { refreshKey?: number })
                 <tr>
                   <th className="text-left px-3 py-2">Nombre</th>
                   <th className="text-left px-3 py-2">Email (login)</th>
+                  <th className="text-left px-3 py-2 hidden sm:table-cell">Clientes</th>
                   <th className="text-left px-3 py-2">Estado</th>
-                  <th className="text-left px-3 py-2">Último acceso</th>
+                  <th className="text-left px-3 py-2 hidden md:table-cell">Último acceso</th>
                   <th className="px-3 py-2 text-right">Acciones</th>
                 </tr>
               </thead>
@@ -211,12 +221,15 @@ export default function TeamManager({ refreshKey = 0 }: { refreshKey?: number })
                   <tr key={u.id} className={`hover:bg-muted/30 ${u.active ? '' : 'opacity-60'}`}>
                     <td className="px-3 py-2 font-medium">{u.name}</td>
                     <td className="px-3 py-2">{u.email}</td>
+                    <td className="px-3 py-2 text-xs text-muted-foreground max-w-[180px] truncate hidden sm:table-cell" title={u.cliente_pattern || 'Ve todas las cargas'}>
+                      {u.cliente_pattern || <span className="italic">Todas</span>}
+                    </td>
                     <td className="px-3 py-2">
                       <Badge variant="outline" className={`text-[10px] ${u.active ? 'text-green-700 border-green-300' : 'text-muted-foreground'}`}>
                         {u.active ? 'Activo' : 'Desactivado'}
                       </Badge>
                     </td>
-                    <td className="px-3 py-2 text-xs text-muted-foreground">{u.last_login ? fmtTs(u.last_login) : 'Nunca entró'}</td>
+                    <td className="px-3 py-2 text-xs text-muted-foreground hidden md:table-cell">{u.last_login ? fmtTs(u.last_login) : 'Nunca entró'}</td>
                     <td className="px-3 py-2">
                       <div className="flex items-center gap-1 justify-end">
                         <Button size="sm" variant="outline" className="h-7" onClick={() => openEdit(u)} title="Editar / resetear contraseña">
@@ -259,7 +272,7 @@ export default function TeamManager({ refreshKey = 0 }: { refreshKey?: number })
             <div className="py-10 text-center text-sm text-muted-foreground">Sin actividad registrada todavía — se va llenando a medida que el equipo trabaja.</div>
           ) : (
             <table className="w-full text-xs">
-              <thead className="bg-muted/40 uppercase text-muted-foreground sticky top-0">
+              <thead className="bg-muted uppercase text-muted-foreground sticky top-0 z-10">
                 <tr>
                   <th className="text-left px-3 py-2">Cuándo</th>
                   <th className="text-left px-3 py-2">Quién</th>
@@ -328,10 +341,15 @@ export default function TeamManager({ refreshKey = 0 }: { refreshKey?: number })
               <Label htmlFor="tm-pass">{editing ? 'Contraseña nueva (opcional)' : 'Contraseña (mínimo 8)'}</Label>
               <Input id="tm-pass" type="text" value={fPassword} onChange={e => setFPassword(e.target.value)} placeholder="mínimo 8 caracteres" />
             </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="tm-pattern">Clientes que puede ver</Label>
+              <Input id="tm-pattern" value={fPattern} onChange={e => setFPattern(e.target.value)} placeholder="Ej: PERETTI, TOMASELLI (vacío = todas)" />
+              <p className="text-[11px] text-muted-foreground">Separá varios con coma. Vacío = ve <b>todas</b> las cargas (como el owner). Coincide por nombre de cliente.</p>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancelar</Button>
-            <Button onClick={save}><CheckCircle size={15} className="mr-1.5" weight="fill" />{editing ? 'Guardar' : 'Crear usuario'}</Button>
+            <Button onClick={save} disabled={saving}><CheckCircle size={15} className="mr-1.5" weight="fill" />{saving ? 'Guardando…' : (editing ? 'Guardar' : 'Crear usuario')}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

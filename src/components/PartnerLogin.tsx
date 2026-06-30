@@ -76,6 +76,8 @@ export default function PartnerLogin({ onLogin, onBack }: PartnerLoginProps) {
                   <Input
                     id="partner-email"
                     type="email"
+                    autoComplete="email"
+                    autoFocus
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     placeholder="usuario@empresa.com"
@@ -91,6 +93,7 @@ export default function PartnerLogin({ onLogin, onBack }: PartnerLoginProps) {
                   <Input
                     id="partner-password"
                     type="password"
+                    autoComplete="current-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
