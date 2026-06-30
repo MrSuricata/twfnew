@@ -140,7 +140,7 @@ async function logoDataUrl(): Promise<{ png: string; w: number; h: number } | nu
 export async function downloadAnalyticsPdf(report: AnalyticsReport): Promise<void> {
   const { jsPDF } = await import('jspdf')
   const autoTable = (await import('jspdf-autotable')).default
-  const doc = new jsPDF({ unit: 'mm', format: 'a4' })
+  const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' })
   const pageW = doc.internal.pageSize.getWidth()
   const margin = 14
 
@@ -185,7 +185,7 @@ export async function downloadAnalyticsPdf(report: AnalyticsReport): Promise<voi
   let y = 66
   for (const table of report.resumen) {
     if (table.rows.length === 0) continue
-    if (y > 250) {
+    if (y > 175) {
       doc.addPage()
       y = 20
     }
@@ -199,7 +199,7 @@ export async function downloadAnalyticsPdf(report: AnalyticsReport): Promise<voi
       body: table.rows,
       margin: { left: margin, right: margin },
       styles: { fontSize: 7.5, cellPadding: 1.5 },
-      headStyles: { fillColor: MED_BLUE, textColor: '#ffffff', fontStyle: 'bold' },
+      headStyles: { fillColor: '#4A90D9', textColor: '#ffffff', fontStyle: 'bold' },
       alternateRowStyles: { fillColor: [240, 241, 248] as [number, number, number] },
     })
     y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8
