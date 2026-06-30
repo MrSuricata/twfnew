@@ -138,6 +138,7 @@ export interface Translations {
     destination: string
     details: string
     submit: string
+    captchaPrompt: string
     submitting: string
     success: string
     error: string
@@ -403,6 +404,7 @@ export const translations: Record<Language, Translations> = {
       destination: 'Destino',
       details: 'Detalle de la Carga',
       submit: 'Enviar Cotización',
+      captchaPrompt: 'Completá el captcha',
       submitting: 'Enviando...',
       success: '¡Cotización enviada exitosamente! Nos contactaremos pronto.',
       error: 'Hubo un error al enviar la cotización. Por favor intente nuevamente o contáctenos por WhatsApp.',
@@ -684,6 +686,7 @@ export const translations: Record<Language, Translations> = {
       destination: 'Destination',
       details: 'Cargo Details',
       submit: 'Send Quote',
+      captchaPrompt: 'Complete the captcha',
       submitting: 'Sending...',
       success: 'Quote sent successfully! We will contact you soon.',
       error: 'There was an error sending the quote. Please try again or contact us via WhatsApp.',
@@ -965,6 +968,7 @@ export const translations: Record<Language, Translations> = {
       destination: 'Destino',
       details: 'Detalhes da Carga',
       submit: 'Enviar Cotação',
+      captchaPrompt: 'Complete o captcha',
       submitting: 'Enviando...',
       success: 'Cotação enviada com sucesso! Entraremos em contato em breve.',
       error: 'Houve um erro ao enviar a cotação. Por favor, tente novamente ou entre em contato via WhatsApp.',

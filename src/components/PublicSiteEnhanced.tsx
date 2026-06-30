@@ -947,7 +947,7 @@ export default function PublicSite({
                     className="w-full bg-accent text-accent-foreground hover:bg-accent/90"
                     size="lg"
                   >
-                    {isSubmitting ? t.quote.submitting : (!turnstileToken ? 'Completá el captcha' : t.quote.submit)}
+                    {isSubmitting ? t.quote.submitting : (!turnstileToken ? t.quote.captchaPrompt : t.quote.submit)}
                     {!isSubmitting && turnstileToken && <ArrowRight size={20} className="ml-2" />}
                   </Button>
                 </form>
