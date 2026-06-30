@@ -108,10 +108,11 @@ export default function ShipmentDetailsDialog({
   const getDaysUntilFree = (libreHasta: string): number | null => {
     if (!libreHasta || libreHasta.trim() === '' || libreHasta.trim() === '—') return null
     try {
-      const parts = libreHasta.split('-')
-      const freeDate = parts.length === 3
-        ? new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]))
-        : new Date(libreHasta)
+      // Solo ISO (YYYY-MM-DD). No-ISO (texto tipo "DEVUELTO" o fecha mal tipeada "2/7")
+      // → null, para no mostrarle días absurdos al cliente en el diálogo de detalle.
+      const m = libreHasta.trim().match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)
+      if (!m) return null
+      const freeDate = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
       if (isNaN(freeDate.getTime())) return null
       const today = new Date()
       today.setHours(0, 0, 0, 0)

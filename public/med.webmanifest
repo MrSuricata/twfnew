@@ -9,6 +9,6 @@
   "theme_color": "#261c79",
   "background_color": "#261c79",
   "display": "standalone",
-  "start_url": "/admin",
+  "start_url": "/",
   "lang": "es"
 }

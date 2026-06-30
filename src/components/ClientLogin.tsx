@@ -199,6 +199,8 @@ export default function ClientLogin({ onLogin, onBack }: ClientLoginProps) {
                     value={otpValue}
                     onChange={handleOTPChange}
                     disabled={isLoading}
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
                     autoFocus
                   >
                     <InputOTPGroup>

@@ -29,6 +29,7 @@ import PendingSalidaSection from './PendingSalidaSection'
 import ShipmentDetailsDialog from '../ShipmentDetailsDialog'
 import ContainerQuickEdit, { buildPatchedOperativas } from '../operations/ContainerQuickEdit'
 import { dropPatch } from './agendaDnd'
+import { isSalidaBeforeArrival } from '@/lib/salidaCheck'
 
 interface AgendaCalendarProps {
   shipments: ParsedShipment[]
@@ -319,14 +320,20 @@ export default function AgendaCalendar({
 
   const handleDragEnd = useCallback((e: DragEndEvent) => {
     setDragActiveEvent(null)
-    const result = dropPatch(
-      e.active.data.current?.event as CalendarEvent | undefined,
-      e.over?.id as string | undefined,
-      buildPatchedOperativas
-    )
-    if (result) {
-      onPatchShipment?.(result.dbId, result.fields)
+    const event = e.active.data.current?.event as CalendarEvent | undefined
+    const newDate = e.over?.id as string | undefined
+    const result = dropPatch(event, newDate, buildPatchedOperativas)
+    if (!result) return
+    // La salida no puede quedar ANTES de la llegada a MVD: confirmar antes de guardar
+    // (misma protección que ContainerDatesSection/QuickEdit; era la única ruta sin el check).
+    if (event?.type === 'salida' && newDate && isSalidaBeforeArrival(newDate, event.shipment?.ETA || '')) {
+      const ok = window.confirm(
+        `⏰ La salida quedaría el ${newDate}, ANTES de la llegada a MVD (${event.shipment?.ETA || '—'})` +
+        ` del contenedor ${event.cntr || ''}.\n\n¿Guardar igual?`
+      )
+      if (!ok) return
     }
+    onPatchShipment?.(result.dbId, result.fields)
   }, [onPatchShipment])
 
   return (

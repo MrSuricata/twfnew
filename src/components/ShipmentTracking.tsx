@@ -323,17 +323,11 @@ export default function ShipmentTracking({ shipmentRecords = [], reports = [], o
   // sneak into the LIBRE_HASTA column from the planilla).
   const parseLocal = (s: string): Date | null => {
     if (!s) return null
-    const parts = s.split('-')
-    let d: Date
-    if (parts.length === 3) {
-      const y = parseInt(parts[0])
-      const m = parseInt(parts[1])
-      const dd = parseInt(parts[2])
-      if (isNaN(y) || isNaN(m) || isNaN(dd)) return null
-      d = new Date(y, m - 1, dd)
-    } else {
-      d = new Date(s)
-    }
+    // Solo ISO (YYYY-MM-DD). No-ISO (texto/"2/7") → null; antes caía a new Date(s) y
+    // generaba fechas absurdas (año 1900/2001) en los semáforos de LIBRE.
+    const mm = s.trim().match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)
+    if (!mm) return null
+    const d = new Date(Number(mm[1]), Number(mm[2]) - 1, Number(mm[3]))
     if (isNaN(d.getTime())) return null
     d.setHours(0, 0, 0, 0)
     return d

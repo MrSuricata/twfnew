@@ -117,6 +117,11 @@ export default function PartnerManager() {
       return
     }
 
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) {
+      toast.error('El email no tiene un formato válido')
+      return
+    }
+
     if (!editingId && !form.password) {
       toast.error('La contraseña es obligatoria para nuevos usuarios')
       return

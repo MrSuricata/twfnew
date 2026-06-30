@@ -141,6 +141,11 @@ export default function ContainerDatesSection({
   editable: boolean
   onCommitOperativas: (next: OperativasRecord[]) => void
 }) {
+  // Los hooks SIEMPRE primero, antes de cualquier return temprano (regla de hooks de React).
+  // Fix 3: local draft state so date inputs commit on onBlur, not per-keystroke.
+  // Key: `${cntr}-SALIDA` or `${cntr}-ETA_FISC`; value: string draft.
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
+
   const cntrs = parseCntr(op.cntr)
   // Si no hay contenedores, no hay nada que mostrar.
   if (cntrs.length === 0) return null
@@ -149,10 +154,6 @@ export default function ContainerDatesSection({
   if (op.mode !== 'fcl') return null
 
   const existing = op.operativas || []
-
-  // Fix 3: local draft state so date inputs commit on onBlur, not per-keystroke.
-  // Key: `${cntr}-SALIDA` or `${cntr}-ETA_FISC`; value: string draft.
-  const [drafts, setDrafts] = useState<Record<string, string>>({})
 
   const draftKey = (i: number, field: string) => `${cntrs[i]}-${i}-${field}`
 

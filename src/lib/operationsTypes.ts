@@ -558,6 +558,8 @@ export function isOperationActive(op: UnifiedOperation, truckStatus: string | un
     const eff = truckStatus || op.status
     return eff !== 'en_fiscal' && eff !== 'devuelto'
   }
+  // OJO (verificado en datos 2026-06): "DEVUELTO" vive en LIBRE (456 FCL), NUNCA en
+  // OPERATIVA (0). No cambiar a op.operativa — todas las devueltas quedarían "activas".
   const devuelta = (op.libre || '').toUpperCase().includes('DEVUELTO')
   const hasOperativaData = !!(op.libre || op.salida || op.etaFisc)
   if (hasOperativaData) {

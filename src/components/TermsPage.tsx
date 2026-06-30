@@ -42,7 +42,7 @@ export default function TermsPage({ onBack }: TermsPageProps) {
             </div>
 
             <p className="text-base leading-relaxed">
-              Bienvenido a la plataforma de Transit World Forwarding (en adelante, &quot;TWF&quot;). Estos
+              Bienvenido a la plataforma de {brand.legalName} (en adelante, &quot;{brand.name}&quot;). Estos
               Términos regulan el uso de nuestra aplicación de gestión logística. Al ingresar o usar
               el servicio, aceptás los términos que siguen. Si no estás de acuerdo, no uses la plataforma.
             </p>
@@ -60,7 +60,7 @@ export default function TermsPage({ onBack }: TermsPageProps) {
             <section className="space-y-2">
               <h2 className="text-xl font-semibold text-primary">2. Descripción del servicio</h2>
               <p className="leading-relaxed">
-                TWF ofrece una aplicación web de gestión logística pensada para operadores de comercio
+                {brand.name} ofrece una aplicación web de gestión logística pensada para operadores de comercio
                 exterior y sus clientes. Permite hacer seguimiento de cargas, gestionar documentación,
                 coordinar con depósitos y transportes, y centralizar información operativa de embarques.
                 El alcance exacto del servicio depende del plan contratado y del rol asignado a cada
@@ -74,7 +74,7 @@ export default function TermsPage({ onBack }: TermsPageProps) {
                 La plataforma maneja distintos roles: administrador, cliente y partners (depósito o
                 transporte). Cada cuenta es personal e intransferible. Sos responsable de mantener la
                 confidencialidad de tu contraseña y de toda actividad que ocurra bajo tu usuario.
-                Notificanos de inmediato a <a href="mailto:info@twf.uy" className="text-primary underline">info@twf.uy</a> ante
+                Notificanos de inmediato a <a href={`mailto:${brand.contact.email}`} className="text-primary underline">{brand.contact.email}</a> ante
                 cualquier acceso no autorizado.
               </p>
             </section>
@@ -98,7 +98,7 @@ export default function TermsPage({ onBack }: TermsPageProps) {
               <h2 className="text-xl font-semibold text-primary">5. Propiedad intelectual</h2>
               <p className="leading-relaxed">
                 El software, el diseño, los textos, los logos y el resto del material de la plataforma
-                son propiedad exclusiva de TWF o de sus licenciantes. No te otorgamos ningún derecho
+                son propiedad exclusiva de {brand.name} o de sus licenciantes. No te otorgamos ningún derecho
                 sobre el código fuente ni sobre los componentes de la plataforma más allá del uso
                 permitido mientras dure tu acceso.
               </p>
@@ -109,7 +109,7 @@ export default function TermsPage({ onBack }: TermsPageProps) {
               <p className="leading-relaxed">
                 El servicio se presta &quot;tal cual&quot; y &quot;según disponibilidad&quot;. Hacemos lo posible para
                 mantener la plataforma estable y disponible, pero no garantizamos un uptime del 100%
-                ni que esté libre de errores. TWF no será responsable por daños indirectos, lucro
+                ni que esté libre de errores. {brand.name} no será responsable por daños indirectos, lucro
                 cesante ni pérdida de datos derivados del uso o de la imposibilidad de uso del servicio,
                 más allá de lo previsto por la ley aplicable.
               </p>
@@ -147,7 +147,7 @@ export default function TermsPage({ onBack }: TermsPageProps) {
               <h2 className="text-xl font-semibold text-primary">10. Contacto</h2>
               <p className="leading-relaxed">
                 Para dudas, reclamos o cualquier consulta sobre estos Términos podés escribirnos a{' '}
-                <a href="mailto:info@twf.uy" className="text-primary underline">info@twf.uy</a>.
+                <a href={`mailto:${brand.contact.email}`} className="text-primary underline">{brand.contact.email}</a>.
               </p>
             </section>
           </CardContent>

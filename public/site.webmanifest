@@ -8,5 +8,5 @@
   "theme_color": "#0f172a",
   "background_color": "#ffffff",
   "display": "standalone",
-  "start_url": "/admin"
+  "start_url": "/"
 }

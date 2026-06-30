@@ -34,7 +34,6 @@ import { motion } from 'framer-motion'
 import { initGA, trackQuoteSubmission, trackWhatsAppClick, trackNavigationClick } from '@/lib/analytics'
 import PublicTracking from './PublicTracking'
 import { ParsedShipment } from '@/lib/shipmentTypes'
-import TestimonialsCarousel from './TestimonialsCarousel'
 import CasosExito from './CasosExito'
 import LanguageSelector from './LanguageSelector'
 import { Language, useTranslation } from '@/lib/i18n'
@@ -268,44 +267,32 @@ export default function PublicSite({
 
     onUpdateQuotes((current) => [...(current || []), newQuote])
 
-    try {
-      trackQuoteSubmission(formData.cargoType)
+    try { trackQuoteSubmission(formData.cargoType) } catch { /* el tracking no debe romper el envío */ }
 
-      // Send quote via server-side email
-      fetch('/api/quotes/submit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...formData, language, turnstileToken })
+    // El éxito/reset se condiciona a res.ok: antes el toast de "enviada" disparaba sin
+    // esperar la respuesta, así que si el backend fallaba el visitante creía que mandó la
+    // cotización y el lead se perdía.
+    fetch('/api/quotes/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...formData, language, turnstileToken })
+    })
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`)
+        setTurnstileToken(null)
+        ;(window as any).turnstile?.reset()
+        toast.success(t.quote.success, { duration: 3000 })
+        setFormData({ name: '', email: '', phone: '', cargoType: '', origin: '', destination: '', details: '' })
       })
-        .then(res => {
-          if (res.ok) {
-            setTurnstileToken(null)
-            ;(window as any).turnstile?.reset()
-          }
-        })
-        .catch(err => console.warn('Quote email failed:', err))
-
-      toast.success(t.quote.success, { duration: 3000 })
-
-      setFormData({
-        name: '',
-        email: '',
-        phone: '',
-        cargoType: '',
-        origin: '',
-        destination: '',
-        details: ''
+      .catch(err => {
+        console.warn('Quote submit failed:', err)
+        toast.error(t.quote.error)
       })
-    } catch (error) {
-      console.error('Error al guardar cotización:', error)
-      toast.error(t.quote.error)
-    } finally {
-      setIsSubmitting(false)
-    }
+      .finally(() => setIsSubmitting(false))
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen overflow-x-hidden bg-background">
       <motion.a
         href="https://wa.me/59899511196?text=Hola!%20Necesito%20información%20sobre%20servicios%20de%20logística%20internacional"
         target="_blank"
@@ -977,28 +964,7 @@ export default function PublicSite({
         </svg>
       </div>
 
-      <section id="testimonios" className="py-16 md:py-24 bg-primary relative overflow-hidden">
-        {/* Grid overlay */}
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSAxMCAwIEwgMCAwIDAgMTAiIGZpbGw9Im5vbmUiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS1vcGFjaXR5PSIwLjA1IiBzdHJva2Utd2lkdGg9IjEiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JpZCkiLz48L3N2Zz4=')] opacity-40 pointer-events-none" />
-        <div className="max-w-7xl mx-auto px-4 md:px-6 relative z-10">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
-            viewport={{ once: true, margin: "-100px" }}
-            className="text-center mb-12"
-          >
-            <h2 className="text-3xl md:text-4xl font-bold mb-4 text-primary-foreground">
-              {t.testimonials.title}
-            </h2>
-            <p className="text-lg text-primary-foreground/70">
-              {t.testimonials.subtitle}
-            </p>
-          </motion.div>
-
-          <TestimonialsCarousel />
-        </div>
-      </section>
+      {/* Sección de testimonios removida temporalmente (pedido de Brian, 2026-06) — eran ficticios */}
 
       {/* Wave: Testimonios → FAQ */}
       <div className="relative -mt-1">
@@ -1160,7 +1126,7 @@ export default function PublicSite({
         </div>
       </section>
 
-      <footer className="bg-primary text-primary-foreground py-12 pb-16">
+      <footer className="bg-primary text-primary-foreground py-12 pb-24 md:pb-16">
         <div className="max-w-7xl mx-auto px-4 md:px-6">
           {/* CTA banner */}
           <div className="bg-primary-foreground/10 border border-primary-foreground/20 rounded-2xl p-6 md:p-8 mb-12 flex flex-col md:flex-row items-center justify-between gap-4">
@@ -1182,7 +1148,7 @@ export default function PublicSite({
               <Button
                 onClick={() => {
                   trackWhatsAppClick()
-                  window.open('https://wa.me/59891000000', '_blank')
+                  window.open('https://wa.me/59899511196', '_blank')
                 }}
                 className="bg-green-500 hover:bg-green-600 text-white"
               >
@@ -1205,7 +1171,7 @@ export default function PublicSite({
                 <a href="mailto:info@twf.uy" className="text-primary-foreground/60 hover:text-accent transition-colors">
                   <EnvelopeSimple size={20} />
                 </a>
-                <a href="https://wa.me/59891000000" target="_blank" rel="noopener noreferrer" className="text-primary-foreground/60 hover:text-green-400 transition-colors">
+                <a href="https://wa.me/59899511196" target="_blank" rel="noopener noreferrer" className="text-primary-foreground/60 hover:text-green-400 transition-colors">
                   <WhatsappLogo size={20} />
                 </a>
               </div>

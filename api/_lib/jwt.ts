@@ -9,6 +9,10 @@ export interface AdminPayload {
   /** 'owner' = Brian (login por env vars) — gestiona usuarios. 'admin' =
    *  usuario individual de admin_users. Tokens viejos sin level = owner. */
   level?: 'owner' | 'admin'
+  /** Scoping por cliente para level=admin: solo ve cargas cuyo CLIENTE matchea
+   *  este patrón (misma semántica que clients.cliente_pattern). Vacío/undefined
+   *  = ve TODAS las cargas (owner y tokens viejos). */
+  clientePattern?: string
 }
 
 export interface ClientPayload {
@@ -51,8 +55,10 @@ function getSecret(): string {
 }
 
 /** Sign an admin JWT (8h expiry) */
-export function signAdminToken(user: string, name?: string, level: 'owner' | 'admin' = 'owner'): string {
+export function signAdminToken(user: string, name?: string, level: 'owner' | 'admin' = 'owner', clientePattern?: string): string {
   const payload: AdminPayload = { role: 'admin', user, name: name || user, level }
+  // Solo los admin acotados llevan patrón; el owner ve todo (sin patrón).
+  if (level === 'admin' && clientePattern && clientePattern.trim()) payload.clientePattern = clientePattern.trim()
   return jwt.sign(payload, getSecret(), { expiresIn: '8h' })
 }
 

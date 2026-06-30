@@ -127,17 +127,15 @@ export interface ShipmentAlert {
  * This function parses it as local midnight instead.
  */
 export function parseLocalDate(s: string): Date | null {
-  if (!s || s.trim() === '') return null
-  const parts = s.split('-')
-  if (parts.length === 3) {
-    const d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]))
-    if (!isNaN(d.getTime())) return d
-  }
-  // Fallback for other formats
-  const d = new Date(s)
-  if (isNaN(d.getTime())) return null
-  d.setHours(0, 0, 0, 0)
-  return d
+  if (!s) return null
+  // SOLO ISO (YYYY-MM-DD / YYYY-M-D). Cualquier otra cosa — texto tipo "DEVUELTO" o
+  // "CONFIRMAR", o una fecha mal tipeada tipo "2/7" — devuelve null. Antes caía a
+  // `new Date(s)`, que convertía "2/7" en una fecha real pero equivocada (año 1900/2001
+  // o swap mes/día) y le mostraba al CLIENTE "vencido hace 9262 días".
+  const m = s.trim().match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/)
+  if (!m) return null
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+  return isNaN(d.getTime()) ? null : d
 }
 
 /** Get today at midnight local time */
