@@ -140,6 +140,10 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
   const isActiveShipment = (shipment: ParsedShipment): boolean => {
     // If all containers have SALIDA → completed (user's logic)
     if (isShipmentCompleted(shipment)) return false
+    // Carga que arribó a MVD hace +60 días (ya salió y llegó) → vieja, no activa.
+    // Evita que cargas históricas sin datos de operativa queden "activas" para siempre.
+    const eta = parseLocalDate(shipment.ETA)
+    if (eta && eta.getTime() < Date.now() - 60 * 86400000) return false
     // Fallback for shipments without operativas: use libre date
     const daysUntilFree = getDaysUntilFree(shipment.LIBRE_HASTA)
     return daysUntilFree >= -30

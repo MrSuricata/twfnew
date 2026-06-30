@@ -16,10 +16,17 @@ const pad = (n: number) => String(n).padStart(2, '0')
 interface PdfRow { sort: string; cells: (string | number)[] }
 
 /** Arma las filas por-contenedor, excluyendo las que ya llegaron a fiscal / devueltas. */
-function buildRows(shipments: ParsedShipment[], todayISO: string): { prog: PdfRow[]; pend: PdfRow[] } {
+function buildRows(shipments: ParsedShipment[], now: Date): { prog: PdfRow[]; pend: PdfRow[] } {
+  const t = new Date(now); t.setHours(0, 0, 0, 0)
+  const todayISO = `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`
+  const cut = new Date(t); cut.setDate(cut.getDate() - 60)
+  const cutoffISO = `${cut.getFullYear()}-${pad(cut.getMonth() + 1)}-${pad(cut.getDate())}`
   const prog: PdfRow[] = []
   const pend: PdfRow[] = []
   for (const s of shipments) {
+    // EXCLUIR cargas viejas: arribaron a MVD hace +60 días (ya salieron y llegaron).
+    const etaIso = isoOr(s.ETA)
+    if (etaIso && etaIso < cutoffISO) continue
     const ops: (OperativasRecord | null)[] = s.operativas && s.operativas.length ? s.operativas : [null]
     for (const o of ops) {
       const libre = (o?.LIBRE || '').trim()
@@ -91,8 +98,7 @@ export async function downloadClientStatusPdf(
   const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' })
   const pageW = doc.internal.pageSize.getWidth()
   const margin = 12
-  const todayISO = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
-  const { prog, pend } = buildRows(shipments, todayISO)
+  const { prog, pend } = buildRows(shipments, now)
 
   // Header: logo arriba-izquierda + título + subtítulo (formato plan-operativo)
   const logo = await logoDataUrl(brand.logo.full)
