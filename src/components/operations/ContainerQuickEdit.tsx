@@ -10,6 +10,7 @@ import {
 import type { ParsedShipment, OperativasRecord } from '@/lib/shipmentTypes'
 import { getShipmentStatus } from '@/lib/shipmentTypes'
 import { isSalidaBeforeArrival, fmtDMY } from '@/lib/salidaCheck'
+import { lugarOrDeposito } from './ContainerDatesSection'
 
 // ─── Lugar options (mirrors ContainerDatesSection) ────────────────────────
 
@@ -146,7 +147,7 @@ export default function ContainerQuickEdit({
     etaFisc: currentOp.ETA_FISC || '',
     libre: currentOp.LIBRE || '',
   })
-  const [lugar, setLugar] = useState<string>(currentOp.LUGAR_SALIDA || '')
+  const [lugar, setLugar] = useState<string>(lugarOrDeposito(currentOp))
   const [saving, setSaving] = useState(false)
 
   // Fix 2: guard against double-save (Enter+blur fires two commitSave calls).
@@ -158,7 +159,7 @@ export default function ContainerQuickEdit({
     JSON.stringify({
       salida: currentOp.SALIDA || '',
       etaFisc: currentOp.ETA_FISC || '',
-      lugar: currentOp.LUGAR_SALIDA || '',
+      lugar: lugarOrDeposito(currentOp),
       libre: currentOp.LIBRE || '',
     })
   )

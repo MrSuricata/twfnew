@@ -17,6 +17,17 @@ const LUGAR_OPTIONS = [
   { value: 'PLANIR', label: 'PLANIR' },
 ]
 
+const LUGAR_VALS = new Set(LUGAR_OPTIONS.map(o => o.value).filter(Boolean))
+
+/** Lugar de salida efectivo: el explícito, o el DEPÓSITO como default (para
+ *  trasiegos el camión sale del depósito). Si el depósito no es una opción del
+ *  combo, queda "en terminal". */
+export function lugarOrDeposito(rec: OperativasRecord): string {
+  if (rec.LUGAR_SALIDA) return rec.LUGAR_SALIDA
+  const dep = (rec.DEPOSITO || '').trim().toUpperCase()
+  return LUGAR_VALS.has(dep) ? dep : ''
+}
+
 /** Micro-status para un contenedor individual derivado de su OperativasRecord. */
 function microStatus(op: UnifiedOperation, record: OperativasRecord): string {
   // Fix 4: annotate as ParsedShipment (no `as` cast) so schema changes fail at compile time.
@@ -295,7 +306,7 @@ export default function ContainerDatesSection({
                   <span className="text-[10px] text-muted-foreground leading-none">Lugar</span>
                   {editable ? (
                     <select
-                      value={rec.LUGAR_SALIDA || ''}
+                      value={lugarOrDeposito(rec)}
                       onChange={e => handleLugarChange(i, e.target.value)}
                       className="h-9 w-full rounded border border-input bg-background px-1 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                     >
@@ -304,8 +315,8 @@ export default function ContainerDatesSection({
                       ))}
                     </select>
                   ) : (
-                    <span className={`text-[13px] font-medium ${rec.LUGAR_SALIDA ? '' : 'text-muted-foreground'}`}>
-                      {rec.LUGAR_SALIDA || '—'}
+                    <span className={`text-[13px] font-medium ${lugarOrDeposito(rec) ? '' : 'text-muted-foreground'}`}>
+                      {lugarOrDeposito(rec) || '—'}
                     </span>
                   )}
                 </div>
