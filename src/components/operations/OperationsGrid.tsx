@@ -915,7 +915,10 @@ const OperationRow = memo(function OperationRow({
         const tdClass = `px-2 py-1.5 align-top ${c.w || ''} ${c.numeric ? 'text-right tabular-nums' : ''} ${c.wrap ? 'whitespace-normal break-words' : 'whitespace-nowrap'} ${c.sticky ? 'sticky left-0 bg-inherit' : ''} ${segRojo ? 'bg-red-50 text-red-700 font-semibold' : ''}`
 
         // Estado of a cargo loaded on a truck is driven by the truck (read-only).
-        if (c.key === 'status' && truckStatus) {
+        // FCL es la EXCEPCIÓN: su estado deriva SIEMPRE de la planilla (operativas),
+        // nunca del camión — aunque la FCL vaya cargada en uno (trasiego). Ver
+        // isOperationActive, que también ignora truckStatus para mode='fcl'.
+        if (c.key === 'status' && truckStatus && op.mode !== 'fcl') {
           return (
             <td key={c.key} className={tdClass}>
               <Badge variant="outline" className="h-5 text-[9px] whitespace-nowrap gap-1" title={`Estado controlado por el camión ${truckStatus.truckCode}`}>

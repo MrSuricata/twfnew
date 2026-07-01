@@ -274,7 +274,7 @@ export default function BillingManagement({ shipments, dbShipments = [], trucks 
 
       {/* List */}
       <Card>
-        <CardContent className="p-0 overflow-x-auto">
+        <CardContent className="p-0 overflow-x-auto max-h-[70vh] overflow-y-auto">
           {filtered.length === 0 ? (
             <div className="py-16 text-center text-sm text-muted-foreground">
               {subTab === 'pendientes'
@@ -285,7 +285,7 @@ export default function BillingManagement({ shipments, dbShipments = [], trucks 
             </div>
           ) : (
             <table className="w-full min-w-[640px] text-sm">
-              <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
+              <thead className="sticky top-0 z-10 bg-muted text-xs uppercase text-muted-foreground">
                 <tr>
                   <Th k="ref">Ref</Th>
                   <Th k="tipo">Tipo</Th>

@@ -10,25 +10,19 @@ interface OpRow {
   [k: string]: unknown
 }
 
-/** Parse a date string (YYYY-MM-DD or ISO) safely. Returns null for blank /
- *  unparseable / CONFIRMAR / junk — never throws. */
+/** Parse a strict ISO date (YYYY-M-D) safely. Returns null for blank /
+ *  unparseable / CONFIRMAR / junk — never throws.
+ *  IMPORTANTE: mismo criterio ESTRICTO que parseLocalDate en
+ *  src/lib/shipmentTypes.ts (el cliente). Se descartó el fallback new Date(s)
+ *  porque aceptaba basura ('2/7' → año equivocado) que el cliente rechaza, y así
+ *  el rollup del servidor podía elegir una salida/eta_fiscal distinta a la del
+ *  cliente para la misma carga. Server y cliente deben coincidir exacto. */
 function parseLocalDate(s: string): Date | null {
-  if (!s || s.trim() === '') return null
-  const parts = s.split('-')
-  if (parts.length === 3) {
-    const y = parseInt(parts[0], 10)
-    const m = parseInt(parts[1], 10)
-    const d = parseInt(parts[2], 10)
-    if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
-      const dt = new Date(y, m - 1, d)
-      if (!isNaN(dt.getTime())) return dt
-    }
-  }
-  // Fallback for ISO timestamps
-  const dt = new Date(s)
-  if (isNaN(dt.getTime())) return null
-  dt.setHours(0, 0, 0, 0)
-  return dt
+  if (!s) return null
+  const m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s.trim())
+  if (!m) return null
+  const dt = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+  return isNaN(dt.getTime()) ? null : dt
 }
 
 const firstWith = (ops: OpRow[], k: keyof OpRow): string =>
