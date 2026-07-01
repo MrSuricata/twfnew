@@ -1572,10 +1572,13 @@ async function handleShipments(req: VercelRequest, res: VercelResponse, db: any,
       updates.descarga = r.descarga
       updates.dev = r.dev
       updates.contenedor = r.contenedor
-      // Peso/Volumen/Bultos TOTAL = suma de los contenedores.
-      updates.pkgs = r.pkgs
-      updates.kg = r.kg
-      updates.m3 = r.m3
+      // Peso/Volumen/Bultos TOTAL = suma de los contenedores. Pero NO pisar el
+      // total con 0 cuando los contenedores no tienen el peso desglosado: eso
+      // perdería el total cargado a nivel carga (ej. carga multi-cntr importada
+      // con el total solo en la columna). Solo actualizar si hay suma > 0.
+      if (r.pkgs > 0) updates.pkgs = r.pkgs
+      if (r.kg > 0) updates.kg = r.kg
+      if (r.m3 > 0) updates.m3 = r.m3
     }
     if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No valid fields' })
     updates.updated_at_ts = Date.now()
