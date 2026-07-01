@@ -117,6 +117,9 @@ export function getAssignedRefs(loads: TruckLoad[], trucks: Truck[]): Set<string
 export interface AvailabilityOptions {
   showArchived?: boolean
   maxDaysAheadEta?: number
+  /** Ocultar cargas cuya ETA ya pasó hace más de N días (arribó hace mucho →
+   *  ya entregada / fuera de juego). Se revela con "Ver archivadas". */
+  maxDaysAgoEta?: number
 }
 
 export function isFclAvailable(
@@ -124,16 +127,34 @@ export function isFclAvailable(
   assignedRefs: Set<string>,
   opts: AvailabilityOptions = {}
 ): boolean {
-  const { showArchived = false, maxDaysAheadEta = 30 } = opts
+  const { showArchived = false, maxDaysAheadEta = 30, maxDaysAgoEta = 120 } = opts
   if (!shipment.REF) return false
   if (assignedRefs.has(shipment.REF)) return false
   const ops = shipment.operativas || []
   if (ops.length === 0) return false
 
-  const now = todayLocal()
+  // Zona: el armador arma consolidados que SALEN DE URUGUAY. No mostrar cargas de
+  // otras zonas (Argentina / Chile / Paraguay / otros) — no van en un camión desde
+  // MVD. La FCL trae PAIS derivado del POD (UY/AR/CL/OTRO).
+  if (shipment.PAIS === 'AR' || shipment.PAIS === 'CL' || shipment.PAIS === 'OTRO') return false
 
-  // Hide refs whose SALIDA was > 7 days ago (already despachado)
+  const now = todayLocal()
+  const eta = shipment.ETA ? parseLocalDate(shipment.ETA) : null
+
+  // ETA muy en el futuro → todavía no arribó, no es cargable.
+  if (eta) {
+    const daysAhead = (eta.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)
+    if (daysAhead > maxDaysAheadEta) return false
+  }
+
   if (!showArchived) {
+    // Sin ETA válida = placeholder viejo/incompleto (cargas 2024/2025 sin datos).
+    // ETA que pasó hace mucho = ya entregada. Ambas se ven con "Ver archivadas".
+    if (!eta) return false
+    const daysAgo = (now.getTime() - eta.getTime()) / (24 * 60 * 60 * 1000)
+    if (daysAgo > maxDaysAgoEta) return false
+
+    // SALIDA de TODAS las operativas hace > 7 días → ya despachado.
     const allSalidaOld = ops.length > 0 && ops.every(o => {
       if (!isValidDate(o.SALIDA)) return false
       const d = parseLocalDate(o.SALIDA)
@@ -142,15 +163,6 @@ export function isFclAvailable(
       return ageDays > 7
     })
     if (allSalidaOld) return false
-  }
-
-  // Hide ETA way too far in the future (configurable)
-  if (shipment.ETA) {
-    const eta = parseLocalDate(shipment.ETA)
-    if (eta) {
-      const daysAhead = (eta.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)
-      if (daysAhead > maxDaysAheadEta) return false
-    }
   }
 
   return true
