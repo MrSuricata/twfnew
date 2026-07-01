@@ -675,9 +675,7 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
                     <div className="mt-6 text-xs text-muted-foreground space-y-1">
                       <p>¿Consultas? Contactanos:</p>
                       <p>
-                        <a href="mailto:info@twf.uy" className="text-accent hover:underline">info@twf.uy</a>
-                        {' · '}
-                        <a href="mailto:bridvanovich@twf.uy" className="text-accent hover:underline">bridvanovich@twf.uy</a>
+                        <a href={`mailto:${brand.contact.email}`} className="text-accent hover:underline">{brand.contact.email}</a>
                       </p>
                     </div>
                   )}

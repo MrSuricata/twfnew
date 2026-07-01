@@ -8,6 +8,7 @@ import { ArrowLeft, EnvelopeSimple, Package, ShieldCheck, ArrowCounterClockwise,
 import { requestOTP, verifyOTPServer } from '@/lib/authClient'
 import { toast } from 'sonner'
 import { useTranslation, getStoredLanguage } from '@/lib/i18n'
+import { useBrand } from '@/lib/brand'
 
 type LoginStep = 'email' | 'otp'
 
@@ -24,6 +25,7 @@ export default function ClientLogin({ onLogin, onBack }: ClientLoginProps) {
   const [countdown, setCountdown] = useState(0)
   const [clientName, setClientName] = useState('')
   const t = useTranslation(getStoredLanguage())
+  const brand = useBrand()
 
   // Countdown timer for resend cooldown
   useEffect(() => {
@@ -187,7 +189,7 @@ export default function ClientLogin({ onLogin, onBack }: ClientLoginProps) {
 
                 <div className="mt-6 p-4 bg-muted rounded-lg text-sm text-muted-foreground">
                   <p className="font-medium mb-2">¿No tenés acceso?</p>
-                  <p>Contactá a Transit World Forwarding para solicitar acceso al portal de cliente.</p>
+                  <p>Contactá a {brand.displayName} para solicitar acceso al portal de cliente.</p>
                 </div>
               </form>
             ) : (

@@ -775,10 +775,36 @@ async function handleShipmentsCache(req: VercelRequest, res: VercelResponse, db:
 async function handlePartnerShipments(req: VercelRequest, res: VercelResponse, db: any, payload: any) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
 
-  const { data, error } = await db.from('shipments_cache').select('*').eq('id', 1).single()
-  if (error && error.code !== 'PGRST116') throw error
-
-  const allShipments: any[] = data?.data || []
+  // Tras el flip (FCL_SOURCE_OF_TRUTH='db') la web es master de las FCL: viven en
+  // la tabla `shipments` (source='fcl') y el shipments_cache quedó CONGELADO en el
+  // cutover (sync.ts y tracking.ts ya no lo reescriben). Leer el cache acá le
+  // mostraría a depósito/transporte el depósito/salida/transporte VIEJO (o cargas
+  // reasignadas al partner equivocado). Se lee la fuente viva y se mapea al mismo
+  // shape ParsedShipment que ya consume el filtro (operativas[] con claves MAYÚSCULA).
+  let allShipments: any[]
+  let syncedAt: string | null
+  if (process.env.FCL_SOURCE_OF_TRUTH === 'db') {
+    const { data: rows, error } = await db.from('shipments')
+      .select('ref,cliente,etd,eta,contenedor,n_cntr,doc_number,linea,buque,terminal,tipo,libre,operativas,archived')
+      .eq('source', 'fcl')
+      .limit(5000)
+    if (error) throw error
+    allShipments = (rows || [])
+      .filter((r: any) => !r.archived)
+      .map((r: any) => ({
+        REF: r.ref || '', CLIENTE: r.cliente || '', ETD: r.etd || '', ETA: r.eta || '',
+        CNTR: r.contenedor || '', N: r.n_cntr || '', MBL: r.doc_number || '',
+        LINEA: r.linea || '', BUQUE: r.buque || '', TERMINAL: r.terminal || '', TIPO: r.tipo || '',
+        LIBRE_HASTA: r.libre || '',
+        operativas: Array.isArray(r.operativas) ? r.operativas : [],
+      }))
+    syncedAt = new Date().toISOString()
+  } else {
+    const { data, error } = await db.from('shipments_cache').select('*').eq('id', 1).single()
+    if (error && error.code !== 'PGRST116') throw error
+    allShipments = data?.data || []
+    syncedAt = data?.synced_at || null
+  }
   // Support both legacy (depotName/transportName) and new (filterValue) JWT payloads.
   const rawFilter: string = payload.filterValue || payload.depotName || payload.transportName || ''
   const filterValueUpper = rawFilter.trim().toUpperCase()
@@ -808,7 +834,7 @@ async function handlePartnerShipments(req: VercelRequest, res: VercelResponse, d
     return { ...safe, operativas: matchingOps }
   }).filter(Boolean)
 
-  return res.status(200).json({ shipments: filtered, syncedAt: data?.synced_at || null })
+  return res.status(200).json({ shipments: filtered, syncedAt })
 }
 
 // ── Partner Users (admin CRUD) ──────────────────────────────────────

@@ -93,7 +93,7 @@ export default function PrivacyPage({ onBack }: PrivacyPageProps) {
               <p className="leading-relaxed">
                 Conservamos los datos de cuenta mientras la cuenta esté activa. Los datos operativos
                 (embarques, documentación, registros de trazabilidad) se mantienen por el plazo que
-                exigen las normas aduaneras y fiscales uruguayas, que en general es de hasta diez (10)
+                exigen {brand.legal.fiscalNorms}, que en general es de hasta diez (10)
                 años. Pasado ese plazo, los datos se anonimizan o eliminan.
               </p>
             </section>
@@ -142,7 +142,7 @@ export default function PrivacyPage({ onBack }: PrivacyPageProps) {
               <h2 className="text-xl font-semibold text-primary">8. Contacto del responsable</h2>
               <p className="leading-relaxed">
                 El responsable del tratamiento de datos es {brand.legalName}, con domicilio en
-                la República Oriental del Uruguay. Para cualquier consulta sobre esta política o el
+                {' '}{brand.legal.domicile}.{brand.legal.dataLaw ? ` El tratamiento se rige por ${brand.legal.dataLaw}; podés dirigir reclamos a la autoridad de control competente.` : ''} Para cualquier consulta sobre esta política o el
                 tratamiento de tus datos, contactanos a{' '}
                 <a href={`mailto:${brand.contact.email}`} className="text-primary underline">{brand.contact.email}</a>.
               </p>

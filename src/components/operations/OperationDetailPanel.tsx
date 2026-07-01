@@ -233,7 +233,7 @@ export default function OperationDetailPanel({
           <div className="flex items-center gap-1.5 flex-wrap pb-1">
             <Badge variant="outline" className="h-5 text-[9px]">{op.tipo || MODALITY_LABELS[op.mode]}</Badge>
             {op.pais && <Badge variant="outline" className="h-5 text-[9px]">{PAIS_LABEL[op.pais] || op.pais}</Badge>}
-            {truckStatus ? (
+            {truckStatus && op.mode !== 'fcl' ? (
               <Badge variant="outline" className="h-5 text-[9px] gap-1" title={`Estado controlado por el camión ${truckStatus.truckCode}`}>
                 <TruckIcon size={10} weight="fill" className="text-primary" />
                 {truckStatus.truckCode} · {STATUS_LABEL[truckStatus.status] || truckStatus.status}

@@ -32,8 +32,6 @@ import { processShipmentRecord, getShipmentStatus } from '@/lib/shipmentTypes'
 // animaciones de scroll, logo que se mueve al scrollear y tracking público.
 // ──────────────────────────────────────────────────────────────────────
 
-const WHATSAPP = '59899511196' // TODO: reemplazar por el de Mediterranea
-
 const MODES = [
   { icon: Boat, title: 'Marítimo FCL', desc: 'Contenedor completo puerta a puerta, con trazabilidad de punta a punta.' },
   { icon: Stack, title: 'Marítimo LCL', desc: 'Carga consolidada: pagás solo por el espacio que ocupás.' },
@@ -288,8 +286,14 @@ export default function MediterraneaLanding() {
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
 
-  const wa = `https://wa.me/${WHATSAPP}?text=${encodeURIComponent('Hola Mediterranea Carghas, quiero cotizar un embarque.')}`
   const mail = `mailto:${brand.contact.email}?subject=${encodeURIComponent('Consulta de cotización')}`
+  // Número de WhatsApp de la marca (sin '+' ni espacios para wa.me). Mientras
+  // Mediterránea no tenga su propio número en brand.contact.whatsapp, los CTA de
+  // WhatsApp caen al email de la marca — así ningún lead se desvía al número de otra marca.
+  const waNumber = (brand.contact.whatsapp || '').replace(/[^0-9]/g, '')
+  const wa = waNumber
+    ? `https://wa.me/${waNumber}?text=${encodeURIComponent('Hola Mediterranea Carghas, quiero cotizar un embarque.')}`
+    : mail
 
   const navLinks = [
     { href: '#modos', label: 'Servicios' },

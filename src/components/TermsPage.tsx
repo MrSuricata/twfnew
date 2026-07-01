@@ -136,10 +136,9 @@ export default function TermsPage({ onBack }: TermsPageProps) {
             <section className="space-y-2">
               <h2 className="text-xl font-semibold text-primary">9. Ley aplicable y jurisdicción</h2>
               <p className="leading-relaxed">
-                Estos Términos se rigen por las leyes de la República Oriental del Uruguay. Cualquier
-                controversia que surja de su interpretación o ejecución se someterá a los tribunales
-                competentes de la ciudad de Montevideo, renunciando las partes a cualquier otro fuero
-                que pudiera corresponderles.
+                Estos Términos se rigen por las leyes de {brand.legal.country}. Cualquier
+                controversia que surja de su interpretación o ejecución se someterá a {brand.legal.courts},
+                renunciando las partes a cualquier otro fuero que pudiera corresponderles.
               </p>
             </section>
 

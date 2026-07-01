@@ -226,7 +226,7 @@ export default function ContainerDatesSection({
                     onChange={e => setDraft(i, 'SALIDA', e.target.value)}
                     onBlur={() => commitDraft(i, 'SALIDA')}
                     onKeyDown={e => { if (e.key === 'Enter') commitDraft(i, 'SALIDA') }}
-                    className="h-7 rounded border border-input bg-background px-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                    className="h-9 rounded border border-input bg-background px-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                   />
                 ) : (
                   <span className={`text-[13px] font-medium ${rec.SALIDA ? '' : 'text-muted-foreground'}`}>
@@ -248,7 +248,7 @@ export default function ContainerDatesSection({
                     onChange={e => setDraft(i, 'ETA_FISC', e.target.value)}
                     onBlur={() => commitDraft(i, 'ETA_FISC')}
                     onKeyDown={e => { if (e.key === 'Enter') commitDraft(i, 'ETA_FISC') }}
-                    className="h-7 rounded border border-input bg-background px-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                    className="h-9 rounded border border-input bg-background px-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                   />
                 ) : (
                   <span className={`text-[13px] font-medium ${rec.ETA_FISC ? '' : 'text-muted-foreground'}`}>
@@ -264,7 +264,7 @@ export default function ContainerDatesSection({
                   <select
                     value={rec.LUGAR_SALIDA || ''}
                     onChange={e => handleLugarChange(i, e.target.value)}
-                    className="h-7 rounded border border-input bg-background px-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                    className="h-9 rounded border border-input bg-background px-1 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                   >
                     {LUGAR_OPTIONS.map(o => (
                       <option key={o.value} value={o.value}>{o.label}</option>
