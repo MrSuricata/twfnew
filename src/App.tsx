@@ -360,7 +360,8 @@ function App() {
 
   // ── Data update handlers (save to localStorage + Supabase) ──
 
-  const handleUpdateClients = (updated: ClientAccount[]) => {
+  const handleUpdateClients = async (updated: ClientAccount[]) => {
+    const prev = clients
     setClients(updated)
     saveToStorage('twf-clients', updated)
     // Save to Supabase so clients are shared across machines + OTP works.
@@ -369,11 +370,20 @@ function App() {
     // localStorage and get reverted when loadDataFromDB resolves.
     if (isAdminLoggedIn) {
       pendingClientWritesRef.current += 1
-      saveClients(updated)
-        .catch(err => console.warn('[DB] Failed to save clients:', err))
-        .finally(() => {
-          pendingClientWritesRef.current = Math.max(0, pendingClientWritesRef.current - 1)
-        })
+      try {
+        await saveClients(updated)
+      } catch (err) {
+        // Si el backend rechaza (ej. patrón inválido) revertimos el optimista y
+        // avisamos. Antes se tragaba el error (console.warn) → quedaba un falso
+        // éxito que se "des-guardaba" solo al refrescar. Se re-lanza para que el
+        // formulario del cliente NO se cierre y muestre el motivo.
+        setClients(prev)
+        saveToStorage('twf-clients', prev)
+        toast.error(`No se pudo guardar el cliente: ${(err as Error)?.message || 'error desconocido'}`)
+        throw err
+      } finally {
+        pendingClientWritesRef.current = Math.max(0, pendingClientWritesRef.current - 1)
+      }
     }
   }
 

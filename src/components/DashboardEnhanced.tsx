@@ -464,9 +464,7 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
           <TabsContent value="clients">
             <ClientManager
               clients={clients}
-              onUpdateClients={(updated) => {
-                if (onUpdateClients) onUpdateClients(updated)
-              }}
+              onUpdateClients={(updated) => onUpdateClients?.(updated)}
               shipments={fclShipments}
             />
           </TabsContent>

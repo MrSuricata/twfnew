@@ -586,7 +586,7 @@ export function matchesClientePattern(cliente: string, pattern: string): boolean
     .toUpperCase()
     .split(',')
     .map(p => p.trim())
-    .filter(p => p.length >= 5)
+    .filter(p => p.length >= 4)
   if (patterns.length === 0) return false
   return patterns.some(p => {
     const escaped = p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
