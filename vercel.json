@@ -7,7 +7,9 @@
     { "source": "/portal", "destination": "/index.html" },
     { "source": "/partner", "destination": "/index.html" },
     { "source": "/depot", "destination": "/index.html" },
-    { "source": "/transport", "destination": "/index.html" }
+    { "source": "/transport", "destination": "/index.html" },
+    { "source": "/terminos", "destination": "/index.html" },
+    { "source": "/privacidad", "destination": "/index.html" }
   ],
   "headers": [
     {
