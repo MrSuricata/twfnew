@@ -107,6 +107,15 @@ export default function ClientManager({ clients, onUpdateClients, shipments = []
       return
     }
 
+    // Cada cliente del patrón (separado por coma) debe tener ≥4 caracteres — el
+    // backend lo rechaza y el matcheo ignora los más cortos. Avisamos ACÁ, claro,
+    // antes de mandar (si no, el guardado fallaba en silencio).
+    const shortToken = clientePattern.split(',').map(t => t.trim()).find(t => t.length > 0 && t.length < 4)
+    if (shortToken) {
+      setFormError(`Cada cliente del patrón debe tener al menos 4 caracteres. "${shortToken}" tiene ${shortToken.length}.`)
+      return
+    }
+
     setIsSaving(true)
     try {
       let updated: ClientAccount[]
@@ -114,16 +123,8 @@ export default function ClientManager({ clients, onUpdateClients, shipments = []
       if (editingId) {
         updated = clients.map(c => {
           if (c.id !== editingId) return c
-          return {
-            ...c,
-            email,
-            name,
-            company,
-            clientePattern
-          }
+          return { ...c, email, name, company, clientePattern }
         })
-
-        toast.success('Cliente actualizado')
       } else {
         const newClient: ClientAccount = {
           id: `${Date.now()}`,
@@ -134,13 +135,18 @@ export default function ClientManager({ clients, onUpdateClients, shipments = []
           createdAt: Date.now()
         }
         updated = [...clients, newClient]
-        toast.success('Cliente creado — email de bienvenida enviado')
       }
 
+      // Éxito y cierre van DESPUÉS del guardado: si el backend rechaza cae al
+      // catch, muestra el motivo y deja el formulario abierto (antes mostraba
+      // "actualizado" aunque hubiera fallado, y se revertía al refrescar).
       await onUpdateClients(updated)
+      toast.success(editingId ? 'Cliente actualizado' : 'Cliente creado — email de bienvenida enviado')
       setShowDialog(false)
       setForm(EMPTY_FORM)
       setEditingId(null)
+    } catch (err) {
+      setFormError((err as Error)?.message || 'No se pudo guardar el cliente')
     } finally {
       setIsSaving(false)
     }
