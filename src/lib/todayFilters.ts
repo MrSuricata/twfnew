@@ -38,22 +38,23 @@ function daysSince(dateStr: string): number | null {
   return Math.floor((today.getTime() - d.getTime()) / MS_PER_DAY)
 }
 
-/** Contenedor ya devuelto ("DEVUELTO" vive en LIBRE). No debe figurar en las
- *  secciones de movimiento de HOY (saliendo / frontera / llegando): ya cerró su
- *  ciclo, aunque su SALIDA sea de hace 1-2 días. */
-function isReturned(op: { LIBRE?: string }): boolean {
-  return (op.LIBRE || '').trim().toUpperCase() === 'DEVUELTO'
-}
-
 /**
  * Operativas whose SALIDA date is today.
  *
  * "Carga está saliendo de Uruguay hoy via camión."
+ *
+ * OJO: NO filtrar por LIBRE=DEVUELTO. "DEVUELTO" es un estado del CONTENEDOR (el
+ * vacío ya se devolvió a la terminal), NO de la CARGA. En un TRASIEGO el
+ * contenedor se devuelve apenas se trasborda la carga al camión, días ANTES de
+ * que la carga cruce la frontera y llegue a fiscal. Estas cards siguen el
+ * movimiento de la CARGA (salida → frontera → fiscal); el ciclo del contenedor
+ * es independiente. El "ya terminó" lo maneja la lógica de ETA_FISC (si el
+ * arribo fiscal ya pasó, no aparece).
  */
 export function salientesHoy(shipments: ParsedShipment[]): OpMatch[] {
   return shipments.flatMap(s =>
     (s.operativas ?? [])
-      .filter(op => isDateToday(op.SALIDA) && !isReturned(op))
+      .filter(op => isDateToday(op.SALIDA))
       .map(op => ({ shipment: s, op }))
   )
 }
@@ -68,7 +69,9 @@ export function enFronteraHoy(shipments: ParsedShipment[]): OpMatch[] {
   return shipments.flatMap(s =>
     (s.operativas ?? [])
       .filter(op => {
-        if (isReturned(op)) return false // ya devuelto → no está en frontera
+        // NO filtrar por DEVUELTO: es estado del contenedor, no de la carga
+        // (ver nota en salientesHoy). La carga sigue en frontera aunque el
+        // contenedor vacío ya se haya devuelto.
         if (!isValidDate(op.SALIDA)) return false
         const days = daysSince(op.SALIDA)
         if (days === null) return false
@@ -90,7 +93,7 @@ export function enFronteraHoy(shipments: ParsedShipment[]): OpMatch[] {
 export function llegandoFiscalHoy(shipments: ParsedShipment[]): OpMatch[] {
   return shipments.flatMap(s =>
     (s.operativas ?? [])
-      .filter(op => isDateToday(op.ETA_FISC) && !isReturned(op))
+      .filter(op => isDateToday(op.ETA_FISC))
       .map(op => ({ shipment: s, op }))
   )
 }

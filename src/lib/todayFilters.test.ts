@@ -100,6 +100,13 @@ describe('salientesHoy', () => {
     expect(matches[0].op.CNTR_OP).toBe('C1')
     expect(matches[1].op.CNTR_OP).toBe('C2')
   })
+
+  // Regresión: DEVUELTO es estado del CONTENEDOR, no de la CARGA. En un trasiego
+  // el contenedor se devuelve antes de que la carga cruce/ llegue a fiscal.
+  it('incluye ops con LIBRE=DEVUELTO (no filtrar por estado del contenedor)', () => {
+    const s = mkShip('A7500', [mkOp({ SALIDA: TODAY, LIBRE: 'DEVUELTO' })])
+    expect(salientesHoy([s])).toHaveLength(1)
+  })
 })
 
 describe('enFronteraHoy', () => {
@@ -137,6 +144,13 @@ describe('enFronteraHoy', () => {
     ])
     expect(enFronteraHoy([s])).toHaveLength(0)
   })
+
+  // Regresión: la carga sigue en frontera aunque el contenedor vacío ya se
+  // haya devuelto (LIBRE=DEVUELTO). ETA_FISC futuro = todavía no llegó.
+  it('incluye cargas con contenedor DEVUELTO si aún no llegaron a fiscal', () => {
+    const s = mkShip('A7500', [mkOp({ SALIDA: YESTERDAY, ETA_FISC: TOMORROW, LIBRE: 'DEVUELTO' })])
+    expect(enFronteraHoy([s])).toHaveLength(1)
+  })
 })
 
 describe('llegandoFiscalHoy', () => {
@@ -146,6 +160,12 @@ describe('llegandoFiscalHoy', () => {
       mkOp({ ETA_FISC: YESTERDAY }),
       mkOp({ ETA_FISC: '' }),
     ])
+    expect(llegandoFiscalHoy([s])).toHaveLength(1)
+  })
+
+  // Regresión: la carga llega a fiscal hoy aunque el contenedor ya esté DEVUELTO.
+  it('incluye cargas con contenedor DEVUELTO que llegan a fiscal hoy', () => {
+    const s = mkShip('A7500', [mkOp({ ETA_FISC: TODAY, LIBRE: 'DEVUELTO' })])
     expect(llegandoFiscalHoy([s])).toHaveLength(1)
   })
 })
