@@ -22,7 +22,6 @@ Brian Ridvanovich
 Transit World Forwarding
 ✉  bridvanovich@twf.uy
 🌐 transitworldforwarding.vercel.app
-📲 +598 99 511 196
 ─────────────────────────`
 
 interface TemplateLabels {

@@ -103,9 +103,10 @@ export const BRANDS: Record<BrandId, Brand> = {
       icon: '/images/med-emblem-dark.svg',
       iconWhite: '/images/med-emblem-white.svg',
     },
-    // whatsapp: usa el número de TWF (el de Brian) de forma interina hasta que
-    // Mediterránea tenga su propio número — decisión de Brian (01/07/2026).
-    contact: { email: 'info@mediterraneacarghas.com.ar', whatsapp: '+59899511196', site: 'mediterraneacarghas.com.ar' },
+    // INTERINO (decisión de Brian, 01/07/2026): mientras se hacen las pruebas,
+    // el contacto de Med va al mail y WhatsApp de Brian. Revertir cuando esté lista
+    // la casilla propia → email: 'info@mediterraneacarghas.com.ar'.
+    contact: { email: 'bridvanovich@twf.uy', whatsapp: '+59899511196', site: 'mediterraneacarghas.com.ar' },
     capabilities: { publicLanding: true, contentAdmin: true, opsAdmin: true, portals: true },
     legal: {
       country: 'la República Argentina',
