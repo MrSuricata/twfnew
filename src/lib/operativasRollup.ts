@@ -19,6 +19,10 @@ export function rollupFromOperativas(ops: OperativasRecord[]) {
     descarga: firstWith(ops, 'DESCARGA'),
     dev: firstWith(ops, 'DEV'),
     contenedor: ops.map(o => o.CNTR_OP).filter(Boolean).join(', '),
+    // Peso/Volumen/Bultos TOTAL = suma de los contenedores.
+    pkgs: ops.reduce((a, o) => a + (Number(o.PKGS) || 0), 0),
+    kg: ops.reduce((a, o) => a + (Number(o.KG) || 0), 0),
+    m3: ops.reduce((a, o) => a + (Number(o.M3) || 0), 0),
     salidaVaria: new Set(sal.map(x => x.s)).size > 1,
     etaFiscalVaria: new Set(fisc.map(x => x.s)).size > 1,
   }
@@ -45,5 +49,8 @@ export function withRollupColumns(fields: Record<string, unknown>): Record<strin
     descarga: r.descarga,
     dev: r.dev,
     contenedor: r.contenedor,
+    pkgs: r.pkgs,
+    kg: r.kg,
+    m3: r.m3,
   }
 }

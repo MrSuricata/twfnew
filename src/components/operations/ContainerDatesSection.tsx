@@ -123,7 +123,7 @@ export function buildNextOperativas(
   existing: OperativasRecord[],
   op: UnifiedOperation,
   idx: number,
-  patch: Partial<Pick<OperativasRecord, 'SALIDA' | 'ETA_FISC' | 'LUGAR_SALIDA'>>
+  patch: Partial<Pick<OperativasRecord, 'SALIDA' | 'ETA_FISC' | 'LUGAR_SALIDA' | 'PKGS' | 'KG' | 'M3'>>
 ): OperativasRecord[] {
   return cntrs.map((_, i) => {
     const base = resolveRecord(cntrs, existing, i, op)
@@ -157,12 +157,12 @@ export default function ContainerDatesSection({
 
   const draftKey = (i: number, field: string) => `${cntrs[i]}-${i}-${field}`
 
-  const getDraft = (i: number, field: 'SALIDA' | 'ETA_FISC', committed: string) => {
+  const getDraft = (i: number, field: string, committed: string) => {
     const k = draftKey(i, field)
     return k in drafts ? drafts[k] : committed
   }
 
-  const setDraft = (i: number, field: 'SALIDA' | 'ETA_FISC', value: string) => {
+  const setDraft = (i: number, field: string, value: string) => {
     setDrafts(prev => ({ ...prev, [draftKey(i, field)]: value }))
   }
 
@@ -193,6 +193,32 @@ export default function ContainerDatesSection({
     onCommitOperativas(buildNextOperativas(cntrs, existing, op, i, { LUGAR_SALIDA: value }))
   }
 
+  // Bultos/Kg/M³ por contenedor: inputs numéricos, commit onBlur. El total
+  // (Peso/Volumen/Bultos de arriba) pasa a ser la SUMA de los contenedores
+  // (se recalcula en el rollup al escribir el array operativas).
+  const commitNumberDraft = (i: number, field: 'PKGS' | 'KG' | 'M3') => {
+    const k = draftKey(i, field)
+    if (!(k in drafts)) return
+    const raw = (drafts[k] || '').trim().replace(',', '.')
+    setDrafts(prev => { const next = { ...prev }; delete next[k]; return next })
+    const num = raw === '' ? 0 : Number(raw)
+    if (!isFinite(num) || num < 0) return
+    onCommitOperativas(buildNextOperativas(cntrs, existing, op, i, { [field]: num }))
+  }
+
+  // Totales (suma de los contenedores) — se muestran al pie como confirmación.
+  const totals = cntrs.reduce(
+    (acc, _c, i) => {
+      const r = resolveRecord(cntrs, existing, i, op)
+      acc.pkgs += Number(r.PKGS) || 0
+      acc.kg += Number(r.KG) || 0
+      acc.m3 += Number(r.M3) || 0
+      return acc
+    },
+    { pkgs: 0, kg: 0, m3: 0 }
+  )
+  const nf = new Intl.NumberFormat('es-UY', { maximumFractionDigits: 2 })
+
   return (
     <section className="rounded-lg border bg-card p-3">
       <div className="flex items-center justify-between mb-3">
@@ -209,81 +235,149 @@ export default function ContainerDatesSection({
           return (
             <div
               key={`${cntr}-${i}`}
-              className="grid grid-cols-[auto_1fr_1fr_1fr_auto] items-center gap-x-2 gap-y-1 rounded-md border bg-background px-2.5 py-2"
+              className="rounded-md border bg-background px-2.5 py-2 space-y-2"
             >
-              {/* Código contenedor */}
-              <span className="text-[12px] font-mono font-medium text-foreground min-w-[110px] truncate" title={cntr}>
-                {cntr}
-              </span>
-
-              {/* Salida MVD */}
-              <div className="flex flex-col gap-0.5">
-                <span className="text-[10px] text-muted-foreground leading-none">Salida MVD</span>
-                {editable ? (
-                  <input
-                    type="date"
-                    value={getDraft(i, 'SALIDA', rec.SALIDA || '')}
-                    onChange={e => setDraft(i, 'SALIDA', e.target.value)}
-                    onBlur={() => commitDraft(i, 'SALIDA')}
-                    onKeyDown={e => { if (e.key === 'Enter') commitDraft(i, 'SALIDA') }}
-                    className="h-9 rounded border border-input bg-background px-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                  />
-                ) : (
-                  <span className={`text-[13px] font-medium ${rec.SALIDA ? '' : 'text-muted-foreground'}`}>
-                    {rec.SALIDA || '—'}
-                  </span>
-                )}
-                {isSalidaBeforeArrival(getDraft(i, 'SALIDA', rec.SALIDA || ''), rec.ETA_OP || op.eta || '') && (
-                  <span className="text-[10px] font-medium text-red-600 leading-tight">⏰ antes de llegada</span>
-                )}
+              {/* Cabecera: código de contenedor + micro-status */}
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[12px] font-mono font-medium text-foreground truncate" title={cntr}>
+                  {cntr}
+                </span>
+                <span className="text-[11px] text-muted-foreground whitespace-nowrap shrink-0" title="Estado derivado">
+                  {status}
+                </span>
               </div>
 
-              {/* Arribo fiscal */}
-              <div className="flex flex-col gap-0.5">
-                <span className="text-[10px] text-muted-foreground leading-none">Arribo fiscal</span>
-                {editable ? (
-                  <input
-                    type="date"
-                    value={getDraft(i, 'ETA_FISC', rec.ETA_FISC || '')}
-                    onChange={e => setDraft(i, 'ETA_FISC', e.target.value)}
-                    onBlur={() => commitDraft(i, 'ETA_FISC')}
-                    onKeyDown={e => { if (e.key === 'Enter') commitDraft(i, 'ETA_FISC') }}
-                    className="h-9 rounded border border-input bg-background px-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                  />
-                ) : (
-                  <span className={`text-[13px] font-medium ${rec.ETA_FISC ? '' : 'text-muted-foreground'}`}>
-                    {rec.ETA_FISC || '—'}
-                  </span>
-                )}
-              </div>
+              {/* Campos en grilla de 3 columnas (entra en el panel sin cortarse) */}
+              <div className="grid grid-cols-3 gap-x-2 gap-y-1.5">
+                {/* Salida MVD */}
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[10px] text-muted-foreground leading-none">Salida MVD</span>
+                  {editable ? (
+                    <input
+                      type="date"
+                      value={getDraft(i, 'SALIDA', rec.SALIDA || '')}
+                      onChange={e => setDraft(i, 'SALIDA', e.target.value)}
+                      onBlur={() => commitDraft(i, 'SALIDA')}
+                      onKeyDown={e => { if (e.key === 'Enter') commitDraft(i, 'SALIDA') }}
+                      className="h-9 w-full rounded border border-input bg-background px-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                    />
+                  ) : (
+                    <span className={`text-[13px] font-medium ${rec.SALIDA ? '' : 'text-muted-foreground'}`}>
+                      {rec.SALIDA || '—'}
+                    </span>
+                  )}
+                  {isSalidaBeforeArrival(getDraft(i, 'SALIDA', rec.SALIDA || ''), rec.ETA_OP || op.eta || '') && (
+                    <span className="text-[10px] font-medium text-red-600 leading-tight">⏰ antes de llegada</span>
+                  )}
+                </div>
 
-              {/* Lugar de salida — discrete pick: commit onChange */}
-              <div className="flex flex-col gap-0.5">
-                <span className="text-[10px] text-muted-foreground leading-none">Lugar</span>
-                {editable ? (
-                  <select
-                    value={rec.LUGAR_SALIDA || ''}
-                    onChange={e => handleLugarChange(i, e.target.value)}
-                    className="h-9 rounded border border-input bg-background px-1 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                  >
-                    {LUGAR_OPTIONS.map(o => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
-                ) : (
-                  <span className={`text-[13px] font-medium ${rec.LUGAR_SALIDA ? '' : 'text-muted-foreground'}`}>
-                    {rec.LUGAR_SALIDA || '—'}
-                  </span>
-                )}
-              </div>
+                {/* Arribo fiscal */}
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[10px] text-muted-foreground leading-none">Arribo fiscal</span>
+                  {editable ? (
+                    <input
+                      type="date"
+                      value={getDraft(i, 'ETA_FISC', rec.ETA_FISC || '')}
+                      onChange={e => setDraft(i, 'ETA_FISC', e.target.value)}
+                      onBlur={() => commitDraft(i, 'ETA_FISC')}
+                      onKeyDown={e => { if (e.key === 'Enter') commitDraft(i, 'ETA_FISC') }}
+                      className="h-9 w-full rounded border border-input bg-background px-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                    />
+                  ) : (
+                    <span className={`text-[13px] font-medium ${rec.ETA_FISC ? '' : 'text-muted-foreground'}`}>
+                      {rec.ETA_FISC || '—'}
+                    </span>
+                  )}
+                </div>
 
-              {/* Micro-status */}
-              <span className="text-[11px] text-muted-foreground text-right whitespace-nowrap min-w-[80px]" title="Estado derivado">
-                {status}
-              </span>
+                {/* Lugar de salida — discrete pick: commit onChange */}
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[10px] text-muted-foreground leading-none">Lugar</span>
+                  {editable ? (
+                    <select
+                      value={rec.LUGAR_SALIDA || ''}
+                      onChange={e => handleLugarChange(i, e.target.value)}
+                      className="h-9 w-full rounded border border-input bg-background px-1 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                    >
+                      {LUGAR_OPTIONS.map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className={`text-[13px] font-medium ${rec.LUGAR_SALIDA ? '' : 'text-muted-foreground'}`}>
+                      {rec.LUGAR_SALIDA || '—'}
+                    </span>
+                  )}
+                </div>
+
+                {/* Bultos por contenedor */}
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[10px] text-muted-foreground leading-none">Bultos</span>
+                  {editable ? (
+                    <input
+                      type="number" inputMode="numeric" min="0"
+                      value={getDraft(i, 'PKGS', rec.PKGS ? String(rec.PKGS) : '')}
+                      onChange={e => setDraft(i, 'PKGS', e.target.value)}
+                      onBlur={() => commitNumberDraft(i, 'PKGS')}
+                      onKeyDown={e => { if (e.key === 'Enter') commitNumberDraft(i, 'PKGS') }}
+                      className="h-9 w-full rounded border border-input bg-background px-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                    />
+                  ) : (
+                    <span className={`text-[13px] font-medium ${rec.PKGS ? '' : 'text-muted-foreground'}`}>
+                      {rec.PKGS ? nf.format(Number(rec.PKGS)) : '—'}
+                    </span>
+                  )}
+                </div>
+
+                {/* Kg por contenedor */}
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[10px] text-muted-foreground leading-none">Kg</span>
+                  {editable ? (
+                    <input
+                      type="number" inputMode="decimal" min="0"
+                      value={getDraft(i, 'KG', rec.KG ? String(rec.KG) : '')}
+                      onChange={e => setDraft(i, 'KG', e.target.value)}
+                      onBlur={() => commitNumberDraft(i, 'KG')}
+                      onKeyDown={e => { if (e.key === 'Enter') commitNumberDraft(i, 'KG') }}
+                      className="h-9 w-full rounded border border-input bg-background px-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                    />
+                  ) : (
+                    <span className={`text-[13px] font-medium ${rec.KG ? '' : 'text-muted-foreground'}`}>
+                      {rec.KG ? nf.format(Number(rec.KG)) : '—'}
+                    </span>
+                  )}
+                </div>
+
+                {/* M³ por contenedor */}
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[10px] text-muted-foreground leading-none">M³</span>
+                  {editable ? (
+                    <input
+                      type="number" inputMode="decimal" min="0" step="0.01"
+                      value={getDraft(i, 'M3', rec.M3 ? String(rec.M3) : '')}
+                      onChange={e => setDraft(i, 'M3', e.target.value)}
+                      onBlur={() => commitNumberDraft(i, 'M3')}
+                      onKeyDown={e => { if (e.key === 'Enter') commitNumberDraft(i, 'M3') }}
+                      className="h-9 w-full rounded border border-input bg-background px-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                    />
+                  ) : (
+                    <span className={`text-[13px] font-medium ${rec.M3 ? '' : 'text-muted-foreground'}`}>
+                      {rec.M3 ? nf.format(Number(rec.M3)) : '—'}
+                    </span>
+                  )}
+                </div>
+              </div>
             </div>
           )
         })}
+      </div>
+
+      {/* Total = suma de los contenedores (el bloque Peso/Volumen/Bultos de arriba
+          muestra esta misma suma). */}
+      <div className="mt-3 flex flex-wrap items-center justify-end gap-x-4 gap-y-1 border-t pt-2 text-[11px] text-muted-foreground">
+        <span>Total: <b className="text-foreground">{nf.format(totals.pkgs)}</b> bultos</span>
+        <span><b className="text-foreground">{nf.format(totals.kg)}</b> kg</span>
+        <span><b className="text-foreground">{nf.format(totals.m3)}</b> m³</span>
       </div>
     </section>
   )
