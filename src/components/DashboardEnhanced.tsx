@@ -9,7 +9,6 @@ import {
   ChartBar,
   UsersThree,
   CalendarBlank,
-  Package,
   Warning,
   Lightning,
   ShieldCheck,
@@ -27,7 +26,6 @@ import TeamManager from './TeamManager'
 import TodayDashboard from './TodayDashboard'
 import AgendaCalendar from './agenda/AgendaCalendar'
 import { mergeFclShipments } from '@/lib/operationsTypes'
-import ShipmentTracking from './ShipmentTracking'
 import ExcelImport from './ExcelImport'
 import CaseStudiesEditor from './CaseStudiesEditor'
 import TestimonialsEditor from './TestimonialsEditor'
@@ -179,7 +177,6 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
       'excel-import': 'Importar Datos',
       'case-studies': 'Casos de Éxito',
       testimonials: 'Testimonios',
-      tracking: 'Tracking',
       clients: 'Clientes',
       partners: 'Partners',
       quotes: 'Cotizaciones',
@@ -286,10 +283,6 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
               <ChartBar size={16} className="mr-1.5" />
               <span className="hidden sm:inline">Analíticas</span>
             </TabsTrigger>
-            <TabsTrigger value="tracking" className="tab-underline">
-              <Package size={16} className="mr-1.5" />
-              <span className="hidden sm:inline">Cargas</span>
-            </TabsTrigger>
             <TabsTrigger value="operaciones" className="tab-underline">
               <TableIcon size={16} className="mr-1.5" weight="fill" />
               <span className="hidden sm:inline">Operaciones</span>
@@ -386,23 +379,6 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
               dbShipments={dbShipments}
               trucks={trucks}
               truckLoads={truckLoads}
-            />
-          </TabsContent>
-
-          <TabsContent value="tracking">
-            <ShipmentTracking
-              shipmentRecords={shipments}
-              reports={reports}
-              originPhotos={originPhotos}
-              billing={billing}
-              onUpdateReports={(updated) => {
-                if (onUpdateReports) onUpdateReports(updated)
-              }}
-              onUpdateOriginPhotos={(updated) => {
-                if (onUpdateOriginPhotos) onUpdateOriginPhotos(updated)
-              }}
-              onUpdateBilling={onUpdateBilling}
-              onClearBilling={onClearBilling}
             />
           </TabsContent>
 
