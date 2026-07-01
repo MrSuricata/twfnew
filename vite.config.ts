@@ -22,15 +22,15 @@ const MED_META = `<title>Mediterranea Carghas — Logística internacional sin f
     <meta property="og:description" content="Tu socio en comercio internacional. Marítimo, aéreo y terrestre con alcance global — una sola ventana para toda tu logística." />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://mediterraneacarghas.com.ar" />
-    <!-- TODO Brian: og-image 1200x630 de Med en /public/med-og-image.jpg (exportar de Canva).
-         Por ahora usa el emblema para evitar el preview roto (404). -->
-    <meta property="og:image" content="https://mediterraneacarghas.com.ar/med-icon-512.png" />
+    <meta property="og:image" content="https://mediterraneacarghas.com.ar/med-og-image.jpg" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
     <meta property="og:locale" content="es_AR" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:url" content="https://mediterraneacarghas.com.ar" />
     <meta name="twitter:title" content="Mediterranea Carghas — Logística internacional sin fronteras" />
     <meta name="twitter:description" content="Tu socio en comercio internacional. Marítimo, aéreo y terrestre con alcance global." />
-    <meta name="twitter:image" content="https://mediterraneacarghas.com.ar/med-icon-512.png" />
+    <meta name="twitter:image" content="https://mediterraneacarghas.com.ar/med-og-image.jpg" />
     <link rel="canonical" href="https://mediterraneacarghas.com.ar" />
     <script type="application/ld+json">
     {

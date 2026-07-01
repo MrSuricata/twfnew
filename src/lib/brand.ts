@@ -43,6 +43,20 @@ export interface Brand {
   }
   contact: { email: string; whatsapp?: string; site: string }
   capabilities: BrandCapabilities
+  /** Marco legal por marca (Términos / Privacidad). NO es asesoramiento legal:
+   *  redacción base a revisar por un abogado antes de operar. */
+  legal: {
+    /** País cuya ley rige, en genitivo: "la República Argentina". */
+    country: string
+    /** Cláusula de tribunales competentes (Términos §9). */
+    courts: string
+    /** Domicilio del responsable de datos (Privacidad §8). */
+    domicile: string
+    /** Normas de retención documental (Privacidad §4). */
+    fiscalNorms: string
+    /** Ley de protección de datos aplicable (Privacidad); vacío = no citar. */
+    dataLaw: string
+  }
   /** Primary font-family name (loaded via index.html / index.css). */
   font: string
 }
@@ -67,6 +81,13 @@ export const BRANDS: Record<BrandId, Brand> = {
     // producción y se decida bloquear TWF a solo-landing, volver opsAdmin y
     // portals a false.
     capabilities: { publicLanding: true, contentAdmin: true, opsAdmin: true, portals: true },
+    legal: {
+      country: 'la República Oriental del Uruguay',
+      courts: 'los tribunales competentes de la ciudad de Montevideo',
+      domicile: 'la República Oriental del Uruguay',
+      fiscalNorms: 'las normas aduaneras y fiscales uruguayas',
+      dataLaw: '',
+    },
     font: 'Inter',
   },
   med: {
@@ -82,8 +103,17 @@ export const BRANDS: Record<BrandId, Brand> = {
       icon: '/images/med-emblem-dark.svg',
       iconWhite: '/images/med-emblem-white.svg',
     },
-    contact: { email: 'info@mediterraneacarghas.com.ar', site: 'mediterraneacarghas.com.ar' },
+    // whatsapp: usa el número de TWF (el de Brian) de forma interina hasta que
+    // Mediterránea tenga su propio número — decisión de Brian (01/07/2026).
+    contact: { email: 'info@mediterraneacarghas.com.ar', whatsapp: '+59899511196', site: 'mediterraneacarghas.com.ar' },
     capabilities: { publicLanding: true, contentAdmin: true, opsAdmin: true, portals: true },
+    legal: {
+      country: 'la República Argentina',
+      courts: 'los tribunales ordinarios competentes de la República Argentina',
+      domicile: 'la República Argentina',
+      fiscalNorms: 'las normas aduaneras y fiscales argentinas',
+      dataLaw: 'la Ley N.º 25.326 de Protección de los Datos Personales',
+    },
     font: 'Jost',
   },
 }
