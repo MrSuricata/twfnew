@@ -38,7 +38,13 @@ const DEFAULT_CLIENTS: ClientAccount[] = []
 
 // ── localStorage helpers with write queue to prevent concurrent writes ──
 
-let _writeQueue: Promise<void> = Promise.resolve()
+// Persistencia a localStorage con DEBOUNCE por key: coalesce las escrituras
+// rápidas para no bloquear el main thread con un JSON.stringify de arrays grandes
+// (~1400 cargas) en CADA edición — era la causa del freeze al editar varias celdas
+// seguidas. El localStorage es solo cache (la DB es la fuente y el PATCH al backend
+// es inmediato), así que una escritura tardía no pierde datos.
+const _saveTimers: Record<string, ReturnType<typeof setTimeout>> = {}
+const _pendingSaves: Record<string, unknown> = {}
 
 function loadFromStorage<T>(key: string, fallback: T): T {
   try {
@@ -51,14 +57,18 @@ function loadFromStorage<T>(key: string, fallback: T): T {
 }
 
 function saveToStorage(key: string, data: unknown) {
-  // Queue writes to prevent concurrent localStorage corruption
-  _writeQueue = _writeQueue.then(() => {
+  _pendingSaves[key] = data
+  if (_saveTimers[key]) clearTimeout(_saveTimers[key])
+  _saveTimers[key] = setTimeout(() => {
+    const payload = _pendingSaves[key]
+    delete _pendingSaves[key]
+    delete _saveTimers[key]
     try {
-      localStorage.setItem(key, JSON.stringify(data))
+      localStorage.setItem(key, JSON.stringify(payload))
     } catch (e) {
       console.error(`Error saving ${key} to localStorage:`, e)
     }
-  })
+  }, 400)
 }
 
 function getInitialView(): View {
@@ -407,7 +417,7 @@ function App() {
     if (isAdminLoggedIn) {
       pendingDocumentsWritesRef.current += 1
       saveDocuments(docs)
-        .catch(err => console.warn('[DB] Failed to save documents:', err))
+        .catch(err => { console.warn('[DB] Failed to save documents:', err); toast.error('No se pudieron guardar los documentos') })
         .finally(() => {
           pendingDocumentsWritesRef.current = Math.max(0, pendingDocumentsWritesRef.current - 1)
         })
@@ -478,7 +488,7 @@ function App() {
       try {
         await apiDeleteTruck(id)
       } catch (err) {
-        console.warn('[DB] Failed to delete truck:', err)
+        console.warn('[DB] Failed to delete truck:', err); toast.error('No se pudo borrar el camión')
         toast.warning('Error al borrar camión en la base de datos', { duration: 4000 })
       } finally {
         lastTrucksWriteTsRef.current = Date.now()
@@ -562,7 +572,7 @@ function App() {
       try {
         await apiDeleteTruckLoad(id)
       } catch (err) {
-        console.warn('[DB] Failed to delete truck load:', err)
+        console.warn('[DB] Failed to delete truck load:', err); toast.error('No se pudo borrar la carga del camión')
       } finally {
         lastTruckLoadsWriteTsRef.current = Date.now()
       }
@@ -575,7 +585,7 @@ function App() {
     if (isAdminLoggedIn && updated.length > 0) {
       pendingLclAirWritesRef.current += 1
       saveLclAir(updated)
-        .catch(err => console.warn('[DB] Failed to save LCL/Air:', err))
+        .catch(err => { console.warn('[DB] Failed to save LCL/Air:', err); toast.error('No se pudo guardar la carga LCL/aérea') })
         .finally(() => {
           pendingLclAirWritesRef.current = Math.max(0, pendingLclAirWritesRef.current - 1)
         })
@@ -590,7 +600,7 @@ function App() {
       try {
         await apiDeleteLclAir(id)
       } catch (err) {
-        console.warn('[DB] Failed to delete LCL/Air:', err)
+        console.warn('[DB] Failed to delete LCL/Air:', err); toast.error('No se pudo borrar la carga LCL/aérea')
       }
     }
   }
@@ -634,7 +644,7 @@ function App() {
       try {
         await apiDeleteBilling(ref)
       } catch (err) {
-        console.warn('[DB] Failed to delete billing:', err)
+        console.warn('[DB] Failed to delete billing:', err); toast.error('No se pudo deshacer la facturación')
       }
     }
   }
@@ -657,7 +667,7 @@ function App() {
     saveToStorage('twf-operators', next)
     if (isAdminLoggedIn) {
       try { await apiDeleteOperator(id) }
-      catch (err) { console.warn('[DB] Failed to delete operator:', err) }
+      catch (err) { console.warn('[DB] Failed to delete operator:', err); toast.error('No se pudo borrar el operativo') }
     }
   }
 
@@ -765,7 +775,7 @@ function App() {
     setAssignments(next)
     saveToStorage('twf-operator-assignments', next)
     if (isAdminLoggedIn) {
-      saveOperatorAssignment(ref, operatorId).catch(err => console.warn('[DB] Failed to save assignment:', err))
+      saveOperatorAssignment(ref, operatorId).catch(err => { console.warn('[DB] Failed to save assignment:', err); toast.error('No se pudo guardar la asignación de operativo') })
     }
   }
 

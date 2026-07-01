@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect, useCallback, memo, useRef } from 'react'
+import { useMemo, useState, useEffect, useCallback, memo, useRef, useDeferredValue } from 'react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -293,8 +293,11 @@ export default function OperationsGrid({
     )
   }
 
+  // useDeferredValue: al tipear, el filtrado sobre ~1400 filas usa un valor
+  // diferido → el input queda fluido (React no bloquea el tecleo recomputando todo).
+  const deferredSearch = useDeferredValue(search)
   const filtered = useMemo(() => {
-    const q = search.toLowerCase().trim()
+    const q = deferredSearch.toLowerCase().trim()
     const num = (s: string) => { const n = parseFloat(s.replace(',', '.')); return isFinite(n) ? n : null }
     const kMin = num(kgMin), kMax = num(kgMax), vMin = num(m3Min), vMax = num(m3Max)
     const today = new Date(); today.setHours(0, 0, 0, 0)
@@ -315,7 +318,7 @@ export default function OperationsGrid({
       }
       return true
     })
-  }, [visibleOps, modeFilter, zonaFilter, originFilter, destFilter, kgMin, kgMax, m3Min, m3Max, segFilter, truckByRef, operatorFilter, search])
+  }, [visibleOps, modeFilter, zonaFilter, originFilter, destFilter, kgMin, kgMax, m3Min, m3Max, segFilter, truckByRef, operatorFilter, deferredSearch])
 
   const pesoVolActivo = !!(kgMin || kgMax || m3Min || m3Max)
 
