@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { Toaster, toast } from 'sonner'
+import { toast } from 'sonner'
 import { Language, getStoredLanguage, setStoredLanguage } from '@/lib/i18n'
 import { QuoteFormData, ClientAccount, ShipmentDocument, OperativeReport, OriginPhoto } from '@/lib/quotationTypes'
 import { ParsedShipment } from '@/lib/shipmentTypes'
@@ -668,13 +668,18 @@ function App() {
     // (rollupFromOperativasApi). Sin esto, la grilla de Operaciones (que lee las
     // columnas, no el array) quedaba stale hasta recargar la página.
     const optimistic = withRollupColumns(fields)
+    const prev = dbShipments // snapshot para revertir si el guardado falla
     const next = dbShipments.map(s => s.id === id ? { ...s, ...optimistic } as DbShipment : s)
     setDbShipments(next)
     saveToStorage('twf-db-shipments', next)
     if (isAdminLoggedIn) {
       patchDbShipment(id, fields).catch(err => {
         console.warn('[DB] Failed to patch shipment:', err)
-        toast.warning('Error al guardar el cambio', { duration: 4000 })
+        // La DB NO guardó: revertir el update optimista para no dejar la grilla
+        // (y localStorage) mostrando un valor que no se persistió.
+        setDbShipments(prev)
+        saveToStorage('twf-db-shipments', prev)
+        toast.error('No se pudo guardar el cambio — se revirtió. Reintentá.', { duration: 5000 })
       })
     }
   }
@@ -1036,7 +1041,6 @@ function App() {
   if (getBrand().id === 'med') {
     return (
       <>
-        <Toaster position="top-right" toastOptions={{ style: { zIndex: 99999 } }} style={{ zIndex: 99999 }} />
         <MediterraneaLanding />
       </>
     )
@@ -1044,7 +1048,6 @@ function App() {
 
   return (
     <>
-      <Toaster position="top-right" toastOptions={{ style: { zIndex: 99999 } }} style={{ zIndex: 99999 }} />
       <PublicSiteEnhanced
         language={language || 'es'}
         onLanguageChange={handleLanguageChange}

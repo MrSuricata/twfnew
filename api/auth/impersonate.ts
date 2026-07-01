@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { authenticateRequest, signClientToken } from '../_lib/jwt.js'
+import { authenticateRequest, signClientToken, auditUser } from '../_lib/jwt.js'
 import { handleCors } from '../_lib/cors.js'
 import { getSupabase } from '../_lib/supabase.js'
 
@@ -65,6 +65,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!payload || payload.role !== 'admin') {
     return res.status(401).json({ error: 'Admin authentication required' })
   }
+  // Solo el OWNER puede "ver el portal como cliente". Un admin acotado NO debe
+  // poder impersonar a cualquier cliente (saltaría el scoping por cartera y
+  // obtendría un token con el clientePattern completo de ese cliente, sin OTP).
+  // Tokens viejos sin level = owner (back-compat, mismo criterio que isOwner).
+  if (payload.level === 'admin') {
+    return res.status(403).json({ error: 'Solo el owner puede ver el portal como cliente.' })
+  }
 
   const { email } = req.body || {}
   if (!email || typeof email !== 'string') {
@@ -81,8 +88,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(404).json({ error: 'Cliente no encontrado' })
   }
 
-  // Audit trail
-  console.info('[impersonate] admin impersonating:', normalizedEmail)
+  // Audit trail (best-effort) — queda registrado en audit_log quién impersonó a
+  // quién (antes era solo un console.info que no dejaba rastro auditable).
+  try {
+    getSupabase().from('audit_log').insert({
+      usuario: auditUser(payload),
+      action: 'impersonar',
+      entity: 'clients',
+      ref: normalizedEmail,
+      details: { by: payload.user },
+    }).then(() => {}, (e: any) => console.warn('[impersonate audit] failed:', e?.message))
+  } catch (e: any) {
+    console.warn('[impersonate audit] failed:', e?.message)
+  }
 
   // Sign client JWT (identical to OTP verify flow)
   const token = signClientToken(
