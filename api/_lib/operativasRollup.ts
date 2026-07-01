@@ -7,6 +7,9 @@ interface OpRow {
   DESCARGA?: string
   DEV?: string
   CNTR_OP?: string
+  PKGS?: number | string
+  KG?: number | string
+  M3?: number | string
   [k: string]: unknown
 }
 
@@ -28,6 +31,9 @@ function parseLocalDate(s: string): Date | null {
 const firstWith = (ops: OpRow[], k: keyof OpRow): string =>
   (ops.find(o => o[k])?.[k] as string) || ''
 
+const sumOf = (ops: OpRow[], k: 'PKGS' | 'KG' | 'M3'): number =>
+  ops.reduce((acc, o) => acc + (Number(o[k]) || 0), 0)
+
 const datesOf = (ops: OpRow[], k: 'SALIDA' | 'ETA_FISC'): { s: string; d: Date }[] =>
   ops
     .map(o => o[k] as string | undefined)
@@ -47,6 +53,9 @@ export function rollupFromOperativasApi(ops: OpRow[]): {
   descarga: string
   dev: string
   contenedor: string
+  pkgs: number
+  kg: number
+  m3: number
 } {
   const sal = datesOf(ops, 'SALIDA').sort((a, b) => a.d.getTime() - b.d.getTime())
   const fisc = datesOf(ops, 'ETA_FISC').sort((a, b) => a.d.getTime() - b.d.getTime())
@@ -58,5 +67,9 @@ export function rollupFromOperativasApi(ops: OpRow[]): {
     descarga: firstWith(ops, 'DESCARGA'),
     dev: firstWith(ops, 'DEV'),
     contenedor: ops.map(o => o.CNTR_OP).filter(Boolean).join(', '),
+    // Peso/Volumen/Bultos TOTAL = suma de los contenedores.
+    pkgs: sumOf(ops, 'PKGS'),
+    kg: sumOf(ops, 'KG'),
+    m3: sumOf(ops, 'M3'),
   }
 }

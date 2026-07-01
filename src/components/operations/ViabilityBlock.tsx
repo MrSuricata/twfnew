@@ -33,9 +33,12 @@ export default function ViabilityBlock({
       </div>
 
       <div className="grid grid-cols-2 gap-2 mb-3">
-        <StatBox label="Peso" value={op.kg} unit="kg" kind="number" editable={editable} onCommit={v => onCommit('kg', v)} />
-        <StatBox label="Volumen" value={op.m3} unit="m³" kind="number" editable={editable} onCommit={v => onCommit('m3', v)} />
-        <StatBox label="Bultos" value={op.pkgs} kind="number" editable={editable} onCommit={v => onCommit('pkgs', v)} />
+        {/* FCL: Peso/Volumen/Bultos = SUMA de los contenedores (read-only). Se
+            editan por contenedor en "Salidas y arribos por contenedor". LCL/aéreo
+            (sin desglose por contenedor) siguen editables directo. */}
+        <StatBox label="Peso" value={op.kg} unit="kg" kind="number" editable={editable && op.mode !== 'fcl'} sumHint={op.mode === 'fcl'} onCommit={v => onCommit('kg', v)} />
+        <StatBox label="Volumen" value={op.m3} unit="m³" kind="number" editable={editable && op.mode !== 'fcl'} sumHint={op.mode === 'fcl'} onCommit={v => onCommit('m3', v)} />
+        <StatBox label="Bultos" value={op.pkgs} kind="number" editable={editable && op.mode !== 'fcl'} sumHint={op.mode === 'fcl'} onCommit={v => onCommit('pkgs', v)} />
         <StatBox label="Fiscal (destino)" value={op.fiscal} kind="text" editable={editable} onCommit={v => onCommit('fiscal', v)} />
         <StatBox label="Depósito UY" value={op.deposito} kind="combo" options={depositoOptions} editable={editable} onCommit={v => onCommit('deposito', v)} />
         <StatBox label="Desconsolidación" value={op.desconsol} kind="date" editable={editable} onCommit={v => onCommit('desconsol', v)} />
@@ -56,7 +59,7 @@ export default function ViabilityBlock({
 
 // Cuadro grande editable: número / texto / fecha / combo (datalist).
 function StatBox({
-  label, value, unit, kind, options, editable, onCommit,
+  label, value, unit, kind, options, editable, sumHint, onCommit,
 }: {
   label: string
   value: string | number
@@ -64,6 +67,7 @@ function StatBox({
   kind: 'number' | 'text' | 'date' | 'combo'
   options?: string[]
   editable: boolean
+  sumHint?: boolean
   onCommit: (v: unknown) => void
 }) {
   const [editing, setEditing] = useState(false)
@@ -121,7 +125,7 @@ function StatBox({
           onClick={start}
           disabled={!editable}
           className={`text-left w-full leading-tight ${editable ? 'cursor-text hover:opacity-70' : 'cursor-default'}`}
-          title={editable ? 'Click para editar' : 'Solo lectura (viene de la planilla)'}
+          title={editable ? 'Click para editar' : sumHint ? 'Total = suma de los contenedores (editá cada uno abajo, en “Salidas y arribos por contenedor”)' : 'Solo lectura (viene de la planilla)'}
         >
           <span className={`text-[22px] font-medium ${display === '—' ? 'text-muted-foreground' : ''}`}>{display}</span>
           {unit && display !== '—' && <span className="text-xs text-muted-foreground ml-1">{unit}</span>}

@@ -38,6 +38,13 @@ function daysSince(dateStr: string): number | null {
   return Math.floor((today.getTime() - d.getTime()) / MS_PER_DAY)
 }
 
+/** Contenedor ya devuelto ("DEVUELTO" vive en LIBRE). No debe figurar en las
+ *  secciones de movimiento de HOY (saliendo / frontera / llegando): ya cerró su
+ *  ciclo, aunque su SALIDA sea de hace 1-2 días. */
+function isReturned(op: { LIBRE?: string }): boolean {
+  return (op.LIBRE || '').trim().toUpperCase() === 'DEVUELTO'
+}
+
 /**
  * Operativas whose SALIDA date is today.
  *
@@ -46,7 +53,7 @@ function daysSince(dateStr: string): number | null {
 export function salientesHoy(shipments: ParsedShipment[]): OpMatch[] {
   return shipments.flatMap(s =>
     (s.operativas ?? [])
-      .filter(op => isDateToday(op.SALIDA))
+      .filter(op => isDateToday(op.SALIDA) && !isReturned(op))
       .map(op => ({ shipment: s, op }))
   )
 }
@@ -61,6 +68,7 @@ export function enFronteraHoy(shipments: ParsedShipment[]): OpMatch[] {
   return shipments.flatMap(s =>
     (s.operativas ?? [])
       .filter(op => {
+        if (isReturned(op)) return false // ya devuelto → no está en frontera
         if (!isValidDate(op.SALIDA)) return false
         const days = daysSince(op.SALIDA)
         if (days === null) return false
@@ -82,7 +90,7 @@ export function enFronteraHoy(shipments: ParsedShipment[]): OpMatch[] {
 export function llegandoFiscalHoy(shipments: ParsedShipment[]): OpMatch[] {
   return shipments.flatMap(s =>
     (s.operativas ?? [])
-      .filter(op => isDateToday(op.ETA_FISC))
+      .filter(op => isDateToday(op.ETA_FISC) && !isReturned(op))
       .map(op => ({ shipment: s, op }))
   )
 }
