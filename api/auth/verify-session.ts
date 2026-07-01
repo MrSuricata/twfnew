@@ -16,8 +16,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ error: 'Invalid or expired token' })
   }
 
-  // Admin: no extra check (password is in env var)
+  // Admin: revalidar los usuarios INDIVIDUALES (admin_users) contra su estado
+  // `active` — así un miembro del equipo desactivado pierde la sesión al toque en
+  // vez de seguir válido hasta que expire el token (8h). El owner (login por env
+  // vars) NO está en admin_users, así que no lo encuentra y se permite. En un
+  // fallo transitorio de DB no bloqueamos (fail-open acotado a este chequeo).
   if (payload.role === 'admin') {
+    try {
+      const db = getSupabase()
+      const { data } = await db
+        .from('admin_users')
+        .select('active')
+        .eq('email', String(payload.user || '').toLowerCase().trim())
+        .maybeSingle()
+      if (data && data.active !== true) {
+        return res.status(401).json({ error: 'Cuenta desactivada' })
+      }
+    } catch (err) {
+      console.error('[verify-session] admin check failed:', err)
+    }
     return res.status(200).json({ role: 'admin', user: payload.user })
   }
 
