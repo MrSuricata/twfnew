@@ -749,7 +749,21 @@ export function buildPerContainerPatch(op: UnifiedOperation, col: string, value:
   const patch: Record<string, unknown> = { [col]: value }
   const opField = OP_ARRAY_FIELD_BY_COL[col]
   if (opField && op.operativas && op.operativas.length > 0) {
-    patch.operativas = op.operativas.map(o => ({ ...o, [opField]: value }))
+    const newVal = String(value ?? '')
+    patch.operativas = op.operativas.map(o => {
+      const next: OperativasRecord = { ...o, [opField]: value }
+      // Cambiar el DEPÓSITO arrastra el LUGAR_SALIDA cuando éste coincidía con el
+      // depósito VIEJO (lugar automático) → sigue al nuevo. Si el lugar era otro
+      // (puesto a mano), se respeta. El caso lugar-VACÍO lo cubre el default de
+      // lectura del cliente (lugarOrDeposito en ContainerDatesSection); el server
+      // NO lo materializa (no existe linkLugar). Así depósito y lugar coinciden.
+      if (col === 'deposito') {
+        const oldDep = String(o.DEPOSITO ?? '').trim().toUpperCase()
+        const oldLugar = String(o.LUGAR_SALIDA ?? '').trim().toUpperCase()
+        if (oldLugar && oldLugar === oldDep) next.LUGAR_SALIDA = newVal
+      }
+      return next
+    })
   }
   return patch
 }
