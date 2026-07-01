@@ -43,6 +43,23 @@ describe('buildPerContainerPatch — propaga campos por-contenedor al array oper
     expect(patch.libre).toBe('2026-06-22')
     expect(patch.operativas).toBeUndefined()
   })
+
+  it('DEPOSITO: el LUGAR_SALIDA automático (== depósito viejo) sigue al nuevo', () => {
+    const ops = [{ ...rec(), CNTR_OP: 'C1', DEPOSITO: 'PLANIR', LUGAR_SALIDA: 'PLANIR' }]
+    const patch = buildPerContainerPatch(op({ operativas: ops }), 'deposito', 'GODILCO')
+    expect(patch.deposito).toBe('GODILCO')
+    const next = (patch.operativas as OperativasRecord[])[0]
+    expect(next.DEPOSITO).toBe('GODILCO')
+    expect(next.LUGAR_SALIDA).toBe('GODILCO') // lugar automático sigue al depósito
+  })
+
+  it('DEPOSITO: el LUGAR_SALIDA manual (!= depósito viejo) se respeta', () => {
+    const ops = [{ ...rec(), CNTR_OP: 'C1', DEPOSITO: 'PLANIR', LUGAR_SALIDA: 'TCP' }]
+    const patch = buildPerContainerPatch(op({ operativas: ops }), 'deposito', 'GODILCO')
+    const next = (patch.operativas as OperativasRecord[])[0]
+    expect(next.DEPOSITO).toBe('GODILCO')
+    expect(next.LUGAR_SALIDA).toBe('TCP') // lugar manual NO se pisa
+  })
 })
 
 describe('buildTruckByRef — estado derivado del camión por ref de origen', () => {
