@@ -1560,10 +1560,35 @@ async function handleShipments(req: VercelRequest, res: VercelResponse, db: any,
     for (const [k, v] of Object.entries(body)) {
       if (SHIPMENT_COLS.has(k)) updates[k] = v
     }
+    // ── Link LUGAR_SALIDA ↔ DEPOSITO (PERSISTIDO, no solo mostrado) ──────
+    // Para trasiegos el camión sale del depósito, así que el "lugar de salida"
+    // debe COINCIDIR con el depósito y quedar guardado. Se materializa acá en
+    // cada guardado para que el equipo no tenga que setearlo/revisarlo a mano.
+    const LUGAR_VALS = new Set(['TCP', 'MONTECON', 'GODILCO', 'PLANIR'])
+    const linkLugar = (op: Record<string, unknown>): Record<string, unknown> => {
+      const dep = String(op.DEPOSITO || '').trim().toUpperCase()
+      return (!String(op.LUGAR_SALIDA || '').trim() && LUGAR_VALS.has(dep))
+        ? { ...op, LUGAR_SALIDA: dep }
+        : op
+    }
+    // Si se edita el DEPÓSITO a nivel carga (columna) sin tocar el array por
+    // contenedor, propagarlo a cada contenedor + linkear el lugar → columna y
+    // array quedan COINCIDIENDO (antes el array quedaba stale).
+    if (typeof updates.deposito === 'string' && !Array.isArray(updates.operativas)) {
+      const { data: cur } = await db.from('shipments').select('operativas').eq('id', id).maybeSingle()
+      const curOpsRaw = cur?.operativas
+      const curOps: Record<string, unknown>[] = Array.isArray(curOpsRaw) ? curOpsRaw : []
+      if (curOps.length > 0) {
+        updates.operativas = curOps.map(op => linkLugar({ ...op, DEPOSITO: updates.deposito }))
+      }
+    }
+
     // When operativas[] is written, recompute the flat rollup columns so the
     // grid / agenda / billing / tracking (which read the scalar columns) stay
     // in sync without requiring a separate PATCH.
     if (Array.isArray(updates.operativas) && updates.operativas.length > 0) {
+      // Materializar el lugar por contenedor (persiste el link con el depósito).
+      updates.operativas = (updates.operativas as Record<string, unknown>[]).map(linkLugar)
       const r = rollupFromOperativasApi(updates.operativas as Record<string, unknown>[])
       updates.salida = r.salida
       updates.eta_fiscal = r.eta_fiscal
