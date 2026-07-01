@@ -747,7 +747,7 @@ export default function OperationsGrid({
       </div>
 
       <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-        <LockSimple size={12} /> <strong>Click en una fila</strong> para ver y editar el detalle. FCL: se editan los datos del buque/ruta (✏️ = pisa a la planilla); salida/fiscal/LIBRE siguen viniendo de la planilla hasta el flip. La REF no se edita.
+        <LockSimple size={12} /> <strong>Click en una fila</strong> para ver y editar el detalle. Salida y arribo fiscal se editan por contenedor; LIBRE y operativa en “Datos clave”. La REF no se edita (flujo aparte con PIN).
       </p>
 
       <OperatorsManager

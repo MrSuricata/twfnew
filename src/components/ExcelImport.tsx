@@ -1,10 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Switch } from '@/components/ui/switch'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
   Dialog,
   DialogContent,
@@ -34,14 +31,6 @@ interface ExcelImportProps {
 
 export default function ExcelImport({ onImportComplete, shipmentRecords = [], onRecordsUpdate }: ExcelImportProps) {
   const [localShipmentRecords, setLocalShipmentRecords] = useState<ParsedShipment[]>(shipmentRecords)
-  const [autoSyncEnabled, setAutoSyncEnabled] = useState<boolean>(() => {
-    const stored = localStorage.getItem('twf-auto-sync')
-    if (stored === null) return true // ON por defecto
-    return stored === 'true'
-  })
-  const [syncInterval, setSyncInterval] = useState<number>(() => {
-    return parseInt(localStorage.getItem('twf-sync-interval') || '5') || 5
-  })
   const [isImporting, setIsImporting] = useState(false)
   const [importPreview, setImportPreview] = useState<ParsedShipment[]>([])
   const [showPreviewDialog, setShowPreviewDialog] = useState(false)
@@ -49,20 +38,10 @@ export default function ExcelImport({ onImportComplete, shipmentRecords = [], on
   const [validationErrors, setValidationErrors] = useState<string[]>([])
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null)
 
-  // Persist auto-sync settings
-  useEffect(() => {
-    localStorage.setItem('twf-auto-sync', String(autoSyncEnabled))
-  }, [autoSyncEnabled])
+  // Post-flip: la web es la fuente de verdad; el auto-sync desde Google Sheets
+  // quedó DESACTIVADO (ver App.tsx). Acá sólo queda la importación manual puntual.
 
-  useEffect(() => {
-    localStorage.setItem('twf-sync-interval', String(syncInterval))
-  }, [syncInterval])
-
-  // Auto-sync is handled globally by App.tsx (reads twf-auto-sync/twf-sync-interval from localStorage).
-  // This component only exposes the toggle + manual sync; the global interval drives actual fetches
-  // to avoid duplicate concurrent calls when the user is on the "Importar" tab.
-
-  // Keep local view in sync with prop updates (e.g. when global auto-sync refreshes shipments)
+  // Keep local view in sync with prop updates
   useEffect(() => {
     setLocalShipmentRecords(shipmentRecords)
   }, [shipmentRecords])
@@ -228,7 +207,8 @@ export default function ExcelImport({ onImportComplete, shipmentRecords = [], on
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Los datos se sincronizan desde Google Sheets configurado en el servidor.
+            La web es la fuente de datos. La sincronización automática desde Google
+            Sheets está desactivada — importá desde Sheets sólo para una carga puntual.
           </p>
 
           <div className="flex gap-2">
@@ -248,38 +228,6 @@ export default function ExcelImport({ onImportComplete, shipmentRecords = [], on
               <ArrowsClockwise size={20} className="mr-2" />
               Sincronizar
             </Button>
-          </div>
-
-          {/* Auto-sync toggle */}
-          <div className="flex items-center justify-between border-t pt-4">
-            <div className="space-y-0.5">
-              <Label htmlFor="auto-sync" className="text-sm">Sincronizacion Automatica</Label>
-              <p className="text-xs text-muted-foreground">Actualiza periodicamente desde Google Sheets</p>
-            </div>
-            <div className="flex items-center gap-2">
-              {autoSyncEnabled && (
-                <Select
-                  value={String(syncInterval || 5)}
-                  onValueChange={(value) => setSyncInterval(parseInt(value))}
-                >
-                  <SelectTrigger className="w-[100px] h-8 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="5">5 min</SelectItem>
-                    <SelectItem value="10">10 min</SelectItem>
-                    <SelectItem value="15">15 min</SelectItem>
-                    <SelectItem value="30">30 min</SelectItem>
-                    <SelectItem value="60">1 hora</SelectItem>
-                  </SelectContent>
-                </Select>
-              )}
-              <Switch
-                id="auto-sync"
-                checked={autoSyncEnabled || false}
-                onCheckedChange={setAutoSyncEnabled}
-              />
-            </div>
           </div>
 
           {/* Collapsible CSV paste */}

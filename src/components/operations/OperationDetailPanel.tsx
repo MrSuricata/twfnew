@@ -425,8 +425,7 @@ export default function OperationDetailPanel({
 
           {op.source === 'fcl' && (
             <p className="text-[11px] text-muted-foreground border-t pt-3 flex items-center gap-1.5">
-              <LockSimple size={11} /> FCL espejo de la planilla: los campos con lápiz se editan acá (✏️ pisa a la planilla);
-              salida / ETA fiscal / LIBRE siguen viniendo de la planilla hasta el flip.
+              <LockSimple size={11} /> Salida y arribo fiscal se editan por contenedor; LIBRE y operativa en “Datos clave de la carga”.
             </p>
           )}
         </div>
