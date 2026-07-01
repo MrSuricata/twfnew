@@ -93,17 +93,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       case 'quotes':
         return handleQuotes(req, res, db)
       case 'documents':
-        return handleDocuments(req, res, db)
+        return handleDocuments(req, res, db, payload)
       case 'reports':
-        return handleReports(req, res, db)
+        return handleReports(req, res, db, payload)
       case 'clients':
         return handleClients(req, res, db)
       case 'settings':
         return handleSettings(req, res, db)
       case 'origin-photos':
-        return handleOriginPhotos(req, res, db)
+        return handleOriginPhotos(req, res, db, payload)
       case 'notification-tasks':
-        return handleNotificationTasks(req, res, db)
+        return handleNotificationTasks(req, res, db, payload)
       case 'shipments-cache':
         return handleShipmentsCache(req, res, db)
       case 'partner-users':
@@ -185,7 +185,7 @@ async function handleQuotes(req: VercelRequest, res: VercelResponse, db: any) {
 
 // ── Documents ───────────────────────────────────────────────────────
 
-async function handleDocuments(req: VercelRequest, res: VercelResponse, db: any) {
+async function handleDocuments(req: VercelRequest, res: VercelResponse, db: any, payload: TokenPayload | null = null) {
   if (req.method === 'GET') {
     let query = db.from('documents').select('*').order('uploaded_at', { ascending: false }).limit(500)
     const shipmentRef = req.query.shipmentRef as string
@@ -202,7 +202,9 @@ async function handleDocuments(req: VercelRequest, res: VercelResponse, db: any)
       url: d.url,
       data: d.data,
     }))
-    return res.status(200).json({ documents: docs })
+    // Scoping por cliente: admin acotado solo ve documentos de SUS cargas.
+    const allowed = await allowedRefsForPayload(db, payload)
+    return res.status(200).json({ documents: filterByAllowedRef(docs, allowed, d => d.shipmentRef) })
   }
 
   if (req.method === 'POST') {
@@ -241,7 +243,7 @@ async function handleDocuments(req: VercelRequest, res: VercelResponse, db: any)
 // POST /api/data/reports?mode=file → single report WITH file_data (for upload)
 // DELETE /api/data/reports?id=xxx  → delete single report
 
-async function handleReports(req: VercelRequest, res: VercelResponse, db: any) {
+async function handleReports(req: VercelRequest, res: VercelResponse, db: any, payload: TokenPayload | null = null) {
   if (req.method === 'GET') {
     // Single report with file data (for download)
     const reportId = req.query.id as string
@@ -249,6 +251,9 @@ async function handleReports(req: VercelRequest, res: VercelResponse, db: any) {
       const { data, error } = await db.from('reports').select('*').eq('id', reportId).single()
       if (error) throw error
       if (!data) return res.status(404).json({ error: 'Report not found' })
+      // Scoping: admin acotado no puede bajar un informe de una carga ajena.
+      const allowedOne = await allowedRefsForPayload(db, payload)
+      if (allowedOne && !allowedOne.has(refOf(data.shipment_ref))) return res.status(404).json({ error: 'Report not found' })
       return res.status(200).json({
         report: {
           id: data.id,
@@ -283,7 +288,8 @@ async function handleReports(req: VercelRequest, res: VercelResponse, db: any) {
       createdAt: r.created_at_ts,
       createdBy: r.created_by,
     }))
-    return res.status(200).json({ reports })
+    const allowed = await allowedRefsForPayload(db, payload)
+    return res.status(200).json({ reports: filterByAllowedRef(reports, allowed, r => r.shipmentRef) })
   }
 
   if (req.method === 'POST') {
@@ -481,7 +487,7 @@ async function handleSettings(req: VercelRequest, res: VercelResponse, db: any) 
 // POST  /api/data/notification-tasks         → upsert (create from confirm)
 // DELETE /api/data/notification-tasks?id=xxx → skip/dismiss
 
-async function handleNotificationTasks(req: VercelRequest, res: VercelResponse, db: any) {
+async function handleNotificationTasks(req: VercelRequest, res: VercelResponse, db: any, payload: TokenPayload | null = null) {
   if (req.method === 'GET') {
     const range = (req.query.range as string) || 'all'
     const today = new Date().toISOString().split('T')[0]
@@ -529,7 +535,8 @@ async function handleNotificationTasks(req: VercelRequest, res: VercelResponse, 
       createdAt: t.created_at,
       updatedAt: t.updated_at,
     }))
-    return res.status(200).json({ tasks })
+    // Scoping por cliente (la tarea trae `cliente` en su fila).
+    return res.status(200).json({ tasks: scopeByAdminPattern(tasks, payload) })
   }
 
   if (req.method === 'POST') {
@@ -599,13 +606,16 @@ async function handleNotificationTasks(req: VercelRequest, res: VercelResponse, 
 // POST /api/data/origin-photos?mode=file    → upload single photo
 // DELETE /api/data/origin-photos?id=xxx     → delete single photo
 
-async function handleOriginPhotos(req: VercelRequest, res: VercelResponse, db: any) {
+async function handleOriginPhotos(req: VercelRequest, res: VercelResponse, db: any, payload: TokenPayload | null = null) {
   if (req.method === 'GET') {
     const photoId = req.query.id as string
     if (photoId) {
       const { data, error } = await db.from('origin_photos').select('*').eq('id', photoId).single()
       if (error) throw error
       if (!data) return res.status(404).json({ error: 'Photo not found' })
+      // Scoping: admin acotado no puede ver una foto de una carga ajena.
+      const allowedOne = await allowedRefsForPayload(db, payload)
+      if (allowedOne && !allowedOne.has(refOf(data.shipment_ref))) return res.status(404).json({ error: 'Photo not found' })
       return res.status(200).json({
         photo: {
           id: data.id,
@@ -652,7 +662,8 @@ async function handleOriginPhotos(req: VercelRequest, res: VercelResponse, db: a
       createdAt: p.created_at_ts,
       createdBy: p.created_by,
     }))
-    return res.status(200).json({ photos })
+    const allowed = await allowedRefsForPayload(db, payload)
+    return res.status(200).json({ photos: filterByAllowedRef(photos, allowed, p => p.shipmentRef) })
   }
 
   if (req.method === 'POST') {
@@ -1365,7 +1376,10 @@ async function handleBilling(req: VercelRequest, res: VercelResponse, db: any, p
       .order('updated_at', { ascending: false })
       .limit(5000)
     if (error) throw error
-    return res.status(200).json({ billing: (data || []).map(mapBillingRowToApi) })
+    // Scoping: admin acotado solo ve la facturación de SUS cargas.
+    const billing = (data || []).map(mapBillingRowToApi)
+    const allowed = await allowedRefsForPayload(db, payload)
+    return res.status(200).json({ billing: filterByAllowedRef(billing, allowed, b => b.ref) })
   }
 
   if (req.method === 'POST') {
@@ -1475,6 +1489,29 @@ function scopeByAdminPattern(rows: any[], payload: TokenPayload | null): any[] {
   if (!payload || payload.role !== 'admin' || !payload.clientePattern) return rows
   const pattern = payload.clientePattern
   return rows.filter((r: any) => matchesClientePattern(r.cliente || '', pattern))
+}
+
+// Datos por-carga (reports/fotos/documentos/billing/tareas) NO tienen CLIENTE en su
+// fila: se scopean por REF. Este helper resuelve el Set de REFs visibles para un
+// admin acotado (una query a shipments por request). Devuelve null si ve TODO
+// (owner / sin patrón / no-admin) → sin filtro.
+async function allowedRefsForPayload(db: any, payload: TokenPayload | null): Promise<Set<string> | null> {
+  if (!payload || payload.role !== 'admin' || !payload.clientePattern) return null
+  const pattern = payload.clientePattern
+  const { data } = await db.from('shipments').select('ref, cliente').limit(5000)
+  const set = new Set<string>()
+  for (const r of (data || [])) {
+    if (matchesClientePattern(r.cliente || '', pattern)) set.add(String(r.ref || '').trim().toUpperCase())
+  }
+  return set
+}
+
+const refOf = (r: string | null | undefined) => String(r || '').trim().toUpperCase()
+
+// Filtra una lista por su ref contra el set permitido (o pasa todo si es null).
+function filterByAllowedRef<T>(items: T[], allowed: Set<string> | null, getRef: (i: any) => string | null | undefined): T[] {
+  if (!allowed) return items
+  return items.filter(i => allowed.has(refOf(getRef(i))))
 }
 
 async function handleShipments(req: VercelRequest, res: VercelResponse, db: any, payload: TokenPayload | null) {
