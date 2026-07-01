@@ -40,7 +40,7 @@ export function withRollupColumns(fields: Record<string, unknown>): Record<strin
   const ops = fields.operativas
   if (!Array.isArray(ops) || ops.length === 0) return fields
   const r = rollupFromOperativas(ops as OperativasRecord[])
-  return {
+  const out: Record<string, unknown> = {
     ...fields,
     salida: r.salida,
     eta_fiscal: r.eta_fiscal,
@@ -49,8 +49,12 @@ export function withRollupColumns(fields: Record<string, unknown>): Record<strin
     descarga: r.descarga,
     dev: r.dev,
     contenedor: r.contenedor,
-    pkgs: r.pkgs,
-    kg: r.kg,
-    m3: r.m3,
   }
+  // NO pisar el total con 0 cuando los contenedores no tienen el peso desglosado
+  // (mismo criterio que el servidor en api/data/[entity].ts): conservar el total
+  // previo y evitar que la actualización optimista lo parpadee a 0.
+  if (r.pkgs > 0) out.pkgs = r.pkgs
+  if (r.kg > 0) out.kg = r.kg
+  if (r.m3 > 0) out.m3 = r.m3
+  return out
 }
