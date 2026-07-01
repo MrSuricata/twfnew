@@ -320,7 +320,11 @@ function App() {
   useEffect(() => {
     // Check auto-sync settings from localStorage
     const checkAndStartSync = () => {
-      const autoSync = localStorage.getItem('twf-auto-sync') === 'true'
+      // Post-flip (Etapa 4): la web es la fuente de verdad y la planilla de Google
+      // Sheets quedó fuera. El auto-sync desde Sheets se DESACTIVA para TODOS —
+      // volver a traer del sheet pisaría la data editada en la web (divergencia).
+      // (No depende de localStorage: se apaga aunque el equipo lo tenga en 'true'.)
+      const autoSync = false
       const intervalMin = parseInt(localStorage.getItem('twf-sync-interval') || '10') || 10
 
       // Clear existing interval
