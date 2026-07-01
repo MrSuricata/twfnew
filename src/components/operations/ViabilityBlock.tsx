@@ -6,6 +6,9 @@ import { DEPOSITOS_UY } from '@/lib/operationsTypes'
 
 const NUM_FMT = new Intl.NumberFormat('es-UY', { maximumFractionDigits: 2 })
 
+// Tipos de operativa de la carga (combo editable, no restrictivo).
+const OPERATIVA_OPTIONS = ['TRASIEGO', 'CONTENEDOR', 'CARGA A PISO']
+
 // Bloque destacado arriba del panel: los datos que se miran para decidir si una
 // carga es viable, en cuadros grandes + toggles. Editable solo para filas DB
 // (LCL/aéreo/terrestre); FCL muestra los valores con candadito (hasta el flip).
@@ -41,6 +44,12 @@ export default function ViabilityBlock({
         <StatBox label="Bultos" value={op.pkgs} kind="number" editable={editable && op.mode !== 'fcl'} sumHint={op.mode === 'fcl'} onCommit={v => onCommit('pkgs', v)} />
         <StatBox label="Fiscal (destino)" value={op.fiscal} kind="text" editable={editable} onCommit={v => onCommit('fiscal', v)} />
         <StatBox label="Depósito UY" value={op.deposito} kind="combo" options={depositoOptions} editable={editable} onCommit={v => onCommit('deposito', v)} />
+        {/* Operativa y LIBRE son datos de la CARGA (no de un contenedor suelto):
+            editarlos acá propaga a TODOS los contenedores + la columna (vía
+            buildPerContainerPatch en el commit del panel). Antes LIBRE se editaba
+            por contenedor y "no persistía" al abrir otro. */}
+        <StatBox label="Operativa" value={op.operativa} kind="combo" options={OPERATIVA_OPTIONS} editable={editable} onCommit={v => onCommit('operativa', v)} />
+        <StatBox label="Libre (máx. devolución)" value={op.libre} kind="date" editable={editable} onCommit={v => onCommit('libre', v)} />
         <StatBox label="Desconsolidación" value={op.desconsol} kind="date" editable={editable} onCommit={v => onCommit('desconsol', v)} />
       </div>
 

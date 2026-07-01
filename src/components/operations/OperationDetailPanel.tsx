@@ -59,7 +59,8 @@ const SECTIONS: { title: string; fields: { key: keyof UnifiedOperation; label: s
       { key: 'eta', label: 'ETA' },
       { key: 'salida', label: 'Salida' },
       { key: 'etaFisc', label: 'ETA fiscal' },
-      { key: 'libre', label: 'LIBRE', kind: 'date' },
+      // LIBRE se movió a "Datos clave de la carga" (ViabilityBlock): es dato de
+      // la carga y se edita ahí (propaga a todos los contenedores).
       { key: 'seguimiento', label: 'Seguimiento' },
     ],
   },
@@ -73,7 +74,7 @@ const SECTIONS: { title: string; fields: { key: keyof UnifiedOperation; label: s
   {
     title: 'Operativa',
     fields: [
-      { key: 'operativa', label: 'Operativa' },
+      // 'operativa' (tipo) se movió a "Datos clave de la carga" (ViabilityBlock).
       { key: 'transporte', label: 'Transporte' },
       // 'camion' NO va acá: era un texto editable que confundía (setearlo NO sube
       // la carga al camión — eso se hace en el armador → "cargas disponibles").
