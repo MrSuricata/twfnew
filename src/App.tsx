@@ -262,8 +262,9 @@ function App() {
   }, [isAdminLoggedIn, loadDataFromDB])
 
   useEffect(() => {
-    // Load demo shipments only if no persisted data
-    if (shipments.length === 0) {
+    // Demo cargo SOLO en desarrollo: en producción no debe parpadear "DEMO ALPHA/
+    // BETA" antes de que llegue la data real de la DB/sync (ej. login admin Med).
+    if (import.meta.env.DEV && shipments.length === 0) {
       setShipments(getDemoShipments())
     }
   }, [])
