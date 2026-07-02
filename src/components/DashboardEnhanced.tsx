@@ -95,6 +95,11 @@ interface DashboardEnhancedProps {
 
 const ONE_DAY_MS = 86_400_000
 
+// Pestaña "Importar" oculta por pedido de Brian (02/07/2026): post-flip la web
+// es master de FCL y el import puntual desde Sheets quedó sin uso diario.
+// Para reactivarla: poner en true (el componente ExcelImport sigue intacto).
+const SHOW_IMPORT_TAB = false
+
 export default function DashboardEnhanced({ onLogout, isDataLoading = false, clients = [], shipments = [], documents = [], reports = [], originPhotos = [], quotes = [], trucks = [], truckLoads = [], lclAir = [], billing = [], operators = [], assignments = [], dbShipments = [], dbSyncError = null, onUpdateShipments, onUpdateClients, onUpdateDocuments, onUpdateReports, onUpdateOriginPhotos, onUpdateQuotes, onUpdateTrucks, onDeleteTruck, onUpdateTruckLoads, onDeleteTruckLoad, onUpdateLclAir, onDeleteLclAir, onUpdateBilling, onClearBilling, onUpdateOperators, onDeleteOperator, onAssignOperator, onPatchShipment, onCreateShipment, onDeleteShipment, onPatchFclField, onRenameRef, onRefreshTrucks, onReloadFromDB }: DashboardEnhancedProps) {
   const brand = useBrand()
   const ops = brand.capabilities.opsAdmin
@@ -118,6 +123,10 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
       setActiveTab('contenido')
       return
     }
+    // Values que ya no tienen pestaña propia: 'tracking' (vieja "Cargas") va a
+    // Operaciones; 'excel-import' quedó oculta (SHOW_IMPORT_TAB) → HOY.
+    if (v === 'tracking') { setActiveTab('operaciones'); return }
+    if (v === 'excel-import' && !SHOW_IMPORT_TAB) { setActiveTab('hoy'); return }
     setActiveTab(v)
   }, [])
   // Pestaña Equipo: solo el owner (Brian) — el backend re-valida igual.
@@ -344,10 +353,12 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
                 </span>
               )}
             </TabsTrigger>
+            {SHOW_IMPORT_TAB && (
             <TabsTrigger value="excel-import" className="tab-underline" aria-label="Importar datos">
               <Database size={16} className="mr-1.5" />
               <span className="hidden sm:inline">Importar</span>
             </TabsTrigger>
+            )}
             </>)}
             {/* Contenido de la landing pública (casos + testimonios) en una sola
                 pestaña con sub-selector. Partners queda al final, junto a Equipo:
@@ -469,6 +480,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
             />
           </TabsContent>
 
+          {SHOW_IMPORT_TAB && (
           <TabsContent value="excel-import">
             <ExcelImport
               shipmentRecords={shipments}
@@ -480,6 +492,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
               }}
             />
           </TabsContent>
+          )}
 
           <TabsContent value="contenido">
             {/* Sub-selector Casos/Testimonios: Tabs anidadas con el estilo pill por

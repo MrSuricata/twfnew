@@ -17,7 +17,6 @@ import {
   SignOut,
   Lightning,
   Truck,
-  Database,
   Star,
   ChatCircleText,
   ShieldCheck,
@@ -36,11 +35,10 @@ const TABS: Array<{ id: string; label: string; icon: typeof Package; shortcut?: 
   { id: 'hoy', label: 'Hoy', icon: Lightning, shortcut: 'G H' },
   { id: 'agenda', label: 'Agenda', icon: CalendarBlank, shortcut: 'G A' },
   { id: 'analytics', label: 'Analíticas', icon: ChartBar },
-  { id: 'tracking', label: 'Cargas', icon: Package, shortcut: 'G C' },
+  { id: 'operaciones', label: 'Operaciones', icon: Package, shortcut: 'G C' },
   { id: 'quotes', label: 'Cotizaciones', icon: ChatCircleText, shortcut: 'G Q' },
   { id: 'clients', label: 'Clientes', icon: UsersThree, shortcut: 'G L' },
   { id: 'partners', label: 'Partners', icon: Truck, shortcut: 'G P' },
-  { id: 'excel-import', label: 'Importar datos', icon: Database },
   { id: 'case-studies', label: 'Casos de Éxito', icon: Star },
   { id: 'testimonials', label: 'Testimonios', icon: ChatCircleText },
 ]
@@ -105,7 +103,7 @@ export default function CommandPalette({ shipments, clients, onNavigate, onLogou
                 <CommandItem
                   key={s.REF}
                   value={`op ${s.REF} ${s.CLIENTE || ''} ${s.BUQUE || ''} ${s.LINEA || ''}`}
-                  onSelect={() => runThenClose(() => onNavigate('tracking'))}
+                  onSelect={() => runThenClose(() => onNavigate('operaciones'))}
                 >
                   <Package size={18} weight="duotone" className="text-accent" />
                   <span className="font-mono font-semibold">{s.REF}</span>
