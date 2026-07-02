@@ -27,6 +27,8 @@ interface AvailableLoadsPanelProps {
   onAddFcl: (shipment: ParsedShipment) => void
   onAddLclAir: (shipment: LclAirShipment) => void
   onAddDb?: (shipment: DbShipment) => void
+  /** Abre el alta de carga desde el armador (cuando la carga aún no existe). */
+  onCreateNew?: () => void
 }
 
 type ModeFilter = 'all' | 'fcl' | 'lcl' | 'air'
@@ -58,6 +60,7 @@ export default function AvailableLoadsPanel({
   onAddFcl,
   onAddLclAir,
   onAddDb,
+  onCreateNew,
 }: AvailableLoadsPanelProps) {
   const [search, setSearch] = useState('')
   const [modeFilter, setModeFilter] = useState<ModeFilter>('all')
@@ -300,24 +303,51 @@ export default function AvailableLoadsPanel({
       {/* Rows */}
       <div className="flex-1 overflow-y-auto divide-y">
         {filtered.length === 0 ? (
-          <div className="p-6 text-center text-sm text-muted-foreground">
-            No hay cargas disponibles para los filtros actuales.
+          <div className="p-6 text-center text-sm text-muted-foreground space-y-3">
+            <p>No hay cargas disponibles para los filtros actuales.</p>
+            {onCreateNew && (
+              <>
+                <p className="text-xs">¿La carga todavía no existe? Creala sin salir del armador.</p>
+                <CreateNewLoadButton onClick={onCreateNew} />
+              </>
+            )}
           </div>
         ) : (
-          filtered.map(r => (
-            <AvailableRowCard
-              key={`${r.type}-${r.ref}`}
-              row={r}
-              onAdd={() => {
-                if (r.fcl) onAddFcl(r.fcl)
-                else if (r.db) onAddDb?.(r.db)
-                else if (r.lclAir) onAddLclAir(r.lclAir)
-              }}
-            />
-          ))
+          <>
+            {filtered.map(r => (
+              <AvailableRowCard
+                key={`${r.type}-${r.ref}`}
+                row={r}
+                onAdd={() => {
+                  if (r.fcl) onAddFcl(r.fcl)
+                  else if (r.db) onAddDb?.(r.db)
+                  else if (r.lclAir) onAddLclAir(r.lclAir)
+                }}
+              />
+            ))}
+            {onCreateNew && (
+              <div className="p-3">
+                <CreateNewLoadButton onClick={onCreateNew} />
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
+  )
+}
+
+// Botón discreto para dar de alta una carga que no existe todavía — abre el
+// mismo diálogo "Nueva carga" de Operaciones y la agrega al camión al crearla.
+function CreateNewLoadButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full flex items-center justify-center gap-1.5 rounded-md border border-dashed py-2 text-xs text-muted-foreground hover:text-primary hover:border-primary/50 transition-colors"
+    >
+      <Plus size={12} /> Crear carga nueva
+    </button>
   )
 }
 

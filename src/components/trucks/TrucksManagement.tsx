@@ -3,7 +3,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Truck as TruckIcon, Boat } from '@phosphor-icons/react'
 import type { Truck, TruckLoad, LclAirShipment } from '@/lib/truckTypes'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
-import type { DbShipment } from '@/lib/operationsTypes'
+import type { DbShipment, Operator } from '@/lib/operationsTypes'
 import TrucksList from './TrucksList'
 import TruckBuilder from './TruckBuilder'
 import LclAirManager from './LclAirManager'
@@ -14,6 +14,8 @@ interface TrucksManagementProps {
   lclAir: LclAirShipment[]
   dbShipments?: DbShipment[]
   shipments: ParsedShipment[]
+  /** Operativos para el alta de carga desde el armador (diálogo Nueva carga). */
+  operators?: Operator[]
   onUpdateTrucks: (trucks: Truck[], changedIds?: string[]) => void
   onDeleteTruck: (id: string) => void
   onUpdateTruckLoads: (loads: TruckLoad[], changedIds?: string[]) => void
@@ -21,6 +23,8 @@ interface TrucksManagementProps {
   onUpdateLclAir: (shipments: LclAirShipment[]) => void
   onDeleteLclAir: (id: string) => void
   onRefreshTrucks?: () => Promise<boolean>
+  /** Alta real de una carga (App.handleCreateShipment). false = abortada. */
+  onCreateShipment?: (row: DbShipment) => boolean | void
 }
 
 export default function TrucksManagement(props: TrucksManagementProps) {
@@ -57,11 +61,13 @@ export default function TrucksManagement(props: TrucksManagementProps) {
         lclAir={props.lclAir}
         dbShipments={props.dbShipments || []}
         shipments={props.shipments}
+        operators={props.operators}
         onBack={() => setSelectedTruckId(null)}
         onUpdateTrucks={props.onUpdateTrucks}
         onUpdateTruckLoads={props.onUpdateTruckLoads}
         onDeleteTruckLoad={props.onDeleteTruckLoad}
         onDeleteTruck={props.onDeleteTruck}
+        onCreateShipment={props.onCreateShipment}
       />
     )
   }

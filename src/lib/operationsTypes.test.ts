@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildOperations, isOperationActive, dbShipmentToOperation, fclToColumns, dbFclToParsedShipment, mergeFclShipments, newDbShipment, buildTruckByRef, buildPerContainerPatch, EDITABLE_FIELDS, DEPOSITOS_UY, type UnifiedOperation, type DbShipment } from './operationsTypes'
+import { buildOperations, isOperationActive, dbShipmentToOperation, fclToColumns, dbFclToParsedShipment, mergeFclShipments, newDbShipment, suggestNextRef, buildTruckByRef, buildPerContainerPatch, EDITABLE_FIELDS, DEPOSITOS_UY, type UnifiedOperation, type DbShipment } from './operationsTypes'
 import type { ParsedShipment } from './shipmentTypes'
 import type { OperativasRecord } from './shipmentTypes'
 import type { Truck, TruckLoad } from './truckTypes'
@@ -406,5 +406,23 @@ describe('FCL horneada (source=db, mode=fcl) — comportamiento preservado', () 
   it('isOperationActive usa la lógica FCL aunque source=db (devuelta + en fiscal → inactiva)', () => {
     const o = op({ source: 'db', mode: 'fcl', libre: 'DEVUELTO', etaFisc: '2025-12-17' })
     expect(isOperationActive(o, undefined, TODAY)).toBe(false)
+  })
+})
+
+// Alta de carga: sugerencia de próxima ref A#### (compartida por la grilla de
+// Operaciones y el armador de camiones — FCL y aéreos comparten numeración).
+describe('suggestNextRef — próxima ref A#### libre', () => {
+  it('toma el máximo global + 1 (mezcla FCL y aéreos)', () => {
+    expect(suggestNextRef(['A7990', 'A8035', 'A8013', 'LCL-42'])).toBe('A8036')
+  })
+  it('acepta "A 8035" con espacio y minúscula', () => {
+    expect(suggestNextRef(['a 8035', 'A8010'])).toBe('A8036')
+  })
+  it('ignora refs no-A y sufijos split (A7611 B cuenta como 7611)', () => {
+    expect(suggestNextRef(['E198', 'C440', 'A7611 B'])).toBe('A7612')
+  })
+  it('sin refs A#### → vacío (no sugiere)', () => {
+    expect(suggestNextRef(['E198', ''])).toBe('')
+    expect(suggestNextRef([])).toBe('')
   })
 })

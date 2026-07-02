@@ -48,6 +48,7 @@ import {
   isSeguimientoVencido,
   operatorsForMode,
   buildTruckByRef,
+  suggestNextRef,
   OPERATION_COLUMNS,
   STATUS_LABEL,
   MODALITY_LABELS,
@@ -68,7 +69,8 @@ interface OperationsGridProps {
   assignments: OperatorAssignment[]
   onAssignOperator: (ref: string, operatorId: string | null) => void
   onPatchShipment: (id: string, fields: Record<string, unknown>) => void
-  onCreateShipment?: (row: DbShipment) => void
+  /** Devuelve false si el alta se abortó (REF duplicada y el usuario canceló). */
+  onCreateShipment?: (row: DbShipment) => boolean | void
   onDeleteShipment?: (op: UnifiedOperation) => void
   onPatchFclField?: (dbId: string, edits: Record<string, unknown>) => void
   onRenameRef?: (op: UnifiedOperation, newRef: string, pin: string) => Promise<void>
@@ -227,17 +229,12 @@ export default function OperationsGrid({
   // "Hoy" una sola vez por montaje (antes se creaba un Date POR FILA por render).
   const hoy = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d }, [])
 
-  // Próxima ref FCL sugerida: máximo A#### entre TODAS las cargas + 1.
-  // El espacio de numeración "A" es compartido con los aéreos, así que se
-  // toma el máximo global para no chocar (ej: aéreo A8013 vs FCL A8035).
-  const suggestedRef = useMemo(() => {
-    let max = 0
-    for (const o of operations) {
-      const m = /^A\s?(\d{3,})/i.exec(o.ref || '')
-      if (m) max = Math.max(max, parseInt(m[1], 10))
-    }
-    return max > 0 ? `A${max + 1}` : ''
-  }, [operations])
+  // Próxima ref FCL sugerida: máximo A#### entre TODAS las cargas + 1
+  // (helper compartido con el armador de camiones).
+  const suggestedRef = useMemo(
+    () => suggestNextRef(operations.map(o => o.ref)),
+    [operations]
+  )
 
   // ref → { truckCode, derivedStatus } for cargas loaded on a truck. The truck
   // drives the cargo's status (its dates are the source of truth), so the Estado
@@ -779,7 +776,11 @@ export default function OperationsGrid({
           open={newOpen}
           onOpenChange={setNewOpen}
           operators={operators}
-          onCreate={onCreateShipment}
+          onCreate={(row) => {
+            const ok = onCreateShipment(row)
+            if (ok !== false) toast.success(`Carga ${row.ref} agregada — completá lo que falte en la grilla`)
+            return ok
+          }}
           suggestedRef={suggestedRef}
         />
       )}

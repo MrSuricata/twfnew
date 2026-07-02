@@ -709,13 +709,16 @@ function App() {
   }
 
   // Create a new DB shipment (LCL/aéreo/terrestre/FCL) from the web.
-  const handleCreateShipment = (row: DbShipment) => {
+  // Devuelve false si el alta se abortó (REF duplicada y el usuario canceló) —
+  // los callers (diálogo Nueva carga, armador de camiones) lo usan para no
+  // seguir con el flujo post-alta (cerrar diálogo / subir la carga al camión).
+  const handleCreateShipment = (row: DbShipment): boolean => {
     // Anti-duplicado de REF: el alta NO chequeaba (a diferencia del rename con su RPC),
     // así que crear "A7990" dos veces hacía 2 filas en silencio. Avisamos antes de crear.
     const newRef = (row.ref || '').trim().toUpperCase()
     if (newRef && dbShipments.some(s => (s.ref || '').trim().toUpperCase() === newRef)) {
       const ok = window.confirm(`Ya existe una carga con la REF "${row.ref}".\n\n¿Crearla igual? Si es una carga partida, cancelá y usá un sufijo (ej. ${row.ref} A / ${row.ref} B).`)
-      if (!ok) return
+      if (!ok) return false
     }
     const next = [row, ...dbShipments]
     setDbShipments(next)
@@ -728,6 +731,7 @@ function App() {
           toast.warning('Error al crear la carga', { duration: 4000 })
         })
     }
+    return true
   }
 
   // Etapa 3 migración: editar un campo de una FCL espejo. Optimista en el
