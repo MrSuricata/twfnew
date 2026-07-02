@@ -25,6 +25,7 @@ import {
 } from '@phosphor-icons/react'
 import { useBrand } from '@/lib/brand'
 import { processShipmentRecord, getShipmentStatus } from '@/lib/shipmentTypes'
+import { voyageProgress, voyageCaption } from '@/lib/trackProgress'
 
 // ─── Mediterranea Carghas — landing ───────────────────────────────────
 // Identidad propia (casa matriz que unifica todos los modos y destinos):
@@ -212,9 +213,19 @@ function TrackingCard() {
           </div>
           {result.CLIENTE && <div className="text-sm text-[#6b6688] mt-1">{result.CLIENTE}</div>}
 
-          {/* Journey stepper */}
+          {/* Journey stepper — el tramo "En tránsito → En puerto" se llena
+              proporcionalmente al tiempo de viaje real (ETD→ETA) */}
           {(() => {
             const stage = trackStage(status.label)
+            const voyage = stage === 1 ? voyageProgress(result.ETD, result.ETA) : null
+            const caption =
+              stage === 0 && result.ETD
+                ? `Salida estimada de origen: ${fmtDate(result.ETD)}${result.ETA ? ` · ETA ${fmtDate(result.ETA)}` : ''}`
+                : stage === 1 && voyage
+                  ? `${voyageCaption(voyage)}${result.ETA ? ` (ETA ${fmtDate(result.ETA)})` : ''}`
+                  : stage === 1 && result.ETA
+                    ? `ETA estimada: ${fmtDate(result.ETA)}`
+                    : null
             return (
               <div className="mt-4">
                 <div className="flex items-center">
@@ -225,7 +236,16 @@ function TrackingCard() {
                         style={i === stage ? { boxShadow: '0 0 0 4px rgba(73,40,107,.15)' } : undefined}
                       />
                       {i < TRACK_STAGES.length - 1 && (
-                        <div className={`flex-1 h-0.5 transition-colors ${i < stage ? 'bg-[#49286b]' : 'bg-[#e5e4f1]'}`} />
+                        i === 1 && stage === 1 && voyage ? (
+                          <div className="flex-1 h-0.5 bg-[#e5e4f1] relative overflow-hidden rounded-full">
+                            <div
+                              className="absolute inset-y-0 left-0 bg-[#49286b] transition-[width] duration-700"
+                              style={{ width: `${Math.round(voyage.pct * 100)}%` }}
+                            />
+                          </div>
+                        ) : (
+                          <div className={`flex-1 h-0.5 transition-colors ${i < stage ? 'bg-[#49286b]' : 'bg-[#e5e4f1]'}`} />
+                        )
                       )}
                     </Fragment>
                   ))}
@@ -237,6 +257,9 @@ function TrackingCard() {
                     </span>
                   ))}
                 </div>
+                {caption && (
+                  <p className="mt-2 text-[11px] text-[#6b6688] text-center">{caption}</p>
+                )}
               </div>
             )
           })()}
