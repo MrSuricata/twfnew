@@ -80,6 +80,18 @@ export const STATUS_LABEL: Record<string, string> = Object.fromEntries(
   STATUS_OPTIONS.filter(o => o.value).map(o => [o.value, o.label])
 )
 
+/** Clases de color suave para el badge de estado de una carga (grilla + panel).
+ *  Display-only: matchea por LABEL (la FCL deriva labels de la planilla y la DB
+ *  usa STATUS_LABEL). Entregado/Devuelto=verde · En tránsito/viaje=azul ·
+ *  Carga hoy/Sale hoy=ámbar · resto=gris actual (string vacío). */
+export function statusBadgeClass(label: string): string {
+  const s = (label || '').toLowerCase()
+  if (s.includes('entregado') || s.includes('devuelto')) return 'bg-emerald-100 text-emerald-800 border-emerald-200'
+  if (s.includes('tránsito') || s.includes('transito') || s.includes('viaje')) return 'bg-blue-100 text-blue-800 border-blue-200'
+  if (s.includes('carga hoy') || s.includes('sale hoy')) return 'bg-amber-100 text-amber-800 border-amber-200'
+  return ''
+}
+
 export const MODALITY_LABELS: Record<Modality, string> = {
   fcl: 'FCL',
   lcl: 'LCL',

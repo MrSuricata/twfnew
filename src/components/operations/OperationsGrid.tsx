@@ -24,6 +24,7 @@ import {
   ArrowCounterClockwise,
   Trash,
   Scales,
+  Clock,
 } from '@phosphor-icons/react'
 import {
   Dialog,
@@ -51,7 +52,9 @@ import {
   STATUS_LABEL,
   MODALITY_LABELS,
   MODALITY_COLORS,
+  statusBadgeClass,
 } from '@/lib/operationsTypes'
+import { fmtDateDMY, fmtNum as fmtNumUY } from '@/lib/format'
 
 // Per-ref truck info for the Estado column (LCL/aéreo driven by their truck).
 interface TruckRefInfo { truckCode: string; status: string }
@@ -83,11 +86,14 @@ const COLS_STORAGE_KEY = 'twf-ops-columns-v2'  // v2: default angosto 12 cols (1
 const COL_ORDER_KEY = 'twf-ops-col-order'      // per-user column order (drag & drop)
 const ACTIVE_ONLY_KEY = 'twf-ops-active-only'  // toggle "Solo activas"
 
-const PAIS_LABEL: Record<string, string> = { UY: '🇺🇾 UY', AR: '🇦🇷 AR', CL: '🇨🇱 CL', OTRO: '—' }
+const PAIS_LABEL: Record<string, string> = { UY: 'UY', AR: 'AR', CL: 'CL', OTRO: '—' }
 
 // Column value typing for sorting.
 const NUMERIC_KEYS = new Set(['pkgs', 'kg', 'm3'])
 const DATE_KEYS = new Set(['etd', 'eta', 'salida', 'etaFisc', 'libre', 'descarga', 'dev'])
+// Columnas que se MUESTRAN como dd/MM/yyyy (display only — el dato guardado
+// sigue en ISO; textos como "DEVUELTO" pasan tal cual por fmtDateDMY).
+const DATE_DISPLAY_KEYS = new Set([...DATE_KEYS, 'seguimiento'])
 const parseDateMs = (s: string): number => {
   const p = String(s || '').split('-')
   if (p.length !== 3) return NaN
@@ -467,9 +473,9 @@ export default function OperationsGrid({
 
   const zonaChips: { id: ZonaFilter; label: string }[] = [
     { id: 'all', label: 'Todas las zonas' },
-    { id: 'UY', label: '🇺🇾 Uruguay' },
-    { id: 'AR', label: '🇦🇷 Argentina' },
-    { id: 'CL', label: '🇨🇱 Chile' },
+    { id: 'UY', label: 'Uruguay' },
+    { id: 'AR', label: 'Argentina' },
+    { id: 'CL', label: 'Chile' },
     { id: 'OTRO', label: 'Otros' },
   ]
 
@@ -500,7 +506,7 @@ export default function OperationsGrid({
           >
             {m.color && <span className="w-2 h-2 rounded-sm" style={{ background: m.color }} />}
             <span className="font-medium">{m.label}</span>
-            <span className="text-xs text-muted-foreground tabular-nums">{counts[m.id] ?? 0}</span>
+            <span className="text-xs text-muted-foreground tabular-nums">{fmtNumUY(counts[m.id] ?? 0)}</span>
           </button>
         ))}
       </div>
@@ -516,7 +522,7 @@ export default function OperationsGrid({
             }`}
           >
             <span className="font-medium">{z.label}</span>
-            <span className="text-[10px] text-muted-foreground tabular-nums">{zonaCounts[z.id] ?? 0}</span>
+            <span className="text-[10px] text-muted-foreground tabular-nums">{fmtNumUY(zonaCounts[z.id] ?? 0)}</span>
           </button>
         ))}
         <span className="mx-1 h-5 w-px bg-border" />
@@ -538,7 +544,7 @@ export default function OperationsGrid({
               segFilter ? 'bg-red-100 border-red-400 text-red-800 font-semibold' : 'bg-red-50 border-red-300 text-red-700'
             }`}
           >
-            ⏰ Seguimiento vencido
+            <Clock size={12} weight="bold" /> Seguimiento vencido
             <span className="text-[10px] tabular-nums font-bold">{segVencidos}</span>
           </button>
         )}
@@ -616,12 +622,12 @@ export default function OperationsGrid({
 
         {/* Bulk paste from Excel */}
         <Button variant="outline" size="sm" className="h-9" onClick={() => setPasteOpen(true)} title="Pegar un bloque desde Excel para actualizar varias cargas a la vez">
-          <ClipboardText size={16} className="mr-1.5" /> Pegar
+          <ClipboardText size={16} className="mr-1.5" /> Pegar desde planilla
         </Button>
 
         {/* Export filtered rows to CSV */}
         <Button variant="outline" size="sm" className="h-9" onClick={exportCsv} title="Exportar las cargas filtradas (columnas visibles) a CSV para Excel">
-          <DownloadSimple size={16} className="mr-1.5" /> CSV
+          <DownloadSimple size={16} className="mr-1.5" /> Exportar CSV
         </Button>
 
         {/* Column picker */}
@@ -743,14 +749,14 @@ export default function OperationsGrid({
 
       {/* Totals for the current filter */}
       <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-xs">
-        <span className="font-semibold text-foreground">{totals.count.toLocaleString('es-UY')} cargas</span>
+        <span className="font-semibold text-foreground">{totals.count.toLocaleString('es-UY')} carga{totals.count === 1 ? '' : 's'}</span>
         <span className="text-muted-foreground">Bultos: <strong className="text-foreground tabular-nums">{fmtNum(totals.pkgs) || 0}</strong></span>
         <span className="text-muted-foreground">Kg: <strong className="text-foreground tabular-nums">{fmtNum(totals.kg) || 0}</strong></span>
         <span className="text-muted-foreground">M³: <strong className="text-foreground tabular-nums">{fmtNum(totals.m3) || 0}</strong></span>
       </div>
 
-      <p className="text-xs text-muted-foreground flex items-center gap-1.5">
-        <LockSimple size={12} /> <strong>Click en una fila</strong> para ver y editar el detalle. Salida y arribo fiscal se editan por contenedor; LIBRE y operativa en “Datos clave”. La REF no se edita (flujo aparte con PIN).
+      <p className="text-xs text-muted-foreground">
+        <LockSimple size={12} className="inline align-[-2px] mr-1" /><strong>Hacé clic en una carga</strong> para ver y editar el detalle. Salida y arribo fiscal se editan por contenedor; LIBRE y operativa en “Datos clave”. La REF no se edita (flujo aparte con PIN).
       </p>
 
       <OperatorsManager
@@ -901,17 +907,20 @@ const OperationRow = memo(function OperationRow({
       case 'status': {
         // FCL: derived label (read-only). DB: code → label.
         const label = op.source === 'fcl' ? op.status : (STATUS_LABEL[op.status] || op.status)
-        return label ? <Badge variant="outline" className="h-5 text-[9px] whitespace-nowrap">{label}</Badge> : ''
+        return label ? <Badge variant="outline" className={`h-5 text-[9px] whitespace-nowrap ${statusBadgeClass(label)}`}>{label}</Badge> : ''
       }
-      default:
-        return (op as unknown as Record<string, unknown>)[key] as string || ''
+      default: {
+        const raw = (op as unknown as Record<string, unknown>)[key] as string || ''
+        // Fechas ISO → dd/MM/yyyy solo para mostrar (textos tipo "DEVUELTO" pasan tal cual).
+        return DATE_DISPLAY_KEYS.has(key) ? fmtDateDMY(raw) : raw
+      }
     }
   }
 
   return (
     // Zebra via CSS (even:) instead of an index prop → rows don't re-render on
     // sort/reorder, only the DOM nodes move (memo stays valid).
-    <tr onClick={() => onOpen(op.uid)} className="bg-card even:bg-muted/30 hover:bg-primary/5 cursor-pointer">
+    <tr onClick={() => onOpen(op.uid)} className="bg-card even:bg-muted/30 hover:bg-primary/5 transition-colors cursor-pointer">
       {cols.map((c) => {
         // Seguimiento 7+ días sin actualizar (carga activa) → celda en rojo.
         const segRojo = c.key === 'seguimiento' && segVencido
@@ -922,11 +931,12 @@ const OperationRow = memo(function OperationRow({
         // nunca del camión — aunque la FCL vaya cargada en uno (trasiego). Ver
         // isOperationActive, que también ignora truckStatus para mode='fcl'.
         if (c.key === 'status' && truckStatus && op.mode !== 'fcl') {
+          const truckLabel = STATUS_LABEL[truckStatus.status] || truckStatus.status
           return (
             <td key={c.key} className={tdClass}>
-              <Badge variant="outline" className="h-5 text-[9px] whitespace-nowrap gap-1" title={`Estado controlado por el camión ${truckStatus.truckCode}`}>
+              <Badge variant="outline" className={`h-5 text-[9px] whitespace-nowrap gap-1 ${statusBadgeClass(truckLabel)}`} title={`Estado controlado por el camión ${truckStatus.truckCode}`}>
                 <TruckIcon size={10} weight="fill" className="text-primary" />
-                {truckStatus.truckCode} · {STATUS_LABEL[truckStatus.status] || truckStatus.status}
+                {truckStatus.truckCode} · {truckLabel}
               </Badge>
             </td>
           )
@@ -975,7 +985,7 @@ const CARD_FIELDS: { key: keyof UnifiedOperation; label: string }[] = [
   { key: 'cliente', label: 'Cliente' },
   { key: 'eta', label: 'ETA' },
   { key: 'cntr', label: 'CNTR' },
-  { key: 'docNumber', label: 'BL / AWB' },
+  { key: 'docNumber', label: 'BL / MAWB / CRT' },
   { key: 'fiscal', label: 'Fiscal' },
   { key: 'destPort', label: 'Destino' },
   { key: 'pkgs', label: 'Bultos' },
@@ -1005,7 +1015,9 @@ const OperationCard = memo(function OperationCard({
   const renderVal = (key: keyof UnifiedOperation) => {
     const num = key === 'pkgs' || key === 'kg' || key === 'm3'
     const raw = (op as unknown as Record<string, unknown>)[key]
-    return <span>{num ? fmtNum(Number(raw) || 0) : (String(raw ?? '') || '—')}</span>
+    if (num) return <span>{fmtNum(Number(raw) || 0)}</span>
+    const s = String(raw ?? '')
+    return <span>{(DATE_DISPLAY_KEYS.has(key) ? fmtDateDMY(s) : s) || '—'}</span>
   }
 
   return (
@@ -1018,9 +1030,9 @@ const OperationCard = memo(function OperationCard({
           {op.readOnly && <LockSimple size={12} className="text-muted-foreground" />}
         </span>
         {truckStatus ? (
-          <Badge variant="outline" className="text-[10px] gap-1"><TruckIcon size={11} weight="fill" className="text-primary" />{truckStatus.truckCode} · {STATUS_LABEL[truckStatus.status] || truckStatus.status}</Badge>
+          <Badge variant="outline" className={`text-[10px] gap-1 ${statusBadgeClass(STATUS_LABEL[truckStatus.status] || truckStatus.status)}`}><TruckIcon size={11} weight="fill" className="text-primary" />{truckStatus.truckCode} · {STATUS_LABEL[truckStatus.status] || truckStatus.status}</Badge>
         ) : (
-          op.status && <Badge variant="outline" className="text-[10px]">{op.status}</Badge>
+          op.status && <Badge variant="outline" className={`text-[10px] ${statusBadgeClass(STATUS_LABEL[op.status] || op.status)}`}>{STATUS_LABEL[op.status] || op.status}</Badge>
         )}
       </div>
 

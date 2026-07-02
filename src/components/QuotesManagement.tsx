@@ -48,6 +48,7 @@ import { getConvertedRef } from '@/lib/quotationTypes'
 import { buildMailtoLink } from '@/lib/quoteTemplates'
 import { downloadQuotesCsv } from '@/lib/quoteExport'
 import { getBrand } from '@/lib/brand'
+import { fmtHorasAtraso } from '@/lib/format'
 import { DownloadSimple, ArrowsClockwise } from '@phosphor-icons/react'
 import {
   Dialog,
@@ -645,7 +646,7 @@ function QuoteListItem({ quote, isSelected, onClick }: QuoteListItemProps) {
             {isOverdue && (
               <Badge variant="outline" className="text-[10px] h-4 px-1.5 bg-destructive/10 text-destructive border-destructive/30">
                 <Clock size={10} className="mr-0.5" />
-                +{Math.floor((Date.now() - quote.timestamp) / 3_600_000)}h
+                {fmtHorasAtraso((Date.now() - quote.timestamp) / 3_600_000)}
               </Badge>
             )}
           </div>
@@ -824,7 +825,7 @@ function QuoteDetail({ quote, onStatusChange, onReply, onDelete, onConvert, newN
               title="Asignar un REF de operación a esta cotización ganada"
             >
               <ArrowsClockwise size={14} />
-              Convertir en op
+              Convertir en operación
             </Button>
           )}
           <Button
@@ -884,7 +885,7 @@ function InfoCard({ icon, label, value }: { icon: React.ReactNode; label: string
         {icon}
         {label}
       </div>
-      <div className="text-sm font-medium truncate" title={value}>{value}</div>
+      <div className="text-sm font-medium truncate capitalize" title={value}>{value}</div>
     </div>
   )
 }

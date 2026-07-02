@@ -72,7 +72,7 @@ export default function Login({ onLogin, onBack }: LoginProps) {
                   id="username"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="admin"
+                  placeholder="Tu usuario"
                   autoComplete="username"
                   autoFocus
                   required

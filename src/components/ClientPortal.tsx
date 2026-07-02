@@ -322,7 +322,7 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
 
               <Button variant="ghost" onClick={onLogout} className="text-primary-foreground hover:bg-primary-foreground/10">
                 <SignOut size={20} className="mr-2" />
-                Cerrar Sesión
+                Cerrar sesión
               </Button>
             </div>
           </div>

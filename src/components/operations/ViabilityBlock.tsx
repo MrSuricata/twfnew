@@ -3,6 +3,7 @@ import { Input } from '@/components/ui/input'
 import { LockSimple } from '@phosphor-icons/react'
 import type { UnifiedOperation } from '@/lib/operationsTypes'
 import { DEPOSITOS_UY } from '@/lib/operationsTypes'
+import { fmtDateDMY } from '@/lib/format'
 
 const NUM_FMT = new Intl.NumberFormat('es-UY', { maximumFractionDigits: 2 })
 
@@ -82,9 +83,13 @@ function StatBox({
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
 
+  // Fechas: se muestran dd/MM/yyyy (display only); el editor type=date sigue
+  // trabajando con el valor ISO crudo. Textos como "DEVUELTO" pasan tal cual.
   const display = kind === 'number'
     ? (Number(value) ? NUM_FMT.format(Number(value)) : '—')
-    : (String(value ?? '') || '—')
+    : kind === 'date'
+      ? (fmtDateDMY(String(value ?? '')) || '—')
+      : (String(value ?? '') || '—')
 
   const start = () => {
     if (!editable) return

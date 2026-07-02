@@ -210,7 +210,7 @@ export default function PartnerManager() {
         <div>
           <h2 className="text-2xl font-bold flex items-center gap-2">
             <ShieldCheck size={24} weight="duotone" />
-            Gestión de Partners
+            Partners
           </h2>
           <p className="text-sm text-muted-foreground">
             {users.length} usuarios partner registrados (depósitos y transportes)
@@ -218,7 +218,7 @@ export default function PartnerManager() {
         </div>
         <Button onClick={openNew} className="bg-accent text-accent-foreground hover:bg-accent/90">
           <UserPlus size={20} className="mr-2" />
-          Agregar Partner
+          Nuevo partner
         </Button>
       </div>
 
@@ -238,7 +238,7 @@ export default function PartnerManager() {
             </p>
             <Button onClick={openNew} className="bg-accent text-accent-foreground hover:bg-accent/90">
               <UserPlus size={20} className="mr-2" />
-              Agregar Partner
+              Nuevo partner
             </Button>
           </CardContent>
         </Card>

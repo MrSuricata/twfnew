@@ -12,6 +12,7 @@ import {
   consolidadosPorMes, volumenPorTransportista,
 } from '@/lib/analyticsUtils'
 import { buildAnalyticsReport, downloadAnalyticsPdf } from '@/lib/analyticsPdf'
+import { fmtNum } from '@/lib/format'
 import { exportToCSV } from '@/lib/exportUtils'
 import { toast } from 'sonner'
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
@@ -47,9 +48,9 @@ const MODE_CHIPS: { value: ModeFilter; label: string }[] = [
 ]
 const ZONE_CHIPS: { value: ZoneFilter; label: string }[] = [
   { value: 'all', label: 'Todas' },
-  { value: 'UY', label: '🇺🇾 UY' },
-  { value: 'AR', label: '🇦🇷 AR' },
-  { value: 'CL', label: '🇨🇱 CL' },
+  { value: 'UY', label: 'UY' },
+  { value: 'AR', label: 'AR' },
+  { value: 'CL', label: 'CL' },
   { value: 'OTRO', label: 'Otros' },
 ]
 
@@ -134,7 +135,7 @@ export default function AnalyticsDashboard({ shipments, dbShipments = [], trucks
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-4">
           <div>
-            <h2 className="text-2xl font-bold">Estadísticas</h2>
+            <h2 className="text-2xl font-bold">Analíticas</h2>
             <p className="text-sm text-muted-foreground">{filtered.length} cargas en {selectedYear}</p>
           </div>
           {/* Year selector */}
@@ -238,7 +239,7 @@ export default function AnalyticsDashboard({ shipments, dbShipments = [], trucks
               </div>
               <div>
                 <div className="text-2xl font-bold">{kpis.transitoPromedio}<span className="text-sm font-normal text-muted-foreground ml-1">días</span></div>
-                <div className="text-xs text-muted-foreground">Tránsito Promedio</div>
+                <div className="text-xs text-muted-foreground">Tránsito promedio</div>
               </div>
             </div>
           </CardContent>
@@ -268,8 +269,8 @@ export default function AnalyticsDashboard({ shipments, dbShipments = [], trucks
                   <Cube size={22} className="text-blue-600" weight="fill" />
                 </div>
                 <div>
-                  <div className="text-2xl font-bold">{vols.pkgs.toLocaleString()}</div>
-                  <div className="text-xs text-muted-foreground">Bultos Totales</div>
+                  <div className="text-2xl font-bold">{fmtNum(vols.pkgs)}</div>
+                  <div className="text-xs text-muted-foreground">Bultos totales</div>
                 </div>
               </div>
             </CardContent>
@@ -281,7 +282,7 @@ export default function AnalyticsDashboard({ shipments, dbShipments = [], trucks
                   <Cube size={22} className="text-blue-600" weight="fill" />
                 </div>
                 <div>
-                  <div className="text-2xl font-bold">{(vols.kg / 1000).toFixed(0)}<span className="text-sm font-normal text-muted-foreground ml-1">ton</span></div>
+                  <div className="text-2xl font-bold">{fmtNum(Math.round(vols.kg / 1000))}<span className="text-sm font-normal text-muted-foreground ml-1">ton</span></div>
                   <div className="text-xs text-muted-foreground">Peso Total</div>
                 </div>
               </div>
@@ -294,7 +295,7 @@ export default function AnalyticsDashboard({ shipments, dbShipments = [], trucks
                   <Warehouse size={22} className="text-blue-600" weight="fill" />
                 </div>
                 <div>
-                  <div className="text-2xl font-bold">{vols.m3.toFixed(0)}<span className="text-sm font-normal text-muted-foreground ml-1">m³</span></div>
+                  <div className="text-2xl font-bold">{fmtNum(Math.round(vols.m3))}<span className="text-sm font-normal text-muted-foreground ml-1">m³</span></div>
                   <div className="text-xs text-muted-foreground">Volumen Total</div>
                 </div>
               </div>
@@ -321,7 +322,7 @@ export default function AnalyticsDashboard({ shipments, dbShipments = [], trucks
         {/* Por modalidad */}
         <Card className="animate-in slide-in-from-left duration-500">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Por Modalidad</CardTitle>
+            <CardTitle className="text-base">Por modalidad</CardTitle>
           </CardHeader>
           <CardContent>
             {dataModalidad.length > 0 ? (
@@ -344,7 +345,7 @@ export default function AnalyticsDashboard({ shipments, dbShipments = [], trucks
         {/* Por zona */}
         <Card className="animate-in slide-in-from-right duration-500">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Por Zona</CardTitle>
+            <CardTitle className="text-base">Por zona</CardTitle>
           </CardHeader>
           <CardContent>
             {dataZona.length > 0 ? (
@@ -367,7 +368,7 @@ export default function AnalyticsDashboard({ shipments, dbShipments = [], trucks
         {/* Shipments per month */}
         <Card className="animate-in slide-in-from-left duration-500">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Arribos por Mes</CardTitle>
+            <CardTitle className="text-base">Arribos por mes</CardTitle>
           </CardHeader>
           <CardContent>
             {shipmentsPerMonth.length > 0 ? (
@@ -479,7 +480,7 @@ export default function AnalyticsDashboard({ shipments, dbShipments = [], trucks
           <div className="border-t pt-6">
             <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
               <TruckIcon size={22} className="text-accent" />
-              Analíticas Operativas
+              Analíticas operativas
             </h3>
           </div>
 
@@ -634,7 +635,7 @@ export default function AnalyticsDashboard({ shipments, dbShipments = [], trucks
                     <Cube size={22} className="text-emerald-600" weight="fill" />
                   </div>
                   <div>
-                    <div className="text-2xl font-bold">{(consKpis.kg / 1000).toFixed(0)}<span className="text-sm font-normal text-muted-foreground ml-1">ton</span></div>
+                    <div className="text-2xl font-bold">{fmtNum(Math.round(consKpis.kg / 1000))}<span className="text-sm font-normal text-muted-foreground ml-1">ton</span></div>
                     <div className="text-xs text-muted-foreground">Peso Transportado</div>
                   </div>
                 </div>
@@ -647,7 +648,7 @@ export default function AnalyticsDashboard({ shipments, dbShipments = [], trucks
                     <Warehouse size={22} className="text-emerald-600" weight="fill" />
                   </div>
                   <div>
-                    <div className="text-2xl font-bold">{consKpis.m3.toFixed(0)}<span className="text-sm font-normal text-muted-foreground ml-1">m³</span></div>
+                    <div className="text-2xl font-bold">{fmtNum(Math.round(consKpis.m3))}<span className="text-sm font-normal text-muted-foreground ml-1">m³</span></div>
                     <div className="text-xs text-muted-foreground">Volumen Transportado</div>
                   </div>
                 </div>

@@ -20,6 +20,12 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import {
   UserPlus,
   PencilSimple,
   Trash,
@@ -190,12 +196,12 @@ export default function ClientManager({ clients, onUpdateClients, shipments = []
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold">Gestión de Clientes</h2>
+          <h2 className="text-2xl font-bold">Clientes</h2>
           <p className="text-sm text-muted-foreground">{clients.length} clientes registrados</p>
         </div>
         <Button onClick={openNew} className="bg-accent text-accent-foreground hover:bg-accent/90">
           <UserPlus size={20} className="mr-2" />
-          Agregar Cliente
+          Nuevo cliente
         </Button>
       </div>
 
@@ -204,10 +210,10 @@ export default function ClientManager({ clients, onUpdateClients, shipments = []
           <CardContent className="pt-12 pb-12 text-center">
             <UserPlus size={48} className="mx-auto mb-4 text-muted-foreground" />
             <h3 className="text-lg font-semibold mb-2">No hay clientes</h3>
-            <p className="text-muted-foreground mb-4">Crea el primer cliente para que pueda acceder al portal</p>
+            <p className="text-muted-foreground mb-4">Creá el primer cliente para que pueda acceder al portal</p>
             <Button onClick={openNew} className="bg-accent text-accent-foreground hover:bg-accent/90">
               <UserPlus size={20} className="mr-2" />
-              Agregar Cliente
+              Nuevo cliente
             </Button>
           </CardContent>
         </Card>
@@ -224,32 +230,51 @@ export default function ClientManager({ clients, onUpdateClients, shipments = []
                         {getMatchCount(client.clientePattern)} cargas
                       </span>
                     </div>
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
                       <span>{client.email}</span>
-                      <span>{client.company}</span>
-                      <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">
-                        Patrón: {client.clientePattern}
+                      <span className="uppercase">{client.company}</span>
+                      <span className="inline-flex items-center gap-1 flex-wrap text-xs">
+                        <span>Ve cargas de:</span>
+                        {(client.clientePattern || '').split(',').map(t => t.trim()).filter(Boolean).map((t, i) => (
+                          <span key={i} className="font-mono uppercase bg-muted px-1.5 py-0.5 rounded">{t}</span>
+                        ))}
                       </span>
                     </div>
                   </div>
                   <div className="flex gap-1 shrink-0 ml-4">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleImpersonate(client)}
-                      title="Ver portal como este cliente"
-                      disabled={impersonatingId === client.id}
-                    >
-                      {impersonatingId === client.id
-                        ? <CircleNotch size={18} className="animate-spin" />
-                        : <UserCircle size={18} />}
-                    </Button>
-                    <Button variant="ghost" size="icon" onClick={() => openEdit(client)} title="Editar">
-                      <PencilSimple size={18} />
-                    </Button>
-                    <Button variant="ghost" size="icon" onClick={() => setDeleteId(client.id)} title="Eliminar" className="text-red-500 hover:text-red-600 hover:bg-red-50">
-                      <Trash size={18} />
-                    </Button>
+                    <TooltipProvider delayDuration={200}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleImpersonate(client)}
+                            disabled={impersonatingId === client.id}
+                          >
+                            {impersonatingId === client.id
+                              ? <CircleNotch size={18} className="animate-spin" />
+                              : <UserCircle size={18} />}
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="text-xs">Entrar como este cliente</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button variant="ghost" size="icon" onClick={() => openEdit(client)}>
+                            <PencilSimple size={18} />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="text-xs">Editar cliente</TooltipContent>
+                      </Tooltip>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button variant="ghost" size="icon" onClick={() => setDeleteId(client.id)} className="text-red-500 hover:text-red-600 hover:bg-red-50">
+                            <Trash size={18} />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="text-xs">Eliminar cliente</TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
                   </div>
                 </div>
               </CardContent>
@@ -261,7 +286,7 @@ export default function ClientManager({ clients, onUpdateClients, shipments = []
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{editingId ? 'Editar Cliente' : 'Nuevo Cliente'}</DialogTitle>
+            <DialogTitle>{editingId ? 'Editar cliente' : 'Nuevo cliente'}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3">

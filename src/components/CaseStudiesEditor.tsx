@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Plus, Pencil, Trash, FloppyDisk, X } from '@phosphor-icons/react'
+import { Plus, Pencil, Trash, FloppyDisk, X, Trophy } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 
 import { CaseStudy } from './CasosExito'
@@ -105,11 +105,11 @@ export default function CaseStudiesEditor() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold">Casos de Éxito</h2>
-          <p className="text-muted-foreground">Gestiona los casos de éxito que se muestran en la web</p>
+          <p className="text-muted-foreground">Gestioná los casos de éxito que se muestran en la web</p>
         </div>
         <Button onClick={handleNew} className="bg-accent text-accent-foreground hover:bg-accent/90">
           <Plus size={20} className="mr-2" />
-          Nuevo Caso
+          Nuevo caso
         </Button>
       </div>
 
@@ -159,12 +159,14 @@ export default function CaseStudiesEditor() {
         {(caseStudies || []).length === 0 && (
           <Card className="col-span-full">
             <CardContent className="pt-6 text-center py-12">
-              <Plus size={48} className="mx-auto mb-4 text-muted-foreground" />
+              <div className="mx-auto mb-4 w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center">
+                <Trophy size={32} weight="duotone" className="text-primary" />
+              </div>
               <h3 className="text-lg font-semibold mb-2">No hay casos de éxito</h3>
-              <p className="text-muted-foreground mb-4">Crea el primer caso de éxito para tu sitio web</p>
+              <p className="text-muted-foreground mb-4">Creá el primer caso de éxito para mostrar en la web</p>
               <Button onClick={handleNew} className="bg-accent text-accent-foreground hover:bg-accent/90">
                 <Plus size={20} className="mr-2" />
-                Crear Caso de Éxito
+                Nuevo caso
               </Button>
             </CardContent>
           </Card>
@@ -175,7 +177,7 @@ export default function CaseStudiesEditor() {
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
-              {editingCase ? 'Editar Caso de Éxito' : 'Nuevo Caso de Éxito'}
+              {editingCase ? 'Editar caso de éxito' : 'Nuevo caso de éxito'}
             </DialogTitle>
           </DialogHeader>
 

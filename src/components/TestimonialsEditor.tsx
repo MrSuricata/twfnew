@@ -165,9 +165,9 @@ export default function TestimonialsEditor() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Gestión de Testimonios</h1>
+          <h1 className="text-3xl font-bold text-foreground">Testimonios</h1>
           <p className="text-muted-foreground">
-            Administra los testimonios de clientes que aparecen en el sitio web
+            Administrá los testimonios de clientes que aparecen en el sitio web
           </p>
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -177,13 +177,13 @@ export default function TestimonialsEditor() {
               className="bg-accent text-accent-foreground hover:bg-accent/90"
             >
               <Plus size={20} className="mr-2" />
-              Nuevo Testimonio
+              Nuevo testimonio
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>
-                {editingTestimonial ? 'Editar Testimonio' : 'Nuevo Testimonio'}
+                {editingTestimonial ? 'Editar testimonio' : 'Nuevo testimonio'}
               </DialogTitle>
             </DialogHeader>
             
@@ -354,7 +354,7 @@ export default function TestimonialsEditor() {
               <User size={48} className="mx-auto mb-4 text-muted-foreground" />
               <h3 className="text-lg font-semibold mb-2">No hay testimonios</h3>
               <p className="text-muted-foreground mb-4">
-                Crea el primer testimonio de cliente
+                Creá el primer testimonio de cliente
               </p>
             </div>
           </CardContent>

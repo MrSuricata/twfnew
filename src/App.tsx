@@ -934,7 +934,7 @@ function App() {
                     border: '2px solid rgba(255,255,255,0.3)', borderTopColor: 'white',
                     borderRadius: '50%', animation: 'twf-spin 0.8s linear infinite',
                   }} />
-                  Sincronizando datos...
+                  <span className="animate-pulse">Sincronizando datos...</span>
                 </>
               ) : (
                 <>&#9888; Usando cache local &mdash; no se pudo conectar a la base de datos</>

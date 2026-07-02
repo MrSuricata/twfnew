@@ -3,6 +3,7 @@ import type { CalendarEvent } from '@/lib/agendaTypes'
 import { getOperativaColor } from '@/lib/agendaTypes'
 import { formatDateShort, daysUntil } from '@/lib/agendaUtils'
 import { copyToClipboard } from '@/lib/clipboard'
+import { fmtNum } from '@/lib/format'
 import {
   Tooltip,
   TooltipContent,
@@ -37,7 +38,7 @@ export default function AgendaEventCard({ event, compact = true, onClick, dragga
         {...(draggable ? listeners : {})}
         {...(draggable ? attributes : {})}
         className={`w-full text-left rounded-md border border-border/50 overflow-hidden
-          hover:shadow-sm hover:border-border hover:-translate-y-0.5 transition-all group ${opColor.bg}
+          hover:shadow-md hover:border-primary/30 hover:-translate-y-0.5 transition-all duration-150 group ${opColor.bg}
           ${draggable ? 'cursor-grab' : 'cursor-pointer'}
           ${isDragging ? 'opacity-50' : ''}`}
       >
@@ -101,9 +102,9 @@ export default function AgendaEventCard({ event, compact = true, onClick, dragga
           {/* Row 2b: Cargo info (kg / btos) — keeps the clicked container's info visible */}
           {hasCargoInfo && (
             <div className="text-[10px] text-muted-foreground truncate">
-              {event.kg > 0 && `${event.kg.toLocaleString()} kg`}
+              {event.kg > 0 && `${fmtNum(event.kg)} kg`}
               {event.kg > 0 && event.pkgs > 0 && ' · '}
-              {event.pkgs > 0 && `${event.pkgs.toLocaleString()} btos`}
+              {event.pkgs > 0 && `${fmtNum(event.pkgs)} btos`}
             </div>
           )}
 
@@ -320,13 +321,13 @@ export default function AgendaEventCard({ event, compact = true, onClick, dragga
             <span className="text-muted-foreground">· {event.tipo}</span>
           )}
           {event.kg > 0 && (
-            <span className="text-muted-foreground">· {event.kg.toLocaleString()} kg</span>
+            <span className="text-muted-foreground">· {fmtNum(event.kg)} kg</span>
           )}
           {event.m3 > 0 && (
             <span className="text-muted-foreground">· {event.m3} m³</span>
           )}
           {event.pkgs > 0 && (
-            <span className="text-muted-foreground">· {event.pkgs.toLocaleString()} btos</span>
+            <span className="text-muted-foreground">· {fmtNum(event.pkgs)} btos</span>
           )}
         </div>
 

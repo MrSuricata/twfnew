@@ -12,6 +12,12 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import {
   Receipt,
   MagnifyingGlass,
   CheckCircle,
@@ -291,7 +297,7 @@ export default function BillingManagement({ shipments, dbShipments = [], trucks 
                   <Th k="tipo">Tipo</Th>
                   <Th k="cliente">Cliente</Th>
                   <Th k="arrival">Llegada</Th>
-                  {subTab === 'pendientes' && <Th k="aging">Aging</Th>}
+                  {subTab === 'pendientes' && <Th k="aging">Días pend.</Th>}
                   {subTab === 'facturadas' && <Th k="factura">Nº Factura</Th>}
                   {subTab === 'facturadas' && <Th k="facturada">Facturada</Th>}
                   <th className="px-3 py-2 text-right">Acciones</th>
@@ -371,7 +377,7 @@ function BillingRow({
   const aged = days >= AGING_THRESHOLD_DAYS
 
   return (
-    <tr className="hover:bg-muted/30">
+    <tr className="hover:bg-muted/30 transition-colors">
       <td className="px-3 py-2 font-medium">{item.ref}</td>
       <td className="px-3 py-2">
         <span className="inline-flex items-center gap-1.5">
@@ -411,13 +417,20 @@ function BillingRow({
         <div className="flex items-center gap-1 justify-end">
           {subTab === 'pendientes' && (
             <>
-              <Button size="sm" className="h-7" onClick={onInvoice}>
+              <Button size="sm" variant="outline" className="h-7" onClick={onInvoice}>
                 <CheckCircle size={14} className="mr-1" weight="fill" />
-                Facturada
+                Marcar facturada
               </Button>
-              <Button size="sm" variant="ghost" className="h-7 text-muted-foreground" onClick={onNoAplica} title="No se factura">
-                <Prohibit size={14} />
-              </Button>
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button size="sm" variant="ghost" className="h-7 text-muted-foreground" onClick={onNoAplica}>
+                      <Prohibit size={14} />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="text-xs">No aplica facturación</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             </>
           )}
           {subTab === 'facturadas' && (

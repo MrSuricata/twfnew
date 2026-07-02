@@ -17,6 +17,7 @@ import {
   Truck as TruckIcon,
   Receipt,
   Table as TableIcon,
+  Globe,
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import { authFetch, getAdminLevel } from '@/lib/authClient'
@@ -94,6 +95,11 @@ interface DashboardEnhancedProps {
 
 const ONE_DAY_MS = 86_400_000
 
+// Pestaña "Importar" oculta por pedido de Brian (02/07/2026): post-flip la web
+// es master de FCL y el import puntual desde Sheets quedó sin uso diario.
+// Para reactivarla: poner en true (el componente ExcelImport sigue intacto).
+const SHOW_IMPORT_TAB = false
+
 export default function DashboardEnhanced({ onLogout, isDataLoading = false, clients = [], shipments = [], documents = [], reports = [], originPhotos = [], quotes = [], trucks = [], truckLoads = [], lclAir = [], billing = [], operators = [], assignments = [], dbShipments = [], dbSyncError = null, onUpdateShipments, onUpdateClients, onUpdateDocuments, onUpdateReports, onUpdateOriginPhotos, onUpdateQuotes, onUpdateTrucks, onDeleteTruck, onUpdateTruckLoads, onDeleteTruckLoad, onUpdateLclAir, onDeleteLclAir, onUpdateBilling, onClearBilling, onUpdateOperators, onDeleteOperator, onAssignOperator, onPatchShipment, onCreateShipment, onDeleteShipment, onPatchFclField, onRenameRef, onRefreshTrucks, onReloadFromDB }: DashboardEnhancedProps) {
   const brand = useBrand()
   const ops = brand.capabilities.opsAdmin
@@ -105,7 +111,24 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
     [shipments, dbShipments],
   )
   // TWF brand has no ops tabs → land on the first content tab.
-  const [activeTab, setActiveTab] = useState(ops ? 'hoy' : 'case-studies')
+  const [activeTab, setActiveTab] = useState(ops ? 'hoy' : 'contenido')
+  // Sub-pestaña de "Contenido web" (Casos de éxito / Testimonios). Vive acá para
+  // que la CommandPalette pueda abrir directo la sub-pestaña correcta.
+  const [contenidoTab, setContenidoTab] = useState<'casos' | 'testimonios'>('casos')
+  // Navegación por value (CommandPalette): los values viejos 'case-studies' y
+  // 'testimonials' ahora son sub-pestañas de "Contenido web" → mapearlos.
+  const navigateTab = useCallback((v: string) => {
+    if (v === 'case-studies' || v === 'testimonials') {
+      setContenidoTab(v === 'testimonials' ? 'testimonios' : 'casos')
+      setActiveTab('contenido')
+      return
+    }
+    // Values que ya no tienen pestaña propia: 'tracking' (vieja "Cargas") va a
+    // Operaciones; 'excel-import' quedó oculta (SHOW_IMPORT_TAB) → HOY.
+    if (v === 'tracking') { setActiveTab('operaciones'); return }
+    if (v === 'excel-import' && !SHOW_IMPORT_TAB) { setActiveTab('hoy'); return }
+    setActiveTab(v)
+  }, [])
   // Pestaña Equipo: solo el owner (Brian) — el backend re-valida igual.
   const isOwner = getAdminLevel() === 'owner'
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -186,17 +209,17 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
     const breadcrumbMap: Record<string, string> = {
       hoy: 'Hoy',
       agenda: 'Agenda',
-      analytics: 'Estadísticas',
+      analytics: 'Analíticas',
       shipments: 'Cargas',
-      'excel-import': 'Importar Datos',
-      'case-studies': 'Casos de Éxito',
-      testimonials: 'Testimonios',
+      'excel-import': 'Importar datos',
+      contenido: 'Contenido web',
       clients: 'Clientes',
       partners: 'Partners',
       quotes: 'Cotizaciones',
       trucks: 'Camiones',
       billing: 'Facturación',
       operaciones: 'Operaciones',
+      equipo: 'Equipo',
     }
 
     return [{ label: breadcrumbMap[activeTab] || 'Dashboard' }]
@@ -207,7 +230,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
       <CommandPalette
         shipments={fclShipments}
         clients={clients}
-        onNavigate={setActiveTab}
+        onNavigate={navigateTab}
         onLogout={onLogout}
       />
 
@@ -250,7 +273,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
               </button>
               <Button variant="ghost" onClick={onLogout} className="text-primary-foreground hover:bg-primary-foreground/10">
                 <SignOut size={20} className="mr-2" />
-                <span className="hidden sm:inline">Cerrar Sesión</span>
+                <span className="hidden sm:inline">Cerrar sesión</span>
               </Button>
             </div>
           </div>
@@ -270,7 +293,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-8">
         <Breadcrumbs
           items={getBreadcrumbs()}
-          onHomeClick={activeTab !== (ops ? 'hoy' : 'case-studies') ? () => setActiveTab(ops ? 'hoy' : 'case-studies') : undefined}
+          onHomeClick={activeTab !== (ops ? 'hoy' : 'contenido') ? () => setActiveTab(ops ? 'hoy' : 'contenido') : undefined}
         />
 
         <Tabs
@@ -285,23 +308,23 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
         >
           <TabsList className="tabs-list-underline">
             {ops && (<>
-            <TabsTrigger value="hoy" className="tab-underline">
+            <TabsTrigger value="hoy" className="tab-underline" aria-label="Hoy">
               <Lightning size={16} className="mr-1.5" weight="fill" />
               <span className="hidden sm:inline">Hoy</span>
             </TabsTrigger>
-            <TabsTrigger value="agenda" className="tab-underline">
+            <TabsTrigger value="agenda" className="tab-underline" aria-label="Agenda">
               <CalendarBlank size={16} className="mr-1.5" />
               <span className="hidden sm:inline">Agenda</span>
             </TabsTrigger>
-            <TabsTrigger value="analytics" className="tab-underline">
+            <TabsTrigger value="analytics" className="tab-underline" aria-label="Analíticas">
               <ChartBar size={16} className="mr-1.5" />
               <span className="hidden sm:inline">Analíticas</span>
             </TabsTrigger>
-            <TabsTrigger value="operaciones" className="tab-underline">
+            <TabsTrigger value="operaciones" className="tab-underline" aria-label="Operaciones">
               <TableIcon size={16} className="mr-1.5" weight="fill" />
               <span className="hidden sm:inline">Operaciones</span>
             </TabsTrigger>
-            <TabsTrigger value="trucks" className="tab-underline">
+            <TabsTrigger value="trucks" className="tab-underline" aria-label="Camiones">
               <TruckIcon size={16} className="mr-1.5" weight="fill" />
               <span className="hidden sm:inline">Camiones</span>
               {trucks.filter(t => t.status === 'planning' || t.status === 'loaded').length > 0 && (
@@ -310,7 +333,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
                 </span>
               )}
             </TabsTrigger>
-            <TabsTrigger value="quotes" className="tab-underline">
+            <TabsTrigger value="quotes" className="tab-underline" aria-label="Cotizaciones">
               <Envelope size={16} className="mr-1.5" />
               <span className="hidden sm:inline">Cotizaciones</span>
               {pendingQuotesCount > 0 && (
@@ -321,7 +344,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
                 </span>
               )}
             </TabsTrigger>
-            <TabsTrigger value="billing" className="tab-underline">
+            <TabsTrigger value="billing" className="tab-underline" aria-label="Facturación">
               <Receipt size={16} className="mr-1.5" weight="fill" />
               <span className="hidden sm:inline">Facturación</span>
               {pendingBillingCount > 0 && (
@@ -330,30 +353,31 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
                 </span>
               )}
             </TabsTrigger>
-            <TabsTrigger value="excel-import" className="tab-underline">
+            {SHOW_IMPORT_TAB && (
+            <TabsTrigger value="excel-import" className="tab-underline" aria-label="Importar datos">
               <Database size={16} className="mr-1.5" />
               <span className="hidden sm:inline">Importar</span>
             </TabsTrigger>
+            )}
             </>)}
-            <TabsTrigger value="case-studies" className="tab-underline">
-              <Star size={16} className="mr-1.5" />
-              <span className="hidden sm:inline">Casos</span>
-            </TabsTrigger>
-            <TabsTrigger value="testimonials" className="tab-underline">
-              <ChatCircleText size={16} className="mr-1.5" />
-              <span className="hidden sm:inline">Testimonios</span>
+            {/* Contenido de la landing pública (casos + testimonios) en una sola
+                pestaña con sub-selector. Partners queda al final, junto a Equipo:
+                son usuarios, no contenido. */}
+            <TabsTrigger value="contenido" className="tab-underline" aria-label="Contenido web">
+              <Globe size={16} className="mr-1.5" />
+              <span className="hidden sm:inline">Contenido web</span>
             </TabsTrigger>
             {ops && (<>
-            <TabsTrigger value="clients" className="tab-underline">
+            <TabsTrigger value="clients" className="tab-underline" aria-label="Clientes">
               <UsersThree size={16} className="mr-1.5" />
               <span className="hidden sm:inline">Clientes</span>
             </TabsTrigger>
-            <TabsTrigger value="partners" className="tab-underline">
+            <TabsTrigger value="partners" className="tab-underline" aria-label="Partners">
               <UsersThree size={16} className="mr-1.5" />
               <span className="hidden sm:inline">Partners</span>
             </TabsTrigger>
             {isOwner && (
-              <TabsTrigger value="equipo" className="tab-underline">
+              <TabsTrigger value="equipo" className="tab-underline" aria-label="Equipo">
                 <ShieldCheck size={16} className="mr-1.5" weight="fill" />
                 <span className="hidden sm:inline">Equipo</span>
               </TabsTrigger>
@@ -456,6 +480,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
             />
           </TabsContent>
 
+          {SHOW_IMPORT_TAB && (
           <TabsContent value="excel-import">
             <ExcelImport
               shipmentRecords={shipments}
@@ -467,13 +492,29 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
               }}
             />
           </TabsContent>
+          )}
 
-          <TabsContent value="case-studies">
-            <CaseStudiesEditor />
-          </TabsContent>
-
-          <TabsContent value="testimonials">
-            <TestimonialsEditor />
+          <TabsContent value="contenido">
+            {/* Sub-selector Casos/Testimonios: Tabs anidadas con el estilo pill por
+                defecto (mismo patrón que Camiones · LCL/Aéreos en TrucksManagement). */}
+            <Tabs value={contenidoTab} onValueChange={v => setContenidoTab(v as 'casos' | 'testimonios')} className="space-y-4">
+              <TabsList>
+                <TabsTrigger value="casos" className="gap-1.5">
+                  <Star size={16} />
+                  Casos de éxito
+                </TabsTrigger>
+                <TabsTrigger value="testimonios" className="gap-1.5">
+                  <ChatCircleText size={16} />
+                  Testimonios
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="casos">
+                <CaseStudiesEditor />
+              </TabsContent>
+              <TabsContent value="testimonios">
+                <TestimonialsEditor />
+              </TabsContent>
+            </Tabs>
           </TabsContent>
 
           <TabsContent value="clients">
