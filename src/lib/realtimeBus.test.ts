@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { resolveRealtimeConfig, isTrucksLiveMessage, TRUCKS_LIVE_CHANNEL } from './realtimeBus'
+import { resolveRealtimeConfig, isTrucksLiveMessage, isOwnTrucksLiveMessage, TRUCKS_LIVE_CHANNEL } from './realtimeBus'
+import { getClientSessionId } from './clientSession'
 
 describe('resolveRealtimeConfig', () => {
   it('sin url o sin key → null (bus no-op, fallback on-focus)', () => {
@@ -27,5 +28,36 @@ describe('isTrucksLiveMessage', () => {
   })
   it('el canal es trucks-live', () => {
     expect(TRUCKS_LIVE_CHANNEL).toBe('trucks-live')
+  })
+  it('tolera el clientId en el payload (broadcast nuevo)', () => {
+    expect(isTrucksLiveMessage({ kind: 'truck_load', clientId: 'abc-123' })).toBe(true)
+  })
+})
+
+// Filtro de timbres PROPIOS: el browser que originó la escritura no debe
+// refetchearse a sí mismo (era el refetch que se metía en pleno guardado).
+describe('isOwnTrucksLiveMessage', () => {
+  it('propio: clientId del payload == id de esta sesión', () => {
+    expect(isOwnTrucksLiveMessage({ kind: 'truck', clientId: 'yo' }, 'yo')).toBe(true)
+  })
+  it('ajeno: clientId distinto → hay que refetchear', () => {
+    expect(isOwnTrucksLiveMessage({ kind: 'truck', clientId: 'otro' }, 'yo')).toBe(false)
+  })
+  it('sin clientId (deploy viejo / emisor desconocido) → cuenta como ajeno', () => {
+    expect(isOwnTrucksLiveMessage({ kind: 'truck' }, 'yo')).toBe(false)
+    expect(isOwnTrucksLiveMessage({ kind: 'truck', clientId: '' }, 'yo')).toBe(false)
+  })
+  it('ownClientId vacío nunca matchea (defensivo)', () => {
+    expect(isOwnTrucksLiveMessage({ kind: 'truck', clientId: '' }, '')).toBe(false)
+  })
+})
+
+describe('getClientSessionId', () => {
+  it('es estable durante la sesión y con formato apto para header', () => {
+    const a = getClientSessionId()
+    const b = getClientSessionId()
+    expect(a).toBe(b)
+    expect(a.length).toBeGreaterThan(7)
+    expect(/^[\w.:-]+$/.test(a)).toBe(true) // mismo charset que valida el backend
   })
 })

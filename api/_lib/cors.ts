@@ -9,7 +9,9 @@ export function setCorsHeaders(res: VercelResponse) {
   }
   res.setHeader('Access-Control-Allow-Origin', origin || 'https://twf.uy')
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
+  // X-Client-Id: id de sesión del browser (para que el emisor ignore su propio
+  // broadcast Realtime). Hay que permitirlo o el preflight CORS lo rebota.
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Client-Id')
 }
 
 /** Handle CORS preflight — returns true if it was an OPTIONS request (already handled) */

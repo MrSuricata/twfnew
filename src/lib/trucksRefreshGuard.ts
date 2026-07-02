@@ -35,3 +35,59 @@ export function canApplyTrucksRefresh(
   // puede ser stale → no aplicar.
   return fetchStartTs - lastWriteTs >= recencyMs
 }
+
+// ── Ventana de escritura compartida (camiones + cargas + deletes) ──
+//
+// Por qué no alcanzaba con lo anterior: la guarda de recencia se apoyaba en
+// contadores/marcas POR MITAD (trucks vs truck_loads) y los DELETE ni siquiera
+// contaban como escritura en vuelo. El guardado del armador es una secuencia
+// multi-paso (DELETEs → POST trucks → POST truck_loads) y, con el timbre de
+// Realtime activo, el propio cliente refetchea en el medio: un refetch podía
+// aplicar una mitad mientras la otra seguía en vuelo (snapshot "torn") o pasar
+// la guarda porque el DELETE lento era invisible para pendingWrites.
+//
+// Esta ventana es UNA para todo el dominio camiones: se abre AL INICIO de cada
+// escritura (antes del estado optimista), se mantiene abierta mientras haya
+// CUALQUIER escritura en vuelo (contador, deletes incluidos) y queda una cola
+// de `trailMs` después de que la última termina. Mientras esté abierta, ningún
+// refetch de fondo aplica NADA (ni trucks ni loads).
+
+export const TRUCKS_WRITE_TRAIL_MS = 2000
+
+export interface TrucksWriteWindow {
+  /** Marca el inicio de una escritura. Devuelve el cierre (idempotente). */
+  begin(now?: number): (endNow?: number) => void
+  /** true si hay escrituras en vuelo o estamos dentro de la cola post-escritura. */
+  isOpen(now?: number): boolean
+  /** ms hasta que la ventana cierre (con escrituras en vuelo devuelve trailMs como piso). */
+  remainingMs(now?: number): number
+  /** Escrituras en vuelo (para diagnóstico/tests). */
+  inFlight(): number
+}
+
+export function createTrucksWriteWindow(trailMs: number = TRUCKS_WRITE_TRAIL_MS): TrucksWriteWindow {
+  let inFlight = 0
+  let quietUntil = 0
+  return {
+    begin(_now: number = Date.now()) {
+      inFlight += 1
+      let ended = false
+      return (endNow: number = Date.now()) => {
+        if (ended) return // cierre idempotente: un finally doble no descuenta dos veces
+        ended = true
+        inFlight = Math.max(0, inFlight - 1)
+        quietUntil = Math.max(quietUntil, endNow + trailMs)
+      }
+    },
+    isOpen(now: number = Date.now()) {
+      return inFlight > 0 || now < quietUntil
+    },
+    remainingMs(now: number = Date.now()) {
+      if (inFlight > 0) return trailMs
+      return Math.max(0, quietUntil - now)
+    },
+    inFlight() {
+      return inFlight
+    },
+  }
+}

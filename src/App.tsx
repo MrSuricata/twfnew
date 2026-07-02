@@ -5,7 +5,7 @@ import { QuoteFormData, ClientAccount, ShipmentDocument, OperativeReport, Origin
 import { ParsedShipment } from '@/lib/shipmentTypes'
 import { Truck, TruckLoad, LclAirShipment } from '@/lib/truckTypes'
 import { getBrand } from '@/lib/brand'
-import { canApplyTrucksRefresh } from '@/lib/trucksRefreshGuard'
+import { canApplyTrucksRefresh, createTrucksWriteWindow } from '@/lib/trucksRefreshGuard'
 import { BillingRecord } from '@/lib/billingTypes'
 import { Operator, OperatorAssignment, DbShipment, UnifiedOperation, dbFclToParsedShipment } from '@/lib/operationsTypes'
 import { withRollupColumns } from '@/lib/operativasRollup'
@@ -135,6 +135,21 @@ function App() {
   // del POST → datos stale que borrarían lo recién creado). Ver trucksRefreshGuard.
   const lastTrucksWriteTsRef = useRef(0)
   const lastTruckLoadsWriteTsRef = useRef(0)
+  // Ventana de escritura COMPARTIDA del dominio camiones (trucks + loads +
+  // DELETEs): se abre al INICIO de cada escritura y deja una cola de ~2s
+  // después de que termina la última. Mientras esté abierta, ningún refresh de
+  // fondo aplica NADA (ni la mitad trucks ni la mitad loads). Cierra los agujeros
+  // que las guardas por mitad no cubrían: (1) los DELETE no contaban como
+  // escritura en vuelo, (2) una mitad podía aplicarse mientras la otra seguía
+  // en vuelo (snapshot "torn") — letal con el timbre Realtime disparando
+  // refetches en plena secuencia multi-paso del guardado.
+  const trucksWriteWindowRef = useRef(createTrucksWriteWindow())
+  // Refetch descartado (ventana abierta / gen viejo / recencia): se re-agenda
+  // UNO para después de la ventana, así el timbre no se pierde y el estado
+  // converge igual al del server. Ref a la función para cortar el ciclo
+  // refresh → schedule → refresh entre useCallbacks.
+  const trucksRefreshRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const refreshTrucksFromDbRef = useRef<() => Promise<boolean>>(() => Promise.resolve(true))
   const pendingLclAirWritesRef = useRef(0)
   const pendingBillingWritesRef = useRef(0)
 
@@ -190,7 +205,10 @@ function App() {
         saveToStorage('twf-origin-photos', data.originPhotos)
       }
 
-      if (canApplyTrucksRefresh(pendingTrucksWritesRef.current, loadStartTs, lastTrucksWriteTsRef.current)) {
+      // Además de la guarda por mitad, la ventana compartida de escritura de
+      // camiones: si hay un guardado en vuelo (o terminó hace <2s), NO pisar.
+      const trucksWindowOpen = trucksWriteWindowRef.current.isOpen()
+      if (!trucksWindowOpen && canApplyTrucksRefresh(pendingTrucksWritesRef.current, loadStartTs, lastTrucksWriteTsRef.current)) {
         // softFetch devuelve [] si el GET de trucks falló (500/red): NO pisar un estado
         // no-vacío con un snapshot vacío — reproducía el "las cargas desaparecieron".
         // Mirror del guard de clients (línea ~171).
@@ -198,7 +216,7 @@ function App() {
         if (data.trucks.length > 0) saveToStorage('twf-trucks', data.trucks)
       }
 
-      if (canApplyTrucksRefresh(pendingTruckLoadsWritesRef.current, loadStartTs, lastTruckLoadsWriteTsRef.current)) {
+      if (!trucksWindowOpen && canApplyTrucksRefresh(pendingTruckLoadsWritesRef.current, loadStartTs, lastTruckLoadsWriteTsRef.current)) {
         setTruckLoads(prev => (data.truckLoads.length === 0 && prev.length > 0) ? prev : data.truckLoads)
         if (data.truckLoads.length > 0) saveToStorage('twf-truck-loads', data.truckLoads)
       }
@@ -455,6 +473,10 @@ function App() {
   const handleUpdateTrucks = (updated: Truck[], changedIds?: string[]) => {
     trucksWriteGenRef.current += 1
     lastTrucksWriteTsRef.current = Date.now()
+    // Ventana compartida: abre AL INICIO (antes del estado optimista) y cierra
+    // recién cuando el POST resuelve (+2s de cola). Un guardado multi-paso
+    // mantiene la ventana abierta de punta a punta.
+    const endWrite = trucksWriteWindowRef.current.begin()
     setTrucks(updated)
     saveToStorage('twf-trucks', updated)
     const toSave = changedIds ? updated.filter(t => changedIds.includes(t.id)) : updated
@@ -472,7 +494,12 @@ function App() {
           // Re-marcar al commitear: extiende la ventana de recencia desde el momento
           // en que la DB realmente quedó consistente.
           lastTrucksWriteTsRef.current = Date.now()
+          endWrite()
         })
+    } else {
+      // Sin POST (no logueado / nada que guardar): cerrar ya — la cola de 2s
+      // igual protege el setState optimista de un refetch pegado.
+      endWrite()
     }
   }
 
@@ -480,6 +507,9 @@ function App() {
     trucksWriteGenRef.current += 1
     lastTrucksWriteTsRef.current = Date.now()
     lastTruckLoadsWriteTsRef.current = Date.now()
+    // El DELETE también cuenta como escritura en vuelo (antes NO: un DELETE
+    // lento era invisible para las guardas y un refetch podía resucitarlo).
+    const endWrite = trucksWriteWindowRef.current.begin()
     const next = trucks.filter(t => t.id !== id)
     const nextLoads = truckLoads.filter(l => l.truckId !== id)
     setTrucks(next)
@@ -495,13 +525,17 @@ function App() {
       } finally {
         lastTrucksWriteTsRef.current = Date.now()
         lastTruckLoadsWriteTsRef.current = Date.now()
+        endWrite()
       }
+    } else {
+      endWrite()
     }
   }
 
   const handleUpdateTruckLoads = (updated: TruckLoad[], changedIds?: string[]) => {
     trucksWriteGenRef.current += 1
     lastTruckLoadsWriteTsRef.current = Date.now()
+    const endWrite = trucksWriteWindowRef.current.begin()
     setTruckLoads(updated)
     saveToStorage('twf-truck-loads', updated)
     const toSave = changedIds ? updated.filter(l => changedIds.includes(l.id)) : updated
@@ -515,38 +549,69 @@ function App() {
         .finally(() => {
           pendingTruckLoadsWritesRef.current = Math.max(0, pendingTruckLoadsWritesRef.current - 1)
           lastTruckLoadsWriteTsRef.current = Date.now()
+          endWrite()
         })
+    } else {
+      endWrite()
     }
   }
 
-  // Refresco liviano SOLO de camiones (al entrar a la pestaña / volver el foco):
-  // trae la verdad de la DB sin pisar escrituras en vuelo.
-  // Devuelve true si el round-trip fue exitoso (o se saltó por generación),
+  // Refresco liviano SOLO de camiones (al entrar a la pestaña / volver el foco /
+  // timbre Realtime): trae la verdad de la DB sin pisar escrituras en vuelo.
+  // Devuelve true si el round-trip fue exitoso (aunque no se haya aplicado),
   // false si hubo un error de red — el caller usa esto para el throttle.
+  //
+  // Si el snapshot NO se puede aplicar (ventana de escritura abierta, generación
+  // vieja o recencia), el timbre NO se pierde: se re-agenda UN refetch para
+  // después de la ventana → el estado siempre converge al del server.
+  const scheduleTrucksRefreshRetry = useCallback(() => {
+    if (trucksRefreshRetryTimerRef.current) return // ya hay un retry agendado
+    const wait = Math.max(600, trucksWriteWindowRef.current.remainingMs() + 250)
+    trucksRefreshRetryTimerRef.current = setTimeout(() => {
+      trucksRefreshRetryTimerRef.current = null
+      void refreshTrucksFromDbRef.current()
+    }, wait)
+  }, [])
+
   const refreshTrucksFromDb = useCallback(async (): Promise<boolean> => {
     if (!isAdminLoggedIn) return true
     try {
       const gen = trucksWriteGenRef.current
       const fetchStartTs = Date.now()
       const [freshTrucks, freshLoads] = await Promise.all([fetchTrucks(), fetchTruckLoads()])
-      if (trucksWriteGenRef.current !== gen) return true // hubo escrituras mientras tanto: snapshot viejo, pero el fetch fue OK
-      // Guarda de recencia (además de pendingWrites): si el GET arrancó dentro de
-      // la ventana posterior a una escritura local, pudo leer la DB antes del
-      // commit del POST → no pisar el estado local con datos stale.
-      if (canApplyTrucksRefresh(pendingTrucksWritesRef.current, fetchStartTs, lastTrucksWriteTsRef.current)) {
-        setTrucks(freshTrucks)
-        saveToStorage('twf-trucks', freshTrucks)
+      // Snapshot viejo o escritura en curso → NO aplicar NADA (las dos mitades
+      // juntas o ninguna: aplicar solo una era el snapshot "torn" que mezclaba
+      // camiones de un momento con cargas de otro) y reintentar después.
+      const staleGen = trucksWriteGenRef.current !== gen // hubo escrituras durante el fetch
+      const windowOpen = trucksWriteWindowRef.current.isOpen() // guardado en vuelo o <2s de terminado
+      const canTrucks = canApplyTrucksRefresh(pendingTrucksWritesRef.current, fetchStartTs, lastTrucksWriteTsRef.current)
+      const canLoads = canApplyTrucksRefresh(pendingTruckLoadsWritesRef.current, fetchStartTs, lastTruckLoadsWriteTsRef.current)
+      if (staleGen || windowOpen || !canTrucks || !canLoads) {
+        scheduleTrucksRefreshRetry()
+        return true // el fetch en sí fue OK
       }
-      if (canApplyTrucksRefresh(pendingTruckLoadsWritesRef.current, fetchStartTs, lastTruckLoadsWriteTsRef.current)) {
-        setTruckLoads(freshLoads)
-        saveToStorage('twf-truck-loads', freshLoads)
-      }
+      setTrucks(freshTrucks)
+      saveToStorage('twf-trucks', freshTrucks)
+      setTruckLoads(freshLoads)
+      saveToStorage('twf-truck-loads', freshLoads)
       return true
     } catch (err) {
       console.warn('[DB] refresh trucks failed:', err)
       return false
     }
-  }, [isAdminLoggedIn])
+  }, [isAdminLoggedIn, scheduleTrucksRefreshRetry])
+
+  // Ref siempre-actual para el retry (evita cerrar sobre una versión vieja) y
+  // limpieza del timer al desmontar/desloguear.
+  useEffect(() => {
+    refreshTrucksFromDbRef.current = refreshTrucksFromDb
+  }, [refreshTrucksFromDb])
+  useEffect(() => () => {
+    if (trucksRefreshRetryTimerRef.current) {
+      clearTimeout(trucksRefreshRetryTimerRef.current)
+      trucksRefreshRetryTimerRef.current = null
+    }
+  }, [])
 
   // Co-edición Fase 1: "timbre" Realtime → al recibir aviso de cambio de un
   // camión/carga (de otro usuario), refetchar en vivo. Debounce para colapsar
@@ -565,6 +630,9 @@ function App() {
   const handleDeleteTruckLoad = async (id: string) => {
     trucksWriteGenRef.current += 1
     lastTruckLoadsWriteTsRef.current = Date.now()
+    // El guardado del armador arranca con los DELETE de las cargas quitadas:
+    // tienen que sostener la ventana abierta hasta que el server confirme.
+    const endWrite = trucksWriteWindowRef.current.begin()
     setTruckLoads(prev => {
       const next = prev.filter(l => l.id !== id)
       saveToStorage('twf-truck-loads', next)
@@ -577,7 +645,10 @@ function App() {
         console.warn('[DB] Failed to delete truck load:', err); toast.error('No se pudo borrar la carga del camión')
       } finally {
         lastTruckLoadsWriteTsRef.current = Date.now()
+        endWrite()
       }
+    } else {
+      endWrite()
     }
   }
 

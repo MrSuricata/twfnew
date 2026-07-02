@@ -3,6 +3,8 @@
 // JWT tokens live in a module-level variable (NOT localStorage) for security.
 // ─────────────────────────────────────────────────────────────────────
 
+import { getClientSessionId } from './clientSession'
+
 export type UserRole = 'admin' | 'client' | 'depot' | 'transport'
 
 let _token: string | null = null
@@ -191,11 +193,15 @@ export async function verifySession(): Promise<{ valid: boolean; role?: UserRole
 }
 
 // ─── Authenticated Fetch ────────────────────────────────────────────
-/** Wrapper around fetch that adds Authorization header automatically */
+/** Wrapper around fetch that adds Authorization header automatically.
+ *  También manda X-Client-Id (id de sesión del browser): el backend lo copia
+ *  al broadcast Realtime para que este cliente ignore sus PROPIOS timbres
+ *  (si no, cada guardado dispara un refetch contra sí mismo en pleno save). */
 export async function authFetch(url: string, options: RequestInit = {}): Promise<Response> {
   const headers = new Headers(options.headers)
   if (_token) {
     headers.set('Authorization', `Bearer ${_token}`)
   }
+  headers.set('X-Client-Id', getClientSessionId())
   return fetch(url, { ...options, headers })
 }
