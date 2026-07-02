@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildOperations, isOperationActive, dbShipmentToOperation, fclToColumns, dbFclToParsedShipment, mergeFclShipments, newDbShipment, suggestNextRef, buildTruckByRef, buildPerContainerPatch, EDITABLE_FIELDS, DEPOSITOS_UY, type UnifiedOperation, type DbShipment } from './operationsTypes'
+import { buildOperations, isOperationActive, dbShipmentToOperation, fclToColumns, dbFclToParsedShipment, mergeFclShipments, newDbShipment, suggestNextRef, buildTruckByRef, buildPerContainerPatch, deriveKnownTransportes, EDITABLE_FIELDS, DEPOSITOS_UY, type UnifiedOperation, type DbShipment } from './operationsTypes'
 import type { ParsedShipment } from './shipmentTypes'
 import type { OperativasRecord } from './shipmentTypes'
 import type { Truck, TruckLoad } from './truckTypes'
@@ -59,6 +59,44 @@ describe('buildPerContainerPatch — propaga campos por-contenedor al array oper
     const next = (patch.operativas as OperativasRecord[])[0]
     expect(next.DEPOSITO).toBe('GODILCO')
     expect(next.LUGAR_SALIDA).toBe('TCP') // lugar manual NO se pisa
+  })
+
+  // Transporte es nivel-carga (como Depósito): columna + TODOS los contenedores.
+  // El rollup del server NO recalcula transporte desde el array — la columna
+  // tiene que viajar en el mismo patch, y este mapa lo garantiza.
+  it('TRANSPORTE se propaga a TODOS los contenedores + setea la columna', () => {
+    const ops = [
+      { ...rec(), CNTR_OP: 'C1', TRANSPORTE: 'OLAVERRY' },
+      { ...rec(), CNTR_OP: 'C2', TRANSPORTE: '' },
+    ]
+    const patch = buildPerContainerPatch(op({ operativas: ops }), 'transporte', 'TRANSCAL')
+    expect(patch.transporte).toBe('TRANSCAL')
+    const next = patch.operativas as OperativasRecord[]
+    expect(next.map(o => o.TRANSPORTE)).toEqual(['TRANSCAL', 'TRANSCAL'])
+    expect(next.map(o => o.CNTR_OP)).toEqual(['C1', 'C2']) // preserva el resto
+  })
+
+  it('acepta un Pick<{operativas}> (lo usa el quick-edit sin UnifiedOperation)', () => {
+    const patch = buildPerContainerPatch({ operativas: [rec({ CNTR_OP: 'C1' })] }, 'transporte', 'PCS')
+    expect(patch.transporte).toBe('PCS')
+    expect((patch.operativas as OperativasRecord[])[0].TRANSPORTE).toBe('PCS')
+  })
+})
+
+describe('deriveKnownTransportes — sugerencias del combo Transporte', () => {
+  it('separa multi-transporte (/ , +), normaliza a MAYÚSCULAS, dedupe y ordena', () => {
+    const out = deriveKnownTransportes([
+      'TRANSCAL / OLAVERRY',
+      'olaverry',
+      'WILDENGOLD+PCS',
+      'ENZO, VAIROLATTI',
+      '', null, undefined,
+    ])
+    expect(out).toEqual(['ENZO', 'OLAVERRY', 'PCS', 'TRANSCAL', 'VAIROLATTI', 'WILDENGOLD'])
+  })
+  it('vacío → lista vacía', () => {
+    expect(deriveKnownTransportes([])).toEqual([])
+    expect(deriveKnownTransportes(['', null])).toEqual([])
   })
 })
 

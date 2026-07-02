@@ -17,11 +17,13 @@ export default function ViabilityBlock({
   op,
   editable,
   knownDepositos,
+  knownTransportes = [],
   onCommit,
 }: {
   op: UnifiedOperation
   editable: boolean
   knownDepositos: string[]
+  knownTransportes?: string[]
   onCommit: (key: keyof UnifiedOperation, v: unknown) => void
 }) {
   const depositoOptions = Array.from(new Set([...DEPOSITOS_UY, ...knownDepositos])).filter(Boolean)
@@ -45,6 +47,10 @@ export default function ViabilityBlock({
         <StatBox label="Bultos" value={op.pkgs} kind="number" editable={editable && op.mode !== 'fcl'} sumHint={op.mode === 'fcl'} onCommit={v => onCommit('pkgs', v)} />
         <StatBox label="Fiscal (destino)" value={op.fiscal} kind="text" editable={editable} onCommit={v => onCommit('fiscal', v)} />
         <StatBox label="Depósito UY" value={op.deposito} kind="combo" options={depositoOptions} editable={editable} onCommit={v => onCommit('deposito', v)} />
+        {/* Transporte es dato de la CARGA (nivel-carga, como Depósito): editarlo
+            propaga a TODOS los contenedores + la columna (buildPerContainerPatch
+            en el commit del panel). Sugiere los ya usados; display en MAYÚSCULAS. */}
+        <StatBox label="Transporte" value={op.transporte} kind="combo" options={knownTransportes} upper editable={editable} onCommit={v => onCommit('transporte', v)} />
         {/* Operativa y LIBRE son datos de la CARGA (no de un contenedor suelto):
             editarlos acá propaga a TODOS los contenedores + la columna (vía
             buildPerContainerPatch en el commit del panel). Antes LIBRE se editaba
@@ -68,8 +74,10 @@ export default function ViabilityBlock({
 }
 
 // Cuadro grande editable: número / texto / fecha / combo (datalist).
+// upper: display en MAYÚSCULAS (patrón transportista de TrucksList) y el valor
+// se normaliza a mayúsculas al guardar.
 function StatBox({
-  label, value, unit, kind, options, editable, sumHint, onCommit,
+  label, value, unit, kind, options, editable, sumHint, upper, onCommit,
 }: {
   label: string
   value: string | number
@@ -78,6 +86,7 @@ function StatBox({
   options?: string[]
   editable: boolean
   sumHint?: boolean
+  upper?: boolean
   onCommit: (v: unknown) => void
 }) {
   const [editing, setEditing] = useState(false)
@@ -105,7 +114,7 @@ function StatBox({
       if (String(value ?? '') !== String(n)) onCommit(n)
       return
     }
-    const v = draft.trim()
+    const v = upper ? draft.trim().toUpperCase() : draft.trim()
     if (String(value ?? '') !== String(v)) onCommit(v)
   }
 
@@ -125,7 +134,7 @@ function StatBox({
             onBlur={save}
             onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
             inputMode={kind === 'number' ? 'decimal' : undefined}
-            className="h-8 text-sm px-1.5"
+            className={`h-8 text-sm px-1.5 ${upper ? 'uppercase' : ''}`}
           />
           {kind === 'combo' && (
             <datalist id={listId}>
@@ -141,7 +150,7 @@ function StatBox({
           className={`text-left w-full leading-tight ${editable ? 'cursor-text hover:opacity-70' : 'cursor-default'}`}
           title={editable ? 'Click para editar' : sumHint ? 'Total = suma de los contenedores (editá cada uno abajo, en “Salidas y arribos por contenedor”)' : 'Solo lectura (viene de la planilla)'}
         >
-          <span className={`text-[22px] font-medium ${display === '—' ? 'text-muted-foreground' : ''}`}>{display}</span>
+          <span className={`text-[22px] font-medium ${display === '—' ? 'text-muted-foreground' : ''} ${upper ? 'uppercase' : ''}`}>{display}</span>
           {unit && display !== '—' && <span className="text-xs text-muted-foreground ml-1">{unit}</span>}
         </button>
       )}

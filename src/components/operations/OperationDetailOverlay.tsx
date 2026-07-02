@@ -16,6 +16,7 @@ import { useMemo } from 'react'
 import OperationDetailPanel from './OperationDetailPanel'
 import {
   buildOperations,
+  deriveKnownTransportes,
   indexAssignments,
   buildTruckByRef,
   type Operator,
@@ -92,6 +93,12 @@ export default function OperationDetailOverlay({
     [operations],
   )
 
+  // Transportes ya usados → combobox de Transporte (datos clave de la carga).
+  const knownTransportes = useMemo(
+    () => deriveKnownTransportes(operations.map(o => o.transporte)),
+    [operations],
+  )
+
   // Asignación de operativo: igual que la grilla — filas DB patchean operator_id;
   // FCL espejo / no-DB usan el overlay por ref.
   const assignOp = (o: UnifiedOperation, operatorId: string | null) => {
@@ -109,6 +116,7 @@ export default function OperationDetailOverlay({
       operatorById={operatorById}
       hoy={hoy}
       knownDepositos={knownDepositos}
+      knownTransportes={knownTransportes}
       onAssign={assignOp}
       onPatch={onPatch}
       onPatchFcl={onPatchFcl}
