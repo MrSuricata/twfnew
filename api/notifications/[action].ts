@@ -1,16 +1,27 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { getSupabase } from '../_lib/supabase.js'
 import { authenticateRequest, type AdminPayload } from '../_lib/jwt.js'
-import { computePushCounts, buildPushBody, montevideoTodayIso } from '../_lib/pushAlerts.js'
+import {
+  computeSlotAlerts,
+  montevideoTodayIso,
+  PUSH_ALERT_META,
+  type PushSlot,
+} from '../_lib/pushAlerts.js'
 
 // ─── Notifications API ──────────────────────────────────────────────
 // Routes:
 //   GET /api/notifications/check-pending — cron, sends daily TWF summary
 //   to the N8N_REMINDER_WEBHOOK (Telegram).
-//   GET|POST /api/notifications/push-daily — cron (vercel.json) o botón de
-//   prueba del owner: manda el resumen del día por Web Push a todas las
-//   suscripciones del equipo (push_subscriptions). Dedupe diario en push_log
-//   (los 2 proyectos Vercel comparten el mismo cron). ?force=1 saltea el dedupe.
+//   GET|POST /api/notifications/push-alerts?slot=manana|tarde — crons
+//   (vercel.json, límite Hobby = 2): manda las alertas del slot por Web Push,
+//   una notificación SEPARADA por tipo con detalle, solo a las suscripciones
+//   con ese tipo activado (push_subscriptions.alert_*). Dedupe claim-first en
+//   push_log con date_key `yyyy-mm-dd:slot` (los 2 proyectos Vercel comparten
+//   los crons). ?force=1 saltea el dedupe.
+//     slot manana (10:00 UTC = 07:00 UY): "Días libres" + "Llegan hoy a fiscal"
+//     slot tarde  (19:00 UTC = 16:00 UY): "Hoy en frontera" + "Salen hoy"
+//   GET|POST /api/notifications/push-daily — alias del slot manana (lo usa el
+//   botón "Enviar resumen de prueba" de la pestaña Equipo, con ?force=1).
 //
 // Previously also handled:
 //   POST /api/notifications/confirm       — create a notification task
@@ -22,7 +33,9 @@ import { computePushCounts, buildPushBody, montevideoTodayIso } from '../_lib/pu
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const action = req.query.action as string
   if (action === 'check-pending') return handleCheckPending(req, res)
-  if (action === 'push-daily') return handlePushDaily(req, res)
+  if (action === 'push-alerts') return handlePushAlerts(req, res)
+  // Alias legacy: el botón de prueba de Equipo sigue pegándole a push-daily.
+  if (action === 'push-daily') return handlePushAlerts(req, res, 'manana')
   return res.status(404).json({ error: `Unknown action: ${action}` })
 }
 
@@ -239,16 +252,40 @@ async function handleCheckPending(req: VercelRequest, res: VercelResponse) {
   }
 }
 
-// ─── push-daily: resumen del día por Web Push ────────────────────────
-// Post-flip la web es master → lee shipments/trucks de la DB (NO el cache de
-// la planilla, que quedó congelado). La derivación de alertas vive en
+// ─── push-alerts: alertas configurables por Web Push (2 slots) ────────
+// Post-flip la web es master → lee shipments de la DB (NO el cache de la
+// planilla, que quedó congelado). La derivación de cada tipo vive en
 // _lib/pushAlerts.ts (copia server-side de src/lib/todayFilters.ts).
+// Cada tipo sale como notificación SEPARADA (título propio + hasta 6 líneas
+// de detalle) y solo a las suscripciones con ese tipo en true.
 
 /** Clave pública VAPID (no secreta) — par de process.env.VAPID_PRIVATE_KEY. */
 const VAPID_PUBLIC_KEY =
   'BGeJ3K_9CI-VQrzpEwtraxp3w2UZlDxqNeZKgeQUrtAStcBdSIq8ZFh315fmgZgA7RhHwuKrk12p-rWo6WKQBx4'
 
-async function handlePushDaily(req: VercelRequest, res: VercelResponse) {
+interface PushSubRow {
+  endpoint: string
+  p256dh: string
+  auth: string
+  alert_libre?: boolean | null
+  alert_salidas?: boolean | null
+  alert_fiscal?: boolean | null
+  alert_frontera?: boolean | null
+}
+
+/** Resuelve el slot: query ?slot=, o (red de seguridad si el query se pierde)
+ *  el header x-vercel-cron-schedule que Vercel manda con cada invocación. */
+function resolveSlot(req: VercelRequest, forced?: PushSlot): PushSlot | null {
+  if (forced) return forced
+  const q = req.query.slot
+  if (q === 'manana' || q === 'tarde') return q
+  const sched = String(req.headers['x-vercel-cron-schedule'] || '')
+  if (sched === '0 10 * * *') return 'manana'
+  if (sched === '0 19 * * *') return 'tarde'
+  return null
+}
+
+async function handlePushAlerts(req: VercelRequest, res: VercelResponse, forcedSlot?: PushSlot) {
   // GET = cron de Vercel · POST = botón "Enviar resumen de prueba" (Equipo)
   if (req.method !== 'GET' && req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
@@ -263,6 +300,11 @@ async function handlePushDaily(req: VercelRequest, res: VercelResponse) {
     return res.status(401).json({ error: 'Unauthorized' })
   }
 
+  const slot = resolveSlot(req, forcedSlot)
+  if (!slot) {
+    return res.status(400).json({ error: 'slot inválido — usar ?slot=manana o ?slot=tarde' })
+  }
+
   const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY
   if (!vapidPrivateKey) {
     return res.status(503).json({
@@ -271,7 +313,8 @@ async function handlePushDaily(req: VercelRequest, res: VercelResponse) {
   }
 
   const db = getSupabase()
-  const dateKey = montevideoTodayIso()
+  const todayIso = montevideoTodayIso()
+  const dateKey = `${todayIso}:${slot}`
   const force = req.query.force === '1'
 
   try {
@@ -292,85 +335,94 @@ async function handlePushDaily(req: VercelRequest, res: VercelResponse) {
       }
     }
 
-    // Datos del día: cargas de la DB (sin filas espejo legacy) + camiones.
+    // Datos del día: cargas FCL de la DB (sin filas espejo legacy).
     const { data: ships, error: shipsErr } = await db
       .from('shipments')
-      .select('ref, cliente, mode, archived, libre, salida, eta_fiscal, operativas')
+      .select('ref, cliente, mode, archived, libre, salida, eta_fiscal, contenedor, deposito, transporte, operativas')
       .neq('source', 'sheet')
       .limit(5000)
     if (shipsErr) throw shipsErr
-    const { data: trucks, error: trucksErr } = await db
-      .from('trucks')
-      .select('code, draft, departure_date')
-      .limit(1000)
-    if (trucksErr) throw trucksErr
 
-    const counts = computePushCounts(ships || [], trucks || [], dateKey)
-    const body = buildPushBody(counts)
+    const alerts = computeSlotAlerts(slot, ships || [], todayIso)
 
-    if (!body) {
+    if (alerts.length === 0) {
       await db.from('push_log').upsert(
-        { date_key: dateKey, sent_at: new Date().toISOString(), payload_resumen: 'sin alertas — no se envió' },
+        { date_key: dateKey, sent_at: new Date().toISOString(), payload_resumen: `[${slot}] sin alertas — no se envió` },
         { onConflict: 'date_key' }
       )
-      return res.status(200).json({ sent: 0, counts, message: 'Sin alertas hoy — no se envió nada' })
+      return res.status(200).json({ slot, sent: 0, alerts: [], message: 'Sin alertas en este slot — no se envió nada' })
     }
 
     const { data: subs, error: subsErr } = await db
       .from('push_subscriptions')
-      .select('endpoint, p256dh, auth')
+      .select('endpoint, p256dh, auth, alert_libre, alert_salidas, alert_fiscal, alert_frontera')
     if (subsErr) throw subsErr
+    const resumenTipos = alerts.map(a => `${a.title}`).join(' · ')
     if (!subs || subs.length === 0) {
       await db.from('push_log').upsert(
-        { date_key: dateKey, sent_at: new Date().toISOString(), payload_resumen: `${body} — sin suscriptores` },
+        { date_key: dateKey, sent_at: new Date().toISOString(), payload_resumen: `[${slot}] ${resumenTipos} — sin suscriptores` },
         { onConflict: 'date_key' }
       )
-      return res.status(200).json({ sent: 0, counts, resumen: body, message: 'Nadie activó los avisos todavía — no hay suscripciones' })
+      return res.status(200).json({ slot, sent: 0, resumen: resumenTipos, alerts: alerts.map(a => ({ kind: a.kind, count: a.count })), message: 'Nadie activó los avisos todavía — no hay suscripciones' })
     }
 
-    // Import dinámico: web-push solo se carga cuando esta action corre (una vez
+    // Import dinámico: web-push solo se carga cuando esta action corre (2 veces
     // al día) — no engorda el cold-start del resto de las notificaciones.
     const webpush = (await import('web-push')).default
     webpush.setVapidDetails('mailto:bridvanovich@twf.uy', VAPID_PUBLIC_KEY, vapidPrivateKey)
 
-    const notification = JSON.stringify({
-      title: 'Mediterránea — resumen del día',
-      body,
-      icon: '/med-icon-192.png',
-      badge: '/med-icon-192.png',
-      url: '/admin',
-    })
-
     let sent = 0
-    const dead: string[] = []
-    await Promise.all(
-      subs.map(async (s: { endpoint: string; p256dh: string; auth: string }) => {
-        try {
-          await webpush.sendNotification(
-            { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
-            notification
-          )
-          sent++
-        } catch (e: any) {
-          const code = e?.statusCode
-          // 404/410 = suscripción muerta (navegador la dio de baja) → limpiarla
-          if (code === 404 || code === 410) dead.push(s.endpoint)
-          else console.error('[push-daily] send falló:', code, e?.message || e)
-        }
+    const dead = new Set<string>()
+    const porTipo: Array<{ kind: string; count: number; sentTo: number }> = []
+
+    // Tipo por tipo (secuencial) para que las notificaciones lleguen en orden;
+    // dentro de cada tipo los envíos van en paralelo.
+    for (const alert of alerts) {
+      const prefColumn = PUSH_ALERT_META[alert.kind].prefColumn as keyof PushSubRow
+      const destino = (subs as PushSubRow[]).filter(s => !dead.has(s.endpoint) && s[prefColumn] !== false)
+      const notification = JSON.stringify({
+        title: alert.title,
+        body: alert.body,
+        // tag por tipo: un re-envío (?force=1) reemplaza el aviso anterior en
+        // vez de apilar duplicados.
+        tag: `med-${alert.kind}`,
+        icon: '/med-icon-192.png',
+        badge: '/med-icon-192.png',
+        url: '/admin',
       })
-    )
-    if (dead.length > 0) {
-      await db.from('push_subscriptions').delete().in('endpoint', dead)
+      let sentTo = 0
+      await Promise.all(
+        destino.map(async s => {
+          try {
+            await webpush.sendNotification(
+              { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
+              notification
+            )
+            sent++
+            sentTo++
+          } catch (e: any) {
+            const code = e?.statusCode
+            // 404/410 = suscripción muerta (navegador la dio de baja) → limpiarla
+            if (code === 404 || code === 410) dead.add(s.endpoint)
+            else console.error('[push-alerts] send falló:', code, e?.message || e)
+          }
+        })
+      )
+      porTipo.push({ kind: alert.kind, count: alert.count, sentTo })
+    }
+
+    if (dead.size > 0) {
+      await db.from('push_subscriptions').delete().in('endpoint', [...dead])
     }
 
     await db.from('push_log').upsert(
-      { date_key: dateKey, sent_at: new Date().toISOString(), payload_resumen: `${body} → ${sent} enviados` },
+      { date_key: dateKey, sent_at: new Date().toISOString(), payload_resumen: `[${slot}] ${resumenTipos} → ${sent} enviados` },
       { onConflict: 'date_key' }
     )
 
-    return res.status(200).json({ sent, muertas: dead.length, counts, resumen: body })
+    return res.status(200).json({ slot, sent, muertas: dead.size, resumen: resumenTipos, alerts: porTipo })
   } catch (error: any) {
-    console.error('[push-daily] Error:', error?.message || error)
-    return res.status(500).json({ error: 'No se pudo enviar el resumen push' })
+    console.error('[push-alerts] Error:', error?.message || error)
+    return res.status(500).json({ error: 'No se pudieron enviar las alertas push' })
   }
 }

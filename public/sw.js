@@ -16,7 +16,7 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim())
 })
 
-// Aviso push del backend: payload JSON { title, body, icon, badge, url }
+// Aviso push del backend: payload JSON { title, body, tag, icon, badge, url }
 self.addEventListener('push', (event) => {
   let data = {}
   try {
@@ -31,6 +31,9 @@ self.addEventListener('push', (event) => {
     badge: data.badge || '/med-icon-192.png',
     data: { url: (data && data.url) || '/admin' },
   }
+  // tag por tipo de alerta: un re-envío reemplaza el aviso anterior del mismo
+  // tipo en vez de apilar duplicados.
+  if (data.tag) options.tag = data.tag
   event.waitUntil(self.registration.showNotification(title, options))
 })
 

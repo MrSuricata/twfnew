@@ -1,100 +1,199 @@
 import { describe, it, expect } from 'vitest'
-import { computePushCounts, buildPushBody, montevideoTodayIso, type PushShipmentRow, type PushTruckRow } from './pushAlerts.js'
+import {
+  computeLibreLines,
+  computeSalidaLines,
+  computeFiscalLines,
+  computeFronteraLines,
+  buildAlertBody,
+  computeSlotAlerts,
+  montevideoTodayIso,
+  MAX_PUSH_LINES,
+  PUSH_SLOT_KINDS,
+  PUSH_ALERT_META,
+  type PushShipmentRow,
+} from './pushAlerts.js'
 
 const HOY = '2026-07-02'
 const AYER = '2026-07-01'
 const ANTEAYER = '2026-06-30'
 const HACE_3D = '2026-06-29'
 const MANANA = '2026-07-03'
+const HOY_MAS_3 = '2026-07-05'
+const HOY_MAS_4 = '2026-07-06'
 
 const fcl = (extra: Partial<PushShipmentRow>): PushShipmentRow => ({
   ref: 'A7000', cliente: 'PERETTI', mode: 'fcl', archived: false, ...extra,
 })
 
-describe('computePushCounts — LIBRE', () => {
-  it('cuenta vencido (fecha pasada) y hoy por separado', () => {
+describe('computeLibreLines — "Días libres" (hoy ≤ LIBRE ≤ hoy+3)', () => {
+  it('incluye hoy y hoy+3; excluye vencidos y hoy+4', () => {
     const ships = [
-      fcl({ libre: ANTEAYER }),
-      fcl({ libre: HOY }),
-      fcl({ libre: MANANA }), // futuro: no alerta
+      fcl({ ref: 'A7001', contenedor: 'MSKU1111111', libre: HOY }),
+      fcl({ ref: 'A7002', contenedor: 'MSKU2222222', libre: HOY_MAS_3 }),
+      fcl({ ref: 'A7003', contenedor: 'MSKU3333333', libre: AYER }),      // vencido → NO
+      fcl({ ref: 'A7004', contenedor: 'MSKU4444444', libre: HOY_MAS_4 }), // hoy+4 → NO
     ]
-    const c = computePushCounts(ships, [], HOY)
-    expect(c.libreVencidos).toBe(1)
-    expect(c.libreHoy).toBe(1)
+    const lines = computeLibreLines(ships, HOY)
+    expect(lines).toEqual([
+      'MSKU1111111 · A7001 · vence 02/07',
+      'MSKU2222222 · A7002 · vence 05/07',
+    ])
   })
 
   it("ignora 'DEVUELTO' y texto no-ISO", () => {
-    const ships = [fcl({ libre: 'DEVUELTO' }), fcl({ libre: '2/7' }), fcl({ libre: '' })]
-    const c = computePushCounts(ships, [], HOY)
-    expect(c.libreVencidos).toBe(0)
-    expect(c.libreHoy).toBe(0)
+    const ships = [fcl({ libre: 'DEVUELTO' }), fcl({ libre: '2/7' }), fcl({ libre: '' }), fcl({ libre: null })]
+    expect(computeLibreLines(ships, HOY)).toEqual([])
   })
 
   it('ignora archivadas y no-FCL', () => {
     const ships = [
-      fcl({ libre: ANTEAYER, archived: true }),
-      fcl({ libre: ANTEAYER, mode: 'lcl' }),
+      fcl({ libre: HOY, archived: true }),
+      fcl({ libre: HOY, mode: 'lcl' }),
     ]
-    const c = computePushCounts(ships, [], HOY)
-    expect(c.libreVencidos).toBe(0)
-  })
-})
-
-describe('computePushCounts — salidas / frontera / fiscal (por contenedor)', () => {
-  it('cuenta por contenedor via el array operativas (2 CNTR saliendo = 2)', () => {
-    const ships = [fcl({ operativas: [{ SALIDA: HOY, ETA_FISC: '' }, { SALIDA: HOY, ETA_FISC: '' }] })]
-    expect(computePushCounts(ships, [], HOY).salidas).toBe(2)
+    expect(computeLibreLines(ships, HOY)).toEqual([])
   })
 
-  it('sin array usa el fallback de columnas rollup (1 operativa sintética)', () => {
-    const ships = [fcl({ salida: HOY, eta_fiscal: '' })]
-    expect(computePushCounts(ships, [], HOY).salidas).toBe(1)
-  })
-
-  it('frontera: SALIDA hace 1–2 días sin llegar a fiscal', () => {
+  it('ordena por vencimiento más próximo y pone — si falta el CNTR', () => {
     const ships = [
-      fcl({ operativas: [{ SALIDA: AYER, ETA_FISC: '' }] }),        // 1 día → frontera
-      fcl({ operativas: [{ SALIDA: ANTEAYER, ETA_FISC: MANANA }] }), // 2 días, fiscal futuro → frontera
-      fcl({ operativas: [{ SALIDA: HACE_3D, ETA_FISC: '' }] }),      // 3 días → afuera de la ventana
-      fcl({ operativas: [{ SALIDA: AYER, ETA_FISC: ANTEAYER }] }),   // ya llegó a fiscal → no
-      fcl({ operativas: [{ SALIDA: AYER, ETA_FISC: HOY }] }),        // llega HOY → cuenta en fiscal, no en frontera
+      fcl({ ref: 'A7010', contenedor: '', libre: MANANA }),
+      fcl({ ref: 'A7011', contenedor: 'TCLU5555555', libre: HOY }),
     ]
-    const c = computePushCounts(ships, [], HOY)
-    expect(c.frontera).toBe(2)
-    expect(c.fiscal).toBe(1)
-  })
-
-  it('fiscal: ETA_FISC = hoy', () => {
-    const ships = [fcl({ operativas: [{ SALIDA: HACE_3D, ETA_FISC: HOY }] })]
-    expect(computePushCounts(ships, [], HOY).fiscal).toBe(1)
+    expect(computeLibreLines(ships, HOY)).toEqual([
+      'TCLU5555555 · A7011 · vence 02/07',
+      '— · A7010 · vence 03/07',
+    ])
   })
 })
 
-describe('computePushCounts — camiones', () => {
-  it('cuenta camiones publicados con salida hoy; ignora drafts y otras fechas', () => {
-    const trucks: PushTruckRow[] = [
-      { code: 'C100', draft: false, departure_date: HOY },
-      { code: 'C101', draft: true, departure_date: HOY },   // borrador → no
-      { code: 'C102', draft: false, departure_date: AYER }, // otra fecha → no
-      { code: 'C103', draft: false, departure_date: null },
+describe('computeSalidaLines — "Salen hoy" (SALIDA = hoy, por contenedor)', () => {
+  it('una línea por contenedor con su depósito', () => {
+    const ships = [fcl({
+      ref: 'A7020',
+      operativas: [
+        { SALIDA: HOY, ETA_FISC: '', CNTR_OP: 'MSKU1111111', DEPOSITO: 'GODILCO' },
+        { SALIDA: HOY, ETA_FISC: '', CNTR_OP: 'MSKU2222222', DEPOSITO: 'GODILCO' },
+        { SALIDA: MANANA, ETA_FISC: '', CNTR_OP: 'MSKU3333333', DEPOSITO: 'GODILCO' }, // otra fecha → no
+      ],
+    })]
+    expect(computeSalidaLines(ships, HOY)).toEqual([
+      'MSKU1111111 · A7020 · GODILCO',
+      'MSKU2222222 · A7020 · GODILCO',
+    ])
+  })
+
+  it('usa LUGAR_SALIDA cuando existe y difiere del depósito', () => {
+    const ships = [
+      fcl({ ref: 'A7021', operativas: [{ SALIDA: HOY, CNTR_OP: 'AAAA1111111', DEPOSITO: 'GODILCO', LUGAR_SALIDA: 'PLANIR' }] }),
+      fcl({ ref: 'A7022', operativas: [{ SALIDA: HOY, CNTR_OP: 'BBBB2222222', DEPOSITO: 'GODILCO', LUGAR_SALIDA: 'GODILCO' }] }),
+      fcl({ ref: 'A7023', operativas: [{ SALIDA: HOY, CNTR_OP: 'CCCC3333333', DEPOSITO: '', LUGAR_SALIDA: '' }] }),
     ]
-    expect(computePushCounts([], trucks, HOY).camiones).toBe(1)
+    expect(computeSalidaLines(ships, HOY)).toEqual([
+      'AAAA1111111 · A7021 · PLANIR',
+      'BBBB2222222 · A7022 · GODILCO',
+      'CCCC3333333 · A7023 · —',
+    ])
+  })
+
+  it('sin array usa el fallback de columnas rollup (CNTR y depósito de la carga)', () => {
+    const ships = [fcl({ ref: 'A7024', salida: HOY, contenedor: 'DDDD4444444', deposito: 'PLANIR' })]
+    expect(computeSalidaLines(ships, HOY)).toEqual(['DDDD4444444 · A7024 · PLANIR'])
   })
 })
 
-describe('buildPushBody', () => {
-  it('arma el resumen omitiendo categorías en 0', () => {
-    const body = buildPushBody({ libreVencidos: 2, libreHoy: 1, salidas: 4, frontera: 2, fiscal: 3, camiones: 2 })
-    expect(body).toBe('🔴 2 LIBRE vencidos · 🟠 1 vence hoy · 🚚 4 salidas · 🛃 2 en frontera · 🏭 3 llegan a fiscal · 2 camiones')
+describe('computeFiscalLines — "Llegan hoy a fiscal" (ETA_FISC = hoy)', () => {
+  it('línea con transporte, — si vacío, hereda el rollup de la carga', () => {
+    const ships = [
+      fcl({ ref: 'A7030', operativas: [{ ETA_FISC: HOY, CNTR_OP: 'AAAA1111111', TRANSPORTE: 'OLAVERRY' }] }),
+      fcl({ ref: 'A7031', operativas: [{ ETA_FISC: HOY, CNTR_OP: 'BBBB2222222' }] }),
+      fcl({ ref: 'A7032', transporte: 'TRANSCAL', operativas: [{ ETA_FISC: HOY, CNTR_OP: 'CCCC3333333' }] }),
+      fcl({ ref: 'A7033', operativas: [{ ETA_FISC: MANANA, CNTR_OP: 'DDDD4444444' }] }), // otra fecha → no
+    ]
+    expect(computeFiscalLines(ships, HOY)).toEqual([
+      'AAAA1111111 · A7030 · OLAVERRY',
+      'BBBB2222222 · A7031 · —',
+      'CCCC3333333 · A7032 · TRANSCAL',
+    ])
+  })
+})
+
+describe('computeFronteraLines — "Hoy en frontera" (SALIDA hace 1–2 días sin fiscal)', () => {
+  it('misma derivación que la pestaña HOY', () => {
+    const ships = [
+      fcl({ ref: 'A7040', operativas: [{ SALIDA: AYER, ETA_FISC: '', CNTR_OP: 'AAAA1111111', TRANSPORTE: 'PCS' }] }),          // 1 día → frontera
+      fcl({ ref: 'A7041', operativas: [{ SALIDA: ANTEAYER, ETA_FISC: MANANA, CNTR_OP: 'BBBB2222222' }] }),                      // 2 días, fiscal futuro → frontera
+      fcl({ ref: 'A7042', operativas: [{ SALIDA: HACE_3D, ETA_FISC: '', CNTR_OP: 'CCCC3333333' }] }),                           // 3 días → afuera
+      fcl({ ref: 'A7043', operativas: [{ SALIDA: AYER, ETA_FISC: ANTEAYER, CNTR_OP: 'DDDD4444444' }] }),                        // ya llegó → no
+      fcl({ ref: 'A7044', operativas: [{ SALIDA: AYER, ETA_FISC: HOY, CNTR_OP: 'EEEE5555555' }] }),                             // llega HOY → va en fiscal
+      fcl({ ref: 'A7045', operativas: [{ SALIDA: HOY, ETA_FISC: '', CNTR_OP: 'FFFF6666666' }] }),                               // sale hoy → va en salidas
+    ]
+    expect(computeFronteraLines(ships, HOY)).toEqual([
+      'AAAA1111111 · A7040 · PCS',
+      'BBBB2222222 · A7041 · —',
+    ])
+  })
+})
+
+describe('buildAlertBody — cap de líneas', () => {
+  it('null si no hay líneas (no se envía nada)', () => {
+    expect(buildAlertBody([])).toBeNull()
   })
 
-  it('omite las categorías vacías y pluraliza bien el singular', () => {
-    const body = buildPushBody({ libreVencidos: 1, libreHoy: 0, salidas: 0, frontera: 0, fiscal: 1, camiones: 1 })
-    expect(body).toBe('🔴 1 LIBRE vencido · 🏭 1 llega a fiscal · 1 camión')
+  it('hasta el máximo va todo, separado por salto de línea', () => {
+    const lines = ['a', 'b', 'c']
+    expect(buildAlertBody(lines)).toBe('a\nb\nc')
+    const seis = ['1', '2', '3', '4', '5', '6']
+    expect(buildAlertBody(seis)).toBe(seis.join('\n'))
   })
 
-  it('todo en 0 → null (no se envía nada)', () => {
-    expect(buildPushBody({ libreVencidos: 0, libreHoy: 0, salidas: 0, frontera: 0, fiscal: 0, camiones: 0 })).toBeNull()
+  it('pasado el máximo capea y agrega "…y N más"', () => {
+    const ocho = ['1', '2', '3', '4', '5', '6', '7', '8']
+    expect(buildAlertBody(ocho)).toBe('1\n2\n3\n4\n5\n6\n…y 2 más')
+    expect(MAX_PUSH_LINES).toBe(6)
+  })
+})
+
+describe('computeSlotAlerts — notificaciones separadas por slot', () => {
+  const ships = [
+    fcl({ ref: 'A7050', contenedor: 'AAAA1111111', libre: HOY }),
+    fcl({ ref: 'A7051', contenedor: 'BBBB2222222', libre: MANANA }),
+    fcl({ ref: 'A7052', operativas: [{ ETA_FISC: HOY, CNTR_OP: 'CCCC3333333', TRANSPORTE: 'OLAVERRY' }] }),
+    fcl({ ref: 'A7053', operativas: [{ SALIDA: HOY, CNTR_OP: 'DDDD4444444', DEPOSITO: 'GODILCO' }] }),
+    fcl({ ref: 'A7054', operativas: [{ SALIDA: AYER, ETA_FISC: '', CNTR_OP: 'EEEE5555555', TRANSPORTE: 'PCS' }] }),
+  ]
+
+  it('manana = libre + fiscal, con título propio y count', () => {
+    const alerts = computeSlotAlerts('manana', ships, HOY)
+    expect(alerts.map(a => a.kind)).toEqual(['libre', 'fiscal'])
+    expect(alerts[0].title).toBe('🔴 Libres por vencer (2)')
+    expect(alerts[0].count).toBe(2)
+    expect(alerts[0].body).toBe('AAAA1111111 · A7050 · vence 02/07\nBBBB2222222 · A7051 · vence 03/07')
+    expect(alerts[1].title).toBe('🏭 Llegan hoy a fiscal (1)')
+    expect(alerts[1].body).toBe('CCCC3333333 · A7052 · OLAVERRY')
+  })
+
+  it('tarde = frontera + salidas', () => {
+    const alerts = computeSlotAlerts('tarde', ships, HOY)
+    expect(alerts.map(a => a.kind)).toEqual(['frontera', 'salidas'])
+    expect(alerts[0].title).toBe('🛃 Hoy en frontera (1)')
+    expect(alerts[0].body).toBe('EEEE5555555 · A7054 · PCS')
+    expect(alerts[1].title).toBe('🚚 Salen hoy (1)')
+    expect(alerts[1].body).toBe('DDDD4444444 · A7053 · GODILCO')
+  })
+
+  it('omite los tipos sin matches (sin nada → [])', () => {
+    expect(computeSlotAlerts('manana', [], HOY)).toEqual([])
+    const soloSalida = [fcl({ ref: 'A7055', operativas: [{ SALIDA: HOY, CNTR_OP: 'FFFF6666666' }] })]
+    const alerts = computeSlotAlerts('tarde', soloSalida, HOY)
+    expect(alerts.map(a => a.kind)).toEqual(['salidas'])
+  })
+
+  it('cada tipo tiene columna de preferencia y horario definidos', () => {
+    for (const slot of ['manana', 'tarde'] as const) {
+      for (const kind of PUSH_SLOT_KINDS[slot]) {
+        expect(PUSH_ALERT_META[kind].prefColumn).toMatch(/^alert_/)
+        expect(PUSH_ALERT_META[kind].hora).toMatch(/^\d{2}:\d{2}$/)
+      }
+    }
   })
 })
 
