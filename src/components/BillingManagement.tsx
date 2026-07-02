@@ -26,20 +26,28 @@ import {
   Clock,
   Warning,
   Truck as TruckIcon,
+  Plus,
+  X,
+  FilePdf,
+  FloppyDisk,
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
 import type { Truck, TruckLoad } from '@/lib/truckTypes'
 import type { DbShipment, Modality } from '@/lib/operationsTypes'
 import { MODALITY_LABELS, MODALITY_COLORS } from '@/lib/operationsTypes'
-import type { BillableItem, BillingRecord } from '@/lib/billingTypes'
+import type { BillableItem, BillingLineItem, BillingRecord } from '@/lib/billingTypes'
 import {
   AGING_THRESHOLD_DAYS,
   buildBillableItems,
   daysSince,
+  hasFichaData,
   indexBilling,
   isInvoicedThisMonth,
 } from '@/lib/billingTypes'
+import { downloadFichaFacturacionPdf, fmtMoneyUY } from '@/lib/fichaFacturacionPdf'
+import { getBrand } from '@/lib/brand'
+import { fmtDateDMY } from '@/lib/format'
 
 // ─── Facturación universal ───────────────────────────────────────────
 // TODA carga (FCL planilla + LCL/aéreo/terrestre/FCL web) entra acá cuando
@@ -59,11 +67,47 @@ type SubTab = 'pendientes' | 'facturadas' | 'no_aplica'
 
 const INVOICED_BY = 'admin'
 
+// ── Ficha de compra/venta: renglones en edición (monto como texto es-UY) ──
+interface FichaLineDraft {
+  concepto: string
+  montoStr: string
+}
+
+/** "1.234,56" / "1234.56" → número. Coma = decimal (es-UY); sin coma, el punto decide. */
+function parseMontoUY(s: string): number {
+  const t = (s || '').trim().replace(/\s/g, '')
+  if (!t) return 0
+  const norm = t.includes(',') ? t.replace(/\./g, '').replace(',', '.') : t
+  const n = parseFloat(norm)
+  return Number.isFinite(n) ? n : 0
+}
+
+const montoToInput = (n: number): string => (n === 0 ? '' : String(n).replace('.', ','))
+
+const EMPTY_DRAFT: FichaLineDraft = { concepto: '', montoStr: '' }
+
+const toDrafts = (lines?: BillingLineItem[]): FichaLineDraft[] =>
+  lines && lines.length > 0
+    ? lines.map(l => ({ concepto: l.concepto, montoStr: montoToInput(l.monto) }))
+    : [{ ...EMPTY_DRAFT }]
+
+/** Drafts → renglones persistibles (descarta filas totalmente vacías). */
+const collectLines = (drafts: FichaLineDraft[]): BillingLineItem[] =>
+  drafts
+    .map(d => ({ concepto: d.concepto.trim(), monto: parseMontoUY(d.montoStr) }))
+    .filter(l => l.concepto !== '' || l.monto !== 0)
+
+const sumDrafts = (drafts: FichaLineDraft[]): number =>
+  drafts.reduce((acc, d) => acc + parseMontoUY(d.montoStr), 0)
+
 export default function BillingManagement({ shipments, dbShipments = [], trucks = [], truckLoads = [], billing, onUpdateBilling, onClearBilling }: BillingManagementProps) {
   const [subTab, setSubTab] = useState<SubTab>('pendientes')
   const [search, setSearch] = useState('')
-  const [invoiceDialog, setInvoiceDialog] = useState<BillableItem | null>(null)
-  const [invoiceNumber, setInvoiceNumber] = useState('')
+  // Ficha de facturación (dialog): ítem abierto + renglones en edición.
+  const [fichaItem, setFichaItem] = useState<BillableItem | null>(null)
+  const [fichaGastos, setFichaGastos] = useState<FichaLineDraft[]>([])
+  const [fichaVentas, setFichaVentas] = useState<FichaLineDraft[]>([])
+  const [fichaInvoice, setFichaInvoice] = useState('')
   // Filtro por tipo de carga (FCL / LCL / aéreo / terrestre).
   const [modeFilter, setModeFilter] = useState<'all' | Modality>('all')
   // Orden por columna: 1er click ▼ (mayor→menor, ej: últimas arribadas), 2do ▲, 3ro limpia.
@@ -161,7 +205,13 @@ export default function BillingManagement({ shipments, dbShipments = [], trucks 
   )
 
   // ── Actions (por ref — vale para cualquier modalidad) ──
-  const markFacturada = (item: BillableItem, invNumber: string) => {
+  // La ficha viaja con la fila: al marcar facturada/no_aplica se preserva lo
+  // que haya (o lo recién editado); nunca se pisa una ficha con arrays vacíos
+  // salvo que el usuario la haya vaciado a propósito en el dialog.
+  const fichaFieldsOf = (rec: BillingRecord | undefined): Pick<BillingRecord, 'gastos' | 'ventas'> | Record<string, never> =>
+    hasFichaData(rec) ? { gastos: rec?.gastos || [], ventas: rec?.ventas || [] } : {}
+
+  const markFacturada = (item: BillableItem, invNumber: string, ficha?: Pick<BillingRecord, 'gastos' | 'ventas'>) => {
     if (!onUpdateBilling) return
     onUpdateBilling({
       ref: item.ref,
@@ -170,12 +220,32 @@ export default function BillingManagement({ shipments, dbShipments = [], trucks 
       invoicedAt: new Date().toISOString(),
       invoicedBy: INVOICED_BY,
       updatedAt: new Date().toISOString(),
+      ...(ficha ?? fichaFieldsOf(billingMap.get(item.ref))),
     })
     toast.success(`${item.ref} marcada como facturada`)
   }
 
   const undoFacturada = (item: BillableItem) => {
-    // Removing the overlay returns it to the derived "pendiente" state.
+    const rec = billingMap.get(item.ref)
+    if (hasFichaData(rec)) {
+      // Hay ficha cargada: NO borrar la fila (se perderían los renglones).
+      // Bajar a status 'pendiente' — semánticamente idéntico a la ausencia de
+      // fila (derive-on-read) pero conserva gastos/ventas.
+      if (!onUpdateBilling) return
+      onUpdateBilling({
+        ref: item.ref,
+        status: 'pendiente',
+        invoiceNumber: '',
+        invoicedAt: null,
+        invoicedBy: '',
+        updatedAt: new Date().toISOString(),
+        gastos: rec?.gastos || [],
+        ventas: rec?.ventas || [],
+      })
+      toast.success(`${item.ref} vuelta a pendiente`)
+      return
+    }
+    // Sin ficha: quitar el overlay vuelve al estado derivado, como siempre.
     if (onClearBilling) {
       onClearBilling(item.ref)
       toast.success(`${item.ref} vuelta a pendiente`)
@@ -191,25 +261,100 @@ export default function BillingManagement({ shipments, dbShipments = [], trucks 
       invoicedAt: null,
       invoicedBy: '',
       updatedAt: new Date().toISOString(),
+      ...fichaFieldsOf(billingMap.get(item.ref)),
     })
     toast.success(`${item.ref} marcada como "no aplica"`)
   }
 
   const restore = (item: BillableItem) => {
+    const rec = billingMap.get(item.ref)
+    if (hasFichaData(rec)) {
+      // Igual que en undoFacturada: conservar la ficha al restaurar.
+      if (!onUpdateBilling) return
+      onUpdateBilling({
+        ref: item.ref,
+        status: 'pendiente',
+        invoiceNumber: '',
+        invoicedAt: null,
+        invoicedBy: '',
+        updatedAt: new Date().toISOString(),
+        gastos: rec?.gastos || [],
+        ventas: rec?.ventas || [],
+      })
+      toast.success(`${item.ref} restaurada`)
+      return
+    }
     if (onClearBilling) {
       onClearBilling(item.ref)
       toast.success(`${item.ref} restaurada`)
     }
   }
 
-  const openInvoiceDialog = (item: BillableItem) => {
-    setInvoiceNumber('')
-    setInvoiceDialog(item)
+  // ── Ficha de compra/venta (dialog) ──
+  const openFicha = (item: BillableItem) => {
+    const rec = billingMap.get(item.ref)
+    setFichaGastos(toDrafts(rec?.gastos))
+    setFichaVentas(toDrafts(rec?.ventas))
+    setFichaInvoice(rec?.invoiceNumber || '')
+    setFichaItem(item)
   }
 
-  const confirmInvoice = () => {
-    if (invoiceDialog) markFacturada(invoiceDialog, invoiceNumber)
-    setInvoiceDialog(null)
+  const fichaRec = fichaItem ? billingMap.get(fichaItem.ref) : undefined
+  const fichaEsFacturada = fichaRec?.status === 'facturada'
+  const fichaResultado = sumDrafts(fichaVentas) - sumDrafts(fichaGastos)
+
+  /** Upsert de la ficha SIN tocar el estado: una carga pendiente sigue
+   *  pendiente (fila con status 'pendiente' = ausencia de fila para la
+   *  derivación); una facturada/no_aplica conserva su estado y su factura. */
+  const guardarFicha = () => {
+    if (!fichaItem || !onUpdateBilling) return
+    const rec = billingMap.get(fichaItem.ref)
+    const status = rec?.status === 'facturada' || rec?.status === 'no_aplica' ? rec.status : 'pendiente'
+    onUpdateBilling({
+      ref: fichaItem.ref,
+      status,
+      invoiceNumber: rec?.invoiceNumber || '',
+      invoicedAt: rec?.invoicedAt || null,
+      invoicedBy: rec?.invoicedBy || '',
+      updatedAt: new Date().toISOString(),
+      gastos: collectLines(fichaGastos),
+      ventas: collectLines(fichaVentas),
+    })
+    toast.success(`Ficha de ${fichaItem.ref} guardada`)
+  }
+
+  /** Cierre desde la ficha: guarda renglones + marca facturada en un solo upsert. */
+  const facturarDesdeFicha = () => {
+    if (!fichaItem) return
+    markFacturada(fichaItem, fichaInvoice, {
+      gastos: collectLines(fichaGastos),
+      ventas: collectLines(fichaVentas),
+    })
+    setFichaItem(null)
+  }
+
+  const exportarFichaPdf = async () => {
+    if (!fichaItem) return
+    try {
+      await downloadFichaFacturacionPdf(
+        {
+          ref: fichaItem.ref,
+          cliente: fichaItem.cliente,
+          cntr: fichaItem.cntr,
+          modeLabel: MODALITY_LABELS[fichaItem.mode],
+          eta: fichaItem.eta,
+          arrival: fichaItem.arrival,
+          truckCode: fichaItem.truckCode,
+          invoiceNumber: fichaEsFacturada ? fichaRec?.invoiceNumber : undefined,
+        },
+        collectLines(fichaGastos),
+        collectLines(fichaVentas),
+        getBrand(),
+      )
+      toast.success('PDF de la ficha descargado')
+    } catch {
+      toast.error('No se pudo generar el PDF')
+    }
   }
 
   return (
@@ -310,7 +455,7 @@ export default function BillingManagement({ shipments, dbShipments = [], trucks 
                     item={item}
                     record={billingMap.get(item.ref)}
                     subTab={subTab}
-                    onInvoice={() => openInvoiceDialog(item)}
+                    onFicha={() => openFicha(item)}
                     onUndo={() => undoFacturada(item)}
                     onNoAplica={() => markNoAplica(item)}
                     onRestore={() => restore(item)}
@@ -322,34 +467,169 @@ export default function BillingManagement({ shipments, dbShipments = [], trucks 
         </CardContent>
       </Card>
 
-      {/* Invoice number dialog */}
-      <Dialog open={!!invoiceDialog} onOpenChange={(open) => !open && setInvoiceDialog(null)}>
-        <DialogContent className="max-w-sm">
+      {/* Ficha de facturación — gastos (compra) vs venta + cierre facturada */}
+      <Dialog open={!!fichaItem} onOpenChange={(open) => !open && setFichaItem(null)}>
+        <DialogContent className="sm:max-w-3xl">
           <DialogHeader>
-            <DialogTitle>Facturar {invoiceDialog?.ref}</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <Receipt size={20} weight="fill" className="text-primary" />
+              Ficha de facturación — {fichaItem?.ref}
+            </DialogTitle>
           </DialogHeader>
-          <div className="space-y-2">
-            <Label className="text-sm text-muted-foreground">Nº de factura (opcional)</Label>
-            <Input
-              value={invoiceNumber}
-              onChange={e => setInvoiceNumber(e.target.value)}
-              placeholder="Ej: A-0012345"
-              autoFocus
-              onKeyDown={e => { if (e.key === 'Enter') confirmInvoice() }}
-            />
-            <p className="text-xs text-muted-foreground">
-              Podés dejarlo vacío y completarlo después. La carga queda marcada como facturada igual.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setInvoiceDialog(null)}>Cancelar</Button>
-            <Button onClick={confirmInvoice}>
-              <CheckCircle size={16} className="mr-1.5" weight="fill" />
-              Marcar facturada
+
+          {fichaItem && (
+            <div className="space-y-4">
+              {/* Cabecera: datos de la carga */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-2 rounded-lg border bg-muted/30 p-3">
+                <FichaDato label="Cliente" value={fichaItem.cliente || '—'} className="col-span-2" />
+                <FichaDato label="Modalidad" value={MODALITY_LABELS[fichaItem.mode]} />
+                <FichaDato label="CNTR" value={fichaItem.cntr || '—'} />
+                <FichaDato label="ETA MVD" value={fichaItem.eta ? fmtDateDMY(fichaItem.eta) : '—'} />
+                <FichaDato label="Llegada a fiscal" value={fichaItem.arrival ? fmtDate(fichaItem.arrival) : '—'} />
+                {fichaItem.truckCode && <FichaDato label="Camión" value={fichaItem.truckCode} />}
+                {fichaEsFacturada && (
+                  <FichaDato
+                    label="Factura"
+                    value={`${fichaRec?.invoiceNumber || 's/nº'}${fichaRec?.invoicedAt ? ` · ${fmtDate(new Date(fichaRec.invoicedAt))}` : ''}`}
+                  />
+                )}
+              </div>
+
+              {/* Dos columnas: GASTOS (compra) | VENTA — apiladas en mobile */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FichaColumn title="Gastos (compra)" rows={fichaGastos} onChange={setFichaGastos} />
+                <FichaColumn title="Venta" rows={fichaVentas} onChange={setFichaVentas} />
+              </div>
+
+              {/* Resultado: VENTA − GASTOS */}
+              <div
+                className={`rounded-lg border p-3 flex items-center justify-between gap-4 ${
+                  fichaResultado >= 0 ? 'border-green-300 bg-green-50' : 'border-red-300 bg-red-50'
+                }`}
+              >
+                <span className={`text-sm font-medium ${fichaResultado >= 0 ? 'text-green-900' : 'text-red-900'}`}>
+                  Resultado (venta − gastos)
+                </span>
+                <span className={`text-2xl font-bold tabular-nums ${fichaResultado >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                  USD {fmtMoneyUY(fichaResultado)}
+                </span>
+              </div>
+
+              {/* Cierre: marcar facturada (solo si todavía no lo está) */}
+              {!fichaEsFacturada && (
+                <div className="rounded-lg border p-3 flex flex-col sm:flex-row sm:items-end gap-2">
+                  <div className="flex-1 space-y-1">
+                    <Label className="text-xs text-muted-foreground">Nº de factura (opcional)</Label>
+                    <Input
+                      value={fichaInvoice}
+                      onChange={e => setFichaInvoice(e.target.value)}
+                      placeholder="Ej: A-0012345"
+                      className="h-9"
+                      onKeyDown={e => { if (e.key === 'Enter') facturarDesdeFicha() }}
+                    />
+                  </div>
+                  <Button onClick={facturarDesdeFicha} className="h-9">
+                    <CheckCircle size={16} className="mr-1.5" weight="fill" />
+                    Marcar facturada
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button variant="ghost" onClick={() => setFichaItem(null)}>Cerrar</Button>
+            <Button variant="outline" onClick={exportarFichaPdf}>
+              <FilePdf size={16} className="mr-1.5" />
+              Exportar PDF
+            </Button>
+            <Button variant="outline" onClick={guardarFicha}>
+              <FloppyDisk size={16} className="mr-1.5" />
+              Guardar ficha
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  )
+}
+
+// ── Ficha: dato de cabecera ──
+
+function FichaDato({ label, value, className = '' }: { label: string; value: string; className?: string }) {
+  return (
+    <div className={`min-w-0 ${className}`}>
+      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="text-sm font-medium truncate" title={value}>{value}</div>
+    </div>
+  )
+}
+
+// ── Ficha: columna de renglones (concepto | monto USD | quitar) ──
+
+function FichaColumn({
+  title,
+  rows,
+  onChange,
+}: {
+  title: string
+  rows: FichaLineDraft[]
+  onChange: (rows: FichaLineDraft[]) => void
+}) {
+  const subtotal = sumDrafts(rows)
+  const setRow = (i: number, patch: Partial<FichaLineDraft>) =>
+    onChange(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)))
+  const removeRow = (i: number) => {
+    const next = rows.filter((_, j) => j !== i)
+    onChange(next.length > 0 ? next : [{ ...EMPTY_DRAFT }])
+  }
+
+  return (
+    <div className="rounded-lg border flex flex-col">
+      <div className="px-3 py-2 border-b bg-muted/50 text-xs font-semibold uppercase tracking-wide">
+        {title}
+      </div>
+      <div className="p-3 space-y-2 flex-1">
+        {rows.map((r, i) => (
+          <div key={i} className="flex items-center gap-2">
+            <Input
+              value={r.concepto}
+              onChange={e => setRow(i, { concepto: e.target.value })}
+              placeholder="Concepto"
+              className="h-9 flex-1 min-w-0"
+            />
+            <Input
+              value={r.montoStr}
+              onChange={e => setRow(i, { montoStr: e.target.value })}
+              placeholder="0,00"
+              inputMode="decimal"
+              className="h-9 w-24 text-right tabular-nums"
+            />
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-9 w-8 p-0 text-muted-foreground shrink-0"
+              onClick={() => removeRow(i)}
+              aria-label="Quitar renglón"
+            >
+              <X size={14} />
+            </Button>
+          </div>
+        ))}
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-8 w-full text-xs"
+          onClick={() => onChange([...rows, { ...EMPTY_DRAFT }])}
+        >
+          <Plus size={14} className="mr-1" />
+          Agregar renglón
+        </Button>
+      </div>
+      <div className="px-3 py-2 border-t flex items-center justify-between text-sm bg-muted/20">
+        <span className="text-muted-foreground">Subtotal</span>
+        <span className="font-semibold tabular-nums">USD {fmtMoneyUY(subtotal)}</span>
+      </div>
     </div>
   )
 }
@@ -360,7 +640,7 @@ function BillingRow({
   item,
   record,
   subTab,
-  onInvoice,
+  onFicha,
   onUndo,
   onNoAplica,
   onRestore,
@@ -368,7 +648,7 @@ function BillingRow({
   item: BillableItem
   record?: BillingRecord
   subTab: SubTab
-  onInvoice: () => void
+  onFicha: () => void
   onUndo: () => void
   onNoAplica: () => void
   onRestore: () => void
@@ -417,9 +697,10 @@ function BillingRow({
         <div className="flex items-center gap-1 justify-end">
           {subTab === 'pendientes' && (
             <>
-              <Button size="sm" variant="outline" className="h-7" onClick={onInvoice}>
-                <CheckCircle size={14} className="mr-1" weight="fill" />
-                Marcar facturada
+              <Button size="sm" className="h-7" onClick={onFicha}>
+                <Receipt size={14} className="mr-1" weight="fill" />
+                Facturar
+                {hasFichaData(record) && <span className="ml-1.5 w-1.5 h-1.5 rounded-full bg-primary-foreground/70" title="Tiene ficha cargada" />}
               </Button>
               <TooltipProvider delayDuration={200}>
                 <Tooltip>
@@ -434,10 +715,16 @@ function BillingRow({
             </>
           )}
           {subTab === 'facturadas' && (
-            <Button size="sm" variant="outline" className="h-7" onClick={onUndo}>
-              <ArrowCounterClockwise size={14} className="mr-1" />
-              Deshacer
-            </Button>
+            <>
+              <Button size="sm" variant="outline" className="h-7" onClick={onFicha}>
+                <Receipt size={14} className="mr-1" />
+                Ver ficha
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 text-muted-foreground" onClick={onUndo}>
+                <ArrowCounterClockwise size={14} className="mr-1" />
+                Deshacer
+              </Button>
+            </>
           )}
           {subTab === 'no_aplica' && (
             <Button size="sm" variant="outline" className="h-7" onClick={onRestore}>

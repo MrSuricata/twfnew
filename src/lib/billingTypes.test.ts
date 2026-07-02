@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildBillableItems, hasReachedFinalDb, type BillingRecord } from './billingTypes'
+import { buildBillableItems, getBillingState, hasReachedFinalDb, type BillingRecord } from './billingTypes'
 import type { DbShipment } from './operationsTypes'
 import type { Truck, TruckLoad } from './truckTypes'
 import type { ParsedShipment } from './shipmentTypes'
@@ -86,6 +86,43 @@ describe('buildBillableItems — universal', () => {
   it('FCL horneada sin salida/eta_fiscal → todavía NO facturable', () => {
     const fclDb = db({ ref: 'A7901', mode: 'fcl', status: '', salida: '', eta_fiscal: '' })
     expect(buildBillableItems([], [fclDb], [], [], noBilling)).toHaveLength(0)
+  })
+})
+
+describe('ficha de compra/venta — la fila con solo gastos/ventas NO cambia el estado', () => {
+  // Guardar la ficha de una carga aún pendiente upserta una fila con
+  // status='pendiente' + gastos/ventas. Esa fila NO debe marcarla facturada:
+  // el estado sigue siendo derive-on-read (solo facturada/no_aplica explícitas
+  // ganan). Si esto se rompe, las cargas con ficha desaparecen de Pendientes.
+  const fichaRow = (ref: string): BillingRecord => ({
+    ref, status: 'pendiente', invoiceNumber: '', invoicedAt: null, invoicedBy: '', updatedAt: '',
+    gastos: [{ concepto: 'Flete', monto: 2000 }],
+    ventas: [{ concepto: 'Venta flete', monto: 2600 }],
+  })
+
+  it('carga DB arribada con ficha guardada (status pendiente) sigue PENDIENTE en la lista/contadores', () => {
+    const billing = new Map([['E10', fichaRow('E10')]])
+    const out = buildBillableItems([], [db({ status: 'en_fiscal' })], [], [], billing)
+    expect(out).toHaveLength(1)
+    expect(out[0].state).toBe('pendiente')
+  })
+
+  it('FCL de planilla arribada con ficha guardada sigue PENDIENTE (getBillingState no la marca)', () => {
+    const fcl = {
+      REF: 'A7777', CLIENTE: 'ACME', ETD: '', ETA: '',
+      operativas: [{ SALIDA: '2026-01-10', ETA_FISC: '2026-01-12' }],
+    } as unknown as ParsedShipment
+    const billing = new Map([['A7777', fichaRow('A7777')]])
+    expect(getBillingState(fcl, billing)).toBe('pendiente')
+    const out = buildBillableItems([fcl], [], [], [], billing)
+    expect(out).toHaveLength(1)
+    expect(out[0].state).toBe('pendiente')
+  })
+
+  it('carga que NO llegó a fiscal con ficha guardada NO aparece todavía (la fila no adelanta el estado)', () => {
+    const billing = new Map([['E10', fichaRow('E10')]])
+    const out = buildBillableItems([], [db({ status: 'en_transito' })], [], [], billing)
+    expect(out).toHaveLength(0)
   })
 })
 

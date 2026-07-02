@@ -17,6 +17,12 @@ import type { Truck, TruckLoad } from './truckTypes'
 
 export type BillingStatus = 'pendiente' | 'facturada' | 'no_aplica'
 
+/** Renglón de la ficha de compra/venta: un concepto con su monto en USD. */
+export interface BillingLineItem {
+  concepto: string
+  monto: number
+}
+
 /** Overlay row persisted in `shipment_billing`. */
 export interface BillingRecord {
   ref: string
@@ -25,6 +31,16 @@ export interface BillingRecord {
   invoicedAt: string | null    // ISO timestamp, set when status=facturada
   invoicedBy: string
   updatedAt: string
+  // Ficha de compra/venta (jsonb en la fila). OJO semántica: una fila con solo
+  // gastos/ventas y status='pendiente' NO marca la carga — el estado sigue
+  // derivándose (facturada/no_aplica explícitas ganan; el resto es derive-on-read).
+  gastos?: BillingLineItem[]
+  ventas?: BillingLineItem[]
+}
+
+/** ¿La ficha tiene renglones cargados? (para preservarla al deshacer/restaurar). */
+export function hasFichaData(rec: BillingRecord | undefined | null): boolean {
+  return !!rec && ((rec.gastos?.length ?? 0) > 0 || (rec.ventas?.length ?? 0) > 0)
 }
 
 /** Derived state of a shipment on the billing axis.
@@ -113,6 +129,8 @@ export interface BillableItem {
   mode: Modality
   arrival: Date | null         // llegada (FCL: última ETA_FISC · DB: arribo del camión o ETA)
   truckCode?: string           // si llegó consolidada en un camión
+  cntr?: string                // contenedor(es) — para la cabecera de la ficha
+  eta?: string                 // ETA MVD (ISO) — para la cabecera de la ficha
 }
 
 /** DB cargas: facturable cuando el estado efectivo llegó a fiscal o se entregó. */
@@ -176,7 +194,8 @@ export function buildBillableItems(
     seenFcl.add(s.REF)
     const state = getBillingState(s, billingByRef)
     if (!state) continue
-    out.push({ item: { ref: s.REF, cliente: s.CLIENTE || '', mode: 'fcl', arrival: getFiscalArrivalDate(s) }, state })
+    const cntr = s.CNTR || (s.operativas || []).map(o => o.CNTR_OP).filter(Boolean).join(', ')
+    out.push({ item: { ref: s.REF, cliente: s.CLIENTE || '', mode: 'fcl', arrival: getFiscalArrivalDate(s), cntr, eta: s.ETA || '' }, state })
   }
 
   // Cargas DB (LCL/aéreo/terrestre + FCL horneada post-flip) — incluye archivadas a
@@ -196,7 +215,11 @@ export function buildBillableItems(
       ? parseLocalDate(d.eta_fiscal || '')
       : (t?.arrival || parseLocalDate(d.eta || ''))
     out.push({
-      item: { ref: d.ref, cliente: d.cliente || '', mode: d.mode, arrival, truckCode: d.mode === 'fcl' ? undefined : t?.code },
+      item: {
+        ref: d.ref, cliente: d.cliente || '', mode: d.mode, arrival,
+        truckCode: d.mode === 'fcl' ? undefined : t?.code,
+        cntr: d.contenedor || '', eta: d.eta || '',
+      },
       state,
     })
   }

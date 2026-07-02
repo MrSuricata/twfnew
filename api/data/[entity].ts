@@ -1377,6 +1377,9 @@ function mapBillingRowToApi(b: any) {
     invoicedAt: b.invoiced_at || null,
     invoicedBy: b.invoiced_by || '',
     updatedAt: b.updated_at || '',
+    // Ficha de compra/venta (jsonb): arrays de {concepto, monto}.
+    gastos: Array.isArray(b.gastos) ? b.gastos : [],
+    ventas: Array.isArray(b.ventas) ? b.ventas : [],
   }
 }
 
@@ -1400,20 +1403,38 @@ async function handleBilling(req: VercelRequest, res: VercelResponse, db: any, p
     const nowIso = new Date().toISOString()
     // invoiced_by sale del TOKEN (usuario real), no del cliente — auditoría.
     const who = auditUser(payload as any)
-    const rows = v.items.map((b) => ({
-      ref: b.ref,
-      status: b.status,
-      invoice_number: b.invoiceNumber || b.invoice_number || '',
-      // Only stamp invoiced_at/by when status=facturada; clear otherwise.
-      invoiced_at: b.status === 'facturada'
-        ? (b.invoicedAt || b.invoiced_at || nowIso)
-        : null,
-      invoiced_by: b.status === 'facturada' ? who : '',
-      updated_at: nowIso,
-    }))
-    const { error } = await db.from('shipment_billing').upsert(rows, { onConflict: 'ref' })
-    if (error) throw error
-    for (const r of rows) logAudit(db, payload, `facturación: ${r.status}`, 'billing', r.ref, r.invoice_number ? { factura: r.invoice_number } : undefined)
+    const rows = v.items.map((b) => {
+      const row: Record<string, unknown> = {
+        ref: b.ref,
+        status: b.status,
+        invoice_number: b.invoiceNumber || b.invoice_number || '',
+        // Only stamp invoiced_at/by when status=facturada; clear otherwise.
+        invoiced_at: b.status === 'facturada'
+          ? (b.invoicedAt || b.invoiced_at || nowIso)
+          : null,
+        invoiced_by: b.status === 'facturada' ? who : '',
+        updated_at: nowIso,
+      }
+      // Ficha de compra/venta: SOLO si el request la trae. Si no viene, no
+      // incluimos las columnas → el upsert preserva la ficha ya guardada.
+      // (La UI siempre manda las dos juntas; si llega una sola, la otra se
+      // normaliza a [] para que el lote tenga claves uniformes.)
+      if (b.gastos !== undefined || b.ventas !== undefined) {
+        row.gastos = b.gastos ?? []
+        row.ventas = b.ventas ?? []
+      }
+      return row
+    })
+    // El upsert de PostgREST exige claves uniformes por lote: separar filas
+    // con ficha de filas sin ficha (normalmente el lote trae una sola fila).
+    const conFicha = rows.filter(r => 'gastos' in r || 'ventas' in r)
+    const sinFicha = rows.filter(r => !('gastos' in r) && !('ventas' in r))
+    for (const batch of [conFicha, sinFicha]) {
+      if (batch.length === 0) continue
+      const { error } = await db.from('shipment_billing').upsert(batch, { onConflict: 'ref' })
+      if (error) throw error
+    }
+    for (const r of rows) logAudit(db, payload, `facturación: ${r.status}`, 'billing', r.ref as string, r.invoice_number ? { factura: r.invoice_number } : undefined)
     return res.status(200).json({ saved: true, count: rows.length })
   }
 

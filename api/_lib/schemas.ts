@@ -276,6 +276,12 @@ export const TruckCounterRequestSchema = z.object({
   prefix: z.enum(['C', 'LCL', 'AIR']),
 })
 
+/** Renglón de la ficha de compra/venta ({concepto, monto USD}). */
+export const BillingLineSchema = z.object({
+  concepto: z.string().max(200),
+  monto: z.number().finite(),
+})
+
 /** Billing overlay row (POST upsert). One row per ref. */
 export const BillingRowSchema = z.object({
   ref: z.string().min(1).max(100),
@@ -286,6 +292,11 @@ export const BillingRowSchema = z.object({
   invoiced_at: z.string().max(40).optional().nullable(),
   invoicedBy: z.string().max(200).optional().default(''),
   invoiced_by: z.string().max(200).optional(),
+  // Ficha de compra/venta — OPCIONALES: si el request no los trae, el upsert
+  // no incluye las columnas y la ficha guardada se preserva (marcar facturada
+  // desde flujos viejos no puede borrar renglones).
+  gastos: z.array(BillingLineSchema).max(200).optional(),
+  ventas: z.array(BillingLineSchema).max(200).optional(),
 })
 
 /** Operator row (editable list of operativos) */
