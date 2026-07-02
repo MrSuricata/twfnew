@@ -43,8 +43,9 @@ function descripcion(s: ParsedShipment): string {
   return (s.operativas || []).map(o => o.DESCRIPCION).find(Boolean) || ''
 }
 
-/** Carga el logo de la marca (SVG o PNG) y lo rasteriza a PNG para jsPDF. */
-async function logoDataUrl(url: string): Promise<{ png: string; w: number; h: number } | null> {
+/** Carga el logo de la marca (SVG o PNG) y lo rasteriza a PNG para jsPDF.
+ *  (Compartido con planOperativoPdf — mismo header brand-aware.) */
+export async function logoDataUrl(url: string): Promise<{ png: string; w: number; h: number } | null> {
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(3000) })
     if (!res.ok) return null

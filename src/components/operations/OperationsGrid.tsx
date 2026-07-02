@@ -19,6 +19,7 @@ import {
   MagicWand,
   ClipboardText,
   DownloadSimple,
+  FilePdf,
   Plus,
   Archive,
   ArrowCounterClockwise,
@@ -56,6 +57,8 @@ import {
   statusBadgeClass,
 } from '@/lib/operationsTypes'
 import { fmtDateDMY, fmtNum as fmtNumUY } from '@/lib/format'
+import { useBrand } from '@/lib/brand'
+import { listPlanClientes, downloadPlanOperativoPdf } from '@/lib/planOperativoPdf'
 
 // Per-ref truck info for the Estado column (LCL/aéreo driven by their truck).
 interface TruckRefInfo { truckCode: string; status: string }
@@ -148,6 +151,12 @@ export default function OperationsGrid({
   const [managerOpen, setManagerOpen] = useState(false)
   const [pasteOpen, setPasteOpen] = useState(false)
   const [newOpen, setNewOpen] = useState(false)
+  // Plan operativo (PDF por cliente): diálogo con multi-select de clientes.
+  const [planOpen, setPlanOpen] = useState(false)
+  const [planSelected, setPlanSelected] = useState<Set<string>>(new Set())
+  const [planSearch, setPlanSearch] = useState('')
+  const [planBusy, setPlanBusy] = useState(false)
+  const brand = useBrand()
   // Filtro "Seguimiento vencido" (7+ días sin actualizar, solo cargas activas).
   const [segFilter, setSegFilter] = useState(false)
   // "Ver archivadas" (OFF por defecto) + confirmación de eliminado definitivo.
@@ -390,6 +399,39 @@ export default function OperationsGrid({
     toast.success(`${filtered.length} cargas exportadas a CSV`)
   }
 
+  // ── Plan operativo (PDF por cliente) ──
+  // Clientes con contenedores activos sin llegar a fiscal — derive-on-read,
+  // solo se calcula con el diálogo abierto.
+  const planClientes = useMemo(
+    () => (planOpen ? listPlanClientes(shipments, dbShipments, hoy) : []),
+    [planOpen, shipments, dbShipments, hoy]
+  )
+  const planFiltered = planSearch.trim()
+    ? planClientes.filter(c => c.name.toLowerCase().includes(planSearch.toLowerCase().trim()))
+    : planClientes
+  const togglePlanCliente = (name: string) => {
+    setPlanSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(name)) next.delete(name)
+      else next.add(name)
+      return next
+    })
+  }
+  const descargarPlanOperativo = async () => {
+    const clientes = planClientes.filter(c => planSelected.has(c.name)).map(c => c.name)
+    if (!clientes.length) return
+    setPlanBusy(true)
+    try {
+      const totals = await downloadPlanOperativoPdf(shipments, dbShipments, clientes, brand)
+      toast.success(`Plan operativo descargado — ${totals.contenedores} contenedor(es) de ${clientes.length} cliente(s)`)
+      setPlanOpen(false)
+    } catch {
+      toast.error('No se pudo generar el PDF del plan operativo')
+    } finally {
+      setPlanBusy(false)
+    }
+  }
+
   // ── Sorting ──
   const sortValue = (op: UnifiedOperation, key: string): { empty: boolean; cmp: number | string } => {
     if (NUMERIC_KEYS.has(key)) { const n = (op as unknown as Record<string, number>)[key] || 0; return { empty: n === 0, cmp: n } }
@@ -627,6 +669,17 @@ export default function OperationsGrid({
           <DownloadSimple size={16} className="mr-1.5" /> Exportar CSV
         </Button>
 
+        {/* Plan operativo por cliente (PDF) */}
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-9"
+          onClick={() => { setPlanSelected(new Set()); setPlanSearch(''); setPlanOpen(true) }}
+          title="PDF por cliente con sus cargas activas que todavía no llegaron a fiscal — salidas programadas y pendientes de programar"
+        >
+          <FilePdf size={16} className="mr-1.5" /> Plan operativo
+        </Button>
+
         {/* Column picker */}
         <Popover>
           <PopoverTrigger asChild>
@@ -818,6 +871,64 @@ export default function OperationsGrid({
             >
               <Trash size={14} className="mr-1.5" /> Eliminar definitivamente
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Plan operativo (PDF): elegir uno o varios clientes y descargar. */}
+      <Dialog open={planOpen} onOpenChange={setPlanOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><FilePdf size={18} /> Plan operativo (PDF)</DialogTitle>
+            <DialogDescription>
+              Elegí uno o varios clientes: el PDF lista sus cargas activas que todavía no
+              llegaron a fiscal, con salida programada y pendientes de programar.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <div className="relative">
+              <MagnifyingGlass size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={planSearch}
+                onChange={e => setPlanSearch(e.target.value)}
+                placeholder="Buscar cliente…"
+                className="pl-8 h-8 text-sm"
+              />
+            </div>
+            <div className="max-h-[280px] overflow-y-auto border rounded-md p-1">
+              {planFiltered.length === 0 && (
+                <div className="text-sm text-muted-foreground text-center py-6">
+                  {planClientes.length === 0 ? 'No hay cargas FCL activas sin llegar a fiscal' : 'Sin resultados para esa búsqueda'}
+                </div>
+              )}
+              {planFiltered.map(c => (
+                <label key={c.name} className="flex items-center gap-2 px-1.5 py-1 rounded hover:bg-muted text-sm cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={planSelected.has(c.name)}
+                    onChange={() => togglePlanCliente(c.name)}
+                    className="accent-primary"
+                  />
+                  <span className="flex-1 truncate">{c.name}</span>
+                  <span className="text-[10px] text-muted-foreground tabular-nums">{c.cargas} cntr</span>
+                </label>
+              ))}
+            </div>
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-xs text-muted-foreground">
+                {planSelected.size === 0 ? 'Ningún cliente seleccionado' : `${planSelected.size} cliente(s) seleccionado(s)`}
+              </span>
+              <div className="flex gap-2">
+                {planSelected.size > 0 && (
+                  <Button variant="ghost" size="sm" className="h-8" onClick={() => setPlanSelected(new Set())}>
+                    Limpiar
+                  </Button>
+                )}
+                <Button size="sm" className="h-8" disabled={planSelected.size === 0 || planBusy} onClick={descargarPlanOperativo}>
+                  <FilePdf size={14} className="mr-1.5" /> {planBusy ? 'Generando…' : 'Descargar PDF'}
+                </Button>
+              </div>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
