@@ -84,7 +84,8 @@ interface DashboardEnhancedProps {
   onDeleteOperator?: (id: string) => void
   onAssignOperator?: (ref: string, operatorId: string | null) => void
   onPatchShipment?: (id: string, fields: Record<string, unknown>) => void
-  onCreateShipment?: (row: DbShipment) => void
+  /** Devuelve false si el alta se abortó (REF duplicada y el usuario canceló). */
+  onCreateShipment?: (row: DbShipment) => boolean | void
   onDeleteShipment?: (op: UnifiedOperation) => void
   onPatchFclField?: (dbId: string, edits: Record<string, unknown>) => void
   onRenameRef?: (op: UnifiedOperation, newRef: string, pin: string) => Promise<void>
@@ -404,6 +405,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
               lclAir={lclAir}
               dbShipments={dbShipments}
               shipments={fclShipments}
+              operators={operators}
               onUpdateTrucks={(t, ids) => { if (onUpdateTrucks) onUpdateTrucks(t, ids) }}
               onDeleteTruck={(id) => { if (onDeleteTruck) onDeleteTruck(id) }}
               onUpdateTruckLoads={(l, ids) => { if (onUpdateTruckLoads) onUpdateTruckLoads(l, ids) }}
@@ -411,6 +413,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
               onUpdateLclAir={(s) => { if (onUpdateLclAir) onUpdateLclAir(s) }}
               onDeleteLclAir={(id) => { if (onDeleteLclAir) onDeleteLclAir(id) }}
               onRefreshTrucks={onRefreshTrucks}
+              onCreateShipment={onCreateShipment}
             />
           </TabsContent>
 
@@ -445,7 +448,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
               assignments={assignments}
               onAssignOperator={(ref, opId) => { if (onAssignOperator) onAssignOperator(ref, opId) }}
               onPatchShipment={(id, fields) => { if (onPatchShipment) onPatchShipment(id, fields) }}
-              onCreateShipment={(row) => { if (onCreateShipment) onCreateShipment(row) }}
+              onCreateShipment={(row) => onCreateShipment?.(row)}
               onDeleteShipment={(op) => { if (onDeleteShipment) onDeleteShipment(op) }}
               onPatchFclField={(dbId, edits) => { if (onPatchFclField) onPatchFclField(dbId, edits) }}
               onRenameRef={onRenameRef}

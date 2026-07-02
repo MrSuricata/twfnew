@@ -21,7 +21,8 @@ import {
 import { toast } from 'sonner'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
 import type { Truck, TruckLoad, LclAirShipment, TruckStatus } from '@/lib/truckTypes'
-import type { DbShipment } from '@/lib/operationsTypes'
+import type { DbShipment, Operator } from '@/lib/operationsTypes'
+import { suggestNextRef } from '@/lib/operationsTypes'
 import {
   computeTruckTotals,
   getTruckLimits,
@@ -45,6 +46,7 @@ import {
   commitPendingArrays,
 } from '@/lib/truckUtils'
 import AvailableLoadsPanel from './AvailableLoadsPanel'
+import NewShipmentDialog from '@/components/operations/NewShipmentDialog'
 import { exportTruckPdf } from '@/lib/truckExport'
 
 interface TruckBuilderProps {
@@ -54,15 +56,19 @@ interface TruckBuilderProps {
   lclAir: LclAirShipment[]
   dbShipments: DbShipment[]
   shipments: ParsedShipment[]
+  /** Operativos para el alta de carga desde el armador. */
+  operators?: Operator[]
   onBack: () => void
   onUpdateTrucks: (trucks: Truck[], changedIds?: string[]) => void
   onUpdateTruckLoads: (loads: TruckLoad[], changedIds?: string[]) => void
   onDeleteTruckLoad: (id: string) => void
   onDeleteTruck: (id: string) => void
+  /** Alta real de una carga (App.handleCreateShipment). false = abortada. */
+  onCreateShipment?: (row: DbShipment) => boolean | void
 }
 
 export default function TruckBuilder(props: TruckBuilderProps) {
-  const { truck, trucks, truckLoads, lclAir, dbShipments, shipments, onBack, onUpdateTrucks, onUpdateTruckLoads, onDeleteTruckLoad, onDeleteTruck } = props
+  const { truck, trucks, truckLoads, lclAir, dbShipments, shipments, operators, onBack, onUpdateTrucks, onUpdateTruckLoads, onDeleteTruckLoad, onDeleteTruck, onCreateShipment } = props
 
   const isDraft = truck.draft
   // Lo que se VE y EDITA: el camión con el overlay aplicado.
@@ -217,6 +223,51 @@ export default function TruckBuilder(props: TruckBuilderProps) {
     // Aviso inmediato al agregar una carga especial
     if (s.no_apilable) toast.warning(`📦 ${s.ref} es NO APILABLE — va arriba de todo`, { duration: 6000 })
     if (s.imo) toast.warning(`☢️ ${s.ref} lleva mercancía peligrosa (IMO)`, { duration: 6000 })
+  }
+
+  // ── Crear carga desde el armador ──
+  // El operativo no encuentra la carga porque todavía no existe: la da de alta
+  // acá mismo (mismo diálogo y pipeline que Operaciones — onCreateShipment →
+  // POST shipments) y se sube al camión en el acto como pendiente, con el mismo
+  // flujo del botón + (se confirma al Guardar camión). La TruckLoad se arma
+  // directo desde la fila DbShipment recién creada (fuente única del alta).
+  const [newCargoOpen, setNewCargoOpen] = useState(false)
+  const suggestedRef = useMemo(
+    () => suggestNextRef([...shipments.map(s => s.REF), ...dbShipments.map(s => s.ref)]),
+    [shipments, dbShipments]
+  )
+  const handleCreateFromBuilder = (row: DbShipment): boolean | void => {
+    const created = onCreateShipment?.(row)
+    if (created === false) return false          // REF duplicada y canceló → no seguir
+    if (row.mode === 'land') {
+      // LoadSource no tiene 'land': las cargas terrestres no van dentro de un consolidado.
+      toast.success(`${row.ref} creada — las cargas terrestres no se suben a un camión (la ves en Operaciones)`)
+      return
+    }
+    const load: TruckLoad = {
+      id: newId('load'),
+      truckId: truck.id,
+      sourceType: row.mode === 'fcl' ? 'fcl' : row.mode === 'air' ? 'air' : 'lcl',
+      sourceRef: row.ref,
+      client: row.cliente || '',
+      fiscal: row.fiscal || '',
+      kg: Number(row.kg) || 0,
+      m3: Number(row.m3) || 0,
+      pkgs: Number(row.pkgs) || 0,
+      description: row.observacion || '',
+      mvdArrival: row.eta || '',
+      desconsolDate: row.desconsol_date || row.fecha_consol || '',
+      bl: row.doc_number || '',
+      stock: '',
+      wood: !!row.wood,
+      overrides: {},
+      position: allMine.length,
+      pending: isDraft ? null : 'add',
+    }
+    onUpdateTruckLoads([...truckLoads, load], [load.id])
+    toast.success(`${row.ref} creada y agregada al camión`)
+    if (row.no_apilable) toast.warning(`📦 ${row.ref} es NO APILABLE — va arriba de todo`, { duration: 6000 })
+    if (row.imo) toast.warning(`☢️ ${row.ref} lleva mercancía peligrosa (IMO)`, { duration: 6000 })
   }
 
   // ── Re-sync FCL load from current planilla data ──
@@ -557,9 +608,21 @@ export default function TruckBuilder(props: TruckBuilderProps) {
             onAddFcl={addFcl}
             onAddLclAir={addLclAir}
             onAddDb={addDb}
+            onCreateNew={onCreateShipment ? () => setNewCargoOpen(true) : undefined}
           />
         </Card>
       </div>
+
+      {/* Alta de carga sin salir del armador (mismo diálogo que Operaciones) */}
+      {onCreateShipment && (
+        <NewShipmentDialog
+          open={newCargoOpen}
+          onOpenChange={setNewCargoOpen}
+          operators={operators || []}
+          onCreate={handleCreateFromBuilder}
+          suggestedRef={suggestedRef}
+        />
+      )}
 
       {/* Barra de estado + acciones del borrador */}
       <div className="sticky bottom-0 z-10 mt-4 -mx-1 rounded-lg border bg-card/95 backdrop-blur px-4 py-3 flex items-center justify-between gap-3 shadow-lg">

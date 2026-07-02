@@ -768,6 +768,19 @@ export function buildPerContainerPatch(op: UnifiedOperation, col: string, value:
   return patch
 }
 
+/** Próxima ref "A####" libre: máximo A#### entre TODAS las refs + 1. El espacio
+ *  de numeración "A" es compartido entre FCL y aéreos, así que se toma el máximo
+ *  global para no chocar (ej: aéreo A8013 vs FCL A8035). Compartido por la grilla
+ *  de Operaciones y el armador de camiones (alta desde el armador). */
+export function suggestNextRef(refs: Iterable<string>): string {
+  let max = 0
+  for (const r of refs) {
+    const m = /^A\s?(\d{3,})/i.exec(r || '')
+    if (m) max = Math.max(max, parseInt(m[1], 10))
+  }
+  return max > 0 ? `A${max + 1}` : ''
+}
+
 // Build a new DB shipment row with sensible empty defaults. Only `mode` is
 // required; the rest is filled inline in the grid afterwards.
 export function newDbShipment(fields: Partial<DbShipment> & { mode: Modality }): DbShipment {
