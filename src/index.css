@@ -86,7 +86,9 @@
 
   --border: #e5e4f1;
   --input: #e5e4f1;
-  --ring: #9bd1e5;
+  /* Focus ring en el índigo de marca (antes celeste #9bd1e5, casi invisible
+     sobre fondos claros). El sidebar oscuro conserva su ring celeste. */
+  --ring: #352e6a;
 
   --chart-1: #49286b;
   --chart-2: #352e6a;
@@ -233,7 +235,8 @@ html {
   flex-shrink: 0;
   overflow-x: auto;
   scrollbar-width: none;
-  flex-wrap: wrap;
+  /* UNA sola fila scrolleable (antes wrap → 2 filas con subrayados gigantes) */
+  flex-wrap: nowrap;
 }
 .tabs-list-underline::-webkit-scrollbar {
   display: none;
@@ -313,13 +316,14 @@ button[data-slot="button"]:not(:disabled):active {
   animation: pulse-soft 1.8s ease-in-out infinite;
 }
 
-/* ── UX polish: row hover — reveal caret + subtle shift ── */
+/* ── UX polish: row hover — reveal caret + subtle shift + sombra suave ── */
 .row-hover {
   position: relative;
-  transition: background-color 150ms ease-out, padding 150ms ease-out;
+  transition: background-color 150ms ease-out, padding 150ms ease-out, box-shadow 150ms ease-out;
 }
 .row-hover:hover {
   padding-left: calc(var(--row-pad, 0.5rem) + 4px);
+  box-shadow: 0 2px 8px -2px oklch(0.25 0.08 250 / 0.12);
 }
 .row-hover .row-caret {
   opacity: 0;

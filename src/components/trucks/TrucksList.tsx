@@ -211,7 +211,7 @@ export default function TrucksList({
         <div className="ml-auto">
           <Button onClick={handleCreate} disabled={creating}>
             <Plus size={16} className="mr-1.5" />
-            {creating ? 'Creando…' : 'Nuevo Camión'}
+            {creating ? 'Creando…' : 'Nuevo camión'}
           </Button>
         </div>
       </div>
@@ -224,7 +224,7 @@ export default function TrucksList({
           const limits = getTruckLimits(t.isSider)
           const ds = hasDraftState(t, truckLoads)
           return (
-            <Card key={t.id} className={`hover:border-primary/40 transition-colors${ds ? ' border-amber-300' : ''}`}>
+            <Card key={t.id} className={`hover:border-primary/30 hover:shadow-md transition-all duration-150${ds ? ' border-amber-300' : ''}`}>
               <CardContent className="p-4 space-y-3">
                 {/* Header row */}
                 <div className="flex items-start justify-between gap-2">
@@ -242,7 +242,7 @@ export default function TrucksList({
                       )}
                     </div>
                     {t.transport && (
-                      <p className="text-xs text-muted-foreground mt-0.5">{t.transport}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5 uppercase">{t.transport}</p>
                     )}
                   </div>
                   {(() => {
@@ -291,7 +291,7 @@ export default function TrucksList({
                   return (
                     <div className="flex justify-center">
                       <span className={`text-xs font-semibold tabular-nums rounded px-1.5 py-0.5 border ${COST_STYLES[c]}`}>
-                        USD {perM3.toFixed(2)}/m³
+                        USD {perM3.toLocaleString('es-UY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/m³
                       </span>
                     </div>
                   )
@@ -336,9 +336,9 @@ export default function TrucksList({
                           const ld = t.loadDate, dd = t.departureDate
                           const same = ld && dd && ld === dd
                           const cargaSale = same
-                            ? `Carga/Sale ${formatDateShort(ld)}`
+                            ? `Carga y salida ${formatDateShort(ld)}`
                             : [ld && `Carga ${formatDateShort(ld)}`, dd && `Sale ${formatDateShort(dd)}`].filter(Boolean).join(' · ')
-                          return [cargaSale, t.arrivalDate && `Arribo ${formatDateShort(t.arrivalDate)}`].filter(Boolean).join(' · ')
+                          return [cargaSale, t.arrivalDate && `Arribo ${formatDateShort(t.arrivalDate)}`].filter(Boolean).join(' → ')
                         })()}
                       </span>
                     </div>

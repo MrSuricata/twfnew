@@ -186,9 +186,9 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
     const breadcrumbMap: Record<string, string> = {
       hoy: 'Hoy',
       agenda: 'Agenda',
-      analytics: 'Estadísticas',
+      analytics: 'Analíticas',
       shipments: 'Cargas',
-      'excel-import': 'Importar Datos',
+      'excel-import': 'Importar datos',
       'case-studies': 'Casos de Éxito',
       testimonials: 'Testimonios',
       clients: 'Clientes',
@@ -197,6 +197,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
       trucks: 'Camiones',
       billing: 'Facturación',
       operaciones: 'Operaciones',
+      equipo: 'Equipo',
     }
 
     return [{ label: breadcrumbMap[activeTab] || 'Dashboard' }]
@@ -250,7 +251,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
               </button>
               <Button variant="ghost" onClick={onLogout} className="text-primary-foreground hover:bg-primary-foreground/10">
                 <SignOut size={20} className="mr-2" />
-                <span className="hidden sm:inline">Cerrar Sesión</span>
+                <span className="hidden sm:inline">Cerrar sesión</span>
               </Button>
             </div>
           </div>
@@ -285,23 +286,23 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
         >
           <TabsList className="tabs-list-underline">
             {ops && (<>
-            <TabsTrigger value="hoy" className="tab-underline">
+            <TabsTrigger value="hoy" className="tab-underline" aria-label="Hoy">
               <Lightning size={16} className="mr-1.5" weight="fill" />
               <span className="hidden sm:inline">Hoy</span>
             </TabsTrigger>
-            <TabsTrigger value="agenda" className="tab-underline">
+            <TabsTrigger value="agenda" className="tab-underline" aria-label="Agenda">
               <CalendarBlank size={16} className="mr-1.5" />
               <span className="hidden sm:inline">Agenda</span>
             </TabsTrigger>
-            <TabsTrigger value="analytics" className="tab-underline">
+            <TabsTrigger value="analytics" className="tab-underline" aria-label="Analíticas">
               <ChartBar size={16} className="mr-1.5" />
               <span className="hidden sm:inline">Analíticas</span>
             </TabsTrigger>
-            <TabsTrigger value="operaciones" className="tab-underline">
+            <TabsTrigger value="operaciones" className="tab-underline" aria-label="Operaciones">
               <TableIcon size={16} className="mr-1.5" weight="fill" />
               <span className="hidden sm:inline">Operaciones</span>
             </TabsTrigger>
-            <TabsTrigger value="trucks" className="tab-underline">
+            <TabsTrigger value="trucks" className="tab-underline" aria-label="Camiones">
               <TruckIcon size={16} className="mr-1.5" weight="fill" />
               <span className="hidden sm:inline">Camiones</span>
               {trucks.filter(t => t.status === 'planning' || t.status === 'loaded').length > 0 && (
@@ -310,7 +311,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
                 </span>
               )}
             </TabsTrigger>
-            <TabsTrigger value="quotes" className="tab-underline">
+            <TabsTrigger value="quotes" className="tab-underline" aria-label="Cotizaciones">
               <Envelope size={16} className="mr-1.5" />
               <span className="hidden sm:inline">Cotizaciones</span>
               {pendingQuotesCount > 0 && (
@@ -321,7 +322,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
                 </span>
               )}
             </TabsTrigger>
-            <TabsTrigger value="billing" className="tab-underline">
+            <TabsTrigger value="billing" className="tab-underline" aria-label="Facturación">
               <Receipt size={16} className="mr-1.5" weight="fill" />
               <span className="hidden sm:inline">Facturación</span>
               {pendingBillingCount > 0 && (
@@ -330,30 +331,30 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
                 </span>
               )}
             </TabsTrigger>
-            <TabsTrigger value="excel-import" className="tab-underline">
+            <TabsTrigger value="excel-import" className="tab-underline" aria-label="Importar datos">
               <Database size={16} className="mr-1.5" />
               <span className="hidden sm:inline">Importar</span>
             </TabsTrigger>
             </>)}
-            <TabsTrigger value="case-studies" className="tab-underline">
+            <TabsTrigger value="case-studies" className="tab-underline" aria-label="Casos">
               <Star size={16} className="mr-1.5" />
               <span className="hidden sm:inline">Casos</span>
             </TabsTrigger>
-            <TabsTrigger value="testimonials" className="tab-underline">
+            <TabsTrigger value="testimonials" className="tab-underline" aria-label="Testimonios">
               <ChatCircleText size={16} className="mr-1.5" />
               <span className="hidden sm:inline">Testimonios</span>
             </TabsTrigger>
             {ops && (<>
-            <TabsTrigger value="clients" className="tab-underline">
+            <TabsTrigger value="clients" className="tab-underline" aria-label="Clientes">
               <UsersThree size={16} className="mr-1.5" />
               <span className="hidden sm:inline">Clientes</span>
             </TabsTrigger>
-            <TabsTrigger value="partners" className="tab-underline">
+            <TabsTrigger value="partners" className="tab-underline" aria-label="Partners">
               <UsersThree size={16} className="mr-1.5" />
               <span className="hidden sm:inline">Partners</span>
             </TabsTrigger>
             {isOwner && (
-              <TabsTrigger value="equipo" className="tab-underline">
+              <TabsTrigger value="equipo" className="tab-underline" aria-label="Equipo">
                 <ShieldCheck size={16} className="mr-1.5" weight="fill" />
                 <span className="hidden sm:inline">Equipo</span>
               </TabsTrigger>

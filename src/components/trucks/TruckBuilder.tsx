@@ -411,7 +411,7 @@ export default function TruckBuilder(props: TruckBuilderProps) {
                 </div>
               </div>
               <p className="text-[11px] text-muted-foreground -mt-2">
-                ⚡ Automático: al pasar la <strong>fecha de carga/salida</strong> el camión (y sus cargas) pasan a En Ruta solos; al pasar el <strong>arribo a fiscal</strong>, a Entregado — y las cargas entran a Facturación. Tocar un estado completa la fecha de hoy.
+                ⚡ Automático: al pasar la <strong>fecha de carga/salida</strong> el camión (y sus cargas) pasan a Cargado / Salió solos; al pasar el <strong>arribo a fiscal</strong>, a Entregado — y las cargas entran a Facturación. Tocar un estado completa la fecha de hoy.
               </p>
 
               <Separator />

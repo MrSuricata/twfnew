@@ -13,6 +13,12 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
+import {
   UsersThree,
   Plus,
   Key,
@@ -226,7 +232,7 @@ export default function TeamManager({ refreshKey = 0 }: { refreshKey?: number })
               </thead>
               <tbody className="divide-y">
                 {users.map(u => (
-                  <tr key={u.id} className={`hover:bg-muted/30 ${u.active ? '' : 'opacity-60'}`}>
+                  <tr key={u.id} className={`hover:bg-muted/30 transition-colors ${u.active ? '' : 'opacity-60'}`}>
                     <td className="px-3 py-2 font-medium">{u.name}</td>
                     <td className="px-3 py-2">{u.email}</td>
                     <td className="px-3 py-2 text-xs text-muted-foreground max-w-[180px] truncate hidden sm:table-cell" title={u.cliente_pattern || 'Ve todas las cargas'}>
@@ -243,12 +249,24 @@ export default function TeamManager({ refreshKey = 0 }: { refreshKey?: number })
                         <Button size="sm" variant="outline" className="h-7" onClick={() => openEdit(u)} title="Editar / resetear contraseña">
                           <Key size={13} className="mr-1" /> Editar
                         </Button>
-                        <Button size="sm" variant="ghost" className="h-7" onClick={() => toggleActive(u)} title={u.active ? 'Desactivar (no puede entrar)' : 'Reactivar'}>
-                          {u.active ? <Prohibit size={14} /> : <CheckCircle size={14} className="text-green-600" />}
-                        </Button>
-                        <Button size="sm" variant="ghost" className="h-7 text-muted-foreground hover:text-red-600" onClick={() => removeUser(u)} title="Eliminar usuario">
-                          <Trash size={14} />
-                        </Button>
+                        <TooltipProvider delayDuration={200}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button size="sm" variant="ghost" className="h-7" onClick={() => toggleActive(u)}>
+                                {u.active ? <Prohibit size={14} /> : <CheckCircle size={14} className="text-green-600" />}
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="text-xs">{u.active ? 'Desactivar usuario' : 'Reactivar usuario'}</TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button size="sm" variant="ghost" className="h-7 text-muted-foreground hover:text-red-600" onClick={() => removeUser(u)}>
+                                <Trash size={14} />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent side="top" className="text-xs">Eliminar usuario</TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                       </div>
                     </td>
                   </tr>
@@ -266,7 +284,7 @@ export default function TeamManager({ refreshKey = 0 }: { refreshKey?: number })
             <ClockCounterClockwise size={20} className="text-primary" />
             Actividad reciente
           </h3>
-          <p className="text-xs text-muted-foreground">Quién hizo qué (últimas 300 acciones): ediciones, facturación, archivado, eliminados, usuarios.</p>
+          <p className="text-xs text-muted-foreground">Quién hizo qué (últimas 300 acciones): ediciones, facturación, archivados, eliminados y usuarios.</p>
         </div>
         <Button variant="outline" size="sm" className="h-8" onClick={load} disabled={loading}>
           <ClockCounterClockwise size={14} className="mr-1.5" />
@@ -291,7 +309,7 @@ export default function TeamManager({ refreshKey = 0 }: { refreshKey?: number })
               </thead>
               <tbody className="divide-y">
                 {log.map(e => (
-                  <tr key={e.id} className="hover:bg-muted/30">
+                  <tr key={e.id} className="hover:bg-muted/30 transition-colors">
                     <td className="px-3 py-1.5 whitespace-nowrap text-muted-foreground">{fmtTs(e.ts)}</td>
                     <td className="px-3 py-1.5 font-medium whitespace-nowrap">{e.usuario}</td>
                     <td className="px-3 py-1.5">

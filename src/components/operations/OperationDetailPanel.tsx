@@ -8,15 +8,16 @@ import type { Operator, UnifiedOperation } from '@/lib/operationsTypes'
 import {
   EDITABLE_FIELDS, EDITABLE_FCL_FIELDS, MODALITY_COLORS, MODALITY_LABELS,
   STATUS_LABEL, STATUS_OPTIONS, operatorsForMode, isSeguimientoVencido,
-  buildPerContainerPatch,
+  buildPerContainerPatch, statusBadgeClass,
 } from '@/lib/operationsTypes'
+import { fmtDateDMY } from '@/lib/format'
 import { parseCntr, serializeCntr, normalizeCntr, isStandardCntr } from '@/lib/cntrUtils'
 import ViabilityBlock from './ViabilityBlock'
 import ContainerDatesSection from './ContainerDatesSection'
 
 interface TruckRefInfo { truckCode: string; status: string }
 
-const PAIS_LABEL: Record<string, string> = { UY: '🇺🇾 UY', AR: '🇦🇷 AR', CL: '🇨🇱 CL', OTRO: '—' }
+const PAIS_LABEL: Record<string, string> = { UY: 'UY', AR: 'AR', CL: 'CL', OTRO: '—' }
 const NUM_FMT = new Intl.NumberFormat('es-UY', { maximumFractionDigits: 2 })
 
 // Secciones del panel: declarativas.
@@ -24,7 +25,7 @@ const NUM_FMT = new Intl.NumberFormat('es-UY', { maximumFractionDigits: 2 })
 // wide: true → col-span-2 en el grid de 2 columnas.
 // Nota: los campos bool (tlx, wood, oog, imo, noApilable, seguro, certi, impresa)
 // se sacan de las secciones y se renderizan como chips interactivos en la sección Carga.
-const SECTIONS: { title: string; fields: { key: keyof UnifiedOperation; label: string; kind?: 'number' | 'date'; wide?: boolean }[] }[] = [
+const SECTIONS: { title: string; fields: { key: keyof UnifiedOperation; label: string; kind?: 'number' | 'date'; wide?: boolean; dateDisplay?: boolean }[] }[] = [
   {
     title: 'Identificación',
     fields: [
@@ -55,13 +56,15 @@ const SECTIONS: { title: string; fields: { key: keyof UnifiedOperation; label: s
   {
     title: 'Fechas',
     fields: [
-      { key: 'etd', label: 'ETD' },
-      { key: 'eta', label: 'ETA' },
-      { key: 'salida', label: 'Salida' },
-      { key: 'etaFisc', label: 'ETA fiscal' },
+      // dateDisplay: se MUESTRAN dd/MM/yyyy (fmtDateDMY, display only) — el valor
+      // guardado sigue en ISO y la edición no cambia.
+      { key: 'etd', label: 'ETD', dateDisplay: true },
+      { key: 'eta', label: 'ETA', dateDisplay: true },
+      { key: 'salida', label: 'Salida', dateDisplay: true },
+      { key: 'etaFisc', label: 'ETA fiscal', dateDisplay: true },
       // LIBRE se movió a "Datos clave de la carga" (ViabilityBlock): es dato de
       // la carga y se edita ahí (propaga a todos los contenedores).
-      { key: 'seguimiento', label: 'Seguimiento' },
+      { key: 'seguimiento', label: 'Seguimiento', dateDisplay: true },
     ],
   },
   {
@@ -234,8 +237,9 @@ export default function OperationDetailPanel({
           <div className="flex items-center gap-1.5 flex-wrap pb-1">
             <Badge variant="outline" className="h-5 text-[9px]">{op.tipo || MODALITY_LABELS[op.mode]}</Badge>
             {op.pais && <Badge variant="outline" className="h-5 text-[9px]">{PAIS_LABEL[op.pais] || op.pais}</Badge>}
+            {op.eta && <Badge variant="outline" className="h-5 text-[9px]">ETA {fmtDateDMY(op.eta)}</Badge>}
             {truckStatus && op.mode !== 'fcl' ? (
-              <Badge variant="outline" className="h-5 text-[9px] gap-1" title={`Estado controlado por el camión ${truckStatus.truckCode}`}>
+              <Badge variant="outline" className={`h-5 text-[9px] gap-1 ${statusBadgeClass(STATUS_LABEL[truckStatus.status] || truckStatus.status)}`} title={`Estado controlado por el camión ${truckStatus.truckCode}`}>
                 <TruckIcon size={10} weight="fill" className="text-primary" />
                 {truckStatus.truckCode} · {STATUS_LABEL[truckStatus.status] || truckStatus.status}
               </Badge>
@@ -248,7 +252,7 @@ export default function OperationDetailPanel({
                 {STATUS_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
             ) : (
-              op.status && <Badge variant="outline" className="h-5 text-[9px]">{op.status}</Badge>
+              op.status && <Badge variant="outline" className={`h-5 text-[9px] ${statusBadgeClass(STATUS_LABEL[op.status] || op.status)}`}>{STATUS_LABEL[op.status] || op.status}</Badge>
             )}
             {op.archived && <Badge variant="outline" className="h-5 text-[9px] text-amber-700 border-amber-300">ARCHIVADA</Badge>}
           </div>
@@ -340,7 +344,7 @@ export default function OperationDetailPanel({
                     onClick={() => setAddingCntr(true)}
                     className="inline-flex items-center gap-1 rounded-full border border-dashed px-3 py-1 text-sm text-muted-foreground hover:border-primary hover:text-primary transition-colors"
                   >
-                    <Plus size={12} /> agregar
+                    <Plus size={12} /> Agregar contenedor
                   </button>
                 )
               )}
@@ -364,6 +368,7 @@ export default function OperationDetailPanel({
                     fieldKey={f.key}
                     kind={f.kind}
                     wide={f.wide}
+                    dateDisplay={f.dateDisplay}
                     segVencido={f.key === 'seguimiento' && segVencido}
                     onCommit={commit}
                   />
@@ -415,7 +420,7 @@ export default function OperationDetailPanel({
                 <button
                   type="button"
                   onClick={() => onRequestDelete(op)}
-                  className="inline-flex items-center gap-1.5 text-xs rounded-md border px-2.5 py-1.5 text-muted-foreground hover:text-red-600 hover:border-red-300 hover:bg-red-50"
+                  className="inline-flex items-center gap-1.5 text-xs rounded-md border border-red-200 px-2.5 py-1.5 text-red-600 hover:border-red-300 hover:bg-red-50"
                 >
                   <Trash size={13} /> Eliminar…
                 </button>
@@ -443,6 +448,7 @@ function FieldRow({
   fieldKey,
   kind,
   wide,
+  dateDisplay,
   segVencido,
   onCommit,
 }: {
@@ -451,6 +457,8 @@ function FieldRow({
   fieldKey: keyof UnifiedOperation
   kind?: 'number' | 'date'
   wide?: boolean
+  /** Mostrar como dd/MM/yyyy (display only) — la edición sigue sobre el valor crudo. */
+  dateDisplay?: boolean
   segVencido?: boolean
   onCommit: (key: keyof UnifiedOperation, v: unknown) => void
 }) {
@@ -461,7 +469,7 @@ function FieldRow({
 
   const display = kind === 'number'
     ? (Number(raw) ? NUM_FMT.format(Number(raw)) : '—')
-    : (String(raw ?? '') || '—')
+    : ((dateDisplay ? fmtDateDMY(String(raw ?? '')) : String(raw ?? '')) || '—')
 
   const isEmpty = display === '—'
 

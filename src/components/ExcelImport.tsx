@@ -203,31 +203,30 @@ export default function ExcelImport({ onImportComplete, shipmentRecords = [], on
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <CloudArrowDown size={24} />
-            Importar Datos
+            Importar datos
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <p className="text-sm text-muted-foreground">
             La web es la fuente de datos. La sincronización automática desde Google
-            Sheets está desactivada — importá desde Sheets sólo para una carga puntual.
+            Sheets está desactivada — importá desde Sheets solo para una carga puntual.
           </p>
 
           <div className="flex gap-2">
             <Button
-              onClick={handleImport}
-              disabled={isImporting}
-              className="flex-1 bg-accent text-accent-foreground hover:bg-accent/90"
-            >
-              <CloudArrowDown size={20} className="mr-2" />
-              {isImporting ? 'Importando...' : 'Importar desde Sheets'}
-            </Button>
-            <Button
               onClick={() => performServerSync(false)}
               disabled={isImporting}
-              variant="outline"
             >
               <ArrowsClockwise size={20} className="mr-2" />
               Sincronizar
+            </Button>
+            <Button
+              onClick={handleImport}
+              disabled={isImporting}
+              variant="outline"
+            >
+              <CloudArrowDown size={20} className="mr-2" />
+              {isImporting ? 'Importando...' : 'Importar desde Sheets'}
             </Button>
           </div>
 

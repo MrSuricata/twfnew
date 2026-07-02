@@ -460,7 +460,7 @@ export const translations: Record<Language, Translations> = {
     clientPortal: {
       title: 'Portal de Cliente',
       login: 'Iniciar Sesión',
-      logout: 'Cerrar Sesión',
+      logout: 'Cerrar sesión',
       myShipments: 'Mis Cargas',
       activeShipments: 'Cargas Activas',
       history: 'Historial',

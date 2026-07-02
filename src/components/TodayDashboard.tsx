@@ -113,18 +113,20 @@ export default function TodayDashboard({
     }
   }
 
+  // "jueves 2 de julio" — minúsculas como corresponde en español (sin la coma
+  // del locale y SIN la clase `capitalize`, que capitalizaba mes y preposición).
   const todayLabel = new Date().toLocaleDateString('es-UY', {
     weekday: 'long',
     day: 'numeric',
     month: 'long',
-  })
+  }).replace(',', '')
 
   return (
     <div className="space-y-6">
       {/* ── Header ───────────────────────────────────────── */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight capitalize">
+          <h1 className="text-3xl font-bold tracking-tight">
             <span className="text-muted-foreground/70 font-semibold">Hoy</span>
             <span className="text-muted-foreground/50 font-normal mx-2">·</span>
             {todayLabel}
@@ -133,7 +135,7 @@ export default function TodayDashboard({
             <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
               <StatChip icon={<CalendarBlank size={14} weight="fill" />} label={`${snapshot.totalCount} movimientos`} tone="muted" />
               {snapshot.libreAlerts.length > 0 && (
-                <StatChip icon={<Warning size={14} weight="fill" />} label={`${snapshot.libreAlerts.length} alertas LIBRE`} tone="destructive" />
+                <StatChip icon={<Warning size={14} weight="fill" />} label={`${snapshot.libreAlerts.length} alerta${snapshot.libreAlerts.length === 1 ? '' : 's'} LIBRE`} tone="destructive" />
               )}
             </div>
           ) : initialLoading ? (

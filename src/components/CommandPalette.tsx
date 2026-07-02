@@ -40,7 +40,7 @@ const TABS: Array<{ id: string; label: string; icon: typeof Package; shortcut?: 
   { id: 'quotes', label: 'Cotizaciones', icon: ChatCircleText, shortcut: 'G Q' },
   { id: 'clients', label: 'Clientes', icon: UsersThree, shortcut: 'G L' },
   { id: 'partners', label: 'Partners', icon: Truck, shortcut: 'G P' },
-  { id: 'excel-import', label: 'Importar Datos', icon: Database },
+  { id: 'excel-import', label: 'Importar datos', icon: Database },
   { id: 'case-studies', label: 'Casos de Éxito', icon: Star },
   { id: 'testimonials', label: 'Testimonios', icon: ChatCircleText },
 ]
@@ -147,14 +147,14 @@ export default function CommandPalette({ shipments, clients, onNavigate, onLogou
             onSelect={() => runThenClose(() => onNavigate('clients'))}
           >
             <UsersThree size={18} weight="duotone" className="text-accent" />
-            <span>Ir a Gestión de Clientes</span>
+            <span>Ir a Clientes</span>
           </CommandItem>
           <CommandItem
             value="action agregar partner nuevo deposito transporte"
             onSelect={() => runThenClose(() => onNavigate('partners'))}
           >
             <ShieldCheck size={18} weight="duotone" className="text-accent" />
-            <span>Ir a Gestión de Partners</span>
+            <span>Ir a Partners</span>
           </CommandItem>
           <CommandItem
             value="action cerrar sesion logout salir"
