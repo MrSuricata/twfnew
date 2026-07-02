@@ -1,10 +1,16 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { getSupabase } from '../_lib/supabase.js'
+import { authenticateRequest, type AdminPayload } from '../_lib/jwt.js'
+import { computePushCounts, buildPushBody, montevideoTodayIso } from '../_lib/pushAlerts.js'
 
 // ─── Notifications API ──────────────────────────────────────────────
-// Only route:
+// Routes:
 //   GET /api/notifications/check-pending — cron, sends daily TWF summary
 //   to the N8N_REMINDER_WEBHOOK (Telegram).
+//   GET|POST /api/notifications/push-daily — cron (vercel.json) o botón de
+//   prueba del owner: manda el resumen del día por Web Push a todas las
+//   suscripciones del equipo (push_subscriptions). Dedupe diario en push_log
+//   (los 2 proyectos Vercel comparten el mismo cron). ?force=1 saltea el dedupe.
 //
 // Previously also handled:
 //   POST /api/notifications/confirm       — create a notification task
@@ -15,10 +21,9 @@ import { getSupabase } from '../_lib/supabase.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const action = req.query.action as string
-  if (action !== 'check-pending') {
-    return res.status(404).json({ error: `Unknown action: ${action}` })
-  }
-  return handleCheckPending(req, res)
+  if (action === 'check-pending') return handleCheckPending(req, res)
+  if (action === 'push-daily') return handlePushDaily(req, res)
+  return res.status(404).json({ error: `Unknown action: ${action}` })
 }
 
 // ─── Today filter helpers (server copy — kept in sync with src/lib/todayFilters.ts) ──
@@ -231,5 +236,141 @@ async function handleCheckPending(req: VercelRequest, res: VercelResponse) {
   } catch (error: any) {
     console.error('[check-pending] Error:', error?.message || error)
     return res.status(500).json({ error: 'Check failed' })
+  }
+}
+
+// ─── push-daily: resumen del día por Web Push ────────────────────────
+// Post-flip la web es master → lee shipments/trucks de la DB (NO el cache de
+// la planilla, que quedó congelado). La derivación de alertas vive en
+// _lib/pushAlerts.ts (copia server-side de src/lib/todayFilters.ts).
+
+/** Clave pública VAPID (no secreta) — par de process.env.VAPID_PRIVATE_KEY. */
+const VAPID_PUBLIC_KEY =
+  'BGeJ3K_9CI-VQrzpEwtraxp3w2UZlDxqNeZKgeQUrtAStcBdSIq8ZFh315fmgZgA7RhHwuKrk12p-rWo6WKQBx4'
+
+async function handlePushDaily(req: VercelRequest, res: VercelResponse) {
+  // GET = cron de Vercel · POST = botón "Enviar resumen de prueba" (Equipo)
+  if (req.method !== 'GET' && req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' })
+  }
+  // Auth: el cron de Vercel manda Bearer CRON_SECRET; el botón de prueba de la
+  // pestaña Equipo manda el JWT del owner. Cualquiera de los dos vale.
+  const cronSecret = process.env.CRON_SECRET
+  const isCron = !!cronSecret && req.headers.authorization === `Bearer ${cronSecret}`
+  const payload = authenticateRequest(req.headers.authorization)
+  const isOwner = !!payload && payload.role === 'admin' && (payload as AdminPayload).level !== 'admin'
+  if (!isCron && !isOwner) {
+    return res.status(401).json({ error: 'Unauthorized' })
+  }
+
+  const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY
+  if (!vapidPrivateKey) {
+    return res.status(503).json({
+      error: 'Falta la env var VAPID_PRIVATE_KEY en Vercel — los avisos push no se pueden firmar sin ella.',
+    })
+  }
+
+  const db = getSupabase()
+  const dateKey = montevideoTodayIso()
+  const force = req.query.force === '1'
+
+  try {
+    // Dedupe entre proyectos: reclamar la date_key ANTES de enviar (insert con
+    // PK date_key). Si el otro proyecto ya la insertó → unique violation →
+    // skipped. force=1 (botón de prueba) saltea el claim y upsertea al final.
+    if (!force) {
+      const { error: claimErr } = await db.from('push_log').insert({
+        date_key: dateKey,
+        sent_at: new Date().toISOString(),
+        payload_resumen: '(en curso)',
+      })
+      if (claimErr) {
+        if (claimErr.code === '23505') {
+          return res.status(200).json({ skipped: true, reason: `push_log ya tiene ${dateKey} — otro proyecto lo envió` })
+        }
+        throw claimErr
+      }
+    }
+
+    // Datos del día: cargas de la DB (sin filas espejo legacy) + camiones.
+    const { data: ships, error: shipsErr } = await db
+      .from('shipments')
+      .select('ref, cliente, mode, archived, libre, salida, eta_fiscal, operativas')
+      .neq('source', 'sheet')
+      .limit(5000)
+    if (shipsErr) throw shipsErr
+    const { data: trucks, error: trucksErr } = await db
+      .from('trucks')
+      .select('code, draft, departure_date')
+      .limit(1000)
+    if (trucksErr) throw trucksErr
+
+    const counts = computePushCounts(ships || [], trucks || [], dateKey)
+    const body = buildPushBody(counts)
+
+    if (!body) {
+      await db.from('push_log').upsert(
+        { date_key: dateKey, sent_at: new Date().toISOString(), payload_resumen: 'sin alertas — no se envió' },
+        { onConflict: 'date_key' }
+      )
+      return res.status(200).json({ sent: 0, counts, message: 'Sin alertas hoy — no se envió nada' })
+    }
+
+    const { data: subs, error: subsErr } = await db
+      .from('push_subscriptions')
+      .select('endpoint, p256dh, auth')
+    if (subsErr) throw subsErr
+    if (!subs || subs.length === 0) {
+      await db.from('push_log').upsert(
+        { date_key: dateKey, sent_at: new Date().toISOString(), payload_resumen: `${body} — sin suscriptores` },
+        { onConflict: 'date_key' }
+      )
+      return res.status(200).json({ sent: 0, counts, resumen: body, message: 'Nadie activó los avisos todavía — no hay suscripciones' })
+    }
+
+    // Import dinámico: web-push solo se carga cuando esta action corre (una vez
+    // al día) — no engorda el cold-start del resto de las notificaciones.
+    const webpush = (await import('web-push')).default
+    webpush.setVapidDetails('mailto:bridvanovich@twf.uy', VAPID_PUBLIC_KEY, vapidPrivateKey)
+
+    const notification = JSON.stringify({
+      title: 'Mediterránea — resumen del día',
+      body,
+      icon: '/med-icon-192.png',
+      badge: '/med-icon-192.png',
+      url: '/admin',
+    })
+
+    let sent = 0
+    const dead: string[] = []
+    await Promise.all(
+      subs.map(async (s: { endpoint: string; p256dh: string; auth: string }) => {
+        try {
+          await webpush.sendNotification(
+            { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
+            notification
+          )
+          sent++
+        } catch (e: any) {
+          const code = e?.statusCode
+          // 404/410 = suscripción muerta (navegador la dio de baja) → limpiarla
+          if (code === 404 || code === 410) dead.push(s.endpoint)
+          else console.error('[push-daily] send falló:', code, e?.message || e)
+        }
+      })
+    )
+    if (dead.length > 0) {
+      await db.from('push_subscriptions').delete().in('endpoint', dead)
+    }
+
+    await db.from('push_log').upsert(
+      { date_key: dateKey, sent_at: new Date().toISOString(), payload_resumen: `${body} → ${sent} enviados` },
+      { onConflict: 'date_key' }
+    )
+
+    return res.status(200).json({ sent, muertas: dead.length, counts, resumen: body })
+  } catch (error: any) {
+    console.error('[push-daily] Error:', error?.message || error)
+    return res.status(500).json({ error: 'No se pudo enviar el resumen push' })
   }
 }

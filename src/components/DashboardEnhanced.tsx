@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
@@ -18,9 +18,12 @@ import {
   Receipt,
   Table as TableIcon,
   Globe,
+  Bell,
+  BellRinging,
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import { authFetch, getAdminLevel } from '@/lib/authClient'
+import { isPushSupported, isSubscribed, subscribePush, unsubscribePush, isIosWithoutStandalone } from '@/lib/push'
 import { fetchShipmentsFromDB } from '@/lib/dataClient'
 import TeamManager from './TeamManager'
 
@@ -136,6 +139,45 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
   // Tick que sube con cada Refrescar global → recarga la Actividad del Equipo.
   const [refreshTick, setRefreshTick] = useState(0)
 
+  // ── Avisos push (campana del navbar) ──
+  // null = todavía no sabemos / no soportado (campana oculta) · true/false = estado real.
+  const [pushOn, setPushOn] = useState<boolean | null>(null)
+  const [pushBusy, setPushBusy] = useState(false)
+  useEffect(() => {
+    if (!isPushSupported()) return // campana oculta
+    isSubscribed().then(setPushOn).catch(() => setPushOn(false))
+  }, [])
+
+  const handleTogglePush = async () => {
+    if (pushBusy || pushOn === null) return
+    // iPhone/iPad sin la PWA instalada: iOS solo entrega push a la app de inicio.
+    if (!pushOn && isIosWithoutStandalone()) {
+      toast.info('Instalá la app primero', {
+        description: 'En iPhone los avisos solo funcionan con la app instalada: Compartir → Agregar a inicio, y activalos desde ahí.',
+        duration: 8000,
+      })
+      return
+    }
+    setPushBusy(true)
+    try {
+      if (pushOn) {
+        await unsubscribePush()
+        setPushOn(false)
+        toast.success('Avisos desactivados en este dispositivo')
+      } else {
+        await subscribePush()
+        setPushOn(true)
+        toast.success('Avisos activados', {
+          description: 'Vas a recibir el resumen del día (LIBRE, salidas, frontera y fiscal) en este dispositivo.',
+        })
+      }
+    } catch (err) {
+      toast.error((err as Error)?.message || 'No se pudo cambiar el estado de los avisos')
+    } finally {
+      setPushBusy(false)
+    }
+  }
+
   // Selección del panel de detalle DENTRO de la grilla de Operaciones (controlada).
   const [detailUid, setDetailUid] = useState<string | null>(null)
   // "Más datos →" desde Agenda/HOY: abre el panel completo como OVERLAY sobre la
@@ -243,6 +285,24 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
               <span className="text-sm font-medium opacity-60 border-l border-primary-foreground/20 pl-3">Admin</span>
             </div>
             <div className="flex items-center gap-2">
+              {ops && pushOn !== null && (
+              <button
+                type="button"
+                onClick={handleTogglePush}
+                disabled={pushBusy}
+                className={`inline-flex items-center gap-1.5 px-3 h-9 rounded-md text-sm transition-colors border disabled:opacity-60 disabled:cursor-wait ${
+                  pushOn
+                    ? 'bg-primary-foreground/20 border-primary-foreground/25 text-primary-foreground'
+                    : 'bg-primary-foreground/10 hover:bg-primary-foreground/20 border-primary-foreground/10 text-primary-foreground/85 hover:text-primary-foreground'
+                }`}
+                title={pushOn ? 'Avisos activos en este dispositivo — click para desactivar' : 'Activar avisos del día (LIBRE y salidas) en este dispositivo'}
+              >
+                {pushOn
+                  ? <BellRinging size={16} weight="fill" />
+                  : <Bell size={16} weight="bold" />}
+                <span className="hidden lg:inline">{pushBusy ? 'Un momento…' : pushOn ? 'Avisos activos' : 'Activar avisos'}</span>
+              </button>
+              )}
               {ops && (
               <button
                 type="button"

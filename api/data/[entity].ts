@@ -25,6 +25,7 @@ import {
   BillingRowSchema,
   OperatorRowSchema,
   OperatorAssignmentRowSchema,
+  PushSubscriptionSchema,
 } from '../_lib/schemas.js'
 import { rollupFromOperativasApi } from '../_lib/operativasRollup.js'
 import { broadcastTrucksLive, clientIdFromRequest } from '../_lib/realtimeBroadcast.js'
@@ -126,6 +127,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return handleShipments(req, res, db, payload)
       case 'admin-users':
         return handleAdminUsers(req, res, db, payload)
+      case 'push-subscriptions':
+        return handlePushSubscriptions(req, res, db, payload)
       case 'audit-log':
         return handleAuditLog(req, res, db)
       default:
@@ -1783,6 +1786,47 @@ async function handleAdminUsers(req: VercelRequest, res: VercelResponse, db: any
     const { error } = await db.from('admin_users').delete().eq('id', id)
     if (error) throw error
     logAudit(db, payload, 'eliminar usuario', 'admin_users', u?.email || id)
+    return res.status(200).json({ deleted: true })
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' })
+}
+
+// ── Suscripciones Web Push (avisos del día para el equipo) ──────────
+// POST: alta/refresh — el navegador manda su PushSubscription.toJSON() y se
+// upsertea por endpoint (el endpoint identifica al navegador; el email del
+// token identifica a la persona). DELETE: baja por endpoint (campana off).
+// Cualquier admin logueado (owner o equipo) puede suscribirse.
+
+async function handlePushSubscriptions(req: VercelRequest, res: VercelResponse, db: any, payload: TokenPayload | null) {
+  const admin = payload as AdminPayload | null
+
+  if (req.method === 'POST') {
+    const v = validate(PushSubscriptionSchema, req.body)
+    if (!v.ok) return res.status(400).json({ error: v.error })
+    const { endpoint, keys } = v.data
+    const row = {
+      id: `ps-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      admin_email: (admin?.user || '').toLowerCase().trim(),
+      endpoint,
+      p256dh: keys.p256dh,
+      auth: keys.auth,
+      user_agent: String(req.headers['user-agent'] || '').slice(0, 300),
+    }
+    const { error } = await db.from('push_subscriptions').upsert(row, { onConflict: 'endpoint' })
+    if (error) throw error
+    logAudit(db, payload, 'activar avisos push', 'push_subscriptions', row.admin_email)
+    return res.status(200).json({ saved: true })
+  }
+
+  if (req.method === 'DELETE') {
+    const endpoint = (req.body && typeof req.body === 'object' && typeof (req.body as any).endpoint === 'string'
+      ? (req.body as any).endpoint
+      : req.query.endpoint) as string | undefined
+    if (!endpoint) return res.status(400).json({ error: 'endpoint required' })
+    const { error } = await db.from('push_subscriptions').delete().eq('endpoint', endpoint)
+    if (error) throw error
+    logAudit(db, payload, 'desactivar avisos push', 'push_subscriptions', (admin?.user || '').toLowerCase())
     return res.status(200).json({ deleted: true })
   }
 

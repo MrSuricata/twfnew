@@ -26,6 +26,7 @@ import {
   Prohibit,
   CheckCircle,
   ClockCounterClockwise,
+  BellRinging,
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import { authFetch } from '@/lib/authClient'
@@ -70,6 +71,7 @@ export default function TeamManager({ refreshKey = 0 }: { refreshKey?: number })
   const [saving, setSaving] = useState(false)
   const [migrating, setMigrating] = useState(false)
   const [baking, setBaking] = useState(false)
+  const [sendingPush, setSendingPush] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -175,6 +177,35 @@ export default function TeamManager({ refreshKey = 0 }: { refreshKey?: number })
       toast.error(`Error: ${(err as Error)?.message || 'falló la migración'}`, { id: t })
     } finally {
       setMigrating(false)
+    }
+  }
+
+  // Manda YA el resumen del día por Web Push a todos los suscriptos (?force=1
+  // saltea el dedupe diario) — para probar los avisos antes de confiar en el cron.
+  const sendPushTest = async () => {
+    if (sendingPush) return
+    setSendingPush(true)
+    const t = toast.loading('Enviando resumen de prueba…')
+    try {
+      const res = await authFetch('/api/notifications/push-daily?force=1', { method: 'POST' })
+      const data = await res.json().catch(() => ({} as Record<string, unknown>))
+      if (!res.ok) throw new Error((data as { error?: string }).error || `HTTP ${res.status}`)
+      const sent = Number((data as { sent?: number }).sent || 0)
+      if (sent > 0) {
+        toast.success(`Resumen enviado a ${sent} dispositivo${sent === 1 ? '' : 's'}`, {
+          id: t,
+          description: (data as { resumen?: string }).resumen || '',
+        })
+      } else {
+        toast.info((data as { message?: string }).message || 'No se envió nada', {
+          id: t,
+          description: (data as { resumen?: string }).resumen || '',
+        })
+      }
+    } catch (err) {
+      toast.error(`Error: ${(err as Error)?.message || 'falló el envío de prueba'}`, { id: t })
+    } finally {
+      setSendingPush(false)
     }
   }
 
@@ -334,6 +365,10 @@ export default function TeamManager({ refreshKey = 0 }: { refreshKey?: number })
           Operaciones técnicas de infraestructura. Idempotentes — se pueden correr más de una vez sin problema.
         </p>
         <div className="flex flex-wrap gap-3">
+          <Button onClick={sendPushTest} disabled={sendingPush} variant="outline">
+            <BellRinging size={15} className="mr-1.5" />
+            {sendingPush ? 'Enviando…' : 'Enviar resumen de prueba'}
+          </Button>
           <Button onClick={runPhotoMigration} disabled={migrating} variant="outline">
             {migrating ? 'Migrando…' : 'Migrar fotos a Storage'}
           </Button>
