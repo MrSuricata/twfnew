@@ -226,10 +226,24 @@ describe('pendingSalida', () => {
     expect(pendingSalida([s], TODAY_PS)).toHaveLength(0)
   })
 
-  it('future ETA → excluded', () => {
-    // shipment.ETA is preferred over op.ETA_OP; both future here
+  it('ETA próxima (dentro del horizonte de 14d) → incluida como "llega próximamente" (tier 1)', () => {
     const s = mkShipPS({ ETA: TOMORROW_PS, operativas: [mkOp({ ETA_OP: TOMORROW_PS })] })
+    const result = pendingSalida([s], TODAY_PS)
+    expect(result).toHaveLength(1)
+    expect(result[0].arrival.tier).toBe(1)
+  })
+
+  it('ETA más allá del horizonte (>14d) → excluida', () => {
+    // 2026-07-15 = 29 días después de TODAY_PS (16 jun)
+    const s = mkShipPS({ ETA: '2026-07-15', operativas: [mkOp({ ETA_OP: '2026-07-15' })] })
     expect(pendingSalida([s], TODAY_PS)).toHaveLength(0)
+  })
+
+  it('mixto: arribada primero, próxima después', () => {
+    const arribada = mkShipPS({ REF: 'A0002', ETA: YESTERDAY_PS, operativas: [mkOp({ REF: 'A0002', CNTR_OP: 'ARRB1234567' })] })
+    const proxima = mkShipPS({ REF: 'A0001', ETA: TOMORROW_PS, operativas: [mkOp({ REF: 'A0001', CNTR_OP: 'PROX1234567', ETA_OP: TOMORROW_PS })] })
+    const result = pendingSalida([proxima, arribada], TODAY_PS)
+    expect(result.map(r => r.shipment.REF)).toEqual(['A0002', 'A0001'])
   })
 
   it('shipment.ETA today-or-past wins over junk op.ETA_OP', () => {

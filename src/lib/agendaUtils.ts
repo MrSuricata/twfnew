@@ -496,8 +496,14 @@ export interface PendingSalidaItem {
  * duplicados (bug de datos) → una sola tarjeta por contenedor.
  *
  * Ordenado por LLEGADA (ETA ascendente): la carga que arribó primero va arriba
- * (la que más tiempo lleva esperando coordinar salida). Desempate estable por REF.
+ * (la que más tiempo lleva esperando coordinar salida). Después de las arribadas
+ * entran las que LLEGAN PRÓXIMAMENTE (ETA dentro de PENDING_UPCOMING_HORIZON_DAYS),
+ * de más cercana a más lejana. Desempate estable por REF.
  */
+/** Horizonte de "llega próximamente": la coordinación y los checks arrancan
+ *  ~2 semanas antes de la ETA (regla de negocio TWF), más lejos no es accionable. */
+export const PENDING_UPCOMING_HORIZON_DAYS = 14
+
 export function pendingSalida(
   shipments: ParsedShipment[],
   today: Date
@@ -522,14 +528,17 @@ export function pendingSalida(
       const salidaNorm = (op.SALIDA || '').trim().toUpperCase()
       if (salidaNorm !== '' && salidaNorm !== 'CONFIRMAR' && salidaNorm !== '#N/A') continue
 
-      // ETA must be today-or-past (already arrived).
+      // Arribadas (ETA hoy o pasada) SIEMPRE entran; las por llegar entran solo
+      // dentro del horizonte de 14 días — más lejos todavía no se coordina y
+      // taparía la cola de trabajo.
       // Prefer shipment.ETA — op.ETA_OP can contain junk dates like '2001-09-01'.
       const etaStr = (s.ETA || op.ETA_OP || '').trim()
       const etaDate = parseLocalDate(etaStr)
       if (!etaDate) continue
 
       etaDate.setHours(0, 0, 0, 0)
-      if (etaDate.getTime() > todayNorm.getTime()) continue // future ETA — not arrived yet
+      const daysAway = (etaDate.getTime() - todayNorm.getTime()) / 86_400_000
+      if (daysAway > PENDING_UPCOMING_HORIZON_DAYS) continue // demasiado lejos aún
 
       // Una sola tarjeta por (REF, contenedor) aunque la operativa esté duplicada.
       const dedupKey = `${s.REF}::${cntr.toUpperCase()}`
@@ -545,8 +554,7 @@ export function pendingSalida(
 
   // Orden por proximidad de llegada: ya arribadas primero (la más vieja arriba —
   // es la que más tiempo lleva esperando coordinar), después las que llegan
-  // próximamente, y sin ETA al final. Hoy el filtro solo deja pasar arribadas
-  // (tier 0), pero el orden ya contempla los otros tiers si la regla se relaja.
+  // próximamente (dentro del horizonte), y sin ETA al final.
   // Desempate estable por REF para un orden determinístico.
   items.sort((a, b) => {
     const c = compareByArrival(a.arrival, b.arrival)
