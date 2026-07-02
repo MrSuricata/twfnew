@@ -100,14 +100,13 @@ function Reveal({ children, delay = 0, className = '' }: { children: ReactNode; 
 
 // Friendly status for DB shipments (LCL/aéreo/terrestre), keyed by the `status`
 // column. FCL uses getShipmentStatus() (derived from the Sheet's operativas).
-// 5-stage journey for the tracking stepper. Maps any status label/code (FCL
-// derived label OR DB status) to a stage index by keyword — robust to both.
-const TRACK_STAGES = ['En origen', 'En tránsito', 'En puerto', 'En frontera', 'Entregado']
+// Stepper PÚBLICO de 3 etapas: origen → tránsito → destino (puerto de destino).
+// El tramo terrestre (frontera / fiscal / entrega) es info interna y NO se
+// expone al público: todo lo posterior al arribo se muestra como "En destino".
+const TRACK_STAGES = ['En origen', 'En tránsito', 'En destino']
 function trackStage(s: string): number {
   const t = (s || '').toLowerCase()
-  if (/devuelt|entregad/.test(t)) return 4
-  if (/fiscal|fronter/.test(t)) return 3
-  if (/sale hoy|sali|carga hoy|puerto|arribad|terminal/.test(t)) return 2
+  if (/devuelt|entregad|fiscal|fronter|sale hoy|sali|carga hoy|puerto|arribad|terminal/.test(t)) return 2
   if (/tr[aá]nsito|viaje|embarcad/.test(t)) return 1
   if (/origen/.test(t)) return 0
   return 1
@@ -209,11 +208,13 @@ function TrackingCard() {
         <div className="mt-4 rounded-xl border border-[#e5e4f1] p-4">
           <div className="flex items-center justify-between gap-2">
             <span className="font-semibold text-[#261c79]">{result.REF}</span>
-            <span className="text-xs px-2.5 py-1 rounded-full whitespace-nowrap" style={{ background: '#eef0f8', color: '#352e6a' }}>{status.label}</span>
+            {/* Etiqueta pública capada a las 3 etapas — el estado interno fino
+                (frontera/fiscal/entrega) no se muestra al público */}
+            <span className="text-xs px-2.5 py-1 rounded-full whitespace-nowrap" style={{ background: '#eef0f8', color: '#352e6a' }}>{TRACK_STAGES[trackStage(status.label)]}</span>
           </div>
           {result.CLIENTE && <div className="text-sm text-[#6b6688] mt-1">{result.CLIENTE}</div>}
 
-          {/* Journey stepper — el tramo "En tránsito → En puerto" se llena
+          {/* Journey stepper — el tramo "En tránsito → En destino" se llena
               proporcionalmente al tiempo de viaje real (ETD→ETA) */}
           {(() => {
             const stage = trackStage(status.label)
@@ -252,7 +253,7 @@ function TrackingCard() {
                 </div>
                 <div className="mt-1.5 flex justify-between">
                   {TRACK_STAGES.map((label, i) => (
-                    <span key={i} className={`text-[9px] leading-tight text-center ${i === stage ? 'text-[#49286b] font-semibold' : 'text-[#9a96b8]'}`} style={{ width: '20%' }}>
+                    <span key={i} className={`text-[10px] leading-tight text-center ${i === stage ? 'text-[#49286b] font-semibold' : 'text-[#9a96b8]'}`} style={{ width: `${100 / TRACK_STAGES.length}%` }}>
                       {label}
                     </span>
                   ))}
@@ -620,6 +621,12 @@ export default function MediterraneaLanding() {
                 <a href="#nosotros" className="block hover:text-white">Nosotros</a>
                 <a href="/terminos" className="block hover:text-white">Términos</a>
                 <a href="/privacidad" className="block hover:text-white">Privacidad</a>
+              </div>
+              <div className="space-y-2">
+                <div className="text-white font-semibold mb-3">Accesos</div>
+                <a href="/portal" className="block hover:text-white">Portal de clientes</a>
+                <a href="/partner" className="block hover:text-white">Portal de partners</a>
+                <a href="/admin" className="block hover:text-white">Acceso equipo</a>
               </div>
             </div>
           </div>
