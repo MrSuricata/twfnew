@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { Truck, TruckLoad } from './truckTypes'
-import { trucksToEvents, shipmentsToEvents, pendingSalida } from './agendaUtils'
+import { trucksToEvents, shipmentsToEvents, pendingSalida, arrivalInfo, compareByArrival } from './agendaUtils'
 import type { ParsedShipment, OperativasRecord } from './shipmentTypes'
 
 const truck = (over: Partial<Truck> = {}): Truck =>
@@ -226,10 +226,24 @@ describe('pendingSalida', () => {
     expect(pendingSalida([s], TODAY_PS)).toHaveLength(0)
   })
 
-  it('future ETA → excluded', () => {
-    // shipment.ETA is preferred over op.ETA_OP; both future here
+  it('ETA próxima (dentro del horizonte de 14d) → incluida como "llega próximamente" (tier 1)', () => {
     const s = mkShipPS({ ETA: TOMORROW_PS, operativas: [mkOp({ ETA_OP: TOMORROW_PS })] })
+    const result = pendingSalida([s], TODAY_PS)
+    expect(result).toHaveLength(1)
+    expect(result[0].arrival.tier).toBe(1)
+  })
+
+  it('ETA más allá del horizonte (>14d) → excluida', () => {
+    // 2026-07-15 = 29 días después de TODAY_PS (16 jun)
+    const s = mkShipPS({ ETA: '2026-07-15', operativas: [mkOp({ ETA_OP: '2026-07-15' })] })
     expect(pendingSalida([s], TODAY_PS)).toHaveLength(0)
+  })
+
+  it('mixto: arribada primero, próxima después', () => {
+    const arribada = mkShipPS({ REF: 'A0002', ETA: YESTERDAY_PS, operativas: [mkOp({ REF: 'A0002', CNTR_OP: 'ARRB1234567' })] })
+    const proxima = mkShipPS({ REF: 'A0001', ETA: TOMORROW_PS, operativas: [mkOp({ REF: 'A0001', CNTR_OP: 'PROX1234567', ETA_OP: TOMORROW_PS })] })
+    const result = pendingSalida([proxima, arribada], TODAY_PS)
+    expect(result.map(r => r.shipment.REF)).toEqual(['A0002', 'A0001'])
   })
 
   it('shipment.ETA today-or-past wins over junk op.ETA_OP', () => {
@@ -372,5 +386,64 @@ describe('pendingSalida', () => {
 
     const result = pendingSalida([sB, sA], TODAY_PS)
     expect(result.map(r => r.shipment.REF)).toEqual(['A7800', 'A7900'])
+  })
+
+  it('expone arrival en el item (para el indicador de la card)', () => {
+    const s = mkShipPS({ ETA: '2026-06-11', operativas: [mkOp()] }) // 5 días antes de TODAY_PS
+    const result = pendingSalida([s], TODAY_PS)
+    expect(result[0].arrival.tier).toBe(0)
+    expect(result[0].arrival.label).toBe('Arribó hace 5d')
+  })
+})
+
+// ── arrivalInfo / compareByArrival ──────────────────────────────────────────
+// Proximidad de llegada: orden + etiqueta temporal de "Pendientes de coordinar
+// salida". TODAY_PS = 16 Jun 2026.
+
+describe('arrivalInfo', () => {
+  it('ETA pasada → tier 0, "Arribó hace Xd" (caso del reclamo: ETA de un año anterior)', () => {
+    const info = arrivalInfo('2025-09-03', TODAY_PS)
+    expect(info.tier).toBe(0)
+    expect(info.label).toBe('Arribó hace 286d') // 3 Sep 2025 → 16 Jun 2026
+  })
+
+  it('ETA hoy → "Arribó hoy" y ayer → "Arribó ayer"', () => {
+    expect(arrivalInfo('2026-06-16', TODAY_PS).label).toBe('Arribó hoy')
+    expect(arrivalInfo('2026-06-15', TODAY_PS).label).toBe('Arribó ayer')
+    expect(arrivalInfo('2026-06-16', TODAY_PS).tier).toBe(0)
+  })
+
+  it('ETA futura cercana → tier 1, "Llega mañana" / "Llega en Xd"', () => {
+    expect(arrivalInfo('2026-06-17', TODAY_PS).label).toBe('Llega mañana')
+    expect(arrivalInfo('2026-06-21', TODAY_PS).label).toBe('Llega en 5d')
+    expect(arrivalInfo('2026-06-21', TODAY_PS).tier).toBe(1)
+  })
+
+  it('ETA futura lejana → "Llega el dd/mm" (con año solo si no es el año en curso)', () => {
+    expect(arrivalInfo('2026-09-03', TODAY_PS).label).toBe('Llega el 03/09')
+    expect(arrivalInfo('2027-01-10', TODAY_PS).label).toBe('Llega el 10/01/2027')
+  })
+
+  it('sin ETA o texto no-fecha → tier 2, "Sin ETA" (parseo ISO estricto)', () => {
+    expect(arrivalInfo('', TODAY_PS)).toMatchObject({ tier: 2, days: null, label: 'Sin ETA' })
+    expect(arrivalInfo('CONFIRMAR', TODAY_PS).tier).toBe(2)
+    expect(arrivalInfo('2/7', TODAY_PS).tier).toBe(2) // new Date('2/7') sería válida — acá no
+  })
+})
+
+describe('compareByArrival', () => {
+  it('ordena: arribadas (más vieja primero) → próximas (más cercana primero) → sin ETA', () => {
+    const etas = ['2026-06-20', '2025-09-03', '2026-06-10', '', '2026-09-03']
+    const sorted = etas
+      .map(e => ({ e, info: arrivalInfo(e, TODAY_PS) }))
+      .sort((a, b) => compareByArrival(a.info, b.info))
+      .map(x => x.e)
+    expect(sorted).toEqual(['2025-09-03', '2026-06-10', '2026-06-20', '2026-09-03', ''])
+  })
+
+  it('dos sin ETA → 0 (sin NaN por Infinity - Infinity)', () => {
+    const a = arrivalInfo('', TODAY_PS)
+    const b = arrivalInfo('DEVUELTO', TODAY_PS)
+    expect(compareByArrival(a, b)).toBe(0)
   })
 })

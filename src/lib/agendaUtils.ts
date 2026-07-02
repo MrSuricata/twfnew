@@ -1,5 +1,6 @@
 import type { ParsedShipment, OperativasRecord } from './shipmentTypes'
 import { parseLocalDate } from './shipmentTypes'
+import { fmtDateDMY } from './format'
 import { isSalidaBeforeArrival } from './salidaCheck'
 import type { CalendarEvent, AlertEmoji, EventType } from './agendaTypes'
 import { getShipmentStatus, processShipmentRecord } from './shipmentTypes'
@@ -399,6 +400,68 @@ export function countAlertsInRange(events: CalendarEvent[]): number {
   return events.filter(e => e.alerts.length > 0).length
 }
 
+// ─── Arrival proximity (Pendientes de coordinar salida) ──────────────
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000
+
+/**
+ * Proximidad de llegada de una carga, para ordenar y etiquetar las cards de
+ * "Pendientes de coordinar salida".
+ *
+ * Tiers de orden (menor = más arriba):
+ *  0 = YA ARRIBÓ (ETA hoy o pasada) — el LIBRE corre, es lo más urgente
+ *  1 = llega próximamente (ETA futura)
+ *  2 = sin ETA parseable
+ */
+export interface ArrivalInfo {
+  tier: 0 | 1 | 2
+  /** Días con signo: negativo = arribó hace |days| días, 0 = hoy, positivo = llega en days días. null = sin ETA. */
+  days: number | null
+  /** Etiqueta lista para la card: "Arribó hace 12d" / "Arribó hoy" / "Llega en 3d" / "Llega el 03/09". */
+  label: string
+  /** Timestamp de la ETA para ordenar ascendente dentro del tier. Infinity si no hay ETA. */
+  sortKey: number
+}
+
+/**
+ * Deriva la ArrivalInfo de una ETA (string ISO). Parseo estricto vía
+ * parseLocalDate — texto tipo "CONFIRMAR" o fechas no-ISO caen al tier 2.
+ * `today` se inyecta para que sea una función pura (testeable).
+ *
+ * La fecha lejana lleva año solo si NO es el año en curso: el reclamo original
+ * fue una card "ETA 3 Sep" que en realidad era de un año anterior y parecía futura.
+ */
+export function arrivalInfo(etaStr: string, today: Date): ArrivalInfo {
+  const eta = parseLocalDate((etaStr || '').trim())
+  if (!eta) return { tier: 2, days: null, label: 'Sin ETA', sortKey: Number.POSITIVE_INFINITY }
+
+  eta.setHours(0, 0, 0, 0)
+  const t = new Date(today)
+  t.setHours(0, 0, 0, 0)
+  const days = Math.round((eta.getTime() - t.getTime()) / MS_PER_DAY)
+
+  if (days <= 0) {
+    const label = days === 0 ? 'Arribó hoy' : days === -1 ? 'Arribó ayer' : `Arribó hace ${-days}d`
+    return { tier: 0, days, label, sortKey: eta.getTime() }
+  }
+
+  const full = fmtDateDMY(toDateKey(eta)) // dd/MM/yyyy
+  const dateLabel = eta.getFullYear() === t.getFullYear() ? full.slice(0, 5) : full
+  const label = days === 1 ? 'Llega mañana' : days <= 7 ? `Llega en ${days}d` : `Llega el ${dateLabel}`
+  return { tier: 1, days, label, sortKey: eta.getTime() }
+}
+
+/**
+ * Comparador por proximidad de llegada: primero las ya arribadas (de más vieja
+ * a más nueva — la que más espera coordinar va arriba), después las que llegan
+ * próximamente (de más cercana a más lejana), y sin ETA al final.
+ */
+export function compareByArrival(a: ArrivalInfo, b: ArrivalInfo): number {
+  if (a.tier !== b.tier) return a.tier - b.tier
+  if (a.sortKey === b.sortKey) return 0 // evita Infinity - Infinity = NaN en tier 2
+  return a.sortKey < b.sortKey ? -1 : 1
+}
+
 // ─── Pending Salida Filter ────────────────────────────────────────────
 
 /** Destination zone derived from POD/PAIS, used for the filter chips. */
@@ -409,6 +472,8 @@ export interface PendingSalidaItem {
   op: OperativasRecord
   /** Destination zone for the filter chips (derived from shipment.PAIS). */
   dest: DestZone
+  /** Proximidad de llegada — orden de la lista + etiqueta temporal de la card. */
+  arrival: ArrivalInfo
 }
 
 /**
@@ -431,8 +496,14 @@ export interface PendingSalidaItem {
  * duplicados (bug de datos) → una sola tarjeta por contenedor.
  *
  * Ordenado por LLEGADA (ETA ascendente): la carga que arribó primero va arriba
- * (la que más tiempo lleva esperando coordinar salida). Desempate estable por REF.
+ * (la que más tiempo lleva esperando coordinar salida). Después de las arribadas
+ * entran las que LLEGAN PRÓXIMAMENTE (ETA dentro de PENDING_UPCOMING_HORIZON_DAYS),
+ * de más cercana a más lejana. Desempate estable por REF.
  */
+/** Horizonte de "llega próximamente": la coordinación y los checks arrancan
+ *  ~2 semanas antes de la ETA (regla de negocio TWF), más lejos no es accionable. */
+export const PENDING_UPCOMING_HORIZON_DAYS = 14
+
 export function pendingSalida(
   shipments: ParsedShipment[],
   today: Date
@@ -457,14 +528,17 @@ export function pendingSalida(
       const salidaNorm = (op.SALIDA || '').trim().toUpperCase()
       if (salidaNorm !== '' && salidaNorm !== 'CONFIRMAR' && salidaNorm !== '#N/A') continue
 
-      // ETA must be today-or-past (already arrived).
+      // Arribadas (ETA hoy o pasada) SIEMPRE entran; las por llegar entran solo
+      // dentro del horizonte de 14 días — más lejos todavía no se coordina y
+      // taparía la cola de trabajo.
       // Prefer shipment.ETA — op.ETA_OP can contain junk dates like '2001-09-01'.
       const etaStr = (s.ETA || op.ETA_OP || '').trim()
       const etaDate = parseLocalDate(etaStr)
       if (!etaDate) continue
 
       etaDate.setHours(0, 0, 0, 0)
-      if (etaDate.getTime() > todayNorm.getTime()) continue // future ETA — not arrived yet
+      const daysAway = (etaDate.getTime() - todayNorm.getTime()) / 86_400_000
+      if (daysAway > PENDING_UPCOMING_HORIZON_DAYS) continue // demasiado lejos aún
 
       // Una sola tarjeta por (REF, contenedor) aunque la operativa esté duplicada.
       const dedupKey = `${s.REF}::${cntr.toUpperCase()}`
@@ -474,19 +548,17 @@ export function pendingSalida(
       // Derive destination zone from shipment.PAIS (reliable enum: UY/AR/CL/OTRO)
       const dest: DestZone = (s.PAIS === 'UY' || s.PAIS === 'AR' || s.PAIS === 'CL') ? s.PAIS : 'OTRO'
 
-      items.push({ shipment: s, op, dest })
+      items.push({ shipment: s, op, dest, arrival: arrivalInfo(etaStr, todayNorm) })
     }
   }
 
-  // Orden de llegada: ETA ascendente (la que arribó primero, arriba). Todo item
-  // que pasó el filtro tiene ETA parseable; el guard Infinity es defensivo.
+  // Orden por proximidad de llegada: ya arribadas primero (la más vieja arriba —
+  // es la que más tiempo lleva esperando coordinar), después las que llegan
+  // próximamente (dentro del horizonte), y sin ETA al final.
   // Desempate estable por REF para un orden determinístico.
   items.sort((a, b) => {
-    const etaA = parseLocalDate((a.shipment.ETA || a.op.ETA_OP || '').trim())
-    const etaB = parseLocalDate((b.shipment.ETA || b.op.ETA_OP || '').trim())
-    const ta = etaA ? etaA.getTime() : Infinity
-    const tb = etaB ? etaB.getTime() : Infinity
-    if (ta !== tb) return ta - tb
+    const c = compareByArrival(a.arrival, b.arrival)
+    if (c !== 0) return c
     return a.shipment.REF.localeCompare(b.shipment.REF)
   })
 
