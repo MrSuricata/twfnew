@@ -180,8 +180,10 @@ export default function TeamManager({ refreshKey = 0 }: { refreshKey?: number })
     }
   }
 
-  // Manda YA el resumen del día por Web Push a todos los suscriptos (?force=1
-  // saltea el dedupe diario) — para probar los avisos antes de confiar en el cron.
+  // Manda YA las alertas del slot mañana (días libres + llegan a fiscal) por Web
+  // Push a los suscriptos con esos tipos activados (push-daily quedó como alias de
+  // push-alerts?slot=manana; ?force=1 saltea el dedupe) — para probar los avisos
+  // antes de confiar en los crons.
   const sendPushTest = async () => {
     if (sendingPush) return
     setSendingPush(true)

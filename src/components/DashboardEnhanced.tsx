@@ -23,7 +23,9 @@ import {
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import { authFetch, getAdminLevel } from '@/lib/authClient'
-import { isPushSupported, isSubscribed, subscribePush, unsubscribePush, isIosWithoutStandalone } from '@/lib/push'
+import { isPushSupported, isSubscribed, subscribePush, unsubscribePush, isIosWithoutStandalone, getPushPrefs, patchPushPrefs, DEFAULT_PUSH_PREFS, type PushPrefs } from '@/lib/push'
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Switch } from '@/components/ui/switch'
 import { fetchShipmentsFromDB } from '@/lib/dataClient'
 import TeamManager from './TeamManager'
 
@@ -139,45 +141,6 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
   // Tick que sube con cada Refrescar global → recarga la Actividad del Equipo.
   const [refreshTick, setRefreshTick] = useState(0)
 
-  // ── Avisos push (campana del navbar) ──
-  // null = todavía no sabemos / no soportado (campana oculta) · true/false = estado real.
-  const [pushOn, setPushOn] = useState<boolean | null>(null)
-  const [pushBusy, setPushBusy] = useState(false)
-  useEffect(() => {
-    if (!isPushSupported()) return // campana oculta
-    isSubscribed().then(setPushOn).catch(() => setPushOn(false))
-  }, [])
-
-  const handleTogglePush = async () => {
-    if (pushBusy || pushOn === null) return
-    // iPhone/iPad sin la PWA instalada: iOS solo entrega push a la app de inicio.
-    if (!pushOn && isIosWithoutStandalone()) {
-      toast.info('Instalá la app primero', {
-        description: 'En iPhone los avisos solo funcionan con la app instalada: Compartir → Agregar a inicio, y activalos desde ahí.',
-        duration: 8000,
-      })
-      return
-    }
-    setPushBusy(true)
-    try {
-      if (pushOn) {
-        await unsubscribePush()
-        setPushOn(false)
-        toast.success('Avisos desactivados en este dispositivo')
-      } else {
-        await subscribePush()
-        setPushOn(true)
-        toast.success('Avisos activados', {
-          description: 'Vas a recibir el resumen del día (LIBRE, salidas, frontera y fiscal) en este dispositivo.',
-        })
-      }
-    } catch (err) {
-      toast.error((err as Error)?.message || 'No se pudo cambiar el estado de los avisos')
-    } finally {
-      setPushBusy(false)
-    }
-  }
-
   // Selección del panel de detalle DENTRO de la grilla de Operaciones (controlada).
   const [detailUid, setDetailUid] = useState<string | null>(null)
   // "Más datos →" desde Agenda/HOY: abre el panel completo como OVERLAY sobre la
@@ -285,24 +248,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
               <span className="text-sm font-medium opacity-60 border-l border-primary-foreground/20 pl-3">Admin</span>
             </div>
             <div className="flex items-center gap-2">
-              {ops && pushOn !== null && (
-              <button
-                type="button"
-                onClick={handleTogglePush}
-                disabled={pushBusy}
-                className={`inline-flex items-center gap-1.5 px-3 h-9 rounded-md text-sm transition-colors border disabled:opacity-60 disabled:cursor-wait ${
-                  pushOn
-                    ? 'bg-primary-foreground/20 border-primary-foreground/25 text-primary-foreground'
-                    : 'bg-primary-foreground/10 hover:bg-primary-foreground/20 border-primary-foreground/10 text-primary-foreground/85 hover:text-primary-foreground'
-                }`}
-                title={pushOn ? 'Avisos activos en este dispositivo — click para desactivar' : 'Activar avisos del día (LIBRE y salidas) en este dispositivo'}
-              >
-                {pushOn
-                  ? <BellRinging size={16} weight="fill" />
-                  : <Bell size={16} weight="bold" />}
-                <span className="hidden lg:inline">{pushBusy ? 'Un momento…' : pushOn ? 'Avisos activos' : 'Activar avisos'}</span>
-              </button>
-              )}
+              {ops && <PushBell />}
               {ops && (
               <button
                 type="button"
@@ -617,5 +563,160 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
         />
       </div>
     </div>
+  )
+}
+
+// ─── Campana de avisos push (popover con preferencias por dispositivo) ──────
+// Cada dispositivo elige QUÉ alertas recibe (switches → PATCH a la entity
+// push-subscriptions). Los horarios son los de los 2 crons de vercel.json:
+// mañana 07:00 UY (libres + fiscal) · tarde 16:00 UY (frontera + salidas,
+// la de 17:00 sale junta por el límite de 2 crons del plan Hobby).
+
+const PUSH_ALERT_OPTIONS: Array<{ key: keyof PushPrefs; label: string; hora: string; desc: string }> = [
+  { key: 'alert_libre', label: 'Días libres', hora: '07:00', desc: 'LIBRE vence hoy o en los próximos 3 días' },
+  { key: 'alert_fiscal', label: 'Llegan a fiscal', hora: '07:00', desc: 'Contenedores con arribo fiscal hoy' },
+  { key: 'alert_frontera', label: 'En frontera', hora: '16:00', desc: 'Salieron hace 1–2 días, sin llegar a fiscal' },
+  { key: 'alert_salidas', label: 'Salen hoy', hora: '17:00', desc: 'Operativas con salida hoy' },
+]
+
+function PushBell() {
+  const [open, setOpen] = useState(false)
+  // null = todavía no sabemos / no soportado (campana oculta) · true/false = estado real.
+  const [pushOn, setPushOn] = useState<boolean | null>(null)
+  const [busy, setBusy] = useState(false)
+  // Preferencias de ESTE dispositivo — null hasta que carguen (switches deshabilitados).
+  const [prefs, setPrefs] = useState<PushPrefs | null>(null)
+
+  useEffect(() => {
+    if (!isPushSupported()) return // campana oculta
+    isSubscribed().then(setPushOn).catch(() => setPushOn(false))
+  }, [])
+
+  // Cargar las preferencias al abrir el popover. Si el navegador está suscripto
+  // pero el server no tiene la fila (se limpió como suscripción muerta), re-alta
+  // silenciosa con los defaults — se autorepara sin molestar.
+  useEffect(() => {
+    if (!open || !pushOn || prefs) return
+    let alive = true
+    getPushPrefs()
+      .then(async p => {
+        if (!alive) return
+        if (p) { setPrefs(p); return }
+        await subscribePush()
+        if (alive) setPrefs({ ...DEFAULT_PUSH_PREFS })
+      })
+      .catch(() => { /* los switches quedan deshabilitados */ })
+    return () => { alive = false }
+  }, [open, pushOn, prefs])
+
+  if (pushOn === null) return null
+
+  const handleToggleAll = async () => {
+    if (busy) return
+    // iPhone/iPad sin la PWA instalada: iOS solo entrega push a la app de inicio.
+    if (!pushOn && isIosWithoutStandalone()) {
+      toast.info('Instalá la app primero', {
+        description: 'En iPhone los avisos solo funcionan con la app instalada: Compartir → Agregar a inicio, y activalos desde ahí.',
+        duration: 8000,
+      })
+      return
+    }
+    setBusy(true)
+    try {
+      if (pushOn) {
+        await unsubscribePush()
+        setPushOn(false)
+        setPrefs(null)
+        toast.success('Avisos desactivados en este dispositivo')
+      } else {
+        await subscribePush()
+        setPushOn(true)
+        // El alta conserva las alert_* si la fila ya existía (upsert no las toca)
+        // → leer las preferencias reales en vez de asumir los defaults.
+        const p = await getPushPrefs().catch(() => null)
+        setPrefs(p ?? { ...DEFAULT_PUSH_PREFS })
+        toast.success('Avisos activados', {
+          description: 'Elegí con los switches qué alertas querés recibir en este dispositivo.',
+        })
+      }
+    } catch (err) {
+      toast.error((err as Error)?.message || 'No se pudo cambiar el estado de los avisos')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const handleTogglePref = async (key: keyof PushPrefs) => {
+    if (!prefs || busy) return
+    const prev = prefs
+    const next = { ...prefs, [key]: !prefs[key] }
+    setPrefs(next) // optimista
+    try {
+      const saved = await patchPushPrefs({ [key]: next[key] })
+      setPrefs(saved)
+    } catch (err) {
+      setPrefs(prev) // revert
+      toast.error((err as Error)?.message || 'No se pudo guardar la preferencia')
+    }
+  }
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className={`inline-flex items-center gap-1.5 px-3 h-9 rounded-md text-sm transition-colors border ${
+            pushOn
+              ? 'bg-primary-foreground/20 border-primary-foreground/25 text-primary-foreground'
+              : 'bg-primary-foreground/10 hover:bg-primary-foreground/20 border-primary-foreground/10 text-primary-foreground/85 hover:text-primary-foreground'
+          }`}
+          title={pushOn ? 'Avisos activos en este dispositivo — click para configurar' : 'Activar avisos del día en este dispositivo'}
+        >
+          {pushOn
+            ? <BellRinging size={16} weight="fill" />
+            : <Bell size={16} weight="bold" />}
+          <span className="hidden lg:inline">{pushOn ? 'Avisos activos' : 'Activar avisos'}</span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-80 p-0">
+        <div className="px-4 py-3 border-b border-border">
+          <p className="text-sm font-semibold">Avisos en este dispositivo</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {pushOn
+              ? 'Elegí qué alertas recibir — el horario es cuando llega cada una.'
+              : 'Activalos para elegir qué alertas recibir.'}
+          </p>
+        </div>
+        <div className="px-4 py-1.5">
+          {PUSH_ALERT_OPTIONS.map(opt => (
+            <div key={opt.key} className="flex items-center justify-between gap-3 py-2">
+              <div className="min-w-0">
+                <p className="text-sm leading-tight">
+                  {opt.label} <span className="text-muted-foreground">· {opt.hora}</span>
+                </p>
+                <p className="text-xs text-muted-foreground leading-tight mt-0.5">{opt.desc}</p>
+              </div>
+              <Switch
+                checked={!!pushOn && (prefs ? prefs[opt.key] : true)}
+                disabled={!pushOn || !prefs || busy}
+                onCheckedChange={() => handleTogglePref(opt.key)}
+                aria-label={`${opt.label} a las ${opt.hora}`}
+              />
+            </div>
+          ))}
+        </div>
+        <div className="px-4 py-3 border-t border-border">
+          <Button
+            variant={pushOn ? 'outline' : 'default'}
+            size="sm"
+            className="w-full"
+            disabled={busy}
+            onClick={handleToggleAll}
+          >
+            {busy ? 'Un momento…' : pushOn ? 'Desactivar todos los avisos' : 'Activar avisos en este dispositivo'}
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
   )
 }

@@ -3,7 +3,8 @@
   "outputDirectory": "dist",
   "framework": "vite",
   "crons": [
-    { "path": "/api/notifications/push-daily", "schedule": "0 10 * * *" }
+    { "path": "/api/notifications/push-alerts?slot=manana", "schedule": "0 10 * * *" },
+    { "path": "/api/notifications/push-alerts?slot=tarde", "schedule": "0 19 * * *" }
   ],
   "rewrites": [
     { "source": "/admin", "destination": "/index.html" },

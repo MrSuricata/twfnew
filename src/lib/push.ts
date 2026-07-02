@@ -1,10 +1,27 @@
 // ─── Web Push del admin (cliente) ────────────────────────────────────
-// Suscripción del navegador a los avisos diarios (LIBRE + salidas del día).
-// El SW (`public/sw.js`) es minimalista solo-push: acá vive todo el flujo de
-// permiso → registro → suscripción → alta/baja en el backend.
+// Suscripción del navegador a las alertas del día (4 tipos configurables:
+// días libres, salen hoy, llegan a fiscal, en frontera). El SW
+// (`public/sw.js`) es minimalista solo-push: acá vive todo el flujo de
+// permiso → registro → suscripción → alta/baja/preferencias en el backend.
 // ─────────────────────────────────────────────────────────────────────
 
 import { authFetch } from './authClient'
+
+/** Preferencias de alertas de ESTE dispositivo (columnas de push_subscriptions). */
+export interface PushPrefs {
+  alert_libre: boolean
+  alert_salidas: boolean
+  alert_fiscal: boolean
+  alert_frontera: boolean
+}
+
+/** Defaults del alta: todo activado (igual que la migración). */
+export const DEFAULT_PUSH_PREFS: PushPrefs = {
+  alert_libre: true,
+  alert_salidas: true,
+  alert_fiscal: true,
+  alert_frontera: true,
+}
 
 /** Clave pública VAPID — NO es secreta (identifica a nuestro servidor de push;
  *  el par privado vive en Vercel como VAPID_PRIVATE_KEY). */
@@ -99,5 +116,58 @@ export async function unsubscribePush(): Promise<void> {
   if (!res.ok) {
     const err = await res.json().catch(() => ({} as { error?: string }))
     throw new Error(err.error || `No se pudo dar de baja en el servidor (HTTP ${res.status})`)
+  }
+}
+
+/** Endpoint de la suscripción actual de este navegador (null si no hay). */
+async function currentEndpoint(): Promise<string | null> {
+  const reg = await navigator.serviceWorker.getRegistration()
+  const sub = await reg?.pushManager.getSubscription()
+  return sub?.endpoint ?? null
+}
+
+/** Preferencias de alertas de este dispositivo, leídas del backend.
+ *  null = el dispositivo no figura suscripto en el servidor (nunca se activó,
+ *  o la fila se limpió como suscripción muerta) → el caller puede re-suscribir. */
+export async function getPushPrefs(): Promise<PushPrefs | null> {
+  const endpoint = await currentEndpoint()
+  if (!endpoint) return null
+  const res = await authFetch(`/api/data/push-subscriptions?endpoint=${encodeURIComponent(endpoint)}`)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({} as { error?: string }))
+    throw new Error(err.error || `No se pudieron leer las preferencias (HTTP ${res.status})`)
+  }
+  const data = await res.json().catch(() => ({} as { subscription?: Partial<PushPrefs> | null }))
+  const s = data.subscription
+  if (!s) return null
+  return {
+    alert_libre: s.alert_libre !== false,
+    alert_salidas: s.alert_salidas !== false,
+    alert_fiscal: s.alert_fiscal !== false,
+    alert_frontera: s.alert_frontera !== false,
+  }
+}
+
+/** Actualiza las preferencias de alertas de este dispositivo (switches del
+ *  popover). Devuelve las preferencias como quedaron en el servidor. */
+export async function patchPushPrefs(patch: Partial<PushPrefs>): Promise<PushPrefs> {
+  const endpoint = await currentEndpoint()
+  if (!endpoint) throw new Error('Este dispositivo no está suscripto a los avisos')
+  const res = await authFetch('/api/data/push-subscriptions', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ endpoint, ...patch }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({} as { error?: string }))
+    throw new Error(err.error || `No se pudieron guardar las preferencias (HTTP ${res.status})`)
+  }
+  const data = await res.json().catch(() => ({} as { subscription?: Partial<PushPrefs> }))
+  const s = data.subscription || {}
+  return {
+    alert_libre: s.alert_libre !== false,
+    alert_salidas: s.alert_salidas !== false,
+    alert_fiscal: s.alert_fiscal !== false,
+    alert_frontera: s.alert_frontera !== false,
   }
 }

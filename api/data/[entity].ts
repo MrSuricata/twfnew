@@ -26,6 +26,7 @@ import {
   OperatorRowSchema,
   OperatorAssignmentRowSchema,
   PushSubscriptionSchema,
+  PushPrefsPatchSchema,
 } from '../_lib/schemas.js'
 import { rollupFromOperativasApi } from '../_lib/operativasRollup.js'
 import { broadcastTrucksLive, clientIdFromRequest } from '../_lib/realtimeBroadcast.js'
@@ -1795,11 +1796,29 @@ async function handleAdminUsers(req: VercelRequest, res: VercelResponse, db: any
 // ── Suscripciones Web Push (avisos del día para el equipo) ──────────
 // POST: alta/refresh — el navegador manda su PushSubscription.toJSON() y se
 // upsertea por endpoint (el endpoint identifica al navegador; el email del
-// token identifica a la persona). DELETE: baja por endpoint (campana off).
-// Cualquier admin logueado (owner o equipo) puede suscribirse.
+// token identifica a la persona). El upsert NO toca las columnas alert_* →
+// re-suscribirse conserva las preferencias elegidas.
+// GET ?endpoint= — preferencias de alertas de ESTE dispositivo (popover).
+// PATCH — actualiza las preferencias (switches). DELETE: baja por endpoint
+// (campana off). Cualquier admin logueado (owner o equipo) puede suscribirse.
+
+const PUSH_PREF_COLS = ['alert_libre', 'alert_salidas', 'alert_fiscal', 'alert_frontera'] as const
+const PUSH_SUB_SELECT = 'endpoint, alert_libre, alert_salidas, alert_fiscal, alert_frontera'
 
 async function handlePushSubscriptions(req: VercelRequest, res: VercelResponse, db: any, payload: TokenPayload | null) {
   const admin = payload as AdminPayload | null
+
+  if (req.method === 'GET') {
+    const endpoint = req.query.endpoint as string | undefined
+    if (!endpoint) return res.status(400).json({ error: 'endpoint required' })
+    const { data, error } = await db
+      .from('push_subscriptions')
+      .select(PUSH_SUB_SELECT)
+      .eq('endpoint', endpoint)
+      .maybeSingle()
+    if (error) throw error
+    return res.status(200).json({ subscription: data || null })
+  }
 
   if (req.method === 'POST') {
     const v = validate(PushSubscriptionSchema, req.body)
@@ -1817,6 +1836,28 @@ async function handlePushSubscriptions(req: VercelRequest, res: VercelResponse, 
     if (error) throw error
     logAudit(db, payload, 'activar avisos push', 'push_subscriptions', row.admin_email)
     return res.status(200).json({ saved: true })
+  }
+
+  if (req.method === 'PATCH') {
+    const v = validate(PushPrefsPatchSchema, req.body)
+    if (!v.ok) return res.status(400).json({ error: v.error })
+    const { endpoint } = v.data
+    const updates: Record<string, boolean> = {}
+    for (const col of PUSH_PREF_COLS) {
+      const val = v.data[col]
+      if (typeof val === 'boolean') updates[col] = val
+    }
+    if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No valid fields' })
+    const { data: u, error } = await db
+      .from('push_subscriptions')
+      .update(updates)
+      .eq('endpoint', endpoint)
+      .select(PUSH_SUB_SELECT)
+      .maybeSingle()
+    if (error) throw error
+    if (!u) return res.status(404).json({ error: 'Suscripción no encontrada — reactivá los avisos en este dispositivo' })
+    logAudit(db, payload, 'preferencias avisos push', 'push_subscriptions', (admin?.user || '').toLowerCase())
+    return res.status(200).json({ subscription: u })
   }
 
   if (req.method === 'DELETE') {

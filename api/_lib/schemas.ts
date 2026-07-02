@@ -343,6 +343,16 @@ export const PushSubscriptionSchema = z.object({
   }),
 })
 
+/** PATCH de preferencias de alertas de una suscripción push (switches del
+ *  popover de la campana) — el endpoint identifica al dispositivo. */
+export const PushPrefsPatchSchema = z.object({
+  endpoint: z.string().url().max(1000),
+  alert_libre: z.boolean().optional(),
+  alert_salidas: z.boolean().optional(),
+  alert_fiscal: z.boolean().optional(),
+  alert_frontera: z.boolean().optional(),
+})
+
 // ─── validate() helper ──────────────────────────────────────────────
 
 export type ValidationResult<T> =
