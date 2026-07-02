@@ -1,6 +1,7 @@
 import type { ParsedShipment } from '@/lib/shipmentTypes'
 import type { PendingSalidaItem, DestZone } from '@/lib/agendaUtils'
 import { pendingSalida, formatDateShort, daysUntil } from '@/lib/agendaUtils'
+import { getOperativaColor } from '@/lib/agendaTypes'
 import { useMemo, useState } from 'react'
 import { Package } from '@phosphor-icons/react'
 
@@ -37,6 +38,15 @@ function libreLabel(libreStr: string): string {
   if (days === 0) return `${dateLabel} (vence HOY)`
   if (days === 1) return `${dateLabel} (mañana)`
   return `${dateLabel} (${days}d)`
+}
+
+/** Color del indicador temporal ("Arribó hace Xd" / "Llega en Xd").
+ *  Si YA ARRIBÓ, hereda la urgencia del LIBRE (misma lógica de color que la
+ *  fila Libre); si el LIBRE no apura, queda apenas destacado. Futuras: muted. */
+function arrivalIndicatorClass(tier: number, libreStr: string): string {
+  if (tier !== 0) return 'text-muted-foreground'
+  const libreClass = libreUrgencyClass(libreStr)
+  return libreClass === 'text-muted-foreground' ? 'font-medium text-foreground/70' : libreClass
 }
 
 /** Derive the ordered list of zones that actually appear in `items`.
@@ -143,16 +153,23 @@ export default function PendingSalidaSection({ shipments, editable, onCoordinar 
 
       {/* Grid of cards */}
       <div className="p-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
-        {filteredItems.map(({ shipment: s, op }, idx) => {
+        {filteredItems.map(({ shipment: s, op, arrival }, idx) => {
           const cntr = (op.CNTR_OP || s.CNTR || '').trim()
           const ref = (s.REF || '').replace(/^A/i, '')
           const cliente = s.CLIENTE || op.CLIENTE_OP || '—'
           const deposito = (op.DEPOSITO || '').toUpperCase() || '—'
+          const transporte = (op.TRANSPORTE || '').trim()
           const etaLabel = formatDateShort(s.ETA || op.ETA_OP || '')
           const libreStr = op.LIBRE || s.LIBRE_HASTA || ''
           const kg = op.KG ?? 0
           const pkgs = op.PKGS ?? 0
           const hasCargoInfo = kg > 0 || pkgs > 0
+          // Badge de operativa: mismo mapa de colores que los chips del calendario
+          // (getOperativaColor: CONTENEDOR rojo, TRASIEGO azul, CARGA A PISO ámbar).
+          const operativa = (op.OPERATIVA || '').trim()
+          const opColor = operativa ? getOperativaColor(operativa) : null
+          // Operativa desconocida (mapa devuelve "Otro") → mostrar el valor real.
+          const opBadgeLabel = !opColor ? 'TBD' : opColor.label === 'Otro' ? operativa : opColor.label
 
           return (
             <button
@@ -170,23 +187,37 @@ export default function PendingSalidaSection({ shipments, editable, onCoordinar 
               <div className="h-1 bg-blue-500" />
 
               <div className="px-2.5 py-2 space-y-1">
-                {/* Row 1: REF bold + CNTR mono */}
-                <div className="flex items-baseline gap-1.5 min-w-0">
+                {/* Row 1: REF bold + CNTR mono + badge de operativa */}
+                <div className="flex items-center gap-1.5 min-w-0">
                   <span className="text-xs font-bold text-foreground shrink-0">{ref}</span>
                   <span className="text-[10.5px] font-mono text-muted-foreground truncate">{cntr}</span>
+                  <span
+                    className={`ml-auto shrink-0 rounded-full px-1.5 py-px text-[9px] font-semibold leading-4
+                      ${opColor ? `${opColor.bg} ${opColor.textColor}` : 'bg-muted text-muted-foreground'}`}
+                  >
+                    {opBadgeLabel}
+                  </span>
                 </div>
 
                 {/* Row 2: Cliente */}
                 <div className="text-[11px] text-foreground/80 truncate">{cliente}</div>
 
-                {/* Row 3: Depósito */}
+                {/* Row 3: Depósito + transporte asignado */}
                 <div className="text-[10.5px] text-muted-foreground truncate">
                   <span className="font-medium text-foreground/70">{deposito}</span>
+                  <span> · </span>
+                  {transporte ? (
+                    <span>{transporte}</span>
+                  ) : (
+                    <span className="text-amber-600/90">Sin transporte</span>
+                  )}
                 </div>
 
-                {/* Row 4: ETA */}
+                {/* Row 4: ETA + indicador de proximidad de llegada */}
                 <div className="text-[10px] text-muted-foreground">
                   ETA <span className="font-medium">{etaLabel || '—'}</span>
+                  <span> · </span>
+                  <span className={arrivalIndicatorClass(arrival.tier, libreStr)}>{arrival.label}</span>
                 </div>
 
                 {/* Row 5: LIBRE with urgency color */}
