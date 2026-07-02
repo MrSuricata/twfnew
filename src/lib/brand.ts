@@ -134,25 +134,30 @@ export function resolveBrandId(): BrandId {
   if (isBrandId(env)) return env
 
   if (typeof window !== 'undefined') {
-    // 2) Manual override for switching brand on a shared deployment:
+    // 2) Runtime hostname match — cuando el hostname resuelve a una marca
+    //    conocida, MANDA. Los dominios de producción y *.vercel.app propios
+    //    resuelven solos; un override sticky viejo (?brand= de la etapa
+    //    interina) no puede dejar a un usuario clavado en la marca equivocada,
+    //    así que lo limpiamos si contradice el hostname.
+    const host = window.location.hostname.toLowerCase()
+    let hostBrand: BrandId | null = null
+    for (const b of Object.values(BRANDS)) {
+      if (b.domains.some(d => host === d || host.endsWith('.' + d))) { hostBrand = b.id; break }
+    }
+    if (!hostBrand && host.includes('mediterranea')) hostBrand = 'med'
+    if (hostBrand) {
+      try { localStorage.removeItem('twf-brand-override') } catch { /* ignore */ }
+      return hostBrand
+    }
+
+    // 3) Hostname NO reconocido (localhost, previews): override manual
     //    ?brand=med (sticky via localStorage) / ?brand=twf to reset.
-    //    Interim mechanism so Brian can operate Mediterránea on the existing
-    //    Vercel project before its own domain is configured. Once
-    //    mediterraneacarghas.com.ar points at this project, hostname match
-    //    (step 3) resolves the brand automatically and this is unnecessary.
     try {
       const q = new URLSearchParams(window.location.search).get('brand')
       if (isBrandId(q)) { localStorage.setItem('twf-brand-override', q); return q }
       const stored = localStorage.getItem('twf-brand-override')
       if (isBrandId(stored)) return stored
     } catch { /* ignore */ }
-
-    // 3) Runtime hostname match.
-    const host = window.location.hostname.toLowerCase()
-    for (const b of Object.values(BRANDS)) {
-      if (b.domains.some(d => host === d || host.endsWith('.' + d))) return b.id
-    }
-    if (host.includes('mediterranea')) return 'med'
   }
 
   return DEFAULT_BRAND

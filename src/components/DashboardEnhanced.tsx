@@ -86,11 +86,13 @@ interface DashboardEnhancedProps {
   onDeleteShipment?: (op: UnifiedOperation) => void
   onPatchFclField?: (dbId: string, edits: Record<string, unknown>) => void
   onRenameRef?: (op: UnifiedOperation, newRef: string, pin: string) => Promise<void>
+  /** Refetch completo desde la DB (post-flip las cargas viven ahí, no en Sheets). */
+  onReloadFromDB?: () => Promise<void>
 }
 
 const ONE_DAY_MS = 86_400_000
 
-export default function DashboardEnhanced({ onLogout, clients = [], shipments = [], documents = [], reports = [], originPhotos = [], quotes = [], trucks = [], truckLoads = [], lclAir = [], billing = [], operators = [], assignments = [], dbShipments = [], dbSyncError = null, onUpdateShipments, onUpdateClients, onUpdateDocuments, onUpdateReports, onUpdateOriginPhotos, onUpdateQuotes, onUpdateTrucks, onDeleteTruck, onUpdateTruckLoads, onDeleteTruckLoad, onUpdateLclAir, onDeleteLclAir, onUpdateBilling, onClearBilling, onUpdateOperators, onDeleteOperator, onAssignOperator, onPatchShipment, onCreateShipment, onDeleteShipment, onPatchFclField, onRenameRef, onRefreshTrucks }: DashboardEnhancedProps) {
+export default function DashboardEnhanced({ onLogout, clients = [], shipments = [], documents = [], reports = [], originPhotos = [], quotes = [], trucks = [], truckLoads = [], lclAir = [], billing = [], operators = [], assignments = [], dbShipments = [], dbSyncError = null, onUpdateShipments, onUpdateClients, onUpdateDocuments, onUpdateReports, onUpdateOriginPhotos, onUpdateQuotes, onUpdateTrucks, onDeleteTruck, onUpdateTruckLoads, onDeleteTruckLoad, onUpdateLclAir, onDeleteLclAir, onUpdateBilling, onClearBilling, onUpdateOperators, onDeleteOperator, onAssignOperator, onPatchShipment, onCreateShipment, onDeleteShipment, onPatchFclField, onRenameRef, onRefreshTrucks, onReloadFromDB }: DashboardEnhancedProps) {
   const brand = useBrand()
   const ops = brand.capabilities.opsAdmin
   // Flip Etapa 4: post-flip las FCL viven en dbShipments. Reconstruirlas a
@@ -124,10 +126,13 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
 
   // Manual refresh from the navbar — pulls fresh data from Google Sheets via
   // /api/sheets/sync (drops it into shipments_cache and updates local state).
+  // Post-flip el sync devuelve { shipments: [], flipped: true } (la web es master
+  // de FCL): en ese caso refetcheamos TODO desde la DB — es la única forma de
+  // traer las ediciones de los colegas sin F5.
   const handleRefresh = async () => {
     if (isRefreshing) return
     setIsRefreshing(true)
-    const t = toast.loading('Sincronizando con Google Sheets…')
+    const t = toast.loading('Actualizando datos…')
     try {
       const res = await authFetch('/api/sheets/sync')
       if (!res.ok) {
@@ -135,6 +140,13 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
         throw new Error(err.error || `HTTP ${res.status}`)
       }
       const data = await res.json()
+      if (data.flipped && onReloadFromDB) {
+        await onReloadFromDB()
+        // loadDataFromDB ya muestra su propio toast de éxito (o banner de error):
+        // solo cerramos el loading para no duplicar mensajes.
+        toast.dismiss(t)
+        return
+      }
       let fresh = data.shipments || []
       // Etapa 3: el sync devuelve la planilla CRUDA (sin __dbId ni ediciones
       // web). Re-leemos del espejo recién actualizado para no perder las

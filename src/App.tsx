@@ -139,8 +139,10 @@ function App() {
   const pendingBillingWritesRef = useRef(0)
 
   // ── Load data from Supabase when admin logs in ──
-  const loadDataFromDB = useCallback(async () => {
-    if (dbLoadedRef.current || dbLoadingRef.current) return
+  // `force`: saltea el guard de "ya cargué" para refetches explícitos (rename de
+  // REF, botón Refrescar post-flip). Nunca corre dos cargas en paralelo.
+  const loadDataFromDB = useCallback(async (force = false) => {
+    if ((dbLoadedRef.current && !force) || dbLoadingRef.current) return
     dbLoadingRef.current = true
     setIsDataLoading(true)
     const loadStartTs = Date.now()
@@ -700,7 +702,9 @@ function App() {
   const handleRenameRef = async (op: UnifiedOperation, newRef: string, pin: string): Promise<void> => {
     if (!op.dbId) return
     await renameShipmentRef(op.dbId, newRef, pin)
-    await loadDataFromDB()
+    // force=true: sin esto el guard de loadDataFromDB lo convertía en no-op
+    // (dbLoadedRef ya es true) y la UI quedaba mostrando la REF vieja hasta F5.
+    await loadDataFromDB(true)
     toast.success(`REF cambiada: ${op.ref} → ${newRef}`)
   }
 
@@ -978,6 +982,7 @@ function App() {
           onDeleteShipment={handleDeleteShipment}
           onPatchFclField={handlePatchFclField}
           onRenameRef={handleRenameRef}
+          onReloadFromDB={() => loadDataFromDB(true)}
         />
       </>
     )

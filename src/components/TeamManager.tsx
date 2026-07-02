@@ -92,6 +92,14 @@ export default function TeamManager({ refreshKey = 0 }: { refreshKey?: number })
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(fEmail.trim())) { toast.error('El email no tiene un formato válido'); return }
     if (!editing && fPassword.length < 8) { toast.error('La contraseña necesita al menos 8 caracteres'); return }
     if (editing && fPassword && fPassword.length < 8) { toast.error('La contraseña nueva necesita al menos 8 caracteres'); return }
+    // Cada cliente del patrón (separado por coma) debe tener ≥4 caracteres — el
+    // matcheo del backend ignora los más cortos EN SILENCIO y el usuario quedaría
+    // viendo 0 cargas sin error. Mismo chequeo que ClientManager.
+    const shortToken = fPattern.split(',').map(t => t.trim()).find(t => t.length > 0 && t.length < 4)
+    if (shortToken) {
+      toast.error(`Cada cliente del patrón debe tener al menos 4 caracteres. "${shortToken}" tiene ${shortToken.length}. Para clientes cortos (VMG, AIT) usá la razón social como figura en la planilla.`)
+      return
+    }
     if (saving) return
     setSaving(true)
     try {
@@ -344,7 +352,7 @@ export default function TeamManager({ refreshKey = 0 }: { refreshKey?: number })
             <div className="space-y-1.5">
               <Label htmlFor="tm-pattern">Clientes que puede ver</Label>
               <Input id="tm-pattern" value={fPattern} onChange={e => setFPattern(e.target.value)} placeholder="Ej: PERETTI, TOMASELLI (vacío = todas)" />
-              <p className="text-[11px] text-muted-foreground">Separá varios con coma. Vacío = ve <b>todas</b> las cargas (como el owner). Coincide por nombre de cliente.</p>
+              <p className="text-[11px] text-muted-foreground">Separá varios con coma. Vacío = ve <b>todas</b> las cargas (como el owner). Coincide por nombre de cliente — mínimo 4 letras por cliente; para clientes cortos (VMG, AIT) usá la razón social como figura en la planilla.</p>
             </div>
           </div>
           <DialogFooter>
