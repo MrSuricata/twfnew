@@ -332,6 +332,17 @@ export const OtpVerifySchema = z.object({
   code: z.string().regex(/^\d{6}$/, 'must be 6 digits'),
 })
 
+/** Suscripción Web Push (JSON estándar de PushSubscription.toJSON()).
+ *  El navegador manda también expirationTime — Zod la descarta solo
+ *  (strip por default): guardamos únicamente endpoint + claves. */
+export const PushSubscriptionSchema = z.object({
+  endpoint: z.string().url().max(1000),
+  keys: z.object({
+    p256dh: z.string().min(1).max(300),
+    auth: z.string().min(1).max(300),
+  }),
+})
+
 // ─── validate() helper ──────────────────────────────────────────────
 
 export type ValidationResult<T> =
