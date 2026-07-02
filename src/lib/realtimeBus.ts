@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { getClientSessionId } from './clientSession'
 
 // Bus de tiempo real para co-edición de camiones (Fase 1: solo "timbre").
 // El browser se conecta ÚNICAMENTE al canal Realtime para recibir avisos de
@@ -9,7 +10,10 @@ import { createClient } from '@supabase/supabase-js'
 export const TRUCKS_LIVE_CHANNEL = 'trucks-live'
 
 export type TrucksLiveKind = 'truck' | 'truck_load'
-export interface TrucksLiveMessage { kind: TrucksLiveKind; truckId?: string }
+// clientId: id de sesión del browser que ORIGINÓ la escritura (el backend lo
+// copia del header X-Client-Id al payload del broadcast). Sirve para que el
+// que guarda ignore su propio timbre y no se refetchee en medio de su guardado.
+export interface TrucksLiveMessage { kind: TrucksLiveKind; truckId?: string; clientId?: string }
 
 /** Config del cliente Realtime SOLO si están las dos env vars. null = bus no-op. */
 export function resolveRealtimeConfig(
@@ -25,6 +29,12 @@ export function isTrucksLiveMessage(x: unknown): x is TrucksLiveMessage {
   if (!x || typeof x !== 'object') return false
   const k = (x as { kind?: unknown }).kind
   return k === 'truck' || k === 'truck_load'
+}
+
+/** true si el timbre lo originó ESTE browser (broadcast propio → ignorar).
+ *  Broadcasts sin clientId (deploys viejos / otros emisores) cuentan como ajenos. */
+export function isOwnTrucksLiveMessage(msg: TrucksLiveMessage, ownClientId: string): boolean {
+  return !!msg.clientId && !!ownClientId && msg.clientId === ownClientId
 }
 
 /**
@@ -56,7 +66,12 @@ export function subscribeTrucksLive(onMessage: (msg: TrucksLiveMessage) => void)
     const channel = client
       .channel(TRUCKS_LIVE_CHANNEL)
       .on('broadcast', { event: 'change' }, (msg: { payload?: unknown }) => {
-        if (isTrucksLiveMessage(msg.payload)) onMessage(msg.payload)
+        if (!isTrucksLiveMessage(msg.payload)) return
+        // Timbre PROPIO (escritura originada por este browser): ignorar. El estado
+        // local ya es la verdad (optimista + POST confirmado); refetchear acá era
+        // lo que metía GETs en plena secuencia de guardado multi-paso.
+        if (isOwnTrucksLiveMessage(msg.payload, getClientSessionId())) return
+        onMessage(msg.payload)
       })
       .subscribe()
     return () => {

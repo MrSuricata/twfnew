@@ -27,7 +27,7 @@ import {
   OperatorAssignmentRowSchema,
 } from '../_lib/schemas.js'
 import { rollupFromOperativasApi } from '../_lib/operativasRollup.js'
-import { broadcastTrucksLive } from '../_lib/realtimeBroadcast.js'
+import { broadcastTrucksLive, clientIdFromRequest } from '../_lib/realtimeBroadcast.js'
 import { z } from 'zod'
 import { uploadPhotoObjects, deletePhotoObjects, signPhotoUrls, signPhotoUrl, THUMB_TTL, FULL_TTL } from '../_lib/photoStorage.js'
 
@@ -1033,7 +1033,9 @@ async function handleTrucks(req: VercelRequest, res: VercelResponse, db: any, pa
 
     const { error } = await db.from('trucks').upsert(deduped, { onConflict: 'id' })
     if (error) throw error
-    void broadcastTrucksLive('truck') // timbre co-edición: avisar a los demás browsers
+    // timbre co-edición: avisar a los demás browsers (el emisor se identifica
+    // con clientId para poder ignorar su propio timbre)
+    void broadcastTrucksLive('truck', undefined, clientIdFromRequest(req))
 
     // Auditar crear / publicar / despublicar (cambios de ciclo de vida únicamente)
     for (const row of deduped) {
@@ -1078,7 +1080,7 @@ async function handleTrucks(req: VercelRequest, res: VercelResponse, db: any, pa
     // truck_loads have ON DELETE CASCADE
     const { error } = await db.from('trucks').delete().eq('id', id)
     if (error) throw error
-    void broadcastTrucksLive('truck', id) // timbre co-edición
+    void broadcastTrucksLive('truck', id, clientIdFromRequest(req)) // timbre co-edición
     logAudit(db, payload, 'eliminar', 'camion', truckCode, { cargas_cascadeadas: cascadedRefs })
     return res.status(200).json({ deleted: true })
   }
@@ -1159,7 +1161,7 @@ async function handleTruckLoads(req: VercelRequest, res: VercelResponse, db: any
 
     const { error } = await db.from('truck_loads').upsert(rows, { onConflict: 'id' })
     if (error) throw error
-    void broadcastTrucksLive('truck_load') // timbre co-edición
+    void broadcastTrucksLive('truck_load', undefined, clientIdFromRequest(req)) // timbre co-edición
 
     // Auditar cargas nuevas (agrupadas por truck_id)
     const newRows = rows.filter(r => !prevLoadsById.has(r.id))
@@ -1236,7 +1238,7 @@ async function handleTruckLoads(req: VercelRequest, res: VercelResponse, db: any
 
       const { error } = await db.from('truck_loads').delete().eq('id', id)
       if (error) throw error
-      void broadcastTrucksLive('truck_load') // timbre co-edición
+      void broadcastTrucksLive('truck_load', undefined, clientIdFromRequest(req)) // timbre co-edición
       logAudit(db, payload, 'quitar_carga', 'camion', resolvedCode || id, { ref: sourceRef })
       return res.status(200).json({ deleted: true })
     }
@@ -1250,7 +1252,7 @@ async function handleTruckLoads(req: VercelRequest, res: VercelResponse, db: any
 
       const { error } = await db.from('truck_loads').delete().eq('truck_id', truckId)
       if (error) throw error
-      void broadcastTrucksLive('truck_load') // timbre co-edición
+      void broadcastTrucksLive('truck_load', undefined, clientIdFromRequest(req)) // timbre co-edición
       logAudit(db, payload, 'quitar_cargas_bulk', 'camion', truckId, { refs })
       return res.status(200).json({ deleted: true })
     }
