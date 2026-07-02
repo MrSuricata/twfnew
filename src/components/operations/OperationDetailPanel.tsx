@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { LockSimple, Truck as TruckIcon, Archive, ArrowCounterClockwise, Trash, Plus, X, PencilSimple } from '@phosphor-icons/react'
+import { LockSimple, Truck as TruckIcon, Archive, ArrowCounterClockwise, Trash, Plus, X, PencilSimple, Check } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import type { Operator, UnifiedOperation } from '@/lib/operationsTypes'
 import {
@@ -26,6 +26,22 @@ const NUM_FMT = new Intl.NumberFormat('es-UY', { maximumFractionDigits: 2 })
 // Nota: los campos bool (tlx, wood, oog, imo, noApilable, seguro, certi, impresa)
 // se sacan de las secciones y se renderizan como chips interactivos en la sección Carga.
 const SECTIONS: { title: string; fields: { key: keyof UnifiedOperation; label: string; kind?: 'number' | 'date'; wide?: boolean; dateDisplay?: boolean }[] }[] = [
+  {
+    // Fechas PRIMERO (pedido 02/07): es lo que más se consulta al abrir el panel —
+    // queda apenas debajo de "Datos clave de la carga" / fechas por contenedor.
+    title: 'Fechas',
+    fields: [
+      // dateDisplay: se MUESTRAN dd/MM/yyyy (fmtDateDMY, display only) — el valor
+      // guardado sigue en ISO y la edición no cambia.
+      { key: 'etd', label: 'ETD', dateDisplay: true },
+      { key: 'eta', label: 'ETA', dateDisplay: true },
+      { key: 'salida', label: 'Salida', dateDisplay: true },
+      { key: 'etaFisc', label: 'ETA fiscal', dateDisplay: true },
+      // LIBRE se movió a "Datos clave de la carga" (ViabilityBlock): es dato de
+      // la carga y se edita ahí (propaga a todos los contenedores).
+      { key: 'seguimiento', label: 'Seguimiento', dateDisplay: true },
+    ],
+  },
   {
     title: 'Identificación',
     fields: [
@@ -51,20 +67,6 @@ const SECTIONS: { title: string; fields: { key: keyof UnifiedOperation; label: s
       { key: 'dischargePort', label: 'Pto. descarga' },
       { key: 'destPort', label: 'Destino' },
       { key: 'pais', label: 'País' },
-    ],
-  },
-  {
-    title: 'Fechas',
-    fields: [
-      // dateDisplay: se MUESTRAN dd/MM/yyyy (fmtDateDMY, display only) — el valor
-      // guardado sigue en ISO y la edición no cambia.
-      { key: 'etd', label: 'ETD', dateDisplay: true },
-      { key: 'eta', label: 'ETA', dateDisplay: true },
-      { key: 'salida', label: 'Salida', dateDisplay: true },
-      { key: 'etaFisc', label: 'ETA fiscal', dateDisplay: true },
-      // LIBRE se movió a "Datos clave de la carga" (ViabilityBlock): es dato de
-      // la carga y se edita ahí (propaga a todos los contenedores).
-      { key: 'seguimiento', label: 'Seguimiento', dateDisplay: true },
     ],
   },
   {
@@ -379,6 +381,8 @@ export default function OperationDetailPanel({
                 <div className="mt-3">
                   <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1.5">Indicadores</p>
                   <div className="flex flex-wrap gap-1.5">
+                    {/* Toggles, no tags: activo = tinte de marca + check; inactivo =
+                        borde punteado "para completar". Misma lógica de siempre. */}
                     {FLAGS.map(f => {
                       const raw = (op as unknown as Record<string, unknown>)[f.key]
                       const isOn = raw === true || raw === 'SI'
@@ -389,12 +393,14 @@ export default function OperationDetailPanel({
                           type="button"
                           onClick={mode ? () => commit(f.key, !isOn) : undefined}
                           disabled={!mode}
-                          className={`rounded-full border px-2.5 py-0.5 text-xs transition-colors ${
+                          title={mode ? (isOn ? `Quitar ${f.label}` : `Marcar ${f.label}`) : 'Solo lectura (viene de la planilla)'}
+                          className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs select-none transition-all duration-150 ${
                             isOn
-                              ? 'bg-green-50 border-green-300 text-green-700 font-semibold'
-                              : 'bg-card border-border text-muted-foreground'
-                          } ${mode ? 'hover:opacity-80 cursor-pointer' : 'cursor-default'}`}
+                              ? 'bg-primary/10 border-primary/30 text-primary font-semibold'
+                              : 'border-dashed border-border text-muted-foreground'
+                          } ${mode ? 'cursor-pointer hover:ring-2 hover:ring-primary/20' : 'cursor-default'}`}
                         >
+                          {isOn && <Check size={12} weight="bold" />}
                           {f.label}
                         </button>
                       )

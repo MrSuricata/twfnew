@@ -17,6 +17,7 @@ import {
   Truck as TruckIcon,
   Receipt,
   Table as TableIcon,
+  Globe,
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import { authFetch, getAdminLevel } from '@/lib/authClient'
@@ -105,7 +106,20 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
     [shipments, dbShipments],
   )
   // TWF brand has no ops tabs → land on the first content tab.
-  const [activeTab, setActiveTab] = useState(ops ? 'hoy' : 'case-studies')
+  const [activeTab, setActiveTab] = useState(ops ? 'hoy' : 'contenido')
+  // Sub-pestaña de "Contenido web" (Casos de éxito / Testimonios). Vive acá para
+  // que la CommandPalette pueda abrir directo la sub-pestaña correcta.
+  const [contenidoTab, setContenidoTab] = useState<'casos' | 'testimonios'>('casos')
+  // Navegación por value (CommandPalette): los values viejos 'case-studies' y
+  // 'testimonials' ahora son sub-pestañas de "Contenido web" → mapearlos.
+  const navigateTab = useCallback((v: string) => {
+    if (v === 'case-studies' || v === 'testimonials') {
+      setContenidoTab(v === 'testimonials' ? 'testimonios' : 'casos')
+      setActiveTab('contenido')
+      return
+    }
+    setActiveTab(v)
+  }, [])
   // Pestaña Equipo: solo el owner (Brian) — el backend re-valida igual.
   const isOwner = getAdminLevel() === 'owner'
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -189,8 +203,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
       analytics: 'Analíticas',
       shipments: 'Cargas',
       'excel-import': 'Importar datos',
-      'case-studies': 'Casos de Éxito',
-      testimonials: 'Testimonios',
+      contenido: 'Contenido web',
       clients: 'Clientes',
       partners: 'Partners',
       quotes: 'Cotizaciones',
@@ -208,7 +221,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
       <CommandPalette
         shipments={fclShipments}
         clients={clients}
-        onNavigate={setActiveTab}
+        onNavigate={navigateTab}
         onLogout={onLogout}
       />
 
@@ -271,7 +284,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-8">
         <Breadcrumbs
           items={getBreadcrumbs()}
-          onHomeClick={activeTab !== (ops ? 'hoy' : 'case-studies') ? () => setActiveTab(ops ? 'hoy' : 'case-studies') : undefined}
+          onHomeClick={activeTab !== (ops ? 'hoy' : 'contenido') ? () => setActiveTab(ops ? 'hoy' : 'contenido') : undefined}
         />
 
         <Tabs
@@ -336,13 +349,12 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
               <span className="hidden sm:inline">Importar</span>
             </TabsTrigger>
             </>)}
-            <TabsTrigger value="case-studies" className="tab-underline" aria-label="Casos">
-              <Star size={16} className="mr-1.5" />
-              <span className="hidden sm:inline">Casos</span>
-            </TabsTrigger>
-            <TabsTrigger value="testimonials" className="tab-underline" aria-label="Testimonios">
-              <ChatCircleText size={16} className="mr-1.5" />
-              <span className="hidden sm:inline">Testimonios</span>
+            {/* Contenido de la landing pública (casos + testimonios) en una sola
+                pestaña con sub-selector. Partners queda al final, junto a Equipo:
+                son usuarios, no contenido. */}
+            <TabsTrigger value="contenido" className="tab-underline" aria-label="Contenido web">
+              <Globe size={16} className="mr-1.5" />
+              <span className="hidden sm:inline">Contenido web</span>
             </TabsTrigger>
             {ops && (<>
             <TabsTrigger value="clients" className="tab-underline" aria-label="Clientes">
@@ -469,12 +481,27 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
             />
           </TabsContent>
 
-          <TabsContent value="case-studies">
-            <CaseStudiesEditor />
-          </TabsContent>
-
-          <TabsContent value="testimonials">
-            <TestimonialsEditor />
+          <TabsContent value="contenido">
+            {/* Sub-selector Casos/Testimonios: Tabs anidadas con el estilo pill por
+                defecto (mismo patrón que Camiones · LCL/Aéreos en TrucksManagement). */}
+            <Tabs value={contenidoTab} onValueChange={v => setContenidoTab(v as 'casos' | 'testimonios')} className="space-y-4">
+              <TabsList>
+                <TabsTrigger value="casos" className="gap-1.5">
+                  <Star size={16} />
+                  Casos de éxito
+                </TabsTrigger>
+                <TabsTrigger value="testimonios" className="gap-1.5">
+                  <ChatCircleText size={16} />
+                  Testimonios
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="casos">
+                <CaseStudiesEditor />
+              </TabsContent>
+              <TabsContent value="testimonios">
+                <TestimonialsEditor />
+              </TabsContent>
+            </Tabs>
           </TabsContent>
 
           <TabsContent value="clients">
