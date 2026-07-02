@@ -20,6 +20,7 @@ import {
 } from '@/lib/todayFilters'
 import ShipmentDetailsDialog from './ShipmentDetailsDialog'
 import ContainerQuickEdit from './operations/ContainerQuickEdit'
+import { deriveKnownTransportes } from '@/lib/operationsTypes'
 import type { ShipmentDocument, OperativeReport, OriginPhoto } from '@/lib/quotationTypes'
 import type { Truck as TruckType, TruckLoad } from '@/lib/truckTypes'
 import { deriveTruckDisplayInfo, deriveTruckDisplayStatus } from '@/lib/truckTypes'
@@ -69,6 +70,12 @@ export default function TodayDashboard({
   const [quickEditOpen, setQuickEditOpen] = useState(false)
 
   const snapshot = useMemo(() => buildTodaySnapshot(shipments), [shipments])
+
+  // Transportes ya usados en las cargas → sugerencias del combo Transporte del quick-edit.
+  const knownTransportes = useMemo(
+    () => deriveKnownTransportes(shipments.flatMap(s => (s.operativas ?? []).map(o => o.TRANSPORTE))),
+    [shipments]
+  )
 
   // 🚛 Consolidados en movimiento: carga/sale/llega HOY o en frontera ahora.
   // Estados derivados de las fechas del camión (misma lógica que sus cargas).
@@ -285,6 +292,7 @@ export default function TodayDashboard({
           shipment={quickEditMatch.shipment}
           cntr={quickEditMatch.op.CNTR_OP || quickEditMatch.shipment.CNTR || ''}
           editable={!!onPatchShipment}
+          knownTransportes={knownTransportes}
           open={quickEditOpen}
           onOpenChange={(o) => {
             setQuickEditOpen(o)

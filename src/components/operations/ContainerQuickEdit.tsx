@@ -1,5 +1,5 @@
 // ContainerQuickEdit — centered modal Dialog para editar las fechas de UN contenedor.
-// Salida MVD + Arribo fiscal + Lugar. Botón "Más datos →" abre el panel completo.
+// Salida MVD + Arribo fiscal + Lugar + Transporte. Botón "Más datos →" abre el panel completo.
 // Convertido de Popover a Dialog (2026-06) — centrado en pantalla, visualmente limpio.
 
 import { useState, useRef } from 'react'
@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/dialog'
 import type { ParsedShipment, OperativasRecord } from '@/lib/shipmentTypes'
 import { getShipmentStatus } from '@/lib/shipmentTypes'
+import { buildPerContainerPatch } from '@/lib/operationsTypes'
 import { isSalidaBeforeArrival, fmtDMY } from '@/lib/salidaCheck'
 
 // ─── Lugar options (mirrors ContainerDatesSection) ────────────────────────
@@ -109,6 +110,8 @@ export interface ContainerQuickEditProps {
   onOpenChange: (open: boolean) => void
   /** Unused in Dialog mode — kept for API compatibility with call sites. */
   children?: React.ReactNode
+  /** Transportes ya usados en las cargas → sugerencias del combo Transporte. */
+  knownTransportes?: string[]
   onPatch: (dbId: string, fields: Record<string, unknown>) => void | Promise<void>
   onMasDatos: () => void
   onSaved?: () => void
@@ -122,6 +125,7 @@ export default function ContainerQuickEdit({
   editable,
   open,
   onOpenChange,
+  knownTransportes = [],
   onPatch,
   onMasDatos,
 }: ContainerQuickEditProps) {
@@ -143,12 +147,20 @@ export default function ContainerQuickEdit({
   // Draft state for date inputs (commit on blur/Enter)
   // LIBRE se movió a "Datos clave de la carga" (ViabilityBlock): es dato de la
   // carga, se edita a nivel carga y propaga a todos los contenedores. Acá el
-  // quick-edit solo toca salida / arribo fiscal / lugar (por contenedor).
+  // quick-edit toca salida / arribo fiscal / lugar (por contenedor) + transporte
+  // (nivel-carga: propaga a todos los contenedores vía buildPerContainerPatch).
   const [drafts, setDrafts] = useState<{ salida: string; etaFisc: string }>({
     salida: currentOp.SALIDA || '',
     etaFisc: currentOp.ETA_FISC || '',
   })
   const [lugar, setLugar] = useState<string>(currentOp.LUGAR_SALIDA || '')
+  // Transporte es dato de la CARGA: valor actual = el del contenedor o, si está
+  // vacío, el primero no-vacío del array (misma semántica firstWith del rollup).
+  const normTrans = (s: string) => s.trim().toUpperCase()
+  const initialTransporte = normTrans(
+    currentOp.TRANSPORTE || existing.find(o => o.TRANSPORTE)?.TRANSPORTE || ''
+  )
+  const [transporte, setTransporte] = useState<string>(initialTransporte)
   const [saving, setSaving] = useState(false)
 
   // Fix 2: guard against double-save (Enter+blur fires two commitSave calls).
@@ -161,6 +173,7 @@ export default function ContainerQuickEdit({
       salida: currentOp.SALIDA || '',
       etaFisc: currentOp.ETA_FISC || '',
       lugar: currentOp.LUGAR_SALIDA || '',
+      transporte: initialTransporte,
     })
   )
 
@@ -175,13 +188,14 @@ export default function ContainerQuickEdit({
    * Returns early if nothing changed since the last commit (Fix 2).
    */
   const commitSave = async (
-    overrides?: { salida?: string; etaFisc?: string; lugar?: string }
+    overrides?: { salida?: string; etaFisc?: string; lugar?: string; transporte?: string }
   ) => {
     if (!canSave) return
     const salida = overrides?.salida ?? drafts.salida
     const etaFisc = overrides?.etaFisc ?? drafts.etaFisc
     const lugarVal = overrides?.lugar ?? lugar
-    const serialized = JSON.stringify({ salida, etaFisc, lugar: lugarVal })
+    const transVal = normTrans(overrides?.transporte ?? transporte)
+    const serialized = JSON.stringify({ salida, etaFisc, lugar: lugarVal, transporte: transVal })
     if (serialized === lastCommittedRef.current) return // no change → skip
     // Solo al COORDINAR la salida (cuando la fecha de salida CAMBIÓ): no puede ser
     // anterior a la llegada a MVD → avisar y pedir confirmación. Editar arribo/lugar
@@ -204,7 +218,19 @@ export default function ContainerQuickEdit({
         ETA_FISC: etaFisc,
         LUGAR_SALIDA: lugarVal,
       })
-      await onPatch(shipment.__dbId!, { operativas: next })
+      const fields: Record<string, unknown> = { operativas: next }
+      // Transporte es nivel-carga: si cambió, propagar a TODOS los contenedores
+      // + la columna rollup (REGLA: buildPerContainerPatch — el server NO
+      // recalcula transporte desde el array). Mapea sobre `next`, así conserva
+      // las fechas/lugar recién editados de este contenedor. Solo cuando cambió,
+      // para que un ajuste de fechas no pise transportes distintos por contenedor
+      // en datos históricos.
+      let prevTrans = initialTransporte
+      try { prevTrans = normTrans((JSON.parse(lastCommittedRef.current).transporte as string) || '') } catch { /* sin commit previo */ }
+      if (transVal !== prevTrans) {
+        Object.assign(fields, buildPerContainerPatch({ operativas: next }, 'transporte', transVal))
+      }
+      await onPatch(shipment.__dbId!, fields)
       lastCommittedRef.current = serialized
       // NO cerrar al guardar: el usuario edita varios campos (salida → arribo →
       // lugar) en el mismo modal. El cierre lo manejan "Listo" y Escape. Cerrar
@@ -228,6 +254,9 @@ export default function ContainerQuickEdit({
   })
 
   const lugarLabel = LUGAR_OPTIONS.find(o => o.value === lugar)?.label ?? lugar
+  // Id único por carga para el datalist (puede haber más de un quick-edit montado).
+  // Sin espacios: las refs split ("A6902 A") no son un id HTML válido.
+  const transporteListId = `qe-transportes-${(shipment.REF || 'x').replace(/\s+/g, '-')}`
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -331,6 +360,36 @@ export default function ContainerQuickEdit({
             ) : (
               <span className={`text-sm font-medium ${lugar ? 'text-foreground' : 'text-muted-foreground'}`}>
                 {lugarLabel || '—'}
+              </span>
+            )}
+          </div>
+
+          {/* Transporte — dato de la CARGA (propaga a todos los contenedores).
+              Combo editable: sugiere los ya usados (datalist) + acepta uno nuevo. */}
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              Transporte
+            </label>
+            {editable ? (
+              <>
+                <input
+                  type="text"
+                  list={transporteListId}
+                  value={transporte}
+                  onChange={e => setTransporte(e.target.value)}
+                  onBlur={() => void commitSave()}
+                  onKeyDown={e => { if (e.key === 'Enter') void commitSave() }}
+                  disabled={saving}
+                  placeholder="OLAVERRY, TRANSCAL…"
+                  className="h-9 w-full uppercase rounded-md border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-[#1e3a8a]/40 disabled:opacity-50 transition-shadow"
+                />
+                <datalist id={transporteListId}>
+                  {knownTransportes.map(t => <option key={t} value={t} />)}
+                </datalist>
+              </>
+            ) : (
+              <span className={`text-sm font-medium uppercase ${transporte ? 'text-foreground' : 'text-muted-foreground'}`}>
+                {transporte || '—'}
               </span>
             )}
           </div>

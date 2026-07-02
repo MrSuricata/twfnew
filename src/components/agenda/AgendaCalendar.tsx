@@ -28,6 +28,7 @@ import AgendaEventCard from './AgendaEventCard'
 import PendingSalidaSection from './PendingSalidaSection'
 import ShipmentDetailsDialog from '../ShipmentDetailsDialog'
 import ContainerQuickEdit, { buildPatchedOperativas } from '../operations/ContainerQuickEdit'
+import { deriveKnownTransportes } from '@/lib/operationsTypes'
 import { dropPatch } from './agendaDnd'
 import { isSalidaBeforeArrival } from '@/lib/salidaCheck'
 
@@ -117,6 +118,13 @@ export default function AgendaCalendar({
     }
     return Array.from(transports).sort()
   }, [allEvents])
+
+  // Transportes ya usados en TODAS las cargas (no solo las con evento visible)
+  // → sugerencias del combo Transporte del quick-edit.
+  const knownTransportes = useMemo(
+    () => deriveKnownTransportes(shipments.flatMap(s => (s.operativas ?? []).map(o => o.TRANSPORTE))),
+    [shipments]
+  )
 
   // Filter events by active depots + transports
   const filteredEvents = useMemo(() => {
@@ -515,6 +523,7 @@ export default function AgendaCalendar({
           shipment={quickEditEvent.shipment}
           cntr={quickEditEvent.cntr}
           editable={!!onPatchShipment}
+          knownTransportes={knownTransportes}
           open={quickEditOpen}
           onOpenChange={(o) => {
             setQuickEditOpen(o)

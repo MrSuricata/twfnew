@@ -110,6 +110,23 @@ export const MODALITY_COLORS: Record<Modality, string> = {
 // El input igual acepta uno nuevo (datalist) + se le suman los ya usados.
 export const DEPOSITOS_UY = ['GODILCO', 'PLANIR', 'LOBRAUS', 'TCP', 'MONTECON', 'STL']
 
+/** Transportes distintos ya usados en las cargas, para sugerir en los combos
+ *  (quick-edit + "Datos clave de la carga"). Una celda TRANSPORTE puede traer
+ *  varios separados por "/", "," o "+" (mismo criterio que el filtro de la
+ *  Agenda): se separan en nombres canónicos (trim + MAYÚSCULAS), únicos y
+ *  ordenados. El input igual acepta uno nuevo (datalist). */
+export function deriveKnownTransportes(raw: Iterable<string | null | undefined>): string[] {
+  const set = new Set<string>()
+  for (const v of raw) {
+    if (!v) continue
+    for (const part of String(v).split(/[/,+]/)) {
+      const t = part.trim().toUpperCase()
+      if (t) set.add(t)
+    }
+  }
+  return Array.from(set).sort()
+}
+
 // ── Operativo (lista editable; base de cuentas nombradas en C1b) ──
 export interface Operator {
   id: string
@@ -744,6 +761,11 @@ const OP_ARRAY_FIELD_BY_COL: Partial<Record<string, keyof OperativasRecord>> = {
   dev: 'DEV',
   descarga: 'DESCARGA',
   deposito: 'DEPOSITO',
+  // Transporte es dato de la CARGA entera (como Depósito): editarlo propaga a
+  // todos los contenedores + la columna rollup. OJO: el rollup del server
+  // (rollupFromOperativasApi) NO recalcula transporte desde el array, así que
+  // la columna DEBE viajar en el mismo patch — este mapa lo garantiza.
+  transporte: 'TRANSPORTE',
 }
 
 /**
@@ -756,8 +778,11 @@ const OP_ARRAY_FIELD_BY_COL: Partial<Record<string, keyof OperativasRecord>> = {
  * actualizaba la tarjeta de "Pendientes de salida"). Para los campos del mapa,
  * este patch setea la columna Y propaga el valor a TODOS los contenedores del
  * array. Para el resto, solo la columna.
+ *
+ * Acepta cualquier objeto con `operativas` (Pick): el quick-edit trabaja sobre
+ * ParsedShipment y necesita el mismo patch sin fabricar una UnifiedOperation.
  */
-export function buildPerContainerPatch(op: UnifiedOperation, col: string, value: unknown): Record<string, unknown> {
+export function buildPerContainerPatch(op: Pick<UnifiedOperation, 'operativas'>, col: string, value: unknown): Record<string, unknown> {
   const patch: Record<string, unknown> = { [col]: value }
   const opField = OP_ARRAY_FIELD_BY_COL[col]
   if (opField && op.operativas && op.operativas.length > 0) {

@@ -79,8 +79,8 @@ const SECTIONS: { title: string; fields: { key: keyof UnifiedOperation; label: s
   {
     title: 'Operativa',
     fields: [
-      // 'operativa' (tipo) se movió a "Datos clave de la carga" (ViabilityBlock).
-      { key: 'transporte', label: 'Transporte' },
+      // 'operativa' (tipo) y 'transporte' se movieron a "Datos clave de la carga"
+      // (ViabilityBlock) — no duplicar acá.
       // 'camion' NO va acá: era un texto editable que confundía (setearlo NO sube
       // la carga al camión — eso se hace en el armador → "cargas disponibles").
       // El camión real se muestra derivado en el badge del header (truckStatus).
@@ -126,6 +126,7 @@ export default function OperationDetailPanel({
   operatorById,
   hoy,
   knownDepositos = [],
+  knownTransportes = [],
   onAssign,
   onPatch,
   onPatchFcl,
@@ -139,6 +140,7 @@ export default function OperationDetailPanel({
   operatorById: Map<string, Operator>
   hoy: Date
   knownDepositos?: string[]
+  knownTransportes?: string[]
   onAssign: (op: UnifiedOperation, operatorId: string | null) => void
   onPatch: (id: string, fields: Record<string, unknown>) => void
   onPatchFcl?: (dbId: string, edits: Record<string, unknown>) => void
@@ -288,6 +290,7 @@ export default function OperationDetailPanel({
             op={op}
             editable={op.source === 'db' && !!op.dbId && !op.readOnly}
             knownDepositos={knownDepositos}
+            knownTransportes={knownTransportes}
             onCommit={commit}
           />
 

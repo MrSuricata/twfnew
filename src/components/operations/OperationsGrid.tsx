@@ -43,6 +43,7 @@ import type { Operator, OperatorAssignment, Modality, UnifiedOperation, DbShipme
 import type { Truck, TruckLoad } from '@/lib/truckTypes'
 import {
   buildOperations,
+  deriveKnownTransportes,
   indexAssignments,
   isOperationActive,
   isSeguimientoVencido,
@@ -210,6 +211,11 @@ export default function OperationsGrid({
   // Depósitos UY ya usados → alimentan el combobox del bloque de viabilidad.
   const knownDepositos = useMemo(
     () => Array.from(new Set(operations.map(o => o.deposito).filter(Boolean))),
+    [operations]
+  )
+  // Transportes ya usados → combobox de Transporte (datos clave de la carga).
+  const knownTransportes = useMemo(
+    () => deriveKnownTransportes(operations.map(o => o.transporte)),
     [operations]
   )
 
@@ -828,6 +834,7 @@ export default function OperationsGrid({
         operatorById={operatorById}
         hoy={hoy}
         knownDepositos={knownDepositos}
+        knownTransportes={knownTransportes}
         onAssign={assignOp}
         onPatch={onPatchShipment}
         onPatchFcl={onPatchFclField}
