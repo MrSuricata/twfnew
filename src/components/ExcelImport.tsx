@@ -22,6 +22,7 @@ import {
 } from '@/lib/shipmentTypes'
 import { parseMainSheetCSV, filterShipments } from '@/lib/sheetsSync'
 import { authFetch } from '@/lib/authClient'
+import { getBrand } from '@/lib/brand'
 
 interface ExcelImportProps {
   onImportComplete?: (records: ParsedShipment[]) => void
@@ -165,7 +166,7 @@ export default function ExcelImport({ onImportComplete, shipmentRecords = [], on
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
     const link = document.createElement('a')
     link.href = URL.createObjectURL(blob)
-    link.download = `twf-tracking-${new Date().toISOString().split('T')[0]}.csv`
+    link.download = `${getBrand().id}-tracking-${new Date().toISOString().split('T')[0]}.csv`
     link.click()
 
     toast.success('Archivo CSV descargado')

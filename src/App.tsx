@@ -945,6 +945,7 @@ function App() {
         {isDataLoading && <style>{`@keyframes twf-spin { to { transform: rotate(360deg); } }`}</style>}
         <DashboardEnhanced
           onLogout={handleAdminLogout}
+          isDataLoading={isDataLoading}
           clients={clients}
           shipments={shipments}
           documents={documents}

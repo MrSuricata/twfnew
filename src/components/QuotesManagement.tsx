@@ -47,6 +47,7 @@ import type { QuoteFormData, QuoteStatus, QuoteNote } from '@/lib/quotationTypes
 import { getConvertedRef } from '@/lib/quotationTypes'
 import { buildMailtoLink } from '@/lib/quoteTemplates'
 import { downloadQuotesCsv } from '@/lib/quoteExport'
+import { getBrand } from '@/lib/brand'
 import { DownloadSimple, ArrowsClockwise } from '@phosphor-icons/react'
 import {
   Dialog,
@@ -256,7 +257,7 @@ export default function QuotesManagement({ quotes, onUpdateQuotes }: QuotesManag
     }
     const filterTag = filter === 'all' ? '' : `-${filter}`
     const date = new Date().toISOString().slice(0, 10)
-    downloadQuotesCsv(list, `cotizaciones-twf${filterTag}-${date}.csv`)
+    downloadQuotesCsv(list, `cotizaciones-${getBrand().id}${filterTag}-${date}.csv`)
     toast.success(`Exportadas ${list.length} cotizaciones`)
   }
 

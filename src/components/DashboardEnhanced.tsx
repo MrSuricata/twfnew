@@ -49,6 +49,8 @@ import Breadcrumbs from './Breadcrumbs'
 
 interface DashboardEnhancedProps {
   onLogout: () => void
+  /** Carga inicial de datos en curso (el banner "Sincronizando datos..." de App). */
+  isDataLoading?: boolean
   clients?: ClientAccount[]
   shipments?: ParsedShipment[]
   documents?: ShipmentDocument[]
@@ -92,7 +94,7 @@ interface DashboardEnhancedProps {
 
 const ONE_DAY_MS = 86_400_000
 
-export default function DashboardEnhanced({ onLogout, clients = [], shipments = [], documents = [], reports = [], originPhotos = [], quotes = [], trucks = [], truckLoads = [], lclAir = [], billing = [], operators = [], assignments = [], dbShipments = [], dbSyncError = null, onUpdateShipments, onUpdateClients, onUpdateDocuments, onUpdateReports, onUpdateOriginPhotos, onUpdateQuotes, onUpdateTrucks, onDeleteTruck, onUpdateTruckLoads, onDeleteTruckLoad, onUpdateLclAir, onDeleteLclAir, onUpdateBilling, onClearBilling, onUpdateOperators, onDeleteOperator, onAssignOperator, onPatchShipment, onCreateShipment, onDeleteShipment, onPatchFclField, onRenameRef, onRefreshTrucks, onReloadFromDB }: DashboardEnhancedProps) {
+export default function DashboardEnhanced({ onLogout, isDataLoading = false, clients = [], shipments = [], documents = [], reports = [], originPhotos = [], quotes = [], trucks = [], truckLoads = [], lclAir = [], billing = [], operators = [], assignments = [], dbShipments = [], dbSyncError = null, onUpdateShipments, onUpdateClients, onUpdateDocuments, onUpdateReports, onUpdateOriginPhotos, onUpdateQuotes, onUpdateTrucks, onDeleteTruck, onUpdateTruckLoads, onDeleteTruckLoad, onUpdateLclAir, onDeleteLclAir, onUpdateBilling, onClearBilling, onUpdateOperators, onDeleteOperator, onAssignOperator, onPatchShipment, onCreateShipment, onDeleteShipment, onPatchFclField, onRenameRef, onRefreshTrucks, onReloadFromDB }: DashboardEnhancedProps) {
   const brand = useBrand()
   const ops = brand.capabilities.opsAdmin
   // Flip Etapa 4: post-flip las FCL viven en dbShipments. Reconstruirlas a
@@ -362,6 +364,7 @@ export default function DashboardEnhanced({ onLogout, clients = [], shipments = 
           <TabsContent value="hoy">
             <TodayDashboard
               shipments={fclShipments}
+              isDataLoading={isDataLoading}
               trucks={trucks}
               truckLoads={truckLoads}
               documents={documents}

@@ -31,7 +31,10 @@ export default function Login({ onLogin, onBack }: LoginProps) {
       toast.success(t.auth.loginSuccess)
       onLogin()
     } else {
-      toast.error(result.error || t.auth.adminInvalid)
+      // El 401 de la API llega crudo en inglés ("Invalid credentials") — lo
+      // traducimos acá en el front; otros errores del server se muestran tal cual.
+      const msg = result.error === 'Invalid credentials' ? t.auth.adminInvalid : result.error
+      toast.error(msg || t.auth.adminInvalid)
     }
 
     setLoading(false)
