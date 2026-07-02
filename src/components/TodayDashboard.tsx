@@ -220,7 +220,20 @@ export default function TodayDashboard({
             </div>
             <div className="space-y-1">
               {snapshot.libreAlerts.map((a) => (
-                <LibreAlertRow key={a.shipment.REF} alert={a} onClick={() => openShipment(a.shipment)} />
+                <LibreAlertRow
+                  key={a.shipment.REF}
+                  alert={a}
+                  onClick={() => {
+                    // Mismo camino que las demás tarjetas de HOY: quick-edit para
+                    // FCL editable (ahí mismo se corrige el LIBRE / se marca
+                    // DEVUELTO, y "Más datos" abre el panel completo); diálogo de
+                    // lectura como fallback. LIBRE es nivel-carga, así que la
+                    // primera operativa alcanza para el quick-edit.
+                    const op = (a.shipment.operativas ?? [])[0]
+                    if (op) openOpMatch({ shipment: a.shipment, op })
+                    else openShipment(a.shipment)
+                  }}
+                />
               ))}
             </div>
           </CardContent>
