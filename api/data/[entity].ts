@@ -3,7 +3,7 @@ import { authenticateRequest, auditUser, type TokenPayload, type AdminPayload } 
 import { handleCors } from '../_lib/cors.js'
 import { getSupabase } from '../_lib/supabase.js'
 import { sendMail } from '../_lib/mail.js'
-import { welcomeClientEmail, welcomePartnerEmail } from '../_lib/emailTemplates.js'
+import { welcomeClientEmail, welcomePartnerEmail, resolveEmailBrand } from '../_lib/emailTemplates.js'
 import { hashPassword } from '../_lib/password.js'
 import { matchesClientePattern } from '../_lib/csvParser.js'
 import {
@@ -421,12 +421,15 @@ async function handleClients(req: VercelRequest, res: VercelResponse, db: any) {
     if (error) throw error
 
     // Fire-and-forget welcome emails for new clients (does not block response).
+    // Marca según el hostname desde donde opera el admin (TWF o Mediterránea).
+    const emailBrand = resolveEmailBrand(req.headers.origin || req.headers.referer)
     let welcomesSent = 0
     for (const r of newRows) {
       welcomesSent++
       sendMail({
         to: r.email,
-        ...welcomeClientEmail({ name: r.name, email: r.email }),
+        from: emailBrand.displayName,
+        ...welcomeClientEmail({ name: r.name, email: r.email }, emailBrand),
       })
         .then(result => {
           if (!result.ok) console.warn(`[welcome-client] not sent to ${r.email}: ${result.error}`)
@@ -874,14 +877,17 @@ async function handlePartnerUsers(req: VercelRequest, res: VercelResponse, db: a
     if (error) throw error
 
     // Fire-and-forget welcome email — never block response or include password.
+    // Marca según el hostname desde donde opera el admin (TWF o Mediterránea).
+    const emailBrand = resolveEmailBrand(req.headers.origin || req.headers.referer)
     sendMail({
       to: cleanEmail,
+      from: emailBrand.displayName,
       ...welcomePartnerEmail({
         name: cleanName,
         email: cleanEmail,
         role: role as 'depot' | 'transport',
         filterValue,
-      }),
+      }, emailBrand),
     })
       .then(result => {
         if (!result.ok) console.warn(`[welcome-partner] not sent to ${cleanEmail}: ${result.error}`)
@@ -1706,7 +1712,19 @@ async function handleAdminUsers(req: VercelRequest, res: VercelResponse, db: any
       email: z.string().email(),
       name: z.string().min(1),
       password: z.string().min(8).optional(),
-      clientePattern: z.string().optional(),
+      // matchesClientePattern descarta EN SILENCIO los tokens <4 chars
+      // (hardening deliberado, spec H2): si guardáramos "VMG" el usuario vería
+      // 0 cargas sin ningún error. Rechazar acá, con mensaje claro.
+      clientePattern: z.string().optional().superRefine((val, ctx) => {
+        if (!val) return
+        const short = val.split(',').map(t => t.trim()).find(t => t.length > 0 && t.length < 4)
+        if (short) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `Cada cliente del patrón debe tener al menos 4 caracteres. "${short}" tiene ${short.length}. Para clientes cortos usá la razón social como figura en la planilla.`,
+          })
+        }
+      }),
     }), req.body)
     if (!v.ok) return res.status(400).json({ error: v.error })
     const { id, email, name, password, clientePattern } = v.data

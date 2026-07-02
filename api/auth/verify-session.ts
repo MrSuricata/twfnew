@@ -17,10 +17,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   // Admin: revalidar los usuarios INDIVIDUALES (admin_users) contra su estado
-  // `active` — así un miembro del equipo desactivado pierde la sesión al toque en
-  // vez de seguir válido hasta que expire el token (8h). El owner (login por env
-  // vars) NO está en admin_users, así que no lo encuentra y se permite. En un
-  // fallo transitorio de DB no bloqueamos (fail-open acotado a este chequeo).
+  // `active`. OJO con la garantía real: este chequeo corre SOLO acá, y el front
+  // llama verify-session únicamente al restaurar sesión (F5 / abrir pestaña).
+  // Los endpoints de /api/data/* validan solo la firma del JWT — un usuario
+  // desactivado que NO recargue la página sigue operando hasta que expire el
+  // token (8h). Si se necesita corte inmediato: chequear `active` también en
+  // /api/data (cacheado) o bajar la expiración del token. El owner (login por
+  // env vars) NO está en admin_users, así que no lo encuentra y se permite. En
+  // un fallo transitorio de DB no bloqueamos (fail-open acotado a este chequeo).
   if (payload.role === 'admin') {
     try {
       const db = getSupabase()

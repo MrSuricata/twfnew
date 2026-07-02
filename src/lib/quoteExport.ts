@@ -8,6 +8,7 @@
 
 import type { QuoteFormData } from './quotationTypes'
 import { getConvertedRef } from './quotationTypes'
+import { getBrand } from './brand'
 
 const STATUS_LABELS: Record<string, string> = {
   pending: 'Pendiente',
@@ -79,7 +80,7 @@ export function buildQuotesCsv(quotes: QuoteFormData[]): string {
   return '﻿' + [headers.map(csvEscape).join(','), ...rows].join('\n')
 }
 
-export function downloadQuotesCsv(quotes: QuoteFormData[], filename = 'cotizaciones-twf.csv'): void {
+export function downloadQuotesCsv(quotes: QuoteFormData[], filename = `cotizaciones-${getBrand().id}.csv`): void {
   const csv = buildQuotesCsv(quotes)
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
   const url = URL.createObjectURL(blob)

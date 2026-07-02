@@ -10,6 +10,7 @@ import {
   Siren,
   CaretRight,
   CalendarBlank,
+  CircleNotch,
 } from '@phosphor-icons/react'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
 import {
@@ -26,6 +27,8 @@ import { Badge } from '@/components/ui/badge'
 
 interface TodayDashboardProps {
   shipments: ParsedShipment[]
+  /** Carga inicial de datos en curso (banner "Sincronizando datos..." activo). */
+  isDataLoading?: boolean
   trucks?: TruckType[]
   truckLoads?: TruckLoad[]
   documents?: ShipmentDocument[]
@@ -47,6 +50,7 @@ interface TodayDashboardProps {
  */
 export default function TodayDashboard({
   shipments,
+  isDataLoading = false,
   trucks = [],
   truckLoads = [],
   documents = [],
@@ -84,6 +88,12 @@ export default function TodayDashboard({
       // En el HOY entran: hitos de hoy (carga/sale/llega) + los que están en frontera
       .filter(x => x.info.hoy || (x.status === 'in_transit'))
   }, [trucks, truckLoads])
+
+  // Carga inicial en curso y todavía sin nada que mostrar → estado "Cargando"
+  // en vez del empty state ("Día tranquilo"), para no dar un falso "no hay nada
+  // hoy" mientras el banner de sincronizando sigue activo. Con datos ya
+  // cargados, isDataLoading no cambia nada.
+  const initialLoading = isDataLoading && !snapshot.hasMovement && trucksHoy.length === 0
 
   // For LIBRE alert rows (only have a ParsedShipment, no op)
   const openShipment = (s: ParsedShipment) => {
@@ -126,14 +136,29 @@ export default function TodayDashboard({
                 <StatChip icon={<Warning size={14} weight="fill" />} label={`${snapshot.libreAlerts.length} alertas LIBRE`} tone="destructive" />
               )}
             </div>
+          ) : initialLoading ? (
+            <p className="text-sm text-muted-foreground mt-1">Cargando movimientos…</p>
           ) : (
             <p className="text-sm text-muted-foreground mt-1">Día tranquilo — sin movimientos programados</p>
           )}
         </div>
       </div>
 
+      {/* ── Estado de carga inicial (sincronizando, sin datos aún) ── */}
+      {initialLoading && (
+        <Card className="border-dashed">
+          <CardContent className="flex flex-col items-center justify-center py-20 text-muted-foreground">
+            <div className="p-4 bg-muted rounded-full mb-4">
+              <CircleNotch size={36} className="animate-spin opacity-70" />
+            </div>
+            <p className="text-lg font-semibold text-foreground">Cargando movimientos…</p>
+            <p className="text-sm mt-1">Sincronizando los datos del día</p>
+          </CardContent>
+        </Card>
+      )}
+
       {/* ── Empty state (tampoco hay consolidados en movimiento) ── */}
-      {!snapshot.hasMovement && trucksHoy.length === 0 && (
+      {!initialLoading && !snapshot.hasMovement && trucksHoy.length === 0 && (
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center justify-center py-20 text-muted-foreground">
             <div className="p-4 bg-muted rounded-full mb-4">
@@ -202,7 +227,8 @@ export default function TodayDashboard({
         </Card>
       )}
 
-      {/* ── 3-card grid ──────────────────────────────────── */}
+      {/* ── 3-card grid (oculta durante la carga inicial — evita "Sin salidas hoy" falsos) ── */}
+      {!initialLoading && (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <TodayCard
           title="Saliendo hoy"
@@ -235,6 +261,7 @@ export default function TodayDashboard({
           onRowClick={openOpMatch}
         />
       </div>
+      )}
 
       {/* FCL quick-edit modal (admin, when onPatchShipment is provided + row has __dbId) */}
       {quickEditMatch?.shipment.__dbId && (

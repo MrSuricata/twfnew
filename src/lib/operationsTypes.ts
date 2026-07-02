@@ -778,7 +778,9 @@ export function newDbShipment(fields: Partial<DbShipment> & { mode: Modality }):
     incoterm: '', pkgs: 0, kg: 0, m3: 0, doc_number: '', origin: '', etd: '', eta: '',
     seguimiento: '', contenedor: '', buque: '', linea: '', transbordo: '', seguro: false,
     certi: false, telex: false, impresa: false, despacho: '', deposito: '', fecha_consol: '',
-    transporte: '', camion: '', dest_country: '', discharge_port: '', dest_port: '',
+    // FCL: default UY — dest_country vacío se mapea a PAIS 'OTRO' y el armador
+    // de camiones (isFclAvailable) la excluiría. El campo País sigue editable.
+    transporte: '', camion: '', dest_country: fields.mode === 'fcl' ? 'UY' : '', discharge_port: '', dest_port: '',
     fiscal: '', wood: false, no_apilable: false, oog: false, imo: false, tipo: '',
     libre: '', salida: '', eta_fiscal: '', operativa: '', descarga: '', dev: '', terminal: '', n_cntr: 0, origin_ref: '',
     ftl_ltl: '', costo_extra: '', observacion: '', status: 'en_origen', operator_id: null,

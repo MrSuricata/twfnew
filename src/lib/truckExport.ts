@@ -1,10 +1,11 @@
 // ─── Truck PDF export ──────────────────────────────────────────────
 // No PDF library is bundled in the app — we keep the bundle slim and
 // rely on the browser's native "Print → Save as PDF" instead. This
-// renders a TWF-branded print-only HTML in a new tab and triggers
-// the print dialog. Brian can save as PDF or print directly.
+// renders a brand-aware print-only HTML (TWF o Mediterránea según el
+// hostname, vía getBrand()) in a new tab and triggers the print dialog.
 // ───────────────────────────────────────────────────────────────────
 
+import { getBrand } from './brand'
 import type { Truck, TruckLoad, TruckTotals } from './truckTypes'
 import { TRUCK_STATUS_LABELS, getTruckLimits, truckCostPerM3, costColor } from './truckTypes'
 import { formatKg, formatM3, formatPkgs } from './truckUtils'
@@ -30,6 +31,7 @@ export async function exportTruckPdf(
   loads: TruckLoad[],
   totals: TruckTotals
 ): Promise<void> {
+  const brand = getBrand()
   const limits = getTruckLimits(truck.isSider)
   const today = new Date()
   const fmtNow = today.toLocaleDateString('es-UY')
@@ -97,7 +99,7 @@ export async function exportTruckPdf(
 <html lang="es">
 <head>
 <meta charset="utf-8" />
-<title>Camión ${esc(truck.code)} — TWF</title>
+<title>Camión ${esc(truck.code)} — ${esc(brand.name)}</title>
 <style>
   @page { size: A4 landscape; margin: 14mm 10mm; }
   body { font-family: 'Inter', 'Helvetica', Arial, sans-serif; color: #1f2937; font-size: 11px; margin: 0; }
@@ -161,9 +163,9 @@ export async function exportTruckPdf(
 
   <header class="header">
     <div class="brand">
-      <img src="/images/twf-logo-full-new.png" alt="TWF" onerror="this.style.display='none'" />
+      <img src="${esc(brand.logo.full)}" alt="${esc(brand.name)}" onerror="this.style.display='none'" />
       <div>
-        <div class="name">Transit World Forwarding</div>
+        <div class="name">${esc(brand.displayName)}</div>
         <div class="sub">Plan de carga de camión</div>
       </div>
     </div>
@@ -227,7 +229,7 @@ export async function exportTruckPdf(
   ${costsBlockHtml}
 
   <footer>
-    Transit World Forwarding SAS — Documento confidencial — Generado el ${esc(fmtNow)}
+    ${esc(brand.legalName)} — Documento confidencial — Generado el ${esc(fmtNow)}
   </footer>
 
   <script>
