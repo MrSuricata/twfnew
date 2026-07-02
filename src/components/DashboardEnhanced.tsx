@@ -49,7 +49,7 @@ import OperationDetailOverlay from './operations/OperationDetailOverlay'
 import { ParsedShipment } from '@/lib/shipmentTypes'
 import { ClientAccount, ShipmentDocument, OperativeReport, OriginPhoto, QuoteFormData } from '@/lib/quotationTypes'
 import { Truck, TruckLoad, LclAirShipment } from '@/lib/truckTypes'
-import { BillingRecord, getBillingState, indexBilling } from '@/lib/billingTypes'
+import { BillingRecord, buildBillableItems, indexBilling } from '@/lib/billingTypes'
 import { Operator, OperatorAssignment, DbShipment, UnifiedOperation } from '@/lib/operationsTypes'
 import Breadcrumbs from './Breadcrumbs'
 
@@ -202,11 +202,15 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
   // Pending-quotes badge — counts quotes that need attention.
   const pendingQuotesCount = quotes.filter(q => q.status === 'pending').length
 
-  // Pending-billing badge — refs that reached fiscal and aren't facturada/no_aplica.
-  const billingMap = indexBilling(billing)
-  const pendingBillingCount = (shipments || []).filter(
-    s => getBillingState(s, billingMap) === 'pendiente'
-  ).length
+  // Pending-billing badge — MISMO derivador universal que la pestaña
+  // (buildBillableItems: FCL planilla + FCL horneada + LCL/aéreo/terrestre,
+  // camión incluido). Antes contaba solo la FCL del cache de la planilla →
+  // post-flip (cache vacío) el badge quedaba en 0 con pendientes reales.
+  const pendingBillingCount = useMemo(() => {
+    const billingMap = indexBilling(billing)
+    return buildBillableItems(shipments || [], dbShipments, trucks, truckLoads, billingMap)
+      .filter(x => x.state === 'pendiente').length
+  }, [shipments, dbShipments, trucks, truckLoads, billing])
   const overdueQuotesCount = quotes.filter(
     q => q.status === 'pending' && Date.now() - q.timestamp > ONE_DAY_MS
   ).length
