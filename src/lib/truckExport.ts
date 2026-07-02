@@ -32,6 +32,11 @@ export async function exportTruckPdf(
   totals: TruckTotals
 ): Promise<void> {
   const brand = getBrand()
+  // Acentos por marca: índigo/violeta Mediterránea · azules TWF.
+  const accent = brand.id === 'med' ? '#261c79' : '#1e40af'
+  const accent2 = brand.id === 'med' ? '#49286b' : '#3b82f6'
+  // El HTML se escribe en una ventana about:blank — logo con URL absoluta.
+  const logoUrl = new URL(brand.logo.full, window.location.origin).href
   const limits = getTruckLimits(truck.isSider)
   const today = new Date()
   const fmtNow = today.toLocaleDateString('es-UY')
@@ -48,7 +53,7 @@ export async function exportTruckPdf(
           <td class="num">${formatPkgs(l.pkgs)}</td>
           <td>${esc(l.bl) || '—'}</td>
           <td>${esc(l.stock) || '—'}</td>
-          <td>${l.wood ? 'Sí' : 'No'}</td>
+          <td>${l.wood ? '<span class="wood-badge">Sí</span>' : '<span class="muted">No</span>'}</td>
           <td class="small">${esc(l.description)}</td>
         </tr>
       `).join('')
@@ -99,36 +104,40 @@ export async function exportTruckPdf(
 <html lang="es">
 <head>
 <meta charset="utf-8" />
-<title>Camión ${esc(truck.code)} — ${esc(brand.name)}</title>
+<title>Plan Camión ${esc(truck.code)} — ${esc(fmtNow)} — ${esc(brand.name)}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=${encodeURIComponent(brand.font)}:wght@400;600;700;800&display=swap" rel="stylesheet" />
 <style>
   @page { size: A4 landscape; margin: 14mm 10mm; }
-  body { font-family: 'Inter', 'Helvetica', Arial, sans-serif; color: #1f2937; font-size: 11px; margin: 0; }
-  .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #1e40af; padding-bottom: 10px; margin-bottom: 14px; }
+  body { font-family: '${brand.font}', 'Inter', 'Helvetica', Arial, sans-serif; color: #1f2937; font-size: 11px; margin: 0; }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 10px; }
+  .header-rule { height: 3px; background: linear-gradient(90deg, ${accent} 0%, ${accent} 55%, ${accent2} 100%); margin-bottom: 14px; }
   .brand { display: flex; align-items: center; gap: 12px; }
   .brand img { height: 38px; width: auto; }
-  .brand .name { font-size: 16px; font-weight: 700; color: #1e40af; letter-spacing: -0.01em; }
+  .brand .name { font-size: 16px; font-weight: 700; color: ${accent}; letter-spacing: -0.01em; }
   .brand .sub { font-size: 10px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; }
   .doc-meta { text-align: right; font-size: 10px; color: #6b7280; }
   .doc-meta .doc-title { font-size: 18px; font-weight: 700; color: #111827; letter-spacing: -0.01em; }
-  .doc-meta .doc-code { font-size: 22px; font-weight: 800; color: #1e40af; margin-top: 2px; }
-  .doc-meta .doc-status { display: inline-block; padding: 2px 8px; border-radius: 4px; background: #eff6ff; color: #1e40af; font-size: 10px; font-weight: 600; margin-top: 4px; }
+  .doc-meta .doc-code { font-size: 22px; font-weight: 800; color: ${accent}; margin-top: 2px; }
+  .doc-meta .doc-status { display: inline-block; padding: 2px 8px; border-radius: 4px; background: ${accent}14; color: ${accent}; font-size: 10px; font-weight: 600; margin-top: 4px; }
   .info-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px 18px; padding: 10px 14px; background: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0; margin-bottom: 12px; }
   .info-grid .field { font-size: 10px; }
   .info-grid .label { color: #6b7280; text-transform: uppercase; font-size: 9px; letter-spacing: 0.05em; }
   .info-grid .value { color: #111827; font-weight: 600; margin-top: 2px; }
-  .totals { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 12px; }
+  .totals { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 12px; break-inside: avoid; page-break-inside: avoid; }
   .totals .cell { background: white; border: 1px solid #e2e8f0; padding: 8px 12px; border-radius: 6px; text-align: center; }
   .totals .cell .label { font-size: 9px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; }
-  .totals .cell .value { font-size: 18px; font-weight: 700; color: #1e40af; line-height: 1.1; }
+  .totals .cell .value { font-size: 18px; font-weight: 700; color: ${accent}; line-height: 1.1; }
   .totals .cell .hint { font-size: 9px; color: #6b7280; margin-top: 2px; }
   .totals .cell.over .value { color: #dc2626; }
-  table { width: 100%; border-collapse: collapse; font-size: 10px; }
-  thead { background: #1e40af; color: white; }
+  table { width: 100%; border-collapse: collapse; font-size: 10px; table-layout: fixed; }
+  thead { background: ${accent}; color: white; }
   thead th { padding: 6px 8px; text-align: left; font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; }
   thead th.num { text-align: right; }
-  tbody tr { border-bottom: 1px solid #e5e7eb; }
+  tbody tr { border-bottom: 1px solid #e5e7eb; break-inside: avoid; page-break-inside: avoid; }
   tbody tr:nth-child(even) { background: #f8fafc; }
-  tbody td { padding: 5px 8px; vertical-align: top; }
+  tbody td { padding: 5px 8px; vertical-align: top; overflow-wrap: anywhere; }
   tbody td.num { text-align: right; font-variant-numeric: tabular-nums; }
   tbody td.empty { text-align: center; color: #9ca3af; padding: 20px; }
   tbody td.small { font-size: 9px; color: #6b7280; max-width: 220px; }
@@ -136,11 +145,12 @@ export async function exportTruckPdf(
   .upper { text-transform: uppercase; font-size: 8px; letter-spacing: 0.05em; }
   .warn { background: #fef3c7; color: #92400e; padding: 6px 10px; border-radius: 4px; font-size: 10px; margin-top: 6px; border: 1px solid #fde68a; }
   .warn.err { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
-  .notes { margin-top: 14px; padding: 10px 12px; background: #f8fafc; border-left: 3px solid #1e40af; border-radius: 4px; }
+  .wood-badge { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; border-radius: 3px; padding: 1px 6px; font-weight: 700; }
+  .notes { margin-top: 14px; padding: 10px 12px; background: #f8fafc; border-left: 3px solid ${accent}; border-radius: 4px; break-inside: avoid; page-break-inside: avoid; }
   .notes .label { font-size: 9px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; }
   .notes .value { font-size: 10px; color: #111827; white-space: pre-wrap; margin-top: 2px; }
   footer { margin-top: 20px; padding-top: 8px; border-top: 1px solid #e5e7eb; text-align: center; font-size: 9px; color: #9ca3af; }
-  .costs { margin-top: 14px; padding: 10px 14px; background: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0; }
+  .costs { margin-top: 14px; padding: 10px 14px; background: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0; break-inside: avoid; page-break-inside: avoid; }
   .costs .section-title { font-size: 10px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; margin-bottom: 8px; }
   .costs-row { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px dashed #e5e7eb; font-size: 10px; }
   .costs-row:last-child { border-bottom: none; }
@@ -151,19 +161,23 @@ export async function exportTruckPdf(
   .costs-perm3.green { background: #f0fdf4; border-color: #86efac; color: #15803d; }
   .costs-perm3.yellow { background: #fffbeb; border-color: #fcd34d; color: #92400e; }
   .costs-perm3.red { background: #fef2f2; border-color: #fca5a5; color: #991b1b; }
-  @media print { .no-print { display: none; } body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }
+  @media print {
+    .no-print { display: none; }
+    body { print-color-adjust: exact; -webkit-print-color-adjust: exact; padding-bottom: 26px; }
+    footer { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; }
+  }
 </style>
 </head>
 <body>
   <div class="no-print" style="position:fixed; top:10px; right:10px; z-index:1000;">
-    <button onclick="window.print()" style="padding:8px 16px; background:#1e40af; color:white; border:none; border-radius:6px; font-weight:600; cursor:pointer;">
+    <button onclick="window.print()" style="padding:8px 16px; background:${accent}; color:white; border:none; border-radius:6px; font-weight:600; cursor:pointer;">
       🖨 Imprimir / Guardar PDF
     </button>
   </div>
 
   <header class="header">
     <div class="brand">
-      <img src="${esc(brand.logo.full)}" alt="${esc(brand.name)}" onerror="this.style.display='none'" />
+      <img src="${esc(logoUrl)}" alt="${esc(brand.name)}" onerror="this.style.display='none'" />
       <div>
         <div class="name">${esc(brand.displayName)}</div>
         <div class="sub">Plan de carga de camión</div>
@@ -176,6 +190,7 @@ export async function exportTruckPdf(
       <div style="margin-top:6px;">Emitido: ${esc(fmtNow)}</div>
     </div>
   </header>
+  <div class="header-rule"></div>
 
   <section class="info-grid">
     <div class="field"><div class="label">Transporte</div><div class="value">${esc(truck.transport) || '—'}</div></div>
@@ -200,6 +215,18 @@ export async function exportTruckPdf(
   ${multifiscalWarning}
 
   <table style="margin-top:10px;">
+    <colgroup>
+      <col style="width:9%" />   <!-- Ref -->
+      <col style="width:12%" />  <!-- Cliente -->
+      <col style="width:10%" />  <!-- Fiscal -->
+      <col style="width:7%" />   <!-- Kg -->
+      <col style="width:6%" />   <!-- m³ -->
+      <col style="width:6%" />   <!-- Bultos -->
+      <col style="width:10%" />  <!-- BL -->
+      <col style="width:7%" />   <!-- Stock -->
+      <col style="width:5%" />   <!-- Madera -->
+      <col />                    <!-- Descripción: resto -->
+    </colgroup>
     <thead>
       <tr>
         <th>Ref</th>

@@ -44,6 +44,8 @@ describe('buildAnalyticsReport', () => {
     expect(r.detalle.head).toHaveLength(10)
     expect(r.detalle.rows).toHaveLength(2)
     expect(r.detalle.rows[0][0]).toBe('A1')
+    // Kg con separador de miles es-UY (columna 8)
+    expect(r.detalle.rows[0][8]).toBe((1000).toLocaleString('es-UY'))
   })
 
   it('con filtro FCL no incluye la tabla de consolidados', () => {
