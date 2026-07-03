@@ -319,6 +319,35 @@ export const OperatorAssignmentRowSchema = z.object({
   operator_id: z.string().max(100).nullable().optional(),
 })
 
+/** Paso del checklist operativo por ref (pestaña Checks).
+ *  `by` se acepta pero el server SIEMPRE lo pisa con el usuario del token. */
+export const RefCheckStepSchema = z.object({
+  done: z.boolean(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'fecha YYYY-MM-DD').optional().or(z.literal('')),
+  by: z.string().max(200).optional(),
+})
+
+/** Upsert de checks por ref: steps PARCIALES (solo las claves tocadas), que el
+ *  server mergea sobre el jsonb existente — nunca pisa todo. Claves fijas del
+ *  PROCEDIMIENTO OPERATIVO (11 pasos); .strict() rechaza cualquier otra. */
+const checkStep = RefCheckStepSchema.optional()
+export const RefChecksUpsertSchema = z.object({
+  ref: z.string().min(1).max(100),
+  steps: z.object({
+    salida_origen: checkStep,
+    arribo_buque: checkStep,
+    carta_resp: checkStep,
+    bl_naviera: checkStep,
+    pagos_liberacion: checkStep,
+    traslado_deposito: checkStep,
+    coord_trasiego: checkStep,
+    fotos_carga: checkStep,
+    aviso_salida: checkStep,
+    cruce_frontera: checkStep,
+    arribo_fiscal: checkStep,
+  }).strict().refine(s => Object.values(s).some(v => v !== undefined), { message: 'steps vacío' }),
+})
+
 /** Admin login body */
 export const AdminLoginSchema = z.object({
   username: z.string().min(1).max(200),

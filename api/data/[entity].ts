@@ -27,6 +27,7 @@ import {
   OperatorAssignmentRowSchema,
   PushSubscriptionSchema,
   PushPrefsPatchSchema,
+  RefChecksUpsertSchema,
 } from '../_lib/schemas.js'
 import { rollupFromOperativasApi } from '../_lib/operativasRollup.js'
 import { broadcastTrucksLive, clientIdFromRequest } from '../_lib/realtimeBroadcast.js'
@@ -120,6 +121,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return handleTruckCounter(req, res, db)
       case 'billing':
         return handleBilling(req, res, db, payload)
+      case 'ref-checks':
+        return handleRefChecks(req, res, db, payload)
       case 'operators':
         return handleOperators(req, res, db)
       case 'operator-assignments':
@@ -1445,6 +1448,77 @@ async function handleBilling(req: VercelRequest, res: VercelResponse, db: any, p
     if (error) throw error
     logAudit(db, payload, 'facturación: deshacer', 'billing', ref)
     return res.status(200).json({ deleted: true })
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' })
+}
+
+// ── Ref checks (checklist PROCEDIMIENTO OPERATIVO por ref — pestaña Checks) ──
+// GET  /api/data/ref-checks → todas las filas (scoped por cliente_pattern)
+// POST /api/data/ref-checks → upsert por ref con MERGE de steps parciales
+// La tabla guarda SOLO el estado de los pasos: el universo de refs se deriva
+// de las cargas en el cliente (derive-on-read), nunca se copia acá.
+
+async function handleRefChecks(req: VercelRequest, res: VercelResponse, db: any, payload: TokenPayload | null) {
+  if (req.method === 'GET') {
+    const { data, error } = await db.from('ref_checks').select('*').order('ref', { ascending: true }).limit(5000)
+    if (error) throw error
+    const rows = (data || []).map((r: any) => ({
+      ref: r.ref,
+      steps: r.steps || {},
+      updatedAt: r.updated_at || '',
+      updatedBy: r.updated_by || '',
+    }))
+    // Scoping por cliente: admin acotado solo ve checks de SUS cargas (mismo
+    // patrón que documents/reports).
+    const allowed = await allowedRefsForPayload(db, payload)
+    return res.status(200).json({ checks: filterByAllowedRef(rows, allowed, r => r.ref) })
+  }
+
+  if (req.method === 'POST') {
+    const v = validate(RefChecksUpsertSchema, req.body)
+    if (!v.ok) return res.status(400).json({ error: v.error })
+    const { ref, steps } = v.data
+
+    // Scoping también al escribir: admin acotado no toca checks de cargas ajenas.
+    const allowed = await allowedRefsForPayload(db, payload)
+    if (allowed && !allowed.has(refOf(ref))) return res.status(404).json({ error: 'Carga no encontrada' })
+
+    // `by` sale del TOKEN (como invoiced_by en billing) — nunca del body.
+    const who = String((payload as AdminPayload | null)?.user || '').trim() || auditUser(payload as any)
+    const hoyIso = new Date().toISOString().slice(0, 10)
+
+    // MERGE server-side sobre el jsonb existente (el body trae solo las claves
+    // tocadas — no pisar todo): done=true reemplaza ESE paso (fecha provista o
+    // hoy), done=false lo elimina (vuelve a pendiente), el resto se conserva.
+    // Si el paso YA estaba marcado (edición de fecha), se conserva el `by`
+    // original (quién lo marcó). Nota: read-then-write sin lock — si dos
+    // usuarios marcan a la vez pasos de la MISMA ref puede perderse uno
+    // (aceptable en V1, igual que el resto de los overlays por ref).
+    const { data: prevRow, error: prevErr } = await db.from('ref_checks').select('steps').eq('ref', ref).maybeSingle()
+    if (prevErr) throw prevErr
+    const prevSteps: Record<string, { done?: boolean; date?: string; by?: string }> = prevRow?.steps || {}
+    const merged: Record<string, unknown> = { ...prevSteps }
+    for (const [key, step] of Object.entries(steps)) {
+      if (step === undefined) continue
+      if (!step.done) { delete merged[key]; continue }
+      const prevStep = prevSteps[key]
+      merged[key] = {
+        done: true,
+        date: step.date || prevStep?.date || hoyIso,
+        by: prevStep?.done && prevStep.by ? prevStep.by : who,
+      }
+    }
+
+    const { error } = await db.from('ref_checks').upsert({
+      ref,
+      steps: merged,
+      updated_at: new Date().toISOString(),
+      updated_by: who,
+    }, { onConflict: 'ref' })
+    if (error) throw error
+    logAudit(db, payload, 'checks operativos', 'ref_checks', ref, { pasos: Object.keys(steps) })
+    return res.status(200).json({ saved: true, steps: merged })
   }
 
   return res.status(405).json({ error: 'Method not allowed' })

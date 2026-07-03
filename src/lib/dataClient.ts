@@ -12,6 +12,7 @@ import type { Truck, TruckLoad, LclAirShipment } from './truckTypes'
 import type { BillingRecord } from './billingTypes'
 import type { Operator, OperatorAssignment, DbShipment } from './operationsTypes'
 import { fclToColumns } from './operationsTypes'
+import type { RefCheckRecord, RefCheckSteps } from './checksTypes'
 import { matchesPattern } from './clientMatching'
 
 // ── Shipments FCL (espejo en `shipments` → fallback cache JSON) ──
@@ -581,6 +582,34 @@ export async function saveOperatorAssignment(ref: string, operatorId: string | n
     const err = await res.json().catch(() => ({}))
     throw new Error(err.error || `HTTP ${res.status}`)
   }
+}
+
+// ── Checks operativos por ref (pestaña Checks) ──
+
+/** Todas las filas de ref_checks (el server las scopea por cliente_pattern). */
+export async function fetchRefChecks(): Promise<RefCheckRecord[]> {
+  const res = await authFetch('/api/data/ref-checks')
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const data = await res.json()
+  return data.checks || []
+}
+
+/** Upsert por ref con MERGE server-side de pasos PARCIALES (solo las claves
+ *  tocadas; done=false elimina el paso). Devuelve los steps completos que
+ *  quedaron guardados (con `by` estampado del token) para reconciliar el
+ *  estado optimista de la pestaña. */
+export async function saveRefCheckSteps(ref: string, steps: RefCheckSteps): Promise<RefCheckSteps> {
+  const res = await authFetch('/api/data/ref-checks', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ref, steps }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
+  const data = await res.json()
+  return data.steps || {}
 }
 
 // ── Unified shipments (LCL/aéreo/terrestre desde la tabla shipments) ──
