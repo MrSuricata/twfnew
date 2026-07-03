@@ -1,17 +1,19 @@
-// PDF "Ficha de facturación" por carga — gastos (compra) vs venta con
-// resultado. Patrón brand-aware de clientStatusPdf: logo + wordmark de
-// getBrand(), acento índigo Mediterránea / azul TWF, footer confidencial
-// paginado. jsPDF + autotable con import dinámico.
-import type { Brand } from './brand'
+// ─── Ficha de facturación — export imprimible ───────────────────────
+// Gastos (compra) vs venta con resultado, espejo del diálogo de
+// BillingManagement. Sin librería de PDF: igual que truckExport, se
+// renderiza un HTML brand-aware (getBrand()) en una pestaña nueva y se
+// dispara el diálogo de impresión — el usuario guarda como PDF con
+// fidelidad CSS total (columnas redondeadas, banda de resultado, chip).
+//
+// El renderer jsPDF anterior quedaba frágil: incrustaba el logo como
+// bitmap sin comprimir (~1.3MB con el SVG Med rasterizado) y autotable
+// paginaba en cadena ante cualquier celda desmesurada (14 páginas).
+// ──────────────────────────────────────────────────────────────────────
+
+import { BRANDS } from './brand'
 import type { BillingLineItem } from './billingTypes'
-import { logoDataUrl } from './clientStatusPdf'
 
-const HEADER_BLUE = '#4A90D9'                              // azul TWF (plan-operativo)
-const ALT_ROW: [number, number, number] = [240, 244, 250]  // #f0f4fa
-const GREEN: [number, number, number] = [21, 128, 61]      // resultado ≥ 0
-const RED: [number, number, number] = [185, 28, 28]        // resultado < 0
-
-// ─── Helper puro de armado de datos (testeable sin jsPDF) ───────────────
+// ─── Helpers puros (testeables sin DOM) ─────────────────────────────────
 
 /** Monto USD → string es-UY: punto de miles, coma decimal, 2 decimales. */
 export function fmtMoneyUY(n: number): string {
@@ -26,7 +28,7 @@ export interface FichaPdfData {
   totalVentas: number
   /** VENTA − GASTOS. */
   resultado: number
-  /** Filas listas para autotable: [concepto, monto es-UY]. */
+  /** Filas listas para render: [concepto, monto es-UY]. */
   gastosRows: [string, string][]
   ventasRows: [string, string][]
   totalGastosFmt: string
@@ -63,8 +65,6 @@ export function buildFichaPdfData(gastos: BillingLineItem[], ventas: BillingLine
   }
 }
 
-// ─── PDF ────────────────────────────────────────────────────────────────
-
 /** Datos de cabecera de la carga (lo que ya tiene el ítem facturable). */
 export interface FichaCargaInfo {
   ref: string
@@ -73,8 +73,11 @@ export interface FichaCargaInfo {
   modeLabel: string              // FCL / LCL / Aéreo / Terrestre
   eta?: string                   // ETA MVD (ISO o texto)
   arrival?: Date | null          // llegada a fiscal / entrega
+  transporte?: string            // transporte de la operativa
+  deposito?: string              // depósito de la operativa
   truckCode?: string             // camión consolidado (si aplica)
   invoiceNumber?: string         // nº de factura (si ya está facturada)
+  invoicedAt?: string | null     // fecha de facturación (ISO timestamp)
 }
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/
@@ -82,146 +85,188 @@ const dmy = (v: string) => (ISO.test(v) ? v.split('-').reverse().join('/') : v)
 const fmtDate = (d: Date) =>
   `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`
 
-/** Descarga el PDF "Ficha de facturación — [REF]" (A4 vertical, brand-aware). */
-export async function downloadFichaFacturacionPdf(
+/** Campos de la card de datos, en el orden del diálogo (espejo 1:1). */
+export function fichaHeaderFields(info: FichaCargaInfo): { label: string; value: string }[] {
+  const fields: { label: string; value: string }[] = [
+    { label: 'Cliente', value: info.cliente || '—' },
+    { label: 'Modalidad', value: info.modeLabel || '—' },
+    { label: 'CNTR', value: info.cntr || '—' },
+    { label: 'ETA MVD', value: info.eta ? dmy(info.eta) : '—' },
+    { label: 'Llegada a fiscal', value: info.arrival ? fmtDate(info.arrival) : '—' },
+    { label: 'Transporte', value: (info.transporte || '').trim() || '—' },
+    { label: 'Depósito', value: (info.deposito || '').trim() || '—' },
+  ]
+  if (info.truckCode) fields.push({ label: 'Camión', value: info.truckCode })
+  return fields
+}
+
+// ─── Render imprimible (patrón truckExport) ─────────────────────────────
+
+function esc(s: string | number | undefined | null): string {
+  if (s === null || s === undefined) return ''
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+/** Una columna (GASTOS o VENTA) como card redondeada con subtotal al pie. */
+function columnHtml(title: string, rows: [string, string][], subtotalLabel: string, subtotalFmt: string, emptyMsg: string): string {
+  const body = rows.length === 0
+    ? `<div class="line empty">${esc(emptyMsg)}</div>`
+    : rows.map(([concepto, monto]) => `
+        <div class="line"><span class="concepto">${esc(concepto)}</span><span class="monto">${esc(monto)}</span></div>`).join('')
+  return `
+    <div class="col">
+      <div class="col-head">${esc(title)}</div>
+      <div class="col-body">${body}
+      </div>
+      <div class="col-foot"><span>${esc(subtotalLabel)}</span><span class="monto">USD ${esc(subtotalFmt)}</span></div>
+    </div>`
+}
+
+/**
+ * Abre la ficha "Ficha de facturación — [REF]" en una pestaña nueva lista
+ * para imprimir / guardar como PDF (A4 vertical, brand-aware).
+ */
+export function openFichaFacturacionPrint(
   info: FichaCargaInfo,
   gastos: BillingLineItem[],
   ventas: BillingLineItem[],
-  brand: Brand,
   now: Date = new Date()
-): Promise<void> {
+): void {
   const data = buildFichaPdfData(gastos, ventas)
-  const { jsPDF } = await import('jspdf')
-  const autoTable = (await import('jspdf-autotable')).default
-  const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' })
-  const pageW = doc.internal.pageSize.getWidth()
-  const margin = 14
-
-  // Acento por marca: índigo Mediterránea · azul TWF (mismo criterio que clientStatusPdf).
-  const ACCENT = brand.id === 'med' ? '#261c79' : HEADER_BLUE
-  const ACCENT_RGB: [number, number, number] = brand.id === 'med' ? [38, 28, 121] : [74, 144, 217]
-
-  // Header: logo arriba-izquierda (+ wordmark para Med) + título + fecha.
-  const logo = await logoDataUrl(brand.logo.full)
-  if (logo) {
-    const h = 12, w = (logo.w / logo.h) * h
-    doc.addImage(logo.png, 'PNG', margin, 10, w, h)
-    if (brand.id === 'med') {
-      doc.setTextColor(ACCENT)
-      doc.setFontSize(11)
-      doc.setFont('helvetica', 'bold')
-      doc.text(brand.displayName.toUpperCase(), margin + w + 4, 18)
-    }
-  } else {
-    doc.setTextColor(ACCENT)
-    doc.setFontSize(11)
-    doc.setFont('helvetica', 'bold')
-    doc.text(brand.displayName.toUpperCase(), margin, 18)
-  }
+  // SIEMPRE marca Mediterránea (decisión Brian 03/07, igual que analyticsPdf) —
+  // la ficha es un documento de facturación interno de Med, no del dominio activo.
+  // NO cambiar a getBrand().
+  const brand = BRANDS.med
+  const accent = '#261c79'   // índigo Mediterránea
+  const accent2 = '#49286b'  // violeta Mediterránea
+  // El HTML se escribe en una ventana about:blank — logo con URL absoluta.
+  const logoUrl = new URL(brand.logo.full, window.location.origin).href
+  const fmtNow = fmtDate(now)
   const refStr = (info.ref || '').trim()
-  const title = `FICHA DE FACTURACIÓN — ${refStr.toUpperCase()}`
-  doc.setTextColor(ACCENT)
-  doc.setFontSize(15)
-  doc.setFont('helvetica', 'bold')
-  if (doc.getTextWidth(title) > pageW - margin * 2) doc.setFontSize(13)
-  doc.text(title, margin, 30)
-  doc.setTextColor(90)
-  doc.setFontSize(9)
-  doc.setFont('helvetica', 'normal')
-  doc.text(`Generado: ${fmtDate(now)}`, margin, 35)
 
-  doc.setDrawColor(...ACCENT_RGB)
-  doc.setLineWidth(0.6)
-  doc.line(margin, 37.5, pageW - margin, 37.5)
+  const fieldsHtml = fichaHeaderFields(info).map(f => `
+      <div class="field"><div class="label">${esc(f.label)}</div><div class="value">${esc(f.value)}</div></div>`).join('')
 
-  // Bloque de datos de la carga.
-  const datos: [string, string][] = [
-    ['Referencia', refStr],
-    ['Cliente', info.cliente || '—'],
-    ['Contenedor(es)', info.cntr || '—'],
-    ['Modalidad', info.modeLabel || '—'],
-    ['ETA MVD', info.eta ? dmy(info.eta) : '—'],
-    ['Llegada a fiscal', info.arrival ? fmtDate(info.arrival) : '—'],
-  ]
-  if (info.truckCode) datos.push(['Camión', info.truckCode])
-  if (info.invoiceNumber) datos.push(['Nº factura', info.invoiceNumber])
-  autoTable(doc, {
-    startY: 41,
-    body: datos,
-    theme: 'plain',
-    margin: { left: margin, right: margin },
-    styles: { fontSize: 8.5, cellPadding: 1.1, valign: 'middle' },
-    columnStyles: {
-      0: { cellWidth: 38, fontStyle: 'bold', textColor: ACCENT_RGB },
-      1: { textColor: [40, 40, 40] as [number, number, number] },
-    },
-  })
+  const invoiceChip = info.invoiceNumber || info.invoicedAt
+    ? (() => {
+        const d = info.invoicedAt ? new Date(info.invoicedAt) : null
+        const when = d && !isNaN(d.getTime()) ? ` · ${fmtDate(d)}` : ''
+        return `<div class="doc-status">FACTURADA · Nº ${esc(info.invoiceNumber || 's/nº')}${esc(when)}</div>`
+      })()
+    : ''
 
-  const tableOpts = {
-    margin: { left: margin, right: margin },
-    styles: { fontSize: 9, cellPadding: 1.8, valign: 'middle' as const },
-    headStyles: { fillColor: ACCENT, textColor: '#ffffff', fontStyle: 'bold' as const, fontSize: 9 },
-    alternateRowStyles: { fillColor: ALT_ROW },
-    footStyles: { fillColor: [255, 255, 255] as [number, number, number], textColor: [40, 40, 40] as [number, number, number], fontStyle: 'bold' as const, fontSize: 9 },
-    columnStyles: { 1: { cellWidth: 34, halign: 'right' as const } },
+  const positivo = data.resultado >= 0
+
+  const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>Ficha ${esc(refStr)} — ${esc(fmtNow)} — ${esc(brand.name)}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=${encodeURIComponent(brand.font)}:wght@400;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  @page { size: A4 portrait; margin: 14mm 12mm; }
+  body { font-family: '${brand.font}', 'Inter', 'Helvetica', Arial, sans-serif; color: #1f2937; font-size: 12px; margin: 0; }
+  .header { display: flex; justify-content: space-between; align-items: flex-start; padding-bottom: 10px; }
+  .header-rule { height: 3px; background: linear-gradient(90deg, ${accent} 0%, ${accent} 55%, ${accent2} 100%); margin-bottom: 14px; }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .brand img { height: 38px; width: auto; }
+  .brand .name { font-size: 16px; font-weight: 700; color: ${accent}; letter-spacing: -0.01em; }
+  .brand .sub { font-size: 10px; color: #6b7280; text-transform: uppercase; letter-spacing: 0.05em; }
+  .doc-meta { text-align: right; font-size: 10px; color: #6b7280; }
+  .doc-meta .doc-title { font-size: 17px; font-weight: 700; color: #111827; letter-spacing: -0.01em; }
+  .doc-meta .doc-code { font-size: 22px; font-weight: 800; color: ${accent}; margin-top: 2px; }
+  .doc-status { display: inline-block; padding: 2px 8px; border-radius: 4px; background: #f0fdf4; border: 1px solid #86efac; color: #15803d; font-size: 10px; font-weight: 700; margin-top: 4px; }
+  .info-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px 18px; padding: 12px 14px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 14px; break-inside: avoid; page-break-inside: avoid; }
+  .info-grid .field:first-child { grid-column: span 2; }
+  .info-grid .label { color: #6b7280; text-transform: uppercase; font-size: 9px; letter-spacing: 0.05em; }
+  .info-grid .value { color: #111827; font-weight: 600; margin-top: 2px; font-size: 11px; overflow-wrap: anywhere; }
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
+  .col { border: 1px solid #e2e8f0; border-radius: 10px; }
+  .col-head { padding: 8px 12px; background: #f1f5f9; border-bottom: 1px solid #e2e8f0; border-radius: 10px 10px 0 0; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #334155; }
+  .col-body { padding: 6px 12px; }
+  .line { display: flex; justify-content: space-between; gap: 10px; padding: 5px 0; border-bottom: 1px dashed #e5e7eb; break-inside: avoid; page-break-inside: avoid; }
+  .line:last-child { border-bottom: none; }
+  .line .concepto { color: #374151; overflow-wrap: anywhere; }
+  .line .monto { font-variant-numeric: tabular-nums; font-weight: 600; color: #111827; white-space: nowrap; }
+  .line.empty { color: #9ca3af; font-style: italic; justify-content: center; }
+  .col-foot { display: flex; justify-content: space-between; gap: 10px; padding: 8px 12px; border-top: 2px solid #d1d5db; border-radius: 0 0 10px 10px; background: #f8fafc; font-weight: 700; color: #111827; break-inside: avoid; page-break-inside: avoid; }
+  .resultado { margin-top: 14px; display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 12px 16px; border-radius: 10px; border: 1px solid; break-inside: avoid; page-break-inside: avoid; }
+  .resultado.pos { background: #f0fdf4; border-color: #86efac; }
+  .resultado.neg { background: #fef2f2; border-color: #fca5a5; }
+  .resultado .res-label { font-size: 12px; font-weight: 600; }
+  .resultado.pos .res-label { color: #14532d; }
+  .resultado.neg .res-label { color: #7f1d1d; }
+  .resultado .res-value { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .resultado.pos .res-value { color: #15803d; }
+  .resultado.neg .res-value { color: #b91c1c; }
+  footer { margin-top: 22px; padding-top: 8px; border-top: 1px solid #e5e7eb; text-align: center; font-size: 9px; color: #9ca3af; }
+  @media print {
+    .no-print { display: none; }
+    body { print-color-adjust: exact; -webkit-print-color-adjust: exact; padding-bottom: 26px; }
+    footer { position: fixed; bottom: 0; left: 0; right: 0; background: #fff; }
   }
-  const emptyRow = (msg: string) => [[{
-    content: msg,
-    colSpan: 2,
-    styles: { halign: 'center' as const, textColor: [156, 163, 175] as [number, number, number], fontStyle: 'italic' as const },
-  }]]
+</style>
+</head>
+<body>
+  <div class="no-print" style="position:fixed; top:10px; right:10px; z-index:1000;">
+    <button onclick="window.print()" style="padding:8px 16px; background:${accent}; color:white; border:none; border-radius:6px; font-weight:600; cursor:pointer;">
+      🖨 Imprimir / Guardar PDF
+    </button>
+  </div>
 
-  // Tabla GASTOS (compra).
-  let y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 6
-  autoTable(doc, {
-    startY: y,
-    head: [['GASTOS (compra)', 'USD']],
-    body: data.gastosRows.length ? data.gastosRows : emptyRow('Sin gastos cargados'),
-    foot: [['Total gastos', data.totalGastosFmt]],
-    ...tableOpts,
-  })
+  <header class="header">
+    <div class="brand">
+      <img src="${esc(logoUrl)}" alt="${esc(brand.name)}" onerror="this.style.display='none'" />
+      <div>
+        <div class="name">${esc(brand.displayName)}</div>
+        <div class="sub">Ficha de facturación</div>
+      </div>
+    </div>
+    <div class="doc-meta">
+      <div class="doc-title">FICHA DE FACTURACIÓN</div>
+      <div class="doc-code">${esc(refStr)}</div>
+      ${invoiceChip}
+      <div style="margin-top:6px;">Generado: ${esc(fmtNow)}</div>
+    </div>
+  </header>
+  <div class="header-rule"></div>
 
-  // Tabla VENTA.
-  y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 6
-  autoTable(doc, {
-    startY: y,
-    head: [['VENTA', 'USD']],
-    body: data.ventasRows.length ? data.ventasRows : emptyRow('Sin ventas cargadas'),
-    foot: [['Total venta', data.totalVentasFmt]],
-    ...tableOpts,
-  })
+  <section class="info-grid">${fieldsHtml}
+  </section>
 
-  // RESULTADO destacado (verde ≥ 0 / rojo < 0), con salto de página si no entra.
-  y = (doc as unknown as { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8
-  const pageH = doc.internal.pageSize.getHeight()
-  if (y + 16 > pageH - 14) { doc.addPage(); y = 20 }
-  const resColor = data.resultado >= 0 ? GREEN : RED
-  doc.setFillColor(data.resultado >= 0 ? 240 : 254, data.resultado >= 0 ? 253 : 242, data.resultado >= 0 ? 244 : 242)
-  doc.setDrawColor(...resColor)
-  doc.setLineWidth(0.4)
-  doc.roundedRect(margin, y, pageW - margin * 2, 14, 1.5, 1.5, 'FD')
-  doc.setTextColor(...resColor)
-  doc.setFontSize(11)
-  doc.setFont('helvetica', 'bold')
-  doc.text('RESULTADO (venta − gastos)', margin + 4, y + 8.8)
-  doc.setFontSize(14)
-  doc.text(`USD ${data.resultadoFmt}`, pageW - margin - 4, y + 9.2, { align: 'right' })
+  <section class="cols">
+    ${columnHtml('Gastos (compra)', data.gastosRows, 'Total gastos', data.totalGastosFmt, 'Sin gastos cargados')}
+    ${columnHtml('Venta', data.ventasRows, 'Total venta', data.totalVentasFmt, 'Sin ventas cargadas')}
+  </section>
 
-  // Footer confidencial en todas las páginas.
-  const pages = doc.getNumberOfPages()
-  for (let i = 1; i <= pages; i++) {
-    doc.setPage(i)
-    doc.setTextColor(130)
-    doc.setFontSize(7)
-    doc.setFont('helvetica', 'normal')
-    doc.text(
-      `Página ${i} de ${pages}  —  Documento confidencial — ${brand.legalName}`,
-      pageW / 2,
-      pageH - 6,
-      { align: 'center' }
-    )
+  <section class="resultado ${positivo ? 'pos' : 'neg'}">
+    <span class="res-label">Resultado (venta − gastos)</span>
+    <span class="res-value">USD ${esc(data.resultadoFmt)}</span>
+  </section>
+
+  <footer>
+    ${esc(brand.legalName)} — Documento confidencial — Generado el ${esc(fmtNow)}
+  </footer>
+
+  <script>
+    // Auto-trigger print dialog after the page renders.
+    window.addEventListener('load', () => { setTimeout(() => window.print(), 250); });
+  </script>
+</body>
+</html>`
+
+  // Open in a new tab/window so the user can print without leaving the app.
+  const win = window.open('', '_blank')
+  if (!win) {
+    throw new Error('No se pudo abrir la ventana de impresión (¿popup bloqueado?)')
   }
-
-  const refSlug = refStr.replace(/[^A-Za-z0-9-]+/g, '-').replace(/^-|-$/g, '') || 'carga'
-  doc.save(`Ficha_Facturacion_${refSlug}_${now.toISOString().slice(0, 10)}.pdf`)
+  win.document.open()
+  win.document.write(html)
+  win.document.close()
 }

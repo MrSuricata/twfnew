@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildFichaPdfData, fmtMoneyUY } from './fichaFacturacionPdf'
+import { buildFichaPdfData, fichaHeaderFields, fmtMoneyUY } from './fichaFacturacionPdf'
 import type { BillingLineItem } from './billingTypes'
 
 // Ficha de facturación — helper puro de armado de datos (totales + formato es-UY).
@@ -73,5 +73,44 @@ describe('buildFichaPdfData', () => {
       ['Sin monto', '0,00'],
       ['OK', '50,00'],
     ])
+  })
+})
+
+describe('fichaHeaderFields — card de datos (espejo del diálogo)', () => {
+  const base = {
+    ref: 'A6698',
+    cliente: 'RDM - ABEA S.A.',
+    cntr: 'EITU9212642',
+    modeLabel: 'FCL',
+    eta: '2026-07-16',
+    arrival: new Date(2026, 7, 2), // 02/08/2026
+    transporte: 'OLAVERRY',
+    deposito: 'LOBRAUS',
+  }
+
+  it('incluye Transporte y Depósito en el orden del diálogo, con fechas dd/mm/yyyy', () => {
+    const f = fichaHeaderFields(base)
+    expect(f.map(x => x.label)).toEqual([
+      'Cliente', 'Modalidad', 'CNTR', 'ETA MVD', 'Llegada a fiscal', 'Transporte', 'Depósito',
+    ])
+    expect(f.find(x => x.label === 'Transporte')?.value).toBe('OLAVERRY')
+    expect(f.find(x => x.label === 'Depósito')?.value).toBe('LOBRAUS')
+    expect(f.find(x => x.label === 'ETA MVD')?.value).toBe('16/07/2026')
+    expect(f.find(x => x.label === 'Llegada a fiscal')?.value).toBe('02/08/2026')
+  })
+
+  it('faltantes → "—" (transporte/depósito vacíos o solo espacios, sin ETA ni arrival)', () => {
+    const f = fichaHeaderFields({ ref: 'E10', cliente: '', modeLabel: 'LCL', transporte: '  ', deposito: undefined })
+    expect(f.find(x => x.label === 'Cliente')?.value).toBe('—')
+    expect(f.find(x => x.label === 'Transporte')?.value).toBe('—')
+    expect(f.find(x => x.label === 'Depósito')?.value).toBe('—')
+    expect(f.find(x => x.label === 'ETA MVD')?.value).toBe('—')
+    expect(f.find(x => x.label === 'Llegada a fiscal')?.value).toBe('—')
+  })
+
+  it('Camión solo aparece cuando la carga llegó consolidada', () => {
+    expect(fichaHeaderFields(base).some(x => x.label === 'Camión')).toBe(false)
+    const f = fichaHeaderFields({ ...base, truckCode: 'C440' })
+    expect(f.find(x => x.label === 'Camión')?.value).toBe('C440')
   })
 })

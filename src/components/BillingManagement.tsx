@@ -45,8 +45,7 @@ import {
   indexBilling,
   isInvoicedThisMonth,
 } from '@/lib/billingTypes'
-import { downloadFichaFacturacionPdf, fmtMoneyUY } from '@/lib/fichaFacturacionPdf'
-import { getBrand } from '@/lib/brand'
+import { openFichaFacturacionPrint, fmtMoneyUY } from '@/lib/fichaFacturacionPdf'
 import { fmtDateDMY } from '@/lib/format'
 
 // ─── Facturación universal ───────────────────────────────────────────
@@ -333,10 +332,11 @@ export default function BillingManagement({ shipments, dbShipments = [], trucks 
     setFichaItem(null)
   }
 
-  const exportarFichaPdf = async () => {
+  /** Abre la ficha como HTML imprimible (el usuario guarda como PDF desde el diálogo). */
+  const exportarFichaPdf = () => {
     if (!fichaItem) return
     try {
-      await downloadFichaFacturacionPdf(
+      openFichaFacturacionPrint(
         {
           ref: fichaItem.ref,
           cliente: fichaItem.cliente,
@@ -344,16 +344,18 @@ export default function BillingManagement({ shipments, dbShipments = [], trucks 
           modeLabel: MODALITY_LABELS[fichaItem.mode],
           eta: fichaItem.eta,
           arrival: fichaItem.arrival,
+          transporte: fichaItem.transporte,
+          deposito: fichaItem.deposito,
           truckCode: fichaItem.truckCode,
           invoiceNumber: fichaEsFacturada ? fichaRec?.invoiceNumber : undefined,
+          invoicedAt: fichaEsFacturada ? fichaRec?.invoicedAt : undefined,
         },
         collectLines(fichaGastos),
         collectLines(fichaVentas),
-        getBrand(),
       )
-      toast.success('PDF de la ficha descargado')
+      toast.success('Vista de impresión abierta — guardá como PDF')
     } catch {
-      toast.error('No se pudo generar el PDF')
+      toast.error('No se pudo abrir la vista de impresión (¿popup bloqueado?)')
     }
   }
 
@@ -486,6 +488,8 @@ export default function BillingManagement({ shipments, dbShipments = [], trucks 
                 <FichaDato label="CNTR" value={fichaItem.cntr || '—'} />
                 <FichaDato label="ETA MVD" value={fichaItem.eta ? fmtDateDMY(fichaItem.eta) : '—'} />
                 <FichaDato label="Llegada a fiscal" value={fichaItem.arrival ? fmtDate(fichaItem.arrival) : '—'} />
+                <FichaDato label="Transporte" value={fichaItem.transporte || '—'} />
+                <FichaDato label="Depósito" value={fichaItem.deposito || '—'} />
                 {fichaItem.truckCode && <FichaDato label="Camión" value={fichaItem.truckCode} />}
                 {fichaEsFacturada && (
                   <FichaDato

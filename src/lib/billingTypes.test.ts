@@ -87,6 +87,29 @@ describe('buildBillableItems — universal', () => {
     const fclDb = db({ ref: 'A7901', mode: 'fcl', status: '', salida: '', eta_fiscal: '' })
     expect(buildBillableItems([], [fclDb], [], [], noBilling)).toHaveLength(0)
   })
+
+  // Ficha de facturación: la cabecera necesita transporte + depósito.
+  it('cargas DB llevan transporte y depósito de sus columnas al BillableItem', () => {
+    const fclDb = db({ ref: 'A6698', mode: 'fcl', status: '', salida: '2025-07-31', eta_fiscal: '2025-08-02', transporte: 'OLAVERRY', deposito: 'LOBRAUS' })
+    const out = buildBillableItems([], [fclDb], [], [], noBilling)
+    expect(out[0].item.transporte).toBe('OLAVERRY')
+    expect(out[0].item.deposito).toBe('LOBRAUS')
+  })
+
+  it('FCL de planilla junta transporte/depósito únicos de sus operativas', () => {
+    const fcl = {
+      REF: 'A7800', CLIENTE: 'ACME', ETD: '', ETA: '', CNTR: '',
+      operativas: [
+        { SALIDA: '2026-01-10', ETA_FISC: '2026-01-12', TRANSPORTE: 'OLAVERRY', DEPOSITO: 'GODILCO' },
+        { SALIDA: '2026-01-10', ETA_FISC: '2026-01-12', TRANSPORTE: 'OLAVERRY', DEPOSITO: 'PLANIR' },
+        { SALIDA: '2026-01-10', ETA_FISC: '2026-01-12', TRANSPORTE: '', DEPOSITO: '  ' },
+      ],
+    } as unknown as ParsedShipment
+    const out = buildBillableItems([fcl], [], [], [], noBilling)
+    expect(out).toHaveLength(1)
+    expect(out[0].item.transporte).toBe('OLAVERRY')
+    expect(out[0].item.deposito).toBe('GODILCO, PLANIR')
+  })
 })
 
 describe('ficha de compra/venta — la fila con solo gastos/ventas NO cambia el estado', () => {
