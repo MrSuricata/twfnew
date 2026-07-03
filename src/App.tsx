@@ -751,17 +751,32 @@ function App() {
     // (rollupFromOperativasApi). Sin esto, la grilla de Operaciones (que lee las
     // columnas, no el array) quedaba stale hasta recargar la página.
     const optimistic = withRollupColumns(fields)
-    const prev = dbShipments // snapshot para revertir si el guardado falla
-    const next = dbShipments.map(s => s.id === id ? { ...s, ...optimistic } as DbShipment : s)
-    setDbShipments(next)
-    saveToStorage('twf-db-shipments', next)
+    // Snapshot SOLO de los campos que este patch toca en la fila afectada → revert
+    // granular (no pisa cambios concurrentes de otros patches).
+    const origRow = dbShipments.find(s => s.id === id)
+    const origValues: Record<string, unknown> = {}
+    if (origRow) for (const k of Object.keys(optimistic)) origValues[k] = (origRow as unknown as Record<string, unknown>)[k]
+    // Updater FUNCIONAL: aplicar SIEMPRE sobre el estado más reciente, nunca sobre
+    // la closure de dbShipments. Dos patches seguidos (agregar contenedor → cargar
+    // salida/arribo fiscal por contenedor) construían el 2º sobre el estado previo
+    // al 1º y lo pisaban → los datos "desaparecían" de la pantalla hasta recargar
+    // (el server sí los tenía). Misma familia del race del guardado de camiones.
+    setDbShipments(prev => {
+      const next = prev.map(s => s.id === id ? { ...s, ...optimistic } as DbShipment : s)
+      saveToStorage('twf-db-shipments', next)
+      return next
+    })
     if (isAdminLoggedIn) {
       patchDbShipment(id, fields).catch(err => {
         console.warn('[DB] Failed to patch shipment:', err)
-        // La DB NO guardó: revertir el update optimista para no dejar la grilla
-        // (y localStorage) mostrando un valor que no se persistió.
-        setDbShipments(prev)
-        saveToStorage('twf-db-shipments', prev)
+        // La DB NO guardó: revertir SOLO los campos de este patch en esta fila,
+        // sobre el estado más reciente — no borra patches concurrentes que sí se
+        // guardaron (el revert anterior restauraba TODO el array y los perdía).
+        setDbShipments(prev => {
+          const next = prev.map(s => s.id === id ? { ...s, ...origValues } as DbShipment : s)
+          saveToStorage('twf-db-shipments', next)
+          return next
+        })
         toast.error('No se pudo guardar el cambio — se revirtió. Reintentá.', { duration: 5000 })
       })
     }
