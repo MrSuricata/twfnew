@@ -1,4 +1,5 @@
-// OperationMediaSection — sección "Fotos e informes" del panel de detalle
+// OperationMediaSection — "Fotos e informes" de una operación. Vive en un Dialog
+// que se abre desde el chip 📷 junto a la REF en el header del panel de detalle
 // (OperationDetailPanel). Recupera la función que se perdió al remover la vieja
 // pestaña "Cargas" (ShipmentTracking): subir fotos de cómo se cargó la mercadería
 // —en ORIGEN y en URUGUAY— y adjuntar informes PDF, por operación.
@@ -64,12 +65,16 @@ export default function OperationMediaSection({
   reports,
   onUpdateOriginPhotos,
   onUpdateReports,
+  hideHeader,
 }: {
   shipmentRef: string
   originPhotos: OriginPhoto[]
   reports: OperativeReport[]
   onUpdateOriginPhotos?: (photos: OriginPhoto[]) => void
   onUpdateReports?: (reports: OperativeReport[]) => void
+  /** Ocultar el h4 "Fotos e informes" — cuando la sección vive dentro de un
+   *  Dialog cuyo DialogTitle ya cumple ese rol (chip del header del panel). */
+  hideHeader?: boolean
 }) {
   const photoInputOrigen = useRef<HTMLInputElement>(null)
   const photoInputUruguay = useRef<HTMLInputElement>(null)
@@ -213,9 +218,11 @@ export default function OperationMediaSection({
 
   return (
     <section>
-      <h4 className="text-[10px] uppercase tracking-wide text-muted-foreground mb-2 pb-1 border-b">
-        Fotos e informes
-      </h4>
+      {!hideHeader && (
+        <h4 className="text-[10px] uppercase tracking-wide text-muted-foreground mb-2 pb-1 border-b">
+          Fotos e informes
+        </h4>
+      )}
 
       <div className="space-y-4">
         {STAGES.map(({ stage, label }) => {

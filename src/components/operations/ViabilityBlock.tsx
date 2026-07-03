@@ -61,13 +61,17 @@ export default function ViabilityBlock({
       </div>
 
       <div className="grid grid-cols-3 gap-2">
+        {/* Semáforo del dueño (03/07): rojo = respuesta que exige atención
+            operativa · verde = estado tranquilo. Solo se tiñe el botón
+            SELECCIONADO; el otro queda outline neutro. */}
         {/* Apilable es la NEGACIÓN de noApilable: togglear Apilable invierte noApilable */}
-        <Toggle label="Apilable" on={!op.noApilable} editable={editable} onToggle={() => onCommit('noApilable', !op.noApilable)} />
-        <Toggle label="Madera" on={op.wood} editable={editable} onToggle={() => onCommit('wood', !op.wood)} />
-        <Toggle label="Entrega en planta" on={op.entregaPlanta} editable={editable} onToggle={() => onCommit('entregaPlanta', !op.entregaPlanta)} />
+        <Toggle label="Apilable" on={!op.noApilable} colors={{ si: 'green', no: 'red' }} editable={editable} onToggle={() => onCommit('noApilable', !op.noApilable)} />
+        {/* Madera Sí dispara SENASA → rojo */}
+        <Toggle label="Madera" on={op.wood} colors={{ si: 'red', no: 'green' }} editable={editable} onToggle={() => onCommit('wood', !op.wood)} />
+        <Toggle label="Entrega en planta" on={op.entregaPlanta} colors={{ si: 'red', no: 'green' }} editable={editable} onToggle={() => onCommit('entregaPlanta', !op.entregaPlanta)} />
         {/* tlx es string 'SI'|'' en el modelo; el commit envía boolean (col telex) */}
-        <Toggle label="Telex" on={op.tlx === 'SI'} editable={editable} onToggle={() => onCommit('tlx', op.tlx !== 'SI')} />
-        <Toggle label="IMO" on={op.imo} editable={editable} onToggle={() => onCommit('imo', !op.imo)} />
+        <Toggle label="Telex" on={op.tlx === 'SI'} colors={{ si: 'green', no: 'red' }} editable={editable} onToggle={() => onCommit('tlx', op.tlx !== 'SI')} />
+        <Toggle label="IMO" on={op.imo} colors={{ si: 'red', no: 'green' }} editable={editable} onToggle={() => onCommit('imo', !op.imo)} />
       </div>
     </section>
   )
@@ -158,26 +162,36 @@ function StatBox({
   )
 }
 
-// Toggle grande Sí/No: el seleccionado en azul institucional (texto blanco).
+// Toggle grande Sí/No con semáforo operativo: cada respuesta tiene su color al
+// quedar seleccionada (verde = tranquilo · rojo = exige atención: SENASA, entrega
+// especial, sin telex…). Tono 600 con texto blanco (pedido del dueño, por
+// contraste); el botón NO seleccionado queda outline neutro como siempre.
+type ToggleColors = { si: 'green' | 'red'; no: 'green' | 'red' }
+const TOGGLE_ON: Record<'green' | 'red', string> = {
+  green: 'bg-emerald-600 border-emerald-600 text-white font-medium',
+  red: 'bg-red-600 border-red-600 text-white font-medium',
+}
+
 function Toggle({
-  label, on, editable, onToggle,
+  label, on, colors, editable, onToggle,
 }: {
   label: string
   on: boolean
+  colors: ToggleColors
   editable: boolean
   onToggle: () => void
 }) {
-  const seg = (active: boolean) => {
+  const seg = (active: boolean, color: 'green' | 'red') => {
     const base = 'flex-1 h-9 text-sm rounded-md border transition-colors'
-    if (active) return `${base} bg-[#1e3a8a] border-[#1e3a8a] text-white font-medium`
+    if (active) return `${base} ${TOGGLE_ON[color]}`
     return `${base} bg-background border-border text-muted-foreground ${editable ? 'hover:bg-muted' : ''}`
   }
   return (
     <div>
       <div className="text-[11px] text-muted-foreground text-center mb-1 truncate" title={label}>{label}</div>
       <div className="flex gap-1">
-        <button type="button" disabled={!editable || on} onClick={() => { if (!on) onToggle() }} className={seg(on)}>Sí</button>
-        <button type="button" disabled={!editable || !on} onClick={() => { if (on) onToggle() }} className={seg(!on)}>No</button>
+        <button type="button" disabled={!editable || on} onClick={() => { if (!on) onToggle() }} className={seg(on, colors.si)}>Sí</button>
+        <button type="button" disabled={!editable || !on} onClick={() => { if (on) onToggle() }} className={seg(!on, colors.no)}>No</button>
       </div>
     </div>
   )
