@@ -3,6 +3,8 @@
 // Convertido de Popover a Dialog (2026-06) — centrado en pantalla, visualmente limpio.
 
 import { useState, useRef } from 'react'
+import { toast } from 'sonner'
+import { CheckCircle, ArrowCounterClockwise } from '@phosphor-icons/react'
 import {
   Dialog,
   DialogContent,
@@ -11,6 +13,8 @@ import type { ParsedShipment, OperativasRecord } from '@/lib/shipmentTypes'
 import { getShipmentStatus } from '@/lib/shipmentTypes'
 import { buildPerContainerPatch } from '@/lib/operationsTypes'
 import { isSalidaBeforeArrival, fmtDMY } from '@/lib/salidaCheck'
+import { fmtDateDMY } from '@/lib/format'
+import { isLibreDevuelto, libreDevueltoToggle, LIBRE_DEVUELTO } from '@/lib/libreDevuelto'
 
 // ─── Lugar options (mirrors ContainerDatesSection) ────────────────────────
 
@@ -148,7 +152,8 @@ export default function ContainerQuickEdit({
   // LIBRE se movió a "Datos clave de la carga" (ViabilityBlock): es dato de la
   // carga, se edita a nivel carga y propaga a todos los contenedores. Acá el
   // quick-edit toca salida / arribo fiscal / lugar (por contenedor) + transporte
-  // (nivel-carga: propaga a todos los contenedores vía buildPerContainerPatch).
+  // y el botón "Devuelto" sobre LIBRE (nivel-carga: ambos propagan a todos los
+  // contenedores vía buildPerContainerPatch).
   const [drafts, setDrafts] = useState<{ salida: string; etaFisc: string }>({
     salida: currentOp.SALIDA || '',
     etaFisc: currentOp.ETA_FISC || '',
@@ -161,6 +166,14 @@ export default function ContainerQuickEdit({
     currentOp.TRANSPORTE || existing.find(o => o.TRANSPORTE)?.TRANSPORTE || ''
   )
   const [transporte, setTransporte] = useState<string>(initialTransporte)
+  // LIBRE es nivel-carga (la FECHA se edita en Datos clave del panel; acá solo
+  // display + botón "Devuelto"). Valor GUARDADO = columna LIBRE_HASTA o primera
+  // operativa con LIBRE (mismo rollup firstWith de dbShipmentToOperation).
+  // calculatedLibreHasta es solo display de respaldo — NO es el valor que
+  // restaura "Deshacer" (ese debe ser el guardado exacto: fecha o vacío).
+  const storedLibre = shipment.LIBRE_HASTA ||
+    (existing.find(o => (o.LIBRE || '').trim())?.LIBRE || '')
+  const [libreVal, setLibreVal] = useState<string>(storedLibre)
   const [saving, setSaving] = useState(false)
 
   // Fix 2: guard against double-save (Enter+blur fires two commitSave calls).
@@ -174,6 +187,7 @@ export default function ContainerQuickEdit({
       etaFisc: currentOp.ETA_FISC || '',
       lugar: currentOp.LUGAR_SALIDA || '',
       transporte: initialTransporte,
+      libre: storedLibre,
     })
   )
 
@@ -188,14 +202,15 @@ export default function ContainerQuickEdit({
    * Returns early if nothing changed since the last commit (Fix 2).
    */
   const commitSave = async (
-    overrides?: { salida?: string; etaFisc?: string; lugar?: string; transporte?: string }
+    overrides?: { salida?: string; etaFisc?: string; lugar?: string; transporte?: string; libre?: string }
   ) => {
     if (!canSave) return
     const salida = overrides?.salida ?? drafts.salida
     const etaFisc = overrides?.etaFisc ?? drafts.etaFisc
     const lugarVal = overrides?.lugar ?? lugar
     const transVal = normTrans(overrides?.transporte ?? transporte)
-    const serialized = JSON.stringify({ salida, etaFisc, lugar: lugarVal, transporte: transVal })
+    const libreV = overrides?.libre ?? libreVal
+    const serialized = JSON.stringify({ salida, etaFisc, lugar: lugarVal, transporte: transVal, libre: libreV })
     if (serialized === lastCommittedRef.current) return // no change → skip
     // Solo al COORDINAR la salida (cuando la fecha de salida CAMBIÓ): no puede ser
     // anterior a la llegada a MVD → avisar y pedir confirmación. Editar arribo/lugar
@@ -227,8 +242,25 @@ export default function ContainerQuickEdit({
       // en datos históricos.
       let prevTrans = initialTransporte
       try { prevTrans = normTrans((JSON.parse(lastCommittedRef.current).transporte as string) || '') } catch { /* sin commit previo */ }
+      // Las propagaciones nivel-carga se ENCADENAN sobre `propagated` (no sobre
+      // `next` cada una): si transporte Y libre cambian en el mismo commit, la
+      // segunda debe mapear el array ya propagado por la primera o la pisa.
+      let propagated = next
       if (transVal !== prevTrans) {
-        Object.assign(fields, buildPerContainerPatch({ operativas: next }, 'transporte', transVal))
+        const p = buildPerContainerPatch({ operativas: propagated }, 'transporte', transVal)
+        propagated = (p.operativas as OperativasRecord[] | undefined) ?? propagated
+        Object.assign(fields, p)
+      }
+      // LIBRE también es nivel-carga ('DEVUELTO' vive en LIBRE — regla del
+      // repo): si cambió, propagar a TODOS los contenedores + la columna con
+      // el MISMO buildPerContainerPatch, conservando las fechas/lugar recién
+      // editados de este contenedor.
+      let prevLibre = storedLibre
+      try { prevLibre = (JSON.parse(lastCommittedRef.current).libre as string) ?? storedLibre } catch { /* sin commit previo */ }
+      if (libreV !== prevLibre) {
+        const p = buildPerContainerPatch({ operativas: propagated }, 'libre', libreV)
+        propagated = (p.operativas as OperativasRecord[] | undefined) ?? propagated
+        Object.assign(fields, p)
       }
       await onPatch(shipment.__dbId!, fields)
       lastCommittedRef.current = serialized
@@ -244,6 +276,28 @@ export default function ContainerQuickEdit({
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') void commitSave()
     // Escape is handled natively by the Dialog (Radix closes on Escape)
+  }
+
+  // Botón rápido "Devuelto" — flujo estrella: alerta LIBRE → quick-edit →
+  // un click → LIBRE='DEVUELTO' (nivel-carga) → la carga sale de las alertas.
+  // Va por el MISMO commitSave (guard anti doble-save incluido); el toast
+  // permite deshacer restaurando el valor EXACTO anterior (fecha o vacío,
+  // capturado ANTES de pisar). Con LIBRE ya DEVUELTO, el botón pasa a
+  // "Deshacer devuelto" y limpia a '' (sin toast: el cambio se ve al instante).
+  const devuelto = isLibreDevuelto(libreVal)
+  const toggleDevuelto = async () => {
+    if (!canSave || saving) return
+    const { next, prev } = libreDevueltoToggle(libreVal)
+    setLibreVal(next)
+    await commitSave({ libre: next })
+    if (next === LIBRE_DEVUELTO) {
+      toast.success('Contenedor devuelto', {
+        action: {
+          label: 'Deshacer',
+          onClick: () => { setLibreVal(prev); void commitSave({ libre: prev }) },
+        },
+      })
+    }
   }
 
   const status = containerMicroStatus(shipment, {
@@ -392,6 +446,31 @@ export default function ContainerQuickEdit({
                 {transporte || '—'}
               </span>
             )}
+          </div>
+
+          {/* LIBRE (nivel-carga) + botón "Devuelto". La FECHA se edita en
+              Datos clave del panel ("Más datos"); acá display + acción rápida.
+              Display con respaldo calculatedLibreHasta (lo mismo que mira
+              libreAlerts); "Deshacer" restaura solo el valor GUARDADO. */}
+          <div className="flex flex-col gap-1">
+            <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              Libre (máx. devolución)
+            </label>
+            <div className="flex items-center justify-between gap-2">
+              <span className={`text-sm font-medium ${devuelto ? 'text-emerald-600' : (libreVal || shipment.calculatedLibreHasta) ? 'text-foreground' : 'text-muted-foreground'}`}>
+                {fmtDateDMY(libreVal || shipment.calculatedLibreHasta || '') || '—'}
+              </span>
+              <button
+                type="button"
+                onClick={() => void toggleDevuelto()}
+                disabled={!canSave || saving}
+                title={!canSave ? 'Solo lectura' : devuelto ? 'Quitar la marca DEVUELTO (LIBRE queda vacío)' : 'Marcar contenedor devuelto (LIBRE = DEVUELTO)'}
+                className="inline-flex items-center gap-1 h-7 px-2 rounded-md border border-input bg-background text-[11px] font-medium text-muted-foreground transition-colors enabled:hover:bg-muted enabled:hover:text-foreground disabled:opacity-50"
+              >
+                {devuelto ? <ArrowCounterClockwise size={12} /> : <CheckCircle size={12} />}
+                {devuelto ? 'Deshacer devuelto' : 'Devuelto'}
+              </button>
+            </div>
           </div>
         </div>
 
