@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
-import { LockSimple, Truck as TruckIcon, Archive, ArrowCounterClockwise, Trash, Plus, X, PencilSimple, Check } from '@phosphor-icons/react'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { LockSimple, Truck as TruckIcon, Archive, ArrowCounterClockwise, Trash, Plus, X, PencilSimple, Check, Camera } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import type { Operator, UnifiedOperation } from '@/lib/operationsTypes'
 import {
@@ -22,16 +23,34 @@ interface TruckRefInfo { truckCode: string; status: string }
 const PAIS_LABEL: Record<string, string> = { UY: 'UY', AR: 'AR', CL: 'CL', OTRO: '—' }
 const NUM_FMT = new Intl.NumberFormat('es-UY', { maximumFractionDigits: 2 })
 
+// Identidad de color por sección (pedido del dueño 03/07): cada bloque es un
+// card con fondo pastel + borde + label teñido, para ubicar de un vistazo dónde
+// va cada dato. SOLO cambia el fondo/acento — los valores siguen en el índigo
+// de marca (text-foreground) y los labels de campo en muted (contraste AA en
+// ambos brands). La app no tiene dark mode (TWF/Med son claros) → pasteles fijos.
+const SECTION_TONES = {
+  slate:    { card: 'bg-slate-50/70 border-slate-200',     label: 'text-slate-600',   box: 'border-slate-200' },
+  sky:      { card: 'bg-sky-50/60 border-sky-200',         label: 'text-sky-700',     box: 'border-sky-200/80' },
+  amber:    { card: 'bg-amber-50/60 border-amber-200',     label: 'text-amber-700',   box: 'border-amber-200/80' },
+  violet:   { card: 'bg-violet-50/60 border-violet-200',   label: 'text-violet-700',  box: 'border-violet-200/80' },
+  emerald:  { card: 'bg-emerald-50/60 border-emerald-200', label: 'text-emerald-700', box: 'border-emerald-200/80' },
+  rose:     { card: 'bg-rose-50/60 border-rose-200',       label: 'text-rose-700',    box: 'border-rose-200/80' },
+  bluegray: { card: 'bg-slate-100/70 border-slate-300/70', label: 'text-slate-700',   box: 'border-slate-300/70' },
+} as const
+type SectionTone = keyof typeof SECTION_TONES
+
 // Secciones del panel: declarativas.
 // kind: 'number' → input numérico.
 // wide: true → col-span-2 en el grid de 2 columnas.
+// tone: identidad de color del card (SECTION_TONES).
 // Nota: los campos bool (tlx, wood, oog, imo, noApilable, seguro, certi, impresa)
 // se sacan de las secciones y se renderizan como chips interactivos en la sección Carga.
-const SECTIONS: { title: string; fields: { key: keyof UnifiedOperation; label: string; kind?: 'number' | 'date'; wide?: boolean; dateDisplay?: boolean }[] }[] = [
+const SECTIONS: { title: string; tone: SectionTone; fields: { key: keyof UnifiedOperation; label: string; kind?: 'number' | 'date'; wide?: boolean; dateDisplay?: boolean }[] }[] = [
   {
     // Fechas PRIMERO (pedido 02/07): es lo que más se consulta al abrir el panel —
     // queda apenas debajo de "Datos clave de la carga" / fechas por contenedor.
     title: 'Fechas',
+    tone: 'sky',
     fields: [
       // dateDisplay: se MUESTRAN dd/MM/yyyy (fmtDateDMY, display only) — el valor
       // guardado sigue en ISO y la edición no cambia.
@@ -46,6 +65,7 @@ const SECTIONS: { title: string; fields: { key: keyof UnifiedOperation; label: s
   },
   {
     title: 'Identificación',
+    tone: 'amber',
     fields: [
       { key: 'cliente', label: 'Cliente / Cnee', wide: true },
       { key: 'clientRef', label: 'Ref cliente' },
@@ -56,6 +76,7 @@ const SECTIONS: { title: string; fields: { key: keyof UnifiedOperation; label: s
   },
   {
     title: 'Documental',
+    tone: 'violet',
     fields: [
       { key: 'docNumber', label: 'BL / MAWB / CRT' },
       { key: 'buque', label: 'Buque' },
@@ -64,6 +85,7 @@ const SECTIONS: { title: string; fields: { key: keyof UnifiedOperation; label: s
   },
   {
     title: 'Ruta',
+    tone: 'emerald',
     fields: [
       { key: 'origin', label: 'Origen' },
       { key: 'dischargePort', label: 'Pto. descarga' },
@@ -73,6 +95,7 @@ const SECTIONS: { title: string; fields: { key: keyof UnifiedOperation; label: s
   },
   {
     title: 'Carga',
+    tone: 'rose',
     fields: [
       { key: 'descripcion', label: 'Descripción', wide: true },
       { key: 'tipo', label: 'Tipo' },
@@ -80,6 +103,7 @@ const SECTIONS: { title: string; fields: { key: keyof UnifiedOperation; label: s
   },
   {
     title: 'Operativa',
+    tone: 'bluegray',
     fields: [
       // 'operativa' (tipo) y 'transporte' se movieron a "Datos clave de la carga"
       // (ViabilityBlock) — no duplicar acá.
@@ -167,10 +191,12 @@ export default function OperationDetailPanel({
   const [refDraft, setRefDraft] = useState('')
   const [pinDraft, setPinDraft] = useState('')
   const [renameBusy, setRenameBusy] = useState(false)
+  // Fotos e informes: viven en un Dialog que se abre desde el chip del header.
+  const [mediaOpen, setMediaOpen] = useState(false)
 
   // El panel no se desmonta al cambiar de operación: limpiar el borrador.
   const opUid = op?.uid
-  useEffect(() => { setNewCntr(''); setAddingCntr(false); setRenaming(false); setRefDraft(''); setPinDraft('') }, [opUid])
+  useEffect(() => { setNewCntr(''); setAddingCntr(false); setRenaming(false); setRefDraft(''); setPinDraft(''); setMediaOpen(false) }, [opUid])
 
   if (!op) return <Sheet open={false}><SheetContent side="right" /></Sheet>
 
@@ -210,6 +236,15 @@ export default function OperationDetailPanel({
   const statusEditable = op.source === 'db' && op.mode !== 'fcl' && !!op.dbId && !truckStatus
   const segVencido = isSeguimientoVencido(op, truckStatus?.status, hoy)
 
+  // Fotos e informes: chip compacto junto a la REF (abre el Dialog). El conteo
+  // suma fotos de la operación (origen + Uruguay) + informes PDF — mismo criterio
+  // de matcheo que OperationMediaSection (shipmentRef === REF exacto).
+  const mediaEnabled = !!(originPhotos || reports) && !!op.ref
+  const mediaCount = mediaEnabled
+    ? (originPhotos || []).filter(p => p.shipmentRef === op.ref).length +
+      (reports || []).filter(r => r.shipmentRef === op.ref).length
+    : 0
+
   // Renombrar la REF: solo cargas DB editables (incl. FCL horneada). PIN 0000 + cascada.
   const canRenameRef = op.source === 'db' && !!op.dbId && !op.readOnly && !!onRenameRef
   const submitRename = async () => {
@@ -246,6 +281,22 @@ export default function OperationDetailPanel({
                 className="text-muted-foreground hover:text-foreground"
               >
                 <PencilSimple size={13} />
+              </button>
+            )}
+            {/* Chip fotos e informes — junto a la REF; abre el Dialog de medios */}
+            {mediaEnabled && (
+              <button
+                type="button"
+                onClick={() => setMediaOpen(true)}
+                title="Fotos e informes"
+                className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium transition-colors ${
+                  mediaCount > 0
+                    ? 'border-primary/30 bg-primary/10 text-primary hover:bg-primary/15'
+                    : 'border-dashed border-border text-muted-foreground hover:border-primary hover:text-primary'
+                }`}
+              >
+                <Camera size={12} weight={mediaCount > 0 ? 'fill' : 'regular'} />
+                {mediaCount > 0 ? mediaCount : 'Agregar'}
               </button>
             )}
           </SheetTitle>
@@ -315,9 +366,9 @@ export default function OperationDetailPanel({
             }}
           />
 
-          {/* Contenedores */}
-          <section>
-            <h4 className="text-[10px] uppercase tracking-wide text-muted-foreground mb-2 pb-1 border-b">
+          {/* Contenedores — card slate suave (identidad de color por sección) */}
+          <section className="rounded-lg border border-slate-200 bg-slate-50/70 p-3">
+            <h4 className="text-[10px] uppercase tracking-wide font-semibold text-slate-600 mb-2">
               Contenedores ({cntrs.length})
             </h4>
             <div className="flex flex-wrap gap-1.5">
@@ -368,15 +419,17 @@ export default function OperationDetailPanel({
             </div>
           </section>
 
-          {/* Secciones de campos */}
+          {/* Secciones de campos — cada una un card con su identidad de color,
+              campos como cuadros grandes (mismo patrón que "Datos clave") */}
           {SECTIONS.map(sec => {
             const fields = (sec.title === 'Fechas' && hidePerContainerDates)
               ? sec.fields.filter(f => f.key !== 'salida' && f.key !== 'etaFisc')
               : sec.fields
+            const tone = SECTION_TONES[sec.tone]
             return (
-            <section key={sec.title}>
-              <h4 className="text-[10px] uppercase tracking-wide text-muted-foreground mb-2 pb-1 border-b">{sec.title}</h4>
-              <div className="grid grid-cols-2 gap-x-4 gap-y-2.5">
+            <section key={sec.title} className={`rounded-lg border p-3 ${tone.card}`}>
+              <h4 className={`text-[10px] uppercase tracking-wide font-semibold mb-2 ${tone.label}`}>{sec.title}</h4>
+              <div className="grid grid-cols-2 gap-2">
                 {fields.map(f => (
                   <FieldRow
                     key={f.key}
@@ -387,6 +440,7 @@ export default function OperationDetailPanel({
                     wide={f.wide}
                     dateDisplay={f.dateDisplay}
                     segVencido={f.key === 'seguimiento' && segVencido}
+                    boxClass={tone.box}
                     onCommit={commit}
                   />
                 ))}
@@ -427,19 +481,6 @@ export default function OperationDetailPanel({
             )
           })}
 
-          {/* Fotos de carga (origen/Uruguay) + informes PDF de la operación.
-              Todas las modalidades: la clave es la ref (fotos/informes viven en
-              tablas propias keyed por shipment_ref, no dependen de la fila). */}
-          {(originPhotos || reports) && op.ref && (
-            <OperationMediaSection
-              shipmentRef={op.ref}
-              originPhotos={originPhotos || []}
-              reports={reports || []}
-              onUpdateOriginPhotos={onUpdateOriginPhotos}
-              onUpdateReports={onUpdateReports}
-            />
-          )}
-
           {/* Acciones (solo filas DB) */}
           {op.source === 'db' && op.dbId && (
             <section className="flex items-center gap-2 border-t pt-3">
@@ -468,12 +509,39 @@ export default function OperationDetailPanel({
             </p>
           )}
         </div>
+
+        {/* Dialog de fotos e informes — se abre desde el chip del header y reusa
+            OperationMediaSection completo (galerías origen/Uruguay + informes +
+            uploads). Todas las modalidades: la clave es la ref (fotos/informes
+            viven en tablas propias keyed por shipment_ref, no dependen de la fila). */}
+        {mediaEnabled && (
+          <Dialog open={mediaOpen} onOpenChange={setMediaOpen}>
+            <DialogContent className="sm:max-w-3xl">
+              <DialogHeader>
+                <DialogTitle>Fotos e informes — {op.ref}</DialogTitle>
+                <DialogDescription>
+                  Fotos de la carga (origen y Uruguay) e informes PDF de la operación.
+                </DialogDescription>
+              </DialogHeader>
+              <OperationMediaSection
+                shipmentRef={op.ref}
+                originPhotos={originPhotos || []}
+                reports={reports || []}
+                onUpdateOriginPhotos={onUpdateOriginPhotos}
+                onUpdateReports={onUpdateReports}
+                hideHeader
+              />
+            </DialogContent>
+          </Dialog>
+        )}
       </SheetContent>
     </Sheet>
   )
 }
 
-// ── Una stat-block label+valor del panel; editable según editModeFor ──
+// ── Cuadro label+valor del panel (mismo patrón que StatBox de "Datos clave"):
+// label 10px uppercase arriba, valor grande semibold abajo, editable inline según
+// editModeFor. SOLO cambia la presentación — el commit es idéntico al de siempre.
 // Los campos bool (tlx, wood, oog, etc.) se renderizan en OperationDetailPanel
 // como chips interactivos en la sección Carga, no como FieldRow.
 function FieldRow({
@@ -484,6 +552,7 @@ function FieldRow({
   wide,
   dateDisplay,
   segVencido,
+  boxClass,
   onCommit,
 }: {
   label: string
@@ -494,6 +563,8 @@ function FieldRow({
   /** Mostrar como dd/MM/yyyy (display only) — la edición sigue sobre el valor crudo. */
   dateDisplay?: boolean
   segVencido?: boolean
+  /** Borde teñido según la sección (SECTION_TONES.box). */
+  boxClass?: string
   onCommit: (key: keyof UnifiedOperation, v: unknown) => void
 }) {
   const [editing, setEditing] = useState(false)
@@ -506,6 +577,12 @@ function FieldRow({
     : ((dateDisplay ? fmtDateDMY(String(raw ?? '')) : String(raw ?? '')) || '—')
 
   const isEmpty = display === '—'
+
+  // Campos fecha: editor type=date SOLO si el valor crudo está vacío o ya es ISO
+  // (yyyy-MM-dd). Textos legacy (p.ej. anotaciones sueltas) siguen editándose como
+  // texto para no perderlos — el input date los normalizaría a vacío.
+  const rawStr = String(raw ?? '')
+  const editAsDate = (kind === 'date' || dateDisplay) && (rawStr === '' || /^\d{4}-\d{2}-\d{2}$/.test(rawStr))
 
   const startEdit = () => {
     if (!mode) return
@@ -526,18 +603,22 @@ function FieldRow({
   }
 
   return (
-    <div className={`group flex flex-col gap-0.5 min-w-0 ${wide ? 'col-span-2' : ''}`}>
-      <span className="text-[10px] uppercase tracking-wide text-muted-foreground leading-none">{label}</span>
+    <div
+      className={`group rounded-lg border p-2.5 min-w-0 ${
+        segVencido ? 'border-red-300 bg-red-50' : `bg-card ${boxClass || ''}`
+      } ${wide ? 'col-span-2' : ''}`}
+    >
+      <div className="text-[10px] uppercase tracking-wide text-muted-foreground leading-none mb-1">{label}</div>
       {editing ? (
         <Input
           autoFocus
-          type={kind === 'date' ? 'date' : undefined}
+          type={editAsDate ? 'date' : undefined}
           value={draft}
           onChange={e => setDraft(e.target.value)}
           onFocus={e => e.target.select()}
           onBlur={save}
           onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
-          className="h-6 text-[13px] px-1"
+          className="h-8 text-sm px-1.5"
           inputMode={kind === 'number' ? 'decimal' : undefined}
         />
       ) : (
@@ -545,16 +626,16 @@ function FieldRow({
           type="button"
           onClick={startEdit}
           disabled={!mode}
-          className={`text-left text-[13px] leading-snug rounded px-0.5 py-0.5 break-words min-w-0 ${
-            segVencido
-              ? 'text-red-700 font-semibold bg-red-50 rounded px-1'
-              : isEmpty
-                ? 'text-muted-foreground'
-                : 'font-medium'
-          } ${mode ? 'hover:bg-primary/5 cursor-text' : 'cursor-default'}`}
+          className={`text-left w-full min-w-0 ${mode ? 'cursor-text hover:opacity-70' : 'cursor-default'}`}
           title={mode ? 'Click para editar (Enter guarda · Esc cancela)' : 'Solo lectura (viene de la planilla)'}
         >
-          {display}
+          <span
+            className={`text-[15px] leading-tight break-words ${
+              segVencido ? 'font-semibold text-red-700' : isEmpty ? 'text-muted-foreground' : 'font-semibold'
+            }`}
+          >
+            {display}
+          </span>
           {mode && !isEmpty && <PencilSimple size={10} className="inline ml-1 opacity-0 group-hover:opacity-40" />}
         </button>
       )}

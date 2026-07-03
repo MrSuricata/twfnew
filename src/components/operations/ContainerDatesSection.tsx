@@ -220,9 +220,10 @@ export default function ContainerDatesSection({
   const nf = new Intl.NumberFormat('es-UY', { maximumFractionDigits: 2 })
 
   return (
-    <section className="rounded-lg border bg-card p-3">
+    // Identidad de color: celeste como "Fechas" (son las fechas por contenedor).
+    <section className="rounded-lg border border-sky-200 bg-sky-50/60 p-3">
       <div className="flex items-center justify-between mb-3">
-        <span className="text-[10px] uppercase tracking-wide text-muted-foreground">
+        <span className="text-[10px] uppercase tracking-wide font-semibold text-sky-700">
           Salidas y arribos por contenedor ({cntrs.length})
         </span>
       </div>
@@ -235,7 +236,7 @@ export default function ContainerDatesSection({
           return (
             <div
               key={`${cntr}-${i}`}
-              className="rounded-md border bg-background px-2.5 py-2 space-y-2"
+              className="rounded-md border border-sky-200/80 bg-card px-2.5 py-2 space-y-2"
             >
               {/* Cabecera: código de contenedor + micro-status */}
               <div className="flex items-center justify-between gap-2">
