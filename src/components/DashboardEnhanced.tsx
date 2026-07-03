@@ -480,6 +480,10 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
               truckLoads={truckLoads}
               operators={operators}
               assignments={assignments}
+              originPhotos={originPhotos}
+              reports={reports}
+              onUpdateOriginPhotos={onUpdateOriginPhotos}
+              onUpdateReports={onUpdateReports}
               onAssignOperator={(ref, opId) => { if (onAssignOperator) onAssignOperator(ref, opId) }}
               onPatchShipment={(id, fields) => { if (onPatchShipment) onPatchShipment(id, fields) }}
               onCreateShipment={(row) => onCreateShipment?.(row)}
@@ -559,6 +563,10 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
           truckLoads={truckLoads || []}
           operators={operators || []}
           assignments={assignments || []}
+          originPhotos={originPhotos}
+          reports={reports}
+          onUpdateOriginPhotos={onUpdateOriginPhotos}
+          onUpdateReports={onUpdateReports}
           onPatch={(id, fields) => { if (onPatchShipment) onPatchShipment(id, fields) }}
           onPatchFcl={(id, edits) => { if (onPatchFclField) onPatchFclField(id, edits) }}
           onAssignOperator={(ref, opId) => { if (onAssignOperator) onAssignOperator(ref, opId) }}

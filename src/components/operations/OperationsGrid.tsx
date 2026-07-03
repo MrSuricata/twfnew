@@ -42,6 +42,7 @@ import OperationDetailPanel from './OperationDetailPanel'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
 import type { Operator, OperatorAssignment, Modality, UnifiedOperation, DbShipment } from '@/lib/operationsTypes'
 import type { Truck, TruckLoad } from '@/lib/truckTypes'
+import type { OriginPhoto, OperativeReport } from '@/lib/quotationTypes'
 import {
   buildOperations,
   deriveKnownTransportes,
@@ -71,6 +72,11 @@ interface OperationsGridProps {
   truckLoads?: TruckLoad[]
   operators: Operator[]
   assignments: OperatorAssignment[]
+  /** Fotos de carga + informes PDF → sección "Fotos e informes" del panel de detalle. */
+  originPhotos?: OriginPhoto[]
+  reports?: OperativeReport[]
+  onUpdateOriginPhotos?: (photos: OriginPhoto[]) => void
+  onUpdateReports?: (reports: OperativeReport[]) => void
   onAssignOperator: (ref: string, operatorId: string | null) => void
   onPatchShipment: (id: string, fields: Record<string, unknown>) => void
   /** Devuelve false si el alta se abortó (REF duplicada y el usuario canceló). */
@@ -119,6 +125,10 @@ export default function OperationsGrid({
   truckLoads,
   operators,
   assignments,
+  originPhotos,
+  reports,
+  onUpdateOriginPhotos,
+  onUpdateReports,
   onAssignOperator,
   onPatchShipment,
   onCreateShipment,
@@ -946,6 +956,10 @@ export default function OperationsGrid({
         hoy={hoy}
         knownDepositos={knownDepositos}
         knownTransportes={knownTransportes}
+        originPhotos={originPhotos}
+        reports={reports}
+        onUpdateOriginPhotos={onUpdateOriginPhotos}
+        onUpdateReports={onUpdateReports}
         onAssign={assignOp}
         onPatch={onPatchShipment}
         onPatchFcl={onPatchFclField}

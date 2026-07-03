@@ -127,8 +127,10 @@ export const OriginPhotoRowSchema = z.object({
   containerNumber: z.string().max(50).optional(),
   container_number: z.string().max(50).optional(),
   caption: z.string().max(500).optional().default(''),
-  photoType: z.enum(['origen', 'destino', 'otro']).optional().default('origen'),
-  photo_type: z.enum(['origen', 'destino', 'otro']).optional(),
+  // 'uruguay' es la etapa que usa la UI desde siempre (PhotoLocation en
+  // quotationTypes.ts); faltaba en el enum y el POST la rechazaba con 400.
+  photoType: z.enum(['origen', 'uruguay', 'destino', 'otro']).optional().default('origen'),
+  photo_type: z.enum(['origen', 'uruguay', 'destino', 'otro']).optional(),
   fileName: z.string().max(300).optional().default(''),
   file_name: z.string().max(300).optional(),
   fileType: z.string().max(100).optional().default(''),
