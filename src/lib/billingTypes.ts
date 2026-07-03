@@ -131,6 +131,18 @@ export interface BillableItem {
   truckCode?: string           // si llegó consolidada en un camión
   cntr?: string                // contenedor(es) — para la cabecera de la ficha
   eta?: string                 // ETA MVD (ISO) — para la cabecera de la ficha
+  transporte?: string          // transporte (FCL planilla: de operativas · DB: columna)
+  deposito?: string            // depósito (ídem)
+}
+
+/** Valores únicos no vacíos, unidos con ", " (varias operativas → un string). */
+const uniqJoin = (vals: (string | undefined)[]): string => {
+  const seen = new Set<string>()
+  for (const v of vals) {
+    const t = (v || '').trim()
+    if (t) seen.add(t)
+  }
+  return [...seen].join(', ')
 }
 
 /** DB cargas: facturable cuando el estado efectivo llegó a fiscal o se entregó. */
@@ -194,8 +206,16 @@ export function buildBillableItems(
     seenFcl.add(s.REF)
     const state = getBillingState(s, billingByRef)
     if (!state) continue
-    const cntr = s.CNTR || (s.operativas || []).map(o => o.CNTR_OP).filter(Boolean).join(', ')
-    out.push({ item: { ref: s.REF, cliente: s.CLIENTE || '', mode: 'fcl', arrival: getFiscalArrivalDate(s), cntr, eta: s.ETA || '' }, state })
+    const ops = s.operativas || []
+    const cntr = s.CNTR || ops.map(o => o.CNTR_OP).filter(Boolean).join(', ')
+    out.push({
+      item: {
+        ref: s.REF, cliente: s.CLIENTE || '', mode: 'fcl', arrival: getFiscalArrivalDate(s), cntr, eta: s.ETA || '',
+        transporte: uniqJoin(ops.map(o => o.TRANSPORTE)),
+        deposito: uniqJoin(ops.map(o => o.DEPOSITO)),
+      },
+      state,
+    })
   }
 
   // Cargas DB (LCL/aéreo/terrestre + FCL horneada post-flip) — incluye archivadas a
@@ -219,6 +239,7 @@ export function buildBillableItems(
         ref: d.ref, cliente: d.cliente || '', mode: d.mode, arrival,
         truckCode: d.mode === 'fcl' ? undefined : t?.code,
         cntr: d.contenedor || '', eta: d.eta || '',
+        transporte: d.transporte || '', deposito: d.deposito || '',
       },
       state,
     })
