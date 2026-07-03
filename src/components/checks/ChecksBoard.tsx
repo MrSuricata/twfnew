@@ -9,6 +9,10 @@
 // foco de la ventana (V1 simple, sin estado global en App) — el guardado es
 // optimista con revert en error (patrón handlePatchShipment) y se reconcilia
 // con los steps que devuelve el server (que estampa `by` desde el token).
+//
+// El chip TELEX de cada fila es un toggle real (si la carga es editable):
+// escribe por el MISMO camino que el toggle Telex del panel de detalle —
+// buildPerContainerPatch(op, 'telex', boolean) → onPatchShipment (App).
 // ────────────────────────────────────────────────────────────────────────
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
@@ -26,7 +30,7 @@ import { Switch } from '@/components/ui/switch'
 import { getOperativaColor } from '@/lib/agendaTypes'
 import { fmtDateDMY } from '@/lib/format'
 import { getAdminName } from '@/lib/authClient'
-import { buildOperations, type DbShipment, type UnifiedOperation } from '@/lib/operationsTypes'
+import { buildOperations, buildPerContainerPatch, type DbShipment, type UnifiedOperation } from '@/lib/operationsTypes'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
 import { fetchRefChecks, saveRefCheckSteps } from '@/lib/dataClient'
 import {
@@ -46,6 +50,9 @@ interface ChecksBoardProps {
   shipments?: ParsedShipment[]
   /** Cargas de la tabla shipments (post-flip las FCL viven acá). */
   dbShipments?: DbShipment[]
+  /** Patch de una fila DB — el handlePatchShipment de App (optimista + revert).
+   *  Habilita el toggle de telex desde la fila; sin él, chip estático. */
+  onPatchShipment?: (id: string, fields: Record<string, unknown>) => void
 }
 
 const EMPTY_ASSIGNMENTS = new Map<string, string | null>()
@@ -62,7 +69,7 @@ function shortWho(by: string | undefined): string {
   return String(by || '').split('@')[0]
 }
 
-export default function ChecksBoard({ shipments = [], dbShipments = [] }: ChecksBoardProps) {
+export default function ChecksBoard({ shipments = [], dbShipments = [], onPatchShipment }: ChecksBoardProps) {
   // Hoy a medianoche local — para isOperationActive (vía buildChecksUniverse).
   const today = useMemo(() => {
     const d = new Date()
@@ -162,6 +169,24 @@ export default function ChecksBoard({ shipments = [], dbShipments = [] }: Checks
     applyStep(op.ref, key, { ...cur, date })
   }, [checksByRef, applyStep])
 
+  // ── Telex desde la fila — MISMO camino que el toggle Telex del panel ──
+  // ViabilityBlock hace onCommit('tlx', op.tlx !== 'SI') y el commit del panel
+  // lo traduce a onPatch(op.dbId, buildPerContainerPatch(op, 'telex', boolean))
+  // (EDITABLE_FIELDS.tlx → col 'telex' bool). Como 'telex' NO está en
+  // OP_ARRAY_FIELD_BY_COL, el patch resultante es { telex: boolean } — solo la
+  // columna de shipments, sin tocar el array operativas. onPatchShipment es el
+  // handlePatchShipment de App: optimista con revert en error. Deshacer del
+  // toast = el mismo patch con el valor anterior.
+  const handleToggleTelex = useCallback((op: UnifiedOperation) => {
+    if (!onPatchShipment || !op.dbId) return
+    const next = op.tlx !== 'SI'
+    const apply = (v: boolean) => onPatchShipment(op.dbId!, buildPerContainerPatch(op, 'telex', v))
+    apply(next)
+    toast.success(next ? `Telex marcado — ${op.ref}` : `Telex quitado — ${op.ref}`, {
+      action: { label: 'Deshacer', onClick: () => apply(!next) },
+    })
+  }, [onPatchShipment])
+
   return (
     <div className="space-y-4">
       {/* Encabezado + controles */}
@@ -214,6 +239,10 @@ export default function ChecksBoard({ shipments = [], dbShipments = [] }: Checks
         <div className="rounded-lg border border-border bg-card divide-y divide-border overflow-hidden">
           {visible.map(op => {
             const norm = normalizeRef(op.ref)
+            // Telex editable con el MISMO criterio que el ViabilityBlock del
+            // panel (editable={op.source === 'db' && !!op.dbId && !op.readOnly});
+            // si la carga no es editable (caso raro), chip estático como hoy.
+            const telexEditable = !!onPatchShipment && op.source === 'db' && !!op.dbId && !op.readOnly
             return (
               <ChecksRow
                 key={op.uid}
@@ -223,6 +252,7 @@ export default function ChecksBoard({ shipments = [], dbShipments = [] }: Checks
                 onToggleExpand={() => setExpandedRef(cur => (cur === norm ? null : norm))}
                 onToggleStep={(key, label) => handleToggleStep(op, key, label)}
                 onDateChange={(key, date) => handleDateChange(op, key, date)}
+                onToggleTelex={telexEditable ? () => handleToggleTelex(op) : undefined}
               />
             )
           })}
@@ -245,9 +275,12 @@ interface ChecksRowProps {
   onToggleExpand: () => void
   onToggleStep: (key: CheckStepKey, label: string) => void
   onDateChange: (key: CheckStepKey, date: string) => void
+  /** Marcar/quitar telex desde la fila (mismo camino que el panel). Sin esto
+   *  (carga no editable) el chip queda estático como siempre. */
+  onToggleTelex?: () => void
 }
 
-function ChecksRow({ op, steps, expanded, onToggleExpand, onToggleStep, onDateChange }: ChecksRowProps) {
+function ChecksRow({ op, steps, expanded, onToggleExpand, onToggleStep, onDateChange, onToggleTelex }: ChecksRowProps) {
   const operativa = (op.operativa || '').trim()
   const opColor = operativa ? getOperativaColor(operativa) : null
   // Operativa desconocida (mapa devuelve "Otro") → mostrar el valor real.
@@ -261,18 +294,10 @@ function ChecksRow({ op, steps, expanded, onToggleExpand, onToggleStep, onDateCh
   const complete = done >= total
   const next = nextPendingStep(steps, operativa)
   const visibleSteps = stepsForOperativa(operativa)
+  const nextDef = next ? visibleSteps.find(s => s.key === next) : undefined
   const pct = total > 0 ? Math.round((done / total) * 100) : 0
 
-  const telexChip = (
-    <span
-      className={`shrink-0 rounded-full px-2 py-px text-[10px] font-semibold leading-4 ${
-        hasTelex ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-700'
-      }`}
-      title={hasTelex ? 'Telex release recibido' : 'Sin telex release'}
-    >
-      {hasTelex ? 'TELEX' : 'Sin telex'}
-    </span>
-  )
+  const telexChip = <TelexChip hasTelex={hasTelex} onToggle={onToggleTelex} />
 
   return (
     <div className={expanded ? 'bg-muted/20' : undefined}>
@@ -289,6 +314,38 @@ function ChecksRow({ op, steps, expanded, onToggleExpand, onToggleStep, onDateCh
           : <CaretRight size={14} className="text-muted-foreground shrink-0" />}
         <span className="font-mono text-sm font-semibold shrink-0 min-w-[64px]">{op.ref}</span>
         <span className="text-sm text-foreground/85 truncate flex-1 min-w-0">{op.cliente || '—'}</span>
+        {/* Mini-línea del procedimiento: un punto por paso aplicable (9/11/13
+            según operativa, mismo stepsForOperativa del detalle). Relleno
+            emerald = hecho · hueco gris = pendiente · anillo índigo = el
+            SIGUIENTE pendiente. En pantallas chicas se oculta (hidden sm:flex)
+            para que la fila no se rompa. */}
+        <span className="hidden sm:flex items-center gap-1 shrink-0">
+          {visibleSteps.map((def, i) => {
+            const st = steps[def.key]
+            const isNext = !st?.done && def.key === next
+            const detalle = st?.done
+              ? `hecho${st.date ? ` ${fmtDateDMY(st.date)}` : ''}${st.by ? ` por ${shortWho(st.by)}` : ''}`
+              : 'pendiente'
+            return (
+              <span
+                key={def.key}
+                title={`${i + 1}. ${def.label} — ${detalle}`}
+                className={`h-2 w-2 rounded-full ${
+                  st?.done
+                    ? 'bg-emerald-500'
+                    : isNext
+                      ? 'bg-background ring-2 ring-indigo-500'
+                      : 'bg-background border border-muted-foreground/35'
+                }`}
+              />
+            )
+          })}
+        </span>
+        {nextDef && (
+          <span className="hidden lg:inline-block text-xs text-muted-foreground truncate max-w-[190px] shrink-0">
+            Siguiente: {nextDef.label}
+          </span>
+        )}
         <span
           className={`shrink-0 rounded-full px-2 py-px text-[10px] font-semibold leading-4 ${
             opColor ? `${opColor.bg} ${opColor.textColor}` : 'bg-muted text-muted-foreground'
@@ -386,5 +443,40 @@ function ChecksRow({ op, steps, expanded, onToggleExpand, onToggleStep, onDateCh
         </div>
       )}
     </div>
+  )
+}
+
+// ─── Chip TELEX / Sin telex (semáforo del dueño: sí=verde, no=rojo) ─────
+// Con onToggle es un toggle real: span role=button (vive DENTRO del botón de
+// la fila — mismo patrón que AgendaEventCard para no anidar <button> en
+// <button>) con stopPropagation para no expandir/cerrar la fila al click.
+// Sin onToggle (carga no editable, caso raro) queda estático como siempre.
+function TelexChip({ hasTelex, onToggle }: { hasTelex: boolean; onToggle?: () => void }) {
+  const base = `shrink-0 rounded-full px-2 py-px text-[10px] font-semibold leading-4 ${
+    hasTelex ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-700'
+  }`
+  if (!onToggle) {
+    return (
+      <span className={base} title={hasTelex ? 'Telex release recibido' : 'Sin telex release'}>
+        {hasTelex ? 'TELEX' : 'Sin telex'}
+      </span>
+    )
+  }
+  return (
+    <span
+      role="button"
+      tabIndex={0}
+      aria-pressed={hasTelex}
+      title={hasTelex ? 'Quitar telex' : 'Marcar telex'}
+      onClick={e => { e.stopPropagation(); onToggle() }}
+      onKeyDown={e => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onToggle() }
+      }}
+      className={`${base} cursor-pointer transition-shadow hover:ring-2 ${
+        hasTelex ? 'hover:ring-emerald-300' : 'hover:ring-red-300'
+      }`}
+    >
+      {hasTelex ? 'TELEX' : 'Sin telex'}
+    </span>
   )
 }

@@ -38,6 +38,16 @@ describe('buildPerContainerPatch — propaga campos por-contenedor al array oper
     expect(patch.operativas).toBeUndefined()
   })
 
+  // El toggle de telex (panel de detalle Y chip de la fila en Checks) escribe
+  // por este camino: EDITABLE_FIELDS.tlx → col 'telex' bool → como 'telex' no
+  // está en OP_ARRAY_FIELD_BY_COL, el patch es { telex: boolean } a secas.
+  it('TELEX → { telex: boolean } solo columna (camino del toggle del panel y de la fila de Checks)', () => {
+    expect(EDITABLE_FIELDS.tlx).toEqual({ col: 'telex', type: 'bool' })
+    const patch = buildPerContainerPatch(op({ operativas: [rec(), rec({ CNTR_OP: 'C2' })] }), 'telex', true)
+    expect(patch).toEqual({ telex: true })
+    expect(buildPerContainerPatch(op({ operativas: [rec()] }), 'telex', false)).toEqual({ telex: false })
+  })
+
   it('array vacío → solo la columna', () => {
     const patch = buildPerContainerPatch(op({ operativas: [] }), 'libre', '2026-06-22')
     expect(patch.libre).toBe('2026-06-22')

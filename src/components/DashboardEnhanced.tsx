@@ -507,8 +507,14 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
           <TabsContent value="checks">
             {/* Universo derivado de las MISMAS fuentes que Operaciones
                 (cache legacy + dbShipments); el estado de los pasos lo
-                fetchea la propia pestaña (ref_checks). */}
-            <ChecksBoard shipments={shipments || []} dbShipments={dbShipments} />
+                fetchea la propia pestaña (ref_checks). onPatchShipment
+                habilita el toggle de telex por fila (mismo camino que el
+                panel de detalle). */}
+            <ChecksBoard
+              shipments={shipments || []}
+              dbShipments={dbShipments}
+              onPatchShipment={onPatchShipment}
+            />
           </TabsContent>
 
           {SHOW_IMPORT_TAB && (

@@ -235,11 +235,27 @@ html {
   flex-shrink: 0;
   overflow-x: auto;
   scrollbar-width: none;
-  /* UNA sola fila scrolleable (antes wrap → 2 filas con subrayados gigantes) */
+  /* Mobile (íconos): UNA fila scrolleable, como siempre */
   flex-wrap: nowrap;
 }
 .tabs-list-underline::-webkit-scrollbar {
   display: none;
+}
+/* Desktop (labels visibles, sm+): wrap en 2 filas SIN estirar. Con nowrap +
+   scroll oculto, al sumar la pestaña Checks las últimas quedaban cortadas a
+   la derecha (~1300px: "Equipo" fuera de línea, "Partners" cortado). El bug
+   feo original del wrap no era el wrap en sí sino el flex-1 base de shadcn,
+   que ESTIRABA la 2ª fila (subrayados de media pantalla) → flex: none deja
+   cada trigger en su ancho natural, filas alineadas a la izquierda con gap
+   consistente y el subrayado activo del ancho del trigger. */
+@media (min-width: 640px) {
+  .tabs-list-underline {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+  .tabs-list-underline .tab-underline {
+    flex: none !important;
+  }
 }
 .tab-underline {
   background: transparent !important;
