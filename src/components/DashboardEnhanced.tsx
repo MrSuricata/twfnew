@@ -17,6 +17,7 @@ import {
   Truck as TruckIcon,
   Receipt,
   Table as TableIcon,
+  ListChecks,
   Globe,
   Bell,
   BellRinging,
@@ -46,6 +47,7 @@ import { useBrand } from '@/lib/brand'
 import BillingManagement from './BillingManagement'
 import OperationsGrid from './operations/OperationsGrid'
 import OperationDetailOverlay from './operations/OperationDetailOverlay'
+import ChecksBoard from './checks/ChecksBoard'
 import { ParsedShipment } from '@/lib/shipmentTypes'
 import { ClientAccount, ShipmentDocument, OperativeReport, OriginPhoto, QuoteFormData } from '@/lib/quotationTypes'
 import { Truck, TruckLoad, LclAirShipment } from '@/lib/truckTypes'
@@ -229,6 +231,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
       trucks: 'Camiones',
       billing: 'Facturación',
       operaciones: 'Operaciones',
+      checks: 'Checks',
       equipo: 'Equipo',
     }
 
@@ -334,6 +337,10 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
             <TabsTrigger value="operaciones" className="tab-underline" aria-label="Operaciones">
               <TableIcon size={16} className="mr-1.5" weight="fill" />
               <span className="hidden sm:inline">Operaciones</span>
+            </TabsTrigger>
+            <TabsTrigger value="checks" className="tab-underline" aria-label="Checks">
+              <ListChecks size={16} className="mr-1.5" weight="fill" />
+              <span className="hidden sm:inline">Checks</span>
             </TabsTrigger>
             <TabsTrigger value="trucks" className="tab-underline" aria-label="Camiones">
               <TruckIcon size={16} className="mr-1.5" weight="fill" />
@@ -495,6 +502,13 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
               selectedUid={detailUid}
               onSelectedUidChange={setDetailUid}
             />
+          </TabsContent>
+
+          <TabsContent value="checks">
+            {/* Universo derivado de las MISMAS fuentes que Operaciones
+                (cache legacy + dbShipments); el estado de los pasos lo
+                fetchea la propia pestaña (ref_checks). */}
+            <ChecksBoard shipments={shipments || []} dbShipments={dbShipments} />
           </TabsContent>
 
           {SHOW_IMPORT_TAB && (
