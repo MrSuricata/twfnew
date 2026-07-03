@@ -22,10 +22,12 @@ import {
   Package,
   MapPin,
   CaretDown,
+  SignIn,
 } from '@phosphor-icons/react'
 import { useBrand } from '@/lib/brand'
 import { processShipmentRecord, getShipmentStatus } from '@/lib/shipmentTypes'
 import { voyageProgress, voyageCaption } from '@/lib/trackProgress'
+import LoginDialog from './LoginDialog'
 
 // ─── Mediterranea Carghas — landing ───────────────────────────────────
 // Identidad propia (casa matriz que unifica todos los modos y destinos):
@@ -302,6 +304,7 @@ export default function MediterraneaLanding() {
   const brand = useBrand()
   const [scrolled, setScrolled] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [loginOpen, setLoginOpen] = useState(false)
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 40)
@@ -369,11 +372,20 @@ export default function MediterraneaLanding() {
             ))}
           </nav>
 
-          {/* Cotizar: always visible */}
-          <a href={wa} target="_blank" rel="noopener noreferrer"
-             className="hidden md:inline-flex items-center gap-1.5 px-4 h-9 rounded-full bg-[#9bd1e5] text-[#261c79] text-sm font-semibold hover:bg-[#ceffff] transition-colors">
-            Cotizar <ArrowRight size={15} weight="bold" />
-          </a>
+          {/* Ingresar + Cotizar: siempre visibles en desktop */}
+          <div className="hidden md:flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setLoginOpen(true)}
+              className="inline-flex items-center gap-1.5 px-4 h-9 rounded-full border border-white/25 text-white text-sm font-medium hover:bg-white/10 transition-colors"
+            >
+              <SignIn size={15} weight="bold" /> Ingresar
+            </button>
+            <a href={wa} target="_blank" rel="noopener noreferrer"
+               className="inline-flex items-center gap-1.5 px-4 h-9 rounded-full bg-[#9bd1e5] text-[#261c79] text-sm font-semibold hover:bg-[#ceffff] transition-colors">
+              Cotizar <ArrowRight size={15} weight="bold" />
+            </a>
+          </div>
 
           <button className="md:hidden text-white ml-auto" onClick={() => setMenuOpen(o => !o)} aria-label="Menú">
             {menuOpen ? <XIcon size={24} /> : <List size={24} />}
@@ -384,7 +396,16 @@ export default function MediterraneaLanding() {
             {navLinks.map(l => (
               <a key={l.href} href={l.href} onClick={() => setMenuOpen(false)} className="block text-white/85 py-1">{l.label}</a>
             ))}
-            <a href={wa} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-4 h-10 rounded-full bg-[#9bd1e5] text-[#261c79] font-semibold">Cotizar <ArrowRight size={15} weight="bold" /></a>
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={() => { setMenuOpen(false); setLoginOpen(true) }}
+                className="inline-flex items-center gap-1.5 px-4 h-10 rounded-full border border-white/25 text-white font-medium"
+              >
+                <SignIn size={15} weight="bold" /> Ingresar
+              </button>
+              <a href={wa} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-4 h-10 rounded-full bg-[#9bd1e5] text-[#261c79] font-semibold">Cotizar <ArrowRight size={15} weight="bold" /></a>
+            </div>
           </div>
         )}
       </header>
@@ -636,6 +657,9 @@ export default function MediterraneaLanding() {
           </div>
         </div>
       </footer>
+
+      {/* Diálogo de acceso (Equipo · Cliente · Partner) */}
+      <LoginDialog open={loginOpen} onOpenChange={setLoginOpen} />
     </div>
   )
 }
