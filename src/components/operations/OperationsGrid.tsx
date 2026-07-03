@@ -221,21 +221,30 @@ export default function OperationsGrid({
   const [rowLimit, setRowLimit] = useState(ROWS_STEP)
 
   const assignMap = useMemo(() => indexAssignments(assignments), [assignments])
+  // Base completa (activas + archivadas) — alimenta sugerencias y la vista.
+  const allOperations = useMemo(
+    () => buildOperations(shipments, dbShipments, assignMap, true),
+    [shipments, dbShipments, assignMap]
+  )
+  // "Ver archivadas" es EXCLUYENTE (pedido Brian 03/07): ON = SOLO las
+  // archivadas (no se mezclan con las activas ni suman a los totales/chips);
+  // OFF = solo las no archivadas.
   const operations = useMemo(
-    () => buildOperations(shipments, dbShipments, assignMap, showArchived),
-    [shipments, dbShipments, assignMap, showArchived]
+    () => allOperations.filter(o => (showArchived ? o.archived : !o.archived)),
+    [allOperations, showArchived]
   )
   const archivedCount = useMemo(() => dbShipments.filter(s => s.archived).length, [dbShipments])
 
   // Depósitos UY ya usados → alimentan el combobox del bloque de viabilidad.
+  // (Sobre TODAS las cargas: el modo archivadas no empobrece las sugerencias.)
   const knownDepositos = useMemo(
-    () => Array.from(new Set(operations.map(o => o.deposito).filter(Boolean))),
-    [operations]
+    () => Array.from(new Set(allOperations.map(o => o.deposito).filter(Boolean))),
+    [allOperations]
   )
   // Transportes ya usados → combobox de Transporte (datos clave de la carga).
   const knownTransportes = useMemo(
-    () => deriveKnownTransportes(operations.map(o => o.transporte)),
-    [operations]
+    () => deriveKnownTransportes(allOperations.map(o => o.transporte)),
+    [allOperations]
   )
 
   // Panel de detalle: la op se busca fresca en cada render
@@ -255,10 +264,11 @@ export default function OperationsGrid({
   const hoy = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d }, [])
 
   // Próxima ref FCL sugerida: máximo A#### entre TODAS las cargas + 1
-  // (helper compartido con el armador de camiones).
+  // (helper compartido con el armador de camiones; incluye archivadas para
+  // no re-sugerir una ref vieja mientras se mira el modo archivadas).
   const suggestedRef = useMemo(
-    () => suggestNextRef(operations.map(o => o.ref)),
-    [operations]
+    () => suggestNextRef(allOperations.map(o => o.ref)),
+    [allOperations]
   )
 
   // ref → { truckCode, derivedStatus } for cargas loaded on a truck. The truck
@@ -286,13 +296,12 @@ export default function OperationsGrid({
 
   // Base visible: con "Solo activas" ON se ocultan las terminadas (criterio:
   // devuelta Y en fiscal · DB: estado terminal · sin datos: ETA >60d atrás).
+  // En modo archivadas el filtro de activas no aplica (todas están terminadas).
   const visibleOps = useMemo(() => {
-    if (!activeOnly) return operations
+    if (!activeOnly || showArchived) return operations
     const today = new Date(); today.setHours(0, 0, 0, 0)
-    // Archivadas exentas del filtro de activas: si "Ver archivadas" está ON,
-    // se muestran siempre (si no, ese toggle no mostraría nada).
-    return operations.filter(o => o.archived || isOperationActive(o, truckByRef.get(o.ref)?.status, today))
-  }, [operations, activeOnly, truckByRef])
+    return operations.filter(o => isOperationActive(o, truckByRef.get(o.ref)?.status, today))
+  }, [operations, activeOnly, showArchived, truckByRef])
 
   const counts = useMemo(() => {
     const c: Record<string, number> = { all: visibleOps.length, fcl: 0, lcl: 0, air: 0, land: 0 }
@@ -605,7 +614,7 @@ export default function OperationsGrid({
         )}
         <button
           onClick={() => setShowArchived(v => !v)}
-          title="Mostrar también las cargas archivadas (el número indica cuántas hay)"
+          title="Ver SOLO las cargas archivadas (el número indica cuántas hay)"
           className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 border text-xs transition-all hover:shadow-sm ${
             showArchived ? 'bg-amber-50 border-amber-300 text-amber-700' : 'bg-card border-border text-muted-foreground'
           }`}
