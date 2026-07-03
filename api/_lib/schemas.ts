@@ -329,7 +329,9 @@ export const RefCheckStepSchema = z.object({
 
 /** Upsert de checks por ref: steps PARCIALES (solo las claves tocadas), que el
  *  server mergea sobre el jsonb existente — nunca pisa todo. Claves fijas del
- *  PROCEDIMIENTO OPERATIVO (11 pasos); .strict() rechaza cualquier otra. */
+ *  PROCEDIMIENTO OPERATIVO (9 comunes + 2 solo-TRASIEGO + 4 solo-CONTENEDOR,
+ *  espejo de CHECK_STEPS en src/lib/checksTypes.ts); .strict() rechaza
+ *  cualquier otra. */
 const checkStep = RefCheckStepSchema.optional()
 export const RefChecksUpsertSchema = z.object({
   ref: z.string().min(1).max(100),
@@ -339,12 +341,16 @@ export const RefChecksUpsertSchema = z.object({
     carta_resp: checkStep,
     bl_naviera: checkStep,
     pagos_liberacion: checkStep,
+    confirmar_dev_arg: checkStep,
     traslado_deposito: checkStep,
     coord_trasiego: checkStep,
     fotos_carga: checkStep,
     aviso_salida: checkStep,
     cruce_frontera: checkStep,
     arribo_fiscal: checkStep,
+    transferir_cntr: checkStep,
+    pagar_dropoff: checkStep,
+    pagar_gatein: checkStep,
   }).strict().refine(s => Object.values(s).some(v => v !== undefined), { message: 'steps vacío' }),
 })
 

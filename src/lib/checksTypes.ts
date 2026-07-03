@@ -1,8 +1,13 @@
 // ─── Checks operativos por referencia (pestaña Checks) ─────────────────
-// Checklist del PROCEDIMIENTO OPERATIVO (11 pasos, redacción textual del
-// dueño) para FCL que operan por Uruguay. La tabla `ref_checks` guarda SOLO
-// el estado de los pasos: el universo de refs se deriva SIEMPRE de las
-// cargas al leer (derive-on-read) — nunca se copia a la tabla.
+// Checklist del PROCEDIMIENTO OPERATIVO (redacción textual del dueño) para
+// FCL que operan por Uruguay, con pasos condicionales por operativa:
+//   TRASIEGO   → 11 pasos (9 comunes + traslado a depósito + coordinar trasiego)
+//   CONTENEDOR → 13 pasos (9 comunes + confirmar devolución en AR antes del
+//                viaje + transferencia / drop off / gate in post-arribo)
+//   resto      → 9 pasos comunes
+// La tabla `ref_checks` guarda SOLO el estado de los pasos: el universo de
+// refs se deriva SIEMPRE de las cargas al leer (derive-on-read) — nunca se
+// copia a la tabla.
 //
 // V1: todos los pasos se marcan a MANO. "Avisar cruce de frontera" y
 // "Avisar arribo a fiscal" NO se auto-marcan desde las fechas de la
@@ -19,34 +24,47 @@ export type CheckStepKey =
   | 'carta_resp'
   | 'bl_naviera'
   | 'pagos_liberacion'
+  | 'confirmar_dev_arg'
   | 'traslado_deposito'
   | 'coord_trasiego'
   | 'fotos_carga'
   | 'aviso_salida'
   | 'cruce_frontera'
   | 'arribo_fiscal'
+  | 'transferir_cntr'
+  | 'pagar_dropoff'
+  | 'pagar_gatein'
 
 export interface CheckStepDef {
   key: CheckStepKey
   label: string
-  /** Pasos 6-7 del procedimiento: solo aplican cuando OPERATIVA=TRASIEGO. */
-  trasiegoOnly?: boolean
+  /** Paso condicional: solo aplica cuando la OPERATIVA es esta.
+   *  'TRASIEGO' → traslado a depósito + coordinar trasiego ·
+   *  'CONTENEDOR' → confirmar devolución en AR + transferencia/drop off/gate in. */
+  solo?: 'TRASIEGO' | 'CONTENEDOR'
 }
 
-/** Los 11 pasos del PROCEDIMIENTO OPERATIVO — mantener este orden y esta
- *  redacción (labels textuales del dueño). */
+/** Los pasos del PROCEDIMIENTO OPERATIVO — mantener este orden y esta
+ *  redacción (labels textuales del dueño). Los condicionales se intercalan
+ *  donde ocurren en la operación real: confirmar devolución en AR es PREVIO
+ *  al viaje (tras pagar la liberación); transferencia, drop off y gate in
+ *  son POST-arribo a fiscal. */
 export const CHECK_STEPS: CheckStepDef[] = [
   { key: 'salida_origen', label: 'Avisar salida de origen' },
   { key: 'arribo_buque', label: 'Avisar arribo del buque a destino' },
   { key: 'carta_resp', label: 'Entregar carta de responsabilidad' },
   { key: 'bl_naviera', label: 'Entregar BL a naviera' },
   { key: 'pagos_liberacion', label: 'Pagar gastos para liberar' },
-  { key: 'traslado_deposito', label: 'Avisar traslado de contenedor a depósito en Uruguay', trasiegoOnly: true },
-  { key: 'coord_trasiego', label: 'Coordinar fecha de trasiego', trasiegoOnly: true },
+  { key: 'confirmar_dev_arg', label: 'Confirmar si puede devolver en Argentina', solo: 'CONTENEDOR' },
+  { key: 'traslado_deposito', label: 'Avisar traslado de contenedor a depósito en Uruguay', solo: 'TRASIEGO' },
+  { key: 'coord_trasiego', label: 'Coordinar fecha de trasiego', solo: 'TRASIEGO' },
   { key: 'fotos_carga', label: 'Mandar fotos día de carga' },
   { key: 'aviso_salida', label: 'Avisar salida en el día de carga' },
   { key: 'cruce_frontera', label: 'Avisar cruce de frontera' },
   { key: 'arribo_fiscal', label: 'Avisar arribo a fiscal' },
+  { key: 'transferir_cntr', label: 'Transferir el contenedor', solo: 'CONTENEDOR' },
+  { key: 'pagar_dropoff', label: 'Pagar drop off a la línea', solo: 'CONTENEDOR' },
+  { key: 'pagar_gatein', label: 'Pagar gate in a la terminal en Argentina', solo: 'CONTENEDOR' },
 ]
 
 /** Estado guardado de un paso. `by` lo estampa el server desde el token. */
@@ -71,20 +89,29 @@ export function normalizeRef(ref: string | null | undefined): string {
   return String(ref || '').trim().toUpperCase()
 }
 
-/** ¿La operativa es trasiego? (los pasos 6-7 solo aplican en ese caso). */
+/** ¿La operativa es trasiego? (habilita traslado_deposito + coord_trasiego). */
 export function isTrasiego(operativa: string | null | undefined): boolean {
   return String(operativa || '').toUpperCase().includes('TRASIEGO')
 }
 
-/** Pasos visibles para una operativa: 11 si es TRASIEGO, 9 si no
- *  (se ocultan traslado_deposito y coord_trasiego). */
+/** ¿La operativa es contenedor (retiro directo de terminal a fiscal AR)?
+ *  Habilita confirmar_dev_arg + transferir_cntr + pagar_dropoff + pagar_gatein. */
+export function isContenedor(operativa: string | null | undefined): boolean {
+  return String(operativa || '').toUpperCase().includes('CONTENEDOR')
+}
+
+/** Pasos visibles para una operativa: 11 si es TRASIEGO, 13 si es CONTENEDOR,
+ *  9 en el resto (se ocultan los condicionales que no aplican). */
 export function stepsForOperativa(operativa: string | null | undefined): CheckStepDef[] {
-  if (isTrasiego(operativa)) return CHECK_STEPS
-  return CHECK_STEPS.filter(s => !s.trasiegoOnly)
+  const trasiego = isTrasiego(operativa)
+  const contenedor = isContenedor(operativa)
+  return CHECK_STEPS.filter(s =>
+    !s.solo || (s.solo === 'TRASIEGO' && trasiego) || (s.solo === 'CONTENEDOR' && contenedor)
+  )
 }
 
 /** Progreso "hecho/total" contando SOLO los pasos visibles para la operativa
- *  (un traslado_deposito marcado no cuenta si la operativa no es trasiego). */
+ *  (un paso condicional marcado no cuenta si la operativa ya no aplica). */
 export function checksProgress(steps: RefCheckSteps, operativa: string | null | undefined): { done: number; total: number } {
   const visible = stepsForOperativa(operativa)
   const done = visible.filter(s => steps[s.key]?.done).length

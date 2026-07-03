@@ -29,33 +29,58 @@ const mkOp = (over: Partial<UnifiedOperation> = {}): UnifiedOperation => ({
 })
 
 describe('stepsForOperativa', () => {
-  it('TRASIEGO muestra los 11 pasos en el orden del procedimiento', () => {
-    const steps = stepsForOperativa('TRASIEGO')
-    expect(steps).toHaveLength(11)
-    expect(steps.map(s => s.key)).toEqual(CHECK_STEPS.map(s => s.key))
+  it('TRASIEGO muestra 11 pasos: los 9 comunes + los 2 de trasiego intercalados', () => {
+    const keys = stepsForOperativa('TRASIEGO').map(s => s.key)
+    expect(keys).toEqual([
+      'salida_origen', 'arribo_buque', 'carta_resp', 'bl_naviera', 'pagos_liberacion',
+      'traslado_deposito', 'coord_trasiego',
+      'fotos_carga', 'aviso_salida', 'cruce_frontera', 'arribo_fiscal',
+    ])
+    // Los pasos solo-CONTENEDOR no aparecen en trasiego
+    expect(keys).not.toContain('confirmar_dev_arg')
+    expect(keys).not.toContain('transferir_cntr')
   })
 
-  it('no-trasiego (CONTENEDOR) oculta traslado_deposito y coord_trasiego → 9 pasos', () => {
+  it('CONTENEDOR muestra 13 pasos: confirmar dev AR tras liberar + transferencia/drop off/gate in al final', () => {
     const keys = stepsForOperativa('CONTENEDOR').map(s => s.key)
-    expect(keys).toHaveLength(9)
+    expect(keys).toEqual([
+      'salida_origen', 'arribo_buque', 'carta_resp', 'bl_naviera', 'pagos_liberacion',
+      'confirmar_dev_arg',
+      'fotos_carga', 'aviso_salida', 'cruce_frontera', 'arribo_fiscal',
+      'transferir_cntr', 'pagar_dropoff', 'pagar_gatein',
+    ])
     expect(keys).not.toContain('traslado_deposito')
     expect(keys).not.toContain('coord_trasiego')
-    // El orden relativo del resto se mantiene
-    expect(keys[4]).toBe('pagos_liberacion')
-    expect(keys[5]).toBe('fotos_carga')
+  })
+
+  it('resto de operativas (CARGA A PISO / vacío) → solo los 9 pasos comunes', () => {
+    for (const operativa of ['CARGA A PISO', '', undefined]) {
+      const keys = stepsForOperativa(operativa).map(s => s.key)
+      expect(keys).toHaveLength(9)
+      expect(keys).toEqual(CHECK_STEPS.filter(s => !s.solo).map(s => s.key))
+    }
   })
 })
 
 describe('checksProgress', () => {
-  it('cuenta hechos sobre el total visible según la operativa (11 vs 9)', () => {
+  it('cuenta hechos sobre el total visible según la operativa (11 / 13 / 9)', () => {
     const steps: RefCheckSteps = {
       salida_origen: { done: true, date: '2026-06-01' },
       coord_trasiego: { done: true, date: '2026-06-20' },
     }
     expect(checksProgress(steps, 'TRASIEGO')).toEqual({ done: 2, total: 11 })
     // En CONTENEDOR el paso de trasiego marcado NO cuenta (no es visible)
-    expect(checksProgress(steps, 'CONTENEDOR')).toEqual({ done: 1, total: 9 })
+    expect(checksProgress(steps, 'CONTENEDOR')).toEqual({ done: 1, total: 13 })
     expect(checksProgress({}, '')).toEqual({ done: 0, total: 9 })
+  })
+
+  it('los pasos solo-CONTENEDOR cuentan en CONTENEDOR pero no en TRASIEGO', () => {
+    const steps: RefCheckSteps = {
+      confirmar_dev_arg: { done: true, date: '2026-06-25' },
+      pagar_gatein: { done: true, date: '2026-07-01' },
+    }
+    expect(checksProgress(steps, 'CONTENEDOR')).toEqual({ done: 2, total: 13 })
+    expect(checksProgress(steps, 'TRASIEGO')).toEqual({ done: 0, total: 11 })
   })
 })
 
@@ -124,7 +149,7 @@ describe('buildChecksUniverse', () => {
 })
 
 describe('nextPendingStep', () => {
-  it('sugiere el primer paso visible sin marcar (saltea los de trasiego si no aplica)', () => {
+  it('sugiere el primer paso visible sin marcar según la operativa', () => {
     const steps: RefCheckSteps = {
       salida_origen: { done: true },
       arribo_buque: { done: true },
@@ -133,15 +158,21 @@ describe('nextPendingStep', () => {
       pagos_liberacion: { done: true },
     }
     expect(nextPendingStep(steps, 'TRASIEGO')).toBe('traslado_deposito')
-    expect(nextPendingStep(steps, 'CONTENEDOR')).toBe('fotos_carga')
+    // En CONTENEDOR lo que sigue a la liberación es confirmar la devolución en AR
+    expect(nextPendingStep(steps, 'CONTENEDOR')).toBe('confirmar_dev_arg')
+    expect(nextPendingStep(steps, 'CARGA A PISO')).toBe('fotos_carga')
     expect(nextPendingStep({}, 'TRASIEGO')).toBe('salida_origen')
   })
 
-  it('devuelve null cuando todos los pasos visibles están hechos', () => {
+  it('devuelve null cuando todos los pasos visibles están hechos; los post-arribo cierran CONTENEDOR', () => {
     const all: RefCheckSteps = {}
     for (const s of stepsForOperativa('CONTENEDOR')) all[s.key] = { done: true }
     expect(nextPendingStep(all, 'CONTENEDOR')).toBeNull()
     // Pero en TRASIEGO faltan los 2 pasos propios
     expect(nextPendingStep(all, 'TRASIEGO')).toBe('traslado_deposito')
+    // Y si en CONTENEDOR falta solo el gate in, es lo próximo
+    const casiTodo = { ...all }
+    delete casiTodo.pagar_gatein
+    expect(nextPendingStep(casiTodo, 'CONTENEDOR')).toBe('pagar_gatein')
   })
 })
