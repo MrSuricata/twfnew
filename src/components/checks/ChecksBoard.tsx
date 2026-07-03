@@ -252,11 +252,27 @@ function ChecksRow({ op, steps, expanded, onToggleExpand, onToggleStep, onDateCh
   const opColor = operativa ? getOperativaColor(operativa) : null
   // Operativa desconocida (mapa devuelve "Otro") → mostrar el valor real.
   const badgeLabel = !opColor ? 'TBD' : opColor.label === 'Otro' ? operativa : opColor.label
+  // Telex: derive-on-read con EXACTAMENTE el mismo criterio que el toggle del
+  // panel de detalle (ViabilityBlock: on={op.tlx === 'SI'}) — tlx viene de la
+  // columna telex de shipments (FCL horneada) o del TLX de operativas (cache
+  // legacy). No se guarda nada en ref_checks. Semáforo del dueño: sí=verde, no=rojo.
+  const hasTelex = op.tlx === 'SI'
   const { done, total } = checksProgress(steps, operativa)
   const complete = done >= total
   const next = nextPendingStep(steps, operativa)
   const visibleSteps = stepsForOperativa(operativa)
   const pct = total > 0 ? Math.round((done / total) * 100) : 0
+
+  const telexChip = (
+    <span
+      className={`shrink-0 rounded-full px-2 py-px text-[10px] font-semibold leading-4 ${
+        hasTelex ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-700'
+      }`}
+      title={hasTelex ? 'Telex release recibido' : 'Sin telex release'}
+    >
+      {hasTelex ? 'TELEX' : 'Sin telex'}
+    </span>
+  )
 
   return (
     <div className={expanded ? 'bg-muted/20' : undefined}>
@@ -280,6 +296,7 @@ function ChecksRow({ op, steps, expanded, onToggleExpand, onToggleStep, onDateCh
         >
           {badgeLabel}
         </span>
+        {telexChip}
         <span className="hidden sm:inline text-xs text-muted-foreground shrink-0 w-[104px] text-right">
           ETA {fmtDateDMY(op.eta) || '—'}
         </span>
@@ -306,9 +323,12 @@ function ChecksRow({ op, steps, expanded, onToggleExpand, onToggleStep, onDateCh
       {/* Detalle: los pasos en orden */}
       {expanded && (
         <div className="px-4 pb-3 pt-0.5 sm:pl-9">
-          <p className="text-[10px] uppercase tracking-wide text-muted-foreground mb-1.5">
-            Procedimiento operativo{operativa && !opColor?.label.startsWith('Otro') ? ` · ${badgeLabel.toLowerCase()}` : ''}
-          </p>
+          <div className="flex items-center gap-2 mb-1.5">
+            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+              Procedimiento operativo{operativa && !opColor?.label.startsWith('Otro') ? ` · ${badgeLabel.toLowerCase()}` : ''}
+            </p>
+            {telexChip}
+          </div>
           <div className="rounded-md border border-border/60 bg-background divide-y divide-border/60">
             {visibleSteps.map((def, i) => {
               const st = steps[def.key]
