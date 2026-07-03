@@ -1,9 +1,11 @@
-import { useState } from 'react'
+import { useState, type ReactNode } from 'react'
+import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
-import { LockSimple } from '@phosphor-icons/react'
+import { LockSimple, CheckCircle, ArrowCounterClockwise } from '@phosphor-icons/react'
 import type { UnifiedOperation } from '@/lib/operationsTypes'
 import { DEPOSITOS_UY } from '@/lib/operationsTypes'
 import { fmtDateDMY } from '@/lib/format'
+import { isLibreDevuelto, libreDevueltoToggle, LIBRE_DEVUELTO } from '@/lib/libreDevuelto'
 
 const NUM_FMT = new Intl.NumberFormat('es-UY', { maximumFractionDigits: 2 })
 
@@ -27,6 +29,26 @@ export default function ViabilityBlock({
   onCommit: (key: keyof UnifiedOperation, v: unknown) => void
 }) {
   const depositoOptions = Array.from(new Set([...DEPOSITOS_UY, ...knownDepositos])).filter(Boolean)
+
+  // Botón rápido "Devuelto" (regla del repo: 'DEVUELTO' vive en LIBRE y
+  // reemplaza la fecha — así la carga sale de las alertas de LIBRE). Va por el
+  // MISMO commit que editar LIBRE a mano: onCommit('libre', …) → el panel
+  // propaga a la columna + TODOS los contenedores vía buildPerContainerPatch.
+  // El toast permite deshacer restaurando el valor EXACTO anterior (capturado
+  // ANTES de pisar). Con LIBRE ya DEVUELTO, el botón pasa a "Deshacer devuelto"
+  // y limpia a '' (sin toast: el cambio se ve al instante).
+  const libreDevuelto = isLibreDevuelto(op.libre)
+  const toggleDevuelto = () => {
+    if (!editable) return
+    const { next, prev } = libreDevueltoToggle(op.libre)
+    onCommit('libre', next)
+    if (next === LIBRE_DEVUELTO) {
+      toast.success('Contenedor devuelto', {
+        action: { label: 'Deshacer', onClick: () => onCommit('libre', prev) },
+      })
+    }
+  }
+
   return (
     <section className="rounded-lg border bg-card p-3">
       <div className="flex items-center justify-between mb-2">
@@ -56,7 +78,26 @@ export default function ViabilityBlock({
             buildPerContainerPatch en el commit del panel). Antes LIBRE se editaba
             por contenedor y "no persistía" al abrir otro. */}
         <StatBox label="Operativa" value={op.operativa} kind="combo" options={OPERATIVA_OPTIONS} editable={editable} onCommit={v => onCommit('operativa', v)} />
-        <StatBox label="Libre (máx. devolución)" value={op.libre} kind="date" editable={editable} onCommit={v => onCommit('libre', v)} />
+        <StatBox
+          label="Libre (máx. devolución)"
+          value={op.libre}
+          kind="date"
+          editable={editable}
+          valueClass={libreDevuelto ? 'text-emerald-600' : ''}
+          footer={
+            <button
+              type="button"
+              onClick={toggleDevuelto}
+              disabled={!editable}
+              title={!editable ? 'Solo lectura (viene de la planilla)' : libreDevuelto ? 'Quitar la marca DEVUELTO (LIBRE queda vacío)' : 'Marcar contenedor devuelto (LIBRE = DEVUELTO)'}
+              className="mt-1.5 inline-flex items-center gap-1 h-7 px-2 rounded-md border border-input bg-background text-[11px] font-medium text-muted-foreground transition-colors enabled:hover:bg-muted enabled:hover:text-foreground disabled:opacity-50"
+            >
+              {libreDevuelto ? <ArrowCounterClockwise size={12} /> : <CheckCircle size={12} />}
+              {libreDevuelto ? 'Deshacer devuelto' : 'Devuelto'}
+            </button>
+          }
+          onCommit={v => onCommit('libre', v)}
+        />
         <StatBox label="Desconsolidación" value={op.desconsol} kind="date" editable={editable} onCommit={v => onCommit('desconsol', v)} />
       </div>
 
@@ -80,8 +121,11 @@ export default function ViabilityBlock({
 // Cuadro grande editable: número / texto / fecha / combo (datalist).
 // upper: display en MAYÚSCULAS (patrón transportista de TrucksList) y el valor
 // se normaliza a mayúsculas al guardar.
+// valueClass: clases extra del valor (ej: LIBRE='DEVUELTO' teñido emerald).
+// footer: contenido extra abajo del valor (ej: botón "Devuelto") — se oculta
+// mientras se edita para no disparar acciones con un draft a medio guardar.
 function StatBox({
-  label, value, unit, kind, options, editable, sumHint, upper, onCommit,
+  label, value, unit, kind, options, editable, sumHint, upper, valueClass, footer, onCommit,
 }: {
   label: string
   value: string | number
@@ -91,6 +135,8 @@ function StatBox({
   editable: boolean
   sumHint?: boolean
   upper?: boolean
+  valueClass?: string
+  footer?: ReactNode
   onCommit: (v: unknown) => void
 }) {
   const [editing, setEditing] = useState(false)
@@ -154,10 +200,11 @@ function StatBox({
           className={`text-left w-full leading-tight ${editable ? 'cursor-text hover:opacity-70' : 'cursor-default'}`}
           title={editable ? 'Click para editar' : sumHint ? 'Total = suma de los contenedores (editá cada uno abajo, en “Salidas y arribos por contenedor”)' : 'Solo lectura (viene de la planilla)'}
         >
-          <span className={`text-[22px] font-medium ${display === '—' ? 'text-muted-foreground' : ''} ${upper ? 'uppercase' : ''}`}>{display}</span>
+          <span className={`text-[22px] font-medium ${display === '—' ? 'text-muted-foreground' : ''} ${upper ? 'uppercase' : ''} ${valueClass || ''}`}>{display}</span>
           {unit && display !== '—' && <span className="text-xs text-muted-foreground ml-1">{unit}</span>}
         </button>
       )}
+      {!editing && footer}
     </div>
   )
 }
