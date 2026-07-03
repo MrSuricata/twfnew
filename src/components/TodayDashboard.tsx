@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback, useEffect } from 'react'
+import { toast } from 'sonner'
 import { Card, CardContent } from '@/components/ui/card'
 import {
   Truck,
@@ -11,12 +12,16 @@ import {
   CaretRight,
   CalendarBlank,
   CircleNotch,
+  Check,
 } from '@phosphor-icons/react'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
 import {
   buildTodaySnapshot,
+  AVISO_STEP_BY_COLUMN,
+  AVISO_LABEL_BY_COLUMN,
   type OpMatch,
   type LibreAlert,
+  type TodayColumn,
 } from '@/lib/todayFilters'
 import ShipmentDetailsDialog from './ShipmentDetailsDialog'
 import ContainerQuickEdit from './operations/ContainerQuickEdit'
@@ -25,6 +30,40 @@ import type { ShipmentDocument, OperativeReport, OriginPhoto } from '@/lib/quota
 import type { Truck as TruckType, TruckLoad } from '@/lib/truckTypes'
 import { deriveTruckDisplayInfo, deriveTruckDisplayStatus } from '@/lib/truckTypes'
 import { Badge } from '@/components/ui/badge'
+import { fetchRefChecks, saveRefCheckSteps } from '@/lib/dataClient'
+import {
+  normalizeRef,
+  mergeChecksSteps,
+  type CheckStepKey,
+  type RefCheckStep,
+  type RefCheckSteps,
+} from '@/lib/checksTypes'
+import { getAdminName } from '@/lib/authClient'
+import { fmtDateDMY } from '@/lib/format'
+
+// ─── Avisos por tarjeta (unificados con la pestaña Checks) ────────────────
+// El check "Aviso" de cada tarjeta marca EXACTAMENTE un paso de ref_checks
+// (aviso_salida / cruce_frontera / arribo_fiscal según la columna — mapa en
+// todayFilters.AVISO_STEP_BY_COLUMN). No es un estado nuevo: escribe el MISMO
+// paso que la pestaña Checks (done=true, date=hoy, by=usuario), y lee de la
+// misma tabla → se reflejan mutuamente (derive-on-read). El estado se fetchea
+// acá (fetch on mount + refetch on focus, igual que ChecksBoard) para no
+// hoistear estado global; el guardado es optimista con revert + toast Deshacer.
+// El paso es NIVEL-REF (por operación): si un ref tiene 2 contenedores saliendo
+// hoy, ambas tarjetas comparten el mismo estado del aviso — es un aviso por
+// operación, correcto y esperado.
+
+/** Hoy en ISO local (YYYY-MM-DD) — default de fecha al marcar un aviso. */
+function todayIso(): string {
+  const d = new Date()
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
+/** "quién lo marcó" corto para el tooltip: parte antes de la @ si es email. */
+function shortWho(by: string | undefined): string {
+  return String(by || '').split('@')[0]
+}
 
 interface TodayDashboardProps {
   shipments: ParsedShipment[]
@@ -70,6 +109,70 @@ export default function TodayDashboard({
   const [quickEditOpen, setQuickEditOpen] = useState(false)
 
   const snapshot = useMemo(() => buildTodaySnapshot(shipments), [shipments])
+
+  // ── Estado de los avisos (ref_checks) — fetch propio + refetch on focus ──
+  // Mismo patrón/tabla que ChecksBoard: la fuente de verdad es ref_checks, acá
+  // solo se lee y se togglea el paso de aviso de cada columna.
+  const [checksByRef, setChecksByRef] = useState<Map<string, RefCheckSteps>>(new Map())
+  const refreshChecks = useCallback(async () => {
+    try {
+      const rows = await fetchRefChecks()
+      setChecksByRef(new Map(rows.map(r => [normalizeRef(r.ref), r.steps || {}])))
+    } catch (err) {
+      console.warn('[hoy] no se pudieron cargar los avisos:', err)
+    }
+  }, [])
+  useEffect(() => { refreshChecks() }, [refreshChecks])
+  useEffect(() => {
+    const onFocus = () => refreshChecks()
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [refreshChecks])
+
+  // Guardado optimista con revert en error (patrón applyStep de ChecksBoard):
+  // reconcilia con los steps que devuelve el server (que estampa `by` del token).
+  const applyAviso = useCallback((ref: string, key: CheckStepKey, step: RefCheckStep | null) => {
+    const norm = normalizeRef(ref)
+    const prev = checksByRef // snapshot para revertir si el guardado falla
+    const patch: RefCheckSteps = { [key]: step ?? { done: false } }
+    setChecksByRef(cur => {
+      const next = new Map(cur)
+      next.set(norm, mergeChecksSteps(cur.get(norm) || {}, patch))
+      return next
+    })
+    saveRefCheckSteps(ref, patch)
+      .then(merged => {
+        setChecksByRef(cur => {
+          const next = new Map(cur)
+          next.set(norm, merged)
+          return next
+        })
+      })
+      .catch(err => {
+        setChecksByRef(prev)
+        toast.error(`No se pudo guardar el aviso: ${(err as Error)?.message || 'sin detalles'}`)
+      })
+  }, [checksByRef])
+
+  // Toggle del check "Aviso" de una tarjeta (marca y desmarca; toast + Deshacer
+  // en ambos sentidos). `label` = etiqueta de la columna (Avisar salida / cruce…).
+  const toggleAviso = useCallback((ref: string, key: CheckStepKey, label: string) => {
+    const cur = (checksByRef.get(normalizeRef(ref)) || {})[key]
+    if (cur?.done) {
+      applyAviso(ref, key, null)
+      toast.success(`${label} — aviso quitado`, {
+        description: ref,
+        action: { label: 'Deshacer', onClick: () => applyAviso(ref, key, { done: true, date: todayIso(), by: getAdminName() }) },
+      })
+      return
+    }
+    const date = todayIso()
+    applyAviso(ref, key, { done: true, date, by: getAdminName() })
+    toast.success(`${label} avisado — ${fmtDateDMY(date)}`, {
+      description: ref,
+      action: { label: 'Deshacer', onClick: () => applyAviso(ref, key, null) },
+    })
+  }, [checksByRef, applyAviso])
 
   // Transportes ya usados en las cargas → sugerencias del combo Transporte del quick-edit.
   const knownTransportes = useMemo(
@@ -261,6 +364,9 @@ export default function TodayDashboard({
           matches={snapshot.salientes}
           emptyLabel="Sin salidas hoy"
           onRowClick={openOpMatch}
+          column="salientes"
+          checksByRef={checksByRef}
+          onToggleAviso={toggleAviso}
         />
         <TodayCard
           title="En frontera hoy"
@@ -271,6 +377,9 @@ export default function TodayDashboard({
           matches={snapshot.frontera}
           emptyLabel="Sin cargas en frontera"
           onRowClick={openOpMatch}
+          column="frontera"
+          checksByRef={checksByRef}
+          onToggleAviso={toggleAviso}
         />
         <TodayCard
           title="Llegando a fiscal hoy"
@@ -281,6 +390,9 @@ export default function TodayDashboard({
           matches={snapshot.llegandoFiscal}
           emptyLabel="Sin arribos fiscales hoy"
           onRowClick={openOpMatch}
+          column="llegandoFiscal"
+          checksByRef={checksByRef}
+          onToggleAviso={toggleAviso}
         />
       </div>
       )}
@@ -362,9 +474,17 @@ interface TodayCardProps {
   matches: OpMatch[]
   emptyLabel: string
   onRowClick: (match: OpMatch) => void
+  /** Columna de HOY → determina qué paso de aviso marca el chip de la fila. */
+  column: TodayColumn
+  /** Estado de los pasos por ref (ref_checks) — para pintar el chip verde/gris. */
+  checksByRef: Map<string, RefCheckSteps>
+  /** Toggle del aviso de una fila (marca/desmarca el paso de ref_checks). */
+  onToggleAviso: (ref: string, key: CheckStepKey, label: string) => void
 }
 
-function TodayCard({ title, subtitle, icon, iconBg, barColor, matches, emptyLabel, onRowClick }: TodayCardProps) {
+function TodayCard({ title, subtitle, icon, iconBg, barColor, matches, emptyLabel, onRowClick, column, checksByRef, onToggleAviso }: TodayCardProps) {
+  const stepKey = AVISO_STEP_BY_COLUMN[column]
+  const avisoLabel = AVISO_LABEL_BY_COLUMN[column]
   return (
     <Card
       className="accent-top overflow-hidden shadow-sm hover:shadow-md transition-shadow card-lift"
@@ -387,6 +507,7 @@ function TodayCard({ title, subtitle, icon, iconBg, barColor, matches, emptyLabe
           <div className="divide-y divide-border/60">
             {matches.map((match, idx) => {
               const { shipment, op } = match
+              const aviso = (checksByRef.get(normalizeRef(shipment.REF)) || {})[stepKey]
               return (
               <button
                 key={`${shipment.REF}-${op.CNTR_OP || idx}`}
@@ -421,6 +542,11 @@ function TodayCard({ title, subtitle, icon, iconBg, barColor, matches, emptyLabe
                     </span>
                   </div>
                 </div>
+                <AvisoChip
+                  aviso={aviso}
+                  label={avisoLabel}
+                  onToggle={() => onToggleAviso(shipment.REF, stepKey, avisoLabel)}
+                />
                 <CaretRight size={14} className="row-caret text-muted-foreground mt-1 shrink-0" />
               </button>
               )
@@ -470,5 +596,40 @@ function LibreAlertRow({ alert, onClick }: LibreAlertRowProps) {
       </span>
       <CaretRight size={14} className="row-caret text-muted-foreground shrink-0" />
     </button>
+  )
+}
+
+// ─── Chip "Aviso" por tarjeta (toggle de un paso de ref_checks) ─────────
+// Vive DENTRO del <button> de la fila → es un <span role="button"> con
+// stopPropagation (mismo patrón que TelexChip de ChecksBoard) para que el click
+// marque el aviso SIN abrir el detalle de la tarjeta. Hueco/gris sin avisar,
+// verde (emerald) con ícono Check una vez avisado. El tooltip trae la fecha y
+// quién avisó ("Avisado 03/07 por Joaquín").
+function AvisoChip({ aviso, label, onToggle }: { aviso?: RefCheckStep; label: string; onToggle: () => void }) {
+  const done = !!aviso?.done
+  const who = shortWho(aviso?.by)
+  const title = done
+    ? `${label} · Avisado${aviso?.date ? ` ${fmtDateDMY(aviso.date)}` : ''}${who ? ` por ${who}` : ''} — click para desmarcar`
+    : `${label} — marcar como avisado`
+  return (
+    <span
+      role="button"
+      tabIndex={0}
+      aria-pressed={done}
+      aria-label={done ? `Quitar aviso (${label})` : `Marcar aviso (${label})`}
+      title={title}
+      onClick={e => { e.stopPropagation(); onToggle() }}
+      onKeyDown={e => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onToggle() }
+      }}
+      className={`shrink-0 mt-0.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold leading-4 cursor-pointer transition-shadow ${
+        done
+          ? 'bg-emerald-100 text-emerald-800 hover:ring-2 hover:ring-emerald-300 dark:bg-emerald-500/15 dark:text-emerald-300'
+          : 'bg-muted text-muted-foreground border border-border hover:ring-2 hover:ring-primary/30'
+      }`}
+    >
+      <Check size={11} weight="bold" className={done ? 'opacity-100' : 'opacity-50'} />
+      Aviso
+    </span>
   )
 }
