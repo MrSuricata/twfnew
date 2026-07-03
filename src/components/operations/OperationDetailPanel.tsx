@@ -12,8 +12,10 @@ import {
 } from '@/lib/operationsTypes'
 import { fmtDateDMY } from '@/lib/format'
 import { parseCntr, serializeCntr, normalizeCntr, isStandardCntr } from '@/lib/cntrUtils'
+import type { OriginPhoto, OperativeReport } from '@/lib/quotationTypes'
 import ViabilityBlock from './ViabilityBlock'
 import ContainerDatesSection from './ContainerDatesSection'
+import OperationMediaSection from './OperationMediaSection'
 
 interface TruckRefInfo { truckCode: string; status: string }
 
@@ -127,6 +129,10 @@ export default function OperationDetailPanel({
   hoy,
   knownDepositos = [],
   knownTransportes = [],
+  originPhotos,
+  reports,
+  onUpdateOriginPhotos,
+  onUpdateReports,
   onAssign,
   onPatch,
   onPatchFcl,
@@ -141,6 +147,12 @@ export default function OperationDetailPanel({
   hoy: Date
   knownDepositos?: string[]
   knownTransportes?: string[]
+  /** Fotos e informes de todas las operaciones (sección "Fotos e informes");
+   *  el panel filtra por op.ref. Si no se threadean, la sección no se muestra. */
+  originPhotos?: OriginPhoto[]
+  reports?: OperativeReport[]
+  onUpdateOriginPhotos?: (photos: OriginPhoto[]) => void
+  onUpdateReports?: (reports: OperativeReport[]) => void
   onAssign: (op: UnifiedOperation, operatorId: string | null) => void
   onPatch: (id: string, fields: Record<string, unknown>) => void
   onPatchFcl?: (dbId: string, edits: Record<string, unknown>) => void
@@ -414,6 +426,19 @@ export default function OperationDetailPanel({
             </section>
             )
           })}
+
+          {/* Fotos de carga (origen/Uruguay) + informes PDF de la operación.
+              Todas las modalidades: la clave es la ref (fotos/informes viven en
+              tablas propias keyed por shipment_ref, no dependen de la fila). */}
+          {(originPhotos || reports) && op.ref && (
+            <OperationMediaSection
+              shipmentRef={op.ref}
+              originPhotos={originPhotos || []}
+              reports={reports || []}
+              onUpdateOriginPhotos={onUpdateOriginPhotos}
+              onUpdateReports={onUpdateReports}
+            />
+          )}
 
           {/* Acciones (solo filas DB) */}
           {op.source === 'db' && op.dbId && (

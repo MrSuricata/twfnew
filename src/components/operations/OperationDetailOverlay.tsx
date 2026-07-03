@@ -26,6 +26,7 @@ import {
 } from '@/lib/operationsTypes'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
 import type { Truck, TruckLoad } from '@/lib/truckTypes'
+import type { OriginPhoto, OperativeReport } from '@/lib/quotationTypes'
 
 export interface OperationDetailOverlayProps {
   /** Clave de la operación a abrir: dbId (preferida), uid, o ref FCL. null = cerrado. */
@@ -36,6 +37,11 @@ export interface OperationDetailOverlayProps {
   truckLoads: TruckLoad[]
   operators: Operator[]
   assignments: OperatorAssignment[]
+  /** Fotos de carga + informes PDF → sección "Fotos e informes" del panel. */
+  originPhotos?: OriginPhoto[]
+  reports?: OperativeReport[]
+  onUpdateOriginPhotos?: (photos: OriginPhoto[]) => void
+  onUpdateReports?: (reports: OperativeReport[]) => void
   onPatch: (id: string, fields: Record<string, unknown>) => void
   onPatchFcl?: (dbId: string, edits: Record<string, unknown>) => void
   onAssignOperator: (ref: string, operatorId: string | null) => void
@@ -51,6 +57,10 @@ export default function OperationDetailOverlay({
   truckLoads,
   operators,
   assignments,
+  originPhotos,
+  reports,
+  onUpdateOriginPhotos,
+  onUpdateReports,
   onPatch,
   onPatchFcl,
   onAssignOperator,
@@ -117,6 +127,10 @@ export default function OperationDetailOverlay({
       hoy={hoy}
       knownDepositos={knownDepositos}
       knownTransportes={knownTransportes}
+      originPhotos={originPhotos}
+      reports={reports}
+      onUpdateOriginPhotos={onUpdateOriginPhotos}
+      onUpdateReports={onUpdateReports}
       onAssign={assignOp}
       onPatch={onPatch}
       onPatchFcl={onPatchFcl}
