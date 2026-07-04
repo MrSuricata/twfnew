@@ -618,18 +618,33 @@ export interface ColumnDef {
   label: string
   defaultOn: boolean
   numeric?: boolean
+  /**
+   * Columna congelada (sticky) a la izquierda: al scrollear horizontal queda
+   * fija para no perder la referencia de la fila. Las sticky se fuerzan
+   * primeras, NO son arrastrables ni ocultables (ver `cols` en OperationsGrid y
+   * el column picker, que las deshabilita). `stickyLeft` = offset izquierdo en
+   * px: 0 para la 1ª congelada, ancho acumulado de las previas para las
+   * siguientes. Requiere ANCHO FIJO (`w-[Npx]`) para que el offset calce exacto.
+   */
   sticky?: boolean
+  stickyLeft?: number
   /** Allow the cell to wrap to (up to) 2 lines instead of one long line. */
   wrap?: boolean
   /** Tailwind max-width utility to keep the column narrow (caps horizontal scroll). */
   w?: string
 }
 
+// Ancho FIJO de la 1ª columna congelada (Ref). Debe coincidir con su `w` y con
+// el `stickyLeft` de la 2ª congelada (Cliente arranca donde termina Ref).
+const STICKY_REF_W = 76
+
 export const OPERATION_COLUMNS: ColumnDef[] = [
-  { key: 'ref', label: 'Ref', defaultOn: true, sticky: true, w: 'max-w-[92px]' },
+  // Congeladas (sticky-left): Ref y Cliente quedan fijas al scrollear horizontal.
+  // Van SIEMPRE primeras (Ref, luego Cliente), no se arrastran ni se ocultan.
+  { key: 'ref', label: 'Ref', defaultOn: true, sticky: true, stickyLeft: 0, w: 'w-[76px] max-w-[76px]' },
+  { key: 'cliente', label: 'Cliente / Cnee', defaultOn: true, sticky: true, stickyLeft: STICKY_REF_W, wrap: true, w: 'w-[150px] max-w-[150px]' },
   { key: 'clientRef', label: 'Ref Cliente', defaultOn: false, w: 'max-w-[90px]' },
   { key: 'operator', label: 'Operativo', defaultOn: true },
-  { key: 'cliente', label: 'Cliente / Cnee', defaultOn: true, wrap: true, w: 'max-w-[150px]' },
   { key: 'shipper', label: 'Shipper', defaultOn: false, wrap: true, w: 'max-w-[120px]' },
   { key: 'agente', label: 'Agente', defaultOn: false, wrap: true, w: 'max-w-[110px]' },
   { key: 'incoterm', label: 'Incoterm', defaultOn: false, w: 'max-w-[72px]' },

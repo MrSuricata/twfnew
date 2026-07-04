@@ -372,16 +372,34 @@ export default function OperationsGrid({
     return { count: filtered.length, pkgs, kg, m3 }
   }, [filtered])
 
-  // Visible columns in the user's drag-and-drop order (sticky col pinned first).
+  // Visible columns in the user's drag-and-drop order, con las CONGELADAS
+  // forzadas primeras y en orden fijo por stickyLeft (Ref → Cliente), sin
+  // importar el colOrder guardado (Ref/Cliente no se arrastran). El resto
+  // respeta el drag & drop del usuario a continuación.
   const cols = useMemo(() => {
     const byKey = new Map(OPERATION_COLUMNS.map(c => [c.key as string, c]))
     const seen = new Set<string>()
     const ordered: typeof OPERATION_COLUMNS = []
     for (const k of colOrder) { const d = byKey.get(k); if (d) { ordered.push(d); seen.add(k) } }
     for (const c of OPERATION_COLUMNS) if (!seen.has(c.key as string)) ordered.push(c)
-    const visible = ordered.filter(c => visibleCols.has(c.key))
-    return [...visible].sort((a, b) => (b.sticky ? 1 : 0) - (a.sticky ? 1 : 0))
+    // Las congeladas van SIEMPRE visibles (aunque un usuario viejo las tenga
+    // apagadas en su localStorage), si no la referencia fija se rompe.
+    const visible = ordered.filter(c => c.sticky || visibleCols.has(c.key))
+    return [...visible].sort((a, b) => {
+      // Congeladas primero; entre ellas, por offset izquierdo (0 antes que 76).
+      const sa = a.sticky ? 1 : 0, sb = b.sticky ? 1 : 0
+      if (sa !== sb) return sb - sa
+      if (a.sticky && b.sticky) return (a.stickyLeft ?? 0) - (b.stickyLeft ?? 0)
+      return 0
+    })
   }, [colOrder, visibleCols])
+
+  // Última columna congelada VISIBLE → lleva la sombra que marca el borde del
+  // área fija (las demás sticky no, para que la sombra sea una sola línea).
+  const lastStickyKey = useMemo(() => {
+    const sticky = cols.filter(c => c.sticky)
+    return sticky.length ? sticky[sticky.length - 1].key : null
+  }, [cols])
 
   const operatorById = useMemo(() => {
     const m = new Map<string, Operator>()
@@ -757,8 +775,9 @@ export default function OperationsGrid({
                     onDrop={draggable ? () => dropReorder(c.key) : undefined}
                     onDragEnd={() => { setDragKey(null); setOverKey(null) }}
                     onClick={() => toggleSort(c.key)}
+                    style={c.sticky ? { left: c.stickyLeft ?? 0 } : undefined}
                     title="Click: ordenar · Arrastrá para reordenar"
-                    className={`px-2 py-2 text-left font-semibold uppercase tracking-wide text-[10px] align-bottom cursor-pointer select-none hover:bg-[#274aa3] ${c.w || ''} ${c.numeric ? 'text-right' : ''} ${c.sticky ? 'sticky left-0 bg-[#1e3a8a] z-20' : ''} ${overKey === c.key && dragKey ? 'border-l-2 border-[#9bd1e5]' : ''} ${dragKey === c.key ? 'opacity-50' : ''}`}
+                    className={`px-2 py-2 text-left font-semibold uppercase tracking-wide text-[10px] align-bottom cursor-pointer select-none hover:bg-[#274aa3] ${c.w || ''} ${c.numeric ? 'text-right' : ''} ${c.sticky ? 'sticky bg-[#1e3a8a] z-30' : ''} ${c.key === lastStickyKey ? 'shadow-[6px_0_6px_-4px_rgba(0,0,0,0.45)]' : ''} ${overKey === c.key && dragKey ? 'border-l-2 border-[#9bd1e5]' : ''} ${dragKey === c.key ? 'opacity-50' : ''}`}
                   >
                     <span className={`inline-flex items-center gap-1 ${c.numeric ? 'flex-row-reverse' : ''}`}>
                       {c.label}
@@ -1059,6 +1078,12 @@ const OperationRow = memo(function OperationRow({
     }
   }
 
+  // Última columna congelada de esta fila → lleva la sombra del borde fijo.
+  const lastStickyKey = (() => {
+    for (let i = cols.length - 1; i >= 0; i--) if (cols[i].sticky) return cols[i].key
+    return null
+  })()
+
   return (
     // Zebra via CSS (even:) instead of an index prop → rows don't re-render on
     // sort/reorder, only the DOM nodes move (memo stays valid).
@@ -1066,7 +1091,17 @@ const OperationRow = memo(function OperationRow({
       {cols.map((c) => {
         // Seguimiento 7+ días sin actualizar (carga activa) → celda en rojo.
         const segRojo = c.key === 'seguimiento' && segVencido
-        const tdClass = `px-2 py-1.5 align-top ${c.w || ''} ${c.numeric ? 'text-right tabular-nums' : ''} ${c.wrap ? 'whitespace-normal break-words' : 'whitespace-nowrap'} ${c.sticky ? 'sticky left-0 bg-inherit' : ''} ${segRojo ? 'bg-red-50 text-red-700 font-semibold' : ''}`
+        // Columnas congeladas (Ref/Cliente): fondo SÓLIDO opaco (si no, el
+        // contenido de atrás se ve al scrollear), replicando el zebra/hover de
+        // la fila con variantes que leen la paridad/hover del <tr>. z-20 para
+        // quedar por encima de las celdas normales que scrollean por debajo.
+        // La última congelada suma una sombra sutil a la derecha (borde del
+        // área fija).
+        const stickyCls = c.sticky
+          ? `sticky z-20 bg-ops-sticky [tr:nth-child(even)_&]:bg-ops-sticky-even [tr:hover_&]:bg-ops-sticky-hover ${c.key === lastStickyKey ? 'shadow-[6px_0_6px_-4px_rgba(0,0,0,0.22)]' : ''}`
+          : ''
+        const tdClass = `px-2 py-1.5 align-top ${c.w || ''} ${c.numeric ? 'text-right tabular-nums' : ''} ${c.wrap ? 'whitespace-normal break-words' : 'whitespace-nowrap'} ${stickyCls} ${segRojo ? 'bg-red-50 text-red-700 font-semibold' : ''}`
+        const stickyStyle = c.sticky ? { left: c.stickyLeft ?? 0 } : undefined
 
         // Estado of a cargo loaded on a truck is driven by the truck (read-only).
         // FCL es la EXCEPCIÓN: su estado deriva SIEMPRE de la planilla (operativas),
@@ -1075,7 +1110,7 @@ const OperationRow = memo(function OperationRow({
         if (c.key === 'status' && truckStatus && op.mode !== 'fcl') {
           const truckLabel = STATUS_LABEL[truckStatus.status] || truckStatus.status
           return (
-            <td key={c.key} className={tdClass}>
+            <td key={c.key} className={tdClass} style={stickyStyle}>
               <Badge variant="outline" className={`h-5 text-[9px] whitespace-nowrap gap-1 ${statusBadgeClass(truckLabel)}`} title={`Estado controlado por el camión ${truckStatus.truckCode}`}>
                 <TruckIcon size={10} weight="fill" className="text-primary" />
                 {truckStatus.truckCode} · {truckLabel}
@@ -1086,7 +1121,7 @@ const OperationRow = memo(function OperationRow({
 
         const content = cell(c.key)
         return (
-          <td key={c.key} className={tdClass}>
+          <td key={c.key} className={tdClass} style={stickyStyle}>
             {c.wrap
               ? <div className="line-clamp-2 leading-snug" title={typeof content === 'string' ? content : undefined}>{content}</div>
               : content}

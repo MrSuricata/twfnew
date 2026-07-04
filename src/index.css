@@ -53,6 +53,14 @@
   --sidebar-accent-foreground: oklch(0.95 0.005 250);
   --sidebar-border: oklch(0.30 0.06 250);
   --sidebar-ring: oklch(0.68 0.18 45);
+
+  /* Fondos SÓLIDOS (opacos) para las celdas de las columnas congeladas de la
+     grilla de Operaciones. Deben ser opacos: si fueran translúcidos, el
+     contenido que scrollea por detrás se vería a través de la columna fija.
+     Replican el zebra/hover de las filas (bg-card / muted-30 / primary-5). */
+  --ops-sticky: var(--card);
+  --ops-sticky-even: oklch(0.955 0.005 250);   /* ≈ card con un toque de muted */
+  --ops-sticky-hover: oklch(0.935 0.012 250);  /* ≈ hover primary/5, opaco */
 }
 
 /* ─── Mediterránea Carghas brand theme ───────────────────────────────
@@ -104,6 +112,11 @@
   --sidebar-accent-foreground: #eef0f8;
   --sidebar-border: #352e6a;
   --sidebar-ring: #9bd1e5;
+
+  /* Celdas congeladas de la grilla (ver :root) — opacas, en la paleta Med. */
+  --ops-sticky: #ffffff;
+  --ops-sticky-even: #f5f6fb;   /* ≈ card + toque de #eef0f8 */
+  --ops-sticky-hover: #eaecf7;  /* ≈ hover, opaco */
 }
 
 /* Brand fonts — Jost is a free geometric face close to Gotham. */
@@ -131,7 +144,12 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  
+
+  /* Celdas congeladas de la grilla de Operaciones (opacas, por marca). */
+  --color-ops-sticky: var(--ops-sticky);
+  --color-ops-sticky-even: var(--ops-sticky-even);
+  --color-ops-sticky-hover: var(--ops-sticky-hover);
+
   --radius-sm: calc(var(--radius) * 0.5);
   --radius-md: var(--radius);
   --radius-lg: calc(var(--radius) * 1.5);
