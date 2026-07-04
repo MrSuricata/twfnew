@@ -6,7 +6,11 @@ import {
   llegandoFiscalHoy,
   libreAlerts,
   buildTodaySnapshot,
+  AVISO_STEP_BY_COLUMN,
+  AVISO_LABEL_BY_COLUMN,
+  type TodayColumn,
 } from './todayFilters'
+import { CHECK_STEPS, type CheckStepKey } from './checksTypes'
 
 // Mock today = 2026-04-20 (local)
 beforeAll(() => {
@@ -224,5 +228,46 @@ describe('buildTodaySnapshot', () => {
   it('hasMovement false when empty', () => {
     const snap = buildTodaySnapshot([])
     expect(snap.hasMovement).toBe(false)
+  })
+})
+
+// El check "Aviso" de cada tarjeta de HOY debe marcar EXACTAMENTE el paso del
+// procedimiento operativo que ya vive en ref_checks (pestaña Checks) — no un
+// estado nuevo. Este test blinda ese mapeo card→step contra regresiones.
+describe('AVISO_STEP_BY_COLUMN', () => {
+  it('cada columna de HOY apunta al paso de aviso correcto de ref_checks', () => {
+    expect(AVISO_STEP_BY_COLUMN.salientes).toBe('aviso_salida')
+    expect(AVISO_STEP_BY_COLUMN.frontera).toBe('cruce_frontera')
+    expect(AVISO_STEP_BY_COLUMN.llegandoFiscal).toBe('arribo_fiscal')
+  })
+
+  it('los 3 pasos existen en el procedimiento operativo (CHECK_STEPS)', () => {
+    const validKeys = new Set<CheckStepKey>(CHECK_STEPS.map(s => s.key))
+    for (const step of Object.values(AVISO_STEP_BY_COLUMN)) {
+      expect(validKeys.has(step)).toBe(true)
+    }
+  })
+
+  it('los 3 avisos son pasos comunes (sin condición de operativa) → aplican a cualquier modalidad', () => {
+    // aviso_salida / cruce_frontera / arribo_fiscal NO llevan `solo`, así que se
+    // marcan sin importar TRASIEGO / CONTENEDOR / etc. (HOY muestra cargas de
+    // cualquier operativa).
+    for (const step of Object.values(AVISO_STEP_BY_COLUMN)) {
+      const def = CHECK_STEPS.find(s => s.key === step)
+      expect(def?.solo).toBeUndefined()
+    }
+  })
+
+  it('cubre exactamente las 3 columnas, sin duplicar pasos', () => {
+    const cols: TodayColumn[] = ['salientes', 'frontera', 'llegandoFiscal']
+    expect(Object.keys(AVISO_STEP_BY_COLUMN).sort()).toEqual([...cols].sort())
+    const steps = Object.values(AVISO_STEP_BY_COLUMN)
+    expect(new Set(steps).size).toBe(steps.length)
+  })
+
+  it('hay una etiqueta por cada columna', () => {
+    for (const col of Object.keys(AVISO_STEP_BY_COLUMN) as TodayColumn[]) {
+      expect(AVISO_LABEL_BY_COLUMN[col]).toBeTruthy()
+    }
   })
 })

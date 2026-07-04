@@ -18,11 +18,35 @@ import {
   type ParsedShipment,
   type OperativasRecord,
 } from './shipmentTypes'
+import type { CheckStepKey } from './checksTypes'
 
 /** A single operativa matched along with its parent shipment for context. */
 export interface OpMatch {
   shipment: ParsedShipment
   op: OperativasRecord
+}
+
+/** Las 3 columnas de HOY. Cada una corresponde a un aviso del procedimiento
+ *  operativo (mismo paso que vive en la pestaña Checks / tabla ref_checks). */
+export type TodayColumn = 'salientes' | 'frontera' | 'llegandoFiscal'
+
+/** Mapa columna de HOY → paso de ref_checks. El check "Aviso" de cada tarjeta
+ *  marca EXACTAMENTE este paso (no un estado nuevo):
+ *   - Saliendo hoy        → `aviso_salida`   (se avisó la SALIDA)
+ *   - En frontera hoy     → `cruce_frontera` (se avisó el CRUCE de frontera)
+ *   - Llegando a fiscal   → `arribo_fiscal`  (se avisó la LLEGADA a fiscal)
+ *  Es una constante pura (sin estado) para poder testearla sola. */
+export const AVISO_STEP_BY_COLUMN: Record<TodayColumn, CheckStepKey> = {
+  salientes: 'aviso_salida',
+  frontera: 'cruce_frontera',
+  llegandoFiscal: 'arribo_fiscal',
+}
+
+/** Etiqueta corta del aviso por columna (para tooltips / accesibilidad). */
+export const AVISO_LABEL_BY_COLUMN: Record<TodayColumn, string> = {
+  salientes: 'Avisar salida',
+  frontera: 'Avisar cruce de frontera',
+  llegandoFiscal: 'Avisar arribo a fiscal',
 }
 
 /** Border-crossing estimation window: SALIDA was 1 or 2 days ago. */
