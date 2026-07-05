@@ -49,9 +49,11 @@ export const AVISO_LABEL_BY_COLUMN: Record<TodayColumn, string> = {
   llegandoFiscal: 'Avisar arribo a fiscal',
 }
 
-/** Border-crossing estimation window: SALIDA was 1 or 2 days ago. */
-const BORDER_DAYS_MIN = 1
-const BORDER_DAYS_MAX = 2
+/** En frontera: ya salió (mínimo ayer). El límite superior lo pone la ETA fiscal,
+ *  no un número fijo de días (ver enFronteraHoy). BORDER_MAX_DAYS_NO_FISC es solo
+ *  el tope de seguridad para las que NO tienen ETA fiscal cargada. */
+const BORDER_MIN_DAYS = 1
+const BORDER_MAX_DAYS_NO_FISC = 7
 const MS_PER_DAY = 86_400_000
 
 function daysSince(dateStr: string): number | null {
@@ -84,10 +86,16 @@ export function salientesHoy(shipments: ParsedShipment[]): OpMatch[] {
 }
 
 /**
- * Operativas estimated to be at the border today.
+ * Operativas estimadas EN FRONTERA hoy (en tránsito UY→fiscal).
  *
- * There's no CRUCE_FRONTERA field in the data, so we derive: SALIDA was 1–2 days ago
- * AND cargo hasn't arrived at fiscal yet (ETA_FISC is today or in the future or empty).
+ * No hay campo CRUCE_FRONTERA, así que se deriva: la carga ya SALIÓ (SALIDA en el
+ * pasado — mínimo ayer; si salió hoy va en "Saliendo hoy") y TODAVÍA NO llegó a
+ * fiscal. Sigue "en frontera" desde que sale HASTA EL DÍA ANTERIOR a la ETA fiscal
+ * — el límite lo pone la ETA fiscal, no un número fijo de días. Así, un domingo,
+ * aparecen las que salieron el jueves Y el viernes (no solo las de 1–2 días atrás),
+ * mientras su arribo fiscal siga siendo futuro. El día de la ETA fiscal pasa a la
+ * card "Llegando a fiscal hoy". Sin ETA fiscal cargada: se muestra igual (sigue en
+ * tránsito) con un tope de seguridad para no acumular indefinidamente.
  */
 export function enFronteraHoy(shipments: ParsedShipment[]): OpMatch[] {
   return shipments.flatMap(s =>
@@ -98,12 +106,14 @@ export function enFronteraHoy(shipments: ParsedShipment[]): OpMatch[] {
         // contenedor vacío ya se haya devuelto.
         if (!isValidDate(op.SALIDA)) return false
         const days = daysSince(op.SALIDA)
-        if (days === null) return false
-        if (days < BORDER_DAYS_MIN || days > BORDER_DAYS_MAX) return false
-        // Already arrived at fiscal? Skip.
-        if (isValidDate(op.ETA_FISC) && isDatePast(op.ETA_FISC)) return false
-        if (isDateToday(op.ETA_FISC)) return false
-        return true
+        if (days === null || days < BORDER_MIN_DAYS) return false // sale hoy / no salió aún
+        if (isValidDate(op.ETA_FISC)) {
+          // Con ETA fiscal: en frontera mientras el arribo sea FUTURO (mañana o más).
+          // Hoy → "Llegando a fiscal"; pasado → ya llegó.
+          return !isDatePast(op.ETA_FISC) && !isDateToday(op.ETA_FISC)
+        }
+        // Sin ETA fiscal: sigue en tránsito, pero con tope para no acumular viejas.
+        return days <= BORDER_MAX_DAYS_NO_FISC
       })
       .map(op => ({ shipment: s, op }))
   )

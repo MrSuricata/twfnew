@@ -17,6 +17,7 @@ const HOY = '2026-07-02'
 const AYER = '2026-07-01'
 const ANTEAYER = '2026-06-30'
 const HACE_3D = '2026-06-29'
+const HACE_9D = '2026-06-23'
 const MANANA = '2026-07-03'
 const HOY_MAS_3 = '2026-07-05'
 const HOY_MAS_4 = '2026-07-06'
@@ -116,19 +117,21 @@ describe('computeFiscalLines — "Llegan hoy a fiscal" (ETA_FISC = hoy)', () => 
   })
 })
 
-describe('computeFronteraLines — "Hoy en frontera" (SALIDA hace 1–2 días sin fiscal)', () => {
-  it('misma derivación que la pestaña HOY', () => {
+describe('computeFronteraLines — "Hoy en frontera" (acotado por la ETA fiscal)', () => {
+  it('misma derivación que la pestaña HOY: en frontera hasta el día anterior a fiscal', () => {
     const ships = [
-      fcl({ ref: 'A7040', operativas: [{ SALIDA: AYER, ETA_FISC: '', CNTR_OP: 'AAAA1111111', TRANSPORTE: 'PCS' }] }),          // 1 día → frontera
+      fcl({ ref: 'A7040', operativas: [{ SALIDA: AYER, ETA_FISC: '', CNTR_OP: 'AAAA1111111', TRANSPORTE: 'PCS' }] }),          // 1 día, sin fiscal → frontera
       fcl({ ref: 'A7041', operativas: [{ SALIDA: ANTEAYER, ETA_FISC: MANANA, CNTR_OP: 'BBBB2222222' }] }),                      // 2 días, fiscal futuro → frontera
-      fcl({ ref: 'A7042', operativas: [{ SALIDA: HACE_3D, ETA_FISC: '', CNTR_OP: 'CCCC3333333' }] }),                           // 3 días → afuera
+      fcl({ ref: 'A7042', operativas: [{ SALIDA: HACE_3D, ETA_FISC: '', CNTR_OP: 'CCCC3333333' }] }),                           // 3 días, sin fiscal (dentro del tope) → frontera
       fcl({ ref: 'A7043', operativas: [{ SALIDA: AYER, ETA_FISC: ANTEAYER, CNTR_OP: 'DDDD4444444' }] }),                        // ya llegó → no
       fcl({ ref: 'A7044', operativas: [{ SALIDA: AYER, ETA_FISC: HOY, CNTR_OP: 'EEEE5555555' }] }),                             // llega HOY → va en fiscal
       fcl({ ref: 'A7045', operativas: [{ SALIDA: HOY, ETA_FISC: '', CNTR_OP: 'FFFF6666666' }] }),                               // sale hoy → va en salidas
+      fcl({ ref: 'A7046', operativas: [{ SALIDA: HACE_9D, ETA_FISC: '', CNTR_OP: 'GGGG7777777' }] }),                           // 9 días sin fiscal → pasó el tope
     ]
     expect(computeFronteraLines(ships, HOY)).toEqual([
       'AAAA1111111 · A7040 · PCS',
       'BBBB2222222 · A7041 · —',
+      'CCCC3333333 · A7042 · —',
     ])
   })
 })
