@@ -300,6 +300,16 @@ export default function ContainerQuickEdit({
     }
   }
 
+  // Al cerrar el Dialog (X / Escape / click afuera / "Listo") comitear primero
+  // los borradores pendientes: el arribo fiscal / salida recién elegidos en el
+  // calendario nativo NO blurean al cerrar → se perderían. commitSave ya trae el
+  // guard anti doble-save (no-op si nada cambió), así que es seguro llamarlo
+  // siempre. Solo propagamos el cierre; en abrir, pasa directo.
+  const handleOpenChange = (o: boolean) => {
+    if (!o) { void commitSave().finally(() => onOpenChange(false)); return }
+    onOpenChange(o)
+  }
+
   const status = containerMicroStatus(shipment, {
     ...currentOp,
     SALIDA: drafts.salida,
@@ -313,7 +323,7 @@ export default function ContainerQuickEdit({
   const transporteListId = `qe-transportes-${(shipment.REF || 'x').replace(/\s+/g, '-')}`
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
         className="max-w-sm w-[calc(100%-2rem)] p-0 gap-0 overflow-hidden"
         onKeyDown={handleKeyDown}
@@ -496,7 +506,7 @@ export default function ContainerQuickEdit({
               Más datos →
             </button>
             <button
-              onClick={async () => { await commitSave(); onOpenChange(false) }}
+              onClick={() => handleOpenChange(false)}
               className="px-3 py-1.5 text-[12px] font-medium rounded-md border border-input bg-background hover:bg-muted transition-colors"
             >
               {saving ? 'Cancelar' : 'Listo'}
