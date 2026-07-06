@@ -30,14 +30,18 @@ import type { ShipmentDocument, OperativeReport, OriginPhoto } from '@/lib/quota
 import type { Truck as TruckType, TruckLoad } from '@/lib/truckTypes'
 import { deriveTruckDisplayInfo, deriveTruckDisplayStatus } from '@/lib/truckTypes'
 import { Badge } from '@/components/ui/badge'
-import { fetchRefChecks, saveRefCheckSteps } from '@/lib/dataClient'
+import { fetchRefChecks, saveRefCheckSteps, saveRefCheckCntrs } from '@/lib/dataClient'
 import {
   normalizeRef,
   mergeChecksSteps,
+  avisoForCntr,
+  buildAvisoCntrsMap,
   type CheckStepKey,
   type RefCheckStep,
   type RefCheckSteps,
 } from '@/lib/checksTypes'
+import { parseCntr } from '@/lib/cntrUtils'
+import { subscribeTrucksLive } from '@/lib/realtimeBus'
 import { getAdminName } from '@/lib/authClient'
 import { fmtDateDMY } from '@/lib/format'
 
@@ -110,9 +114,9 @@ export default function TodayDashboard({
 
   const snapshot = useMemo(() => buildTodaySnapshot(shipments), [shipments])
 
-  // ── Estado de los avisos (ref_checks) — fetch propio + refetch on focus ──
-  // Mismo patrón/tabla que ChecksBoard: la fuente de verdad es ref_checks, acá
-  // solo se lee y se togglea el paso de aviso de cada columna.
+  // ── Estado de los avisos (ref_checks) — fetch + refetch on focus + Realtime ──
+  // Fuente de verdad = ref_checks. Los 3 pasos-aviso son POR CONTENEDOR: cada
+  // tarjeta (= un contenedor) marca SU aviso; la pestaña Checks agrega.
   const [checksByRef, setChecksByRef] = useState<Map<string, RefCheckSteps>>(new Map())
   const refreshChecks = useCallback(async () => {
     try {
@@ -128,51 +132,79 @@ export default function TodayDashboard({
     window.addEventListener('focus', onFocus)
     return () => window.removeEventListener('focus', onFocus)
   }, [refreshChecks])
+  // Timbre Realtime: cuando OTRO usuario marca un aviso, refetchamos para ver el
+  // check verde al instante (bug del "no sincroniza"). Debounce para ráfagas.
+  // Sin env de Realtime → subscribeTrucksLive es no-op (sigue el refetch on-focus).
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const unsub = subscribeTrucksLive(msg => {
+      if (msg.kind !== 'ref_checks') return
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(() => { void refreshChecks() }, 300)
+    })
+    return () => { if (timer) clearTimeout(timer); unsub() }
+  }, [refreshChecks])
 
-  // Guardado optimista con revert en error (patrón applyStep de ChecksBoard):
-  // reconcilia con los steps que devuelve el server (que estampa `by` del token).
-  const applyAviso = useCallback((ref: string, key: CheckStepKey, step: RefCheckStep | null) => {
+  // Reconcilia el estado optimista con lo que devuelve el server (estampa `by`).
+  const reconcile = useCallback((norm: string, merged: RefCheckSteps) => {
+    setChecksByRef(cur => { const next = new Map(cur); next.set(norm, merged); return next })
+  }, [])
+
+  // Aviso NIVEL-REF (fallback: solo cuando la fila no tiene contenedor).
+  const applyAvisoStep = useCallback((ref: string, key: CheckStepKey, step: RefCheckStep | null) => {
     const norm = normalizeRef(ref)
-    const prev = checksByRef // snapshot para revertir si el guardado falla
+    const prev = checksByRef
     const patch: RefCheckSteps = { [key]: step ?? { done: false } }
+    setChecksByRef(cur => { const next = new Map(cur); next.set(norm, mergeChecksSteps(cur.get(norm) || {}, patch)); return next })
+    saveRefCheckSteps(ref, patch).then(m => reconcile(norm, m)).catch(err => {
+      setChecksByRef(prev)
+      toast.error(`No se pudo guardar el aviso: ${(err as Error)?.message || 'sin detalles'}`)
+    })
+  }, [checksByRef, reconcile])
+
+  // Aviso POR CONTENEDOR: guarda el mapa completo de la ref para ese paso.
+  const applyAvisoCntrs = useCallback((ref: string, key: CheckStepKey, map: Record<string, { done: boolean; date?: string; by?: string }>) => {
+    const norm = normalizeRef(ref)
+    const prev = checksByRef
+    const anyDone = Object.values(map).some(c => c.done)
     setChecksByRef(cur => {
       const next = new Map(cur)
-      next.set(norm, mergeChecksSteps(cur.get(norm) || {}, patch))
+      const steps: RefCheckSteps = { ...(cur.get(norm) || {}) }
+      if (anyDone) steps[key] = { done: true, cntrs: map }
+      else delete steps[key]
+      next.set(norm, steps)
       return next
     })
-    saveRefCheckSteps(ref, patch)
-      .then(merged => {
-        setChecksByRef(cur => {
-          const next = new Map(cur)
-          next.set(norm, merged)
-          return next
-        })
-      })
-      .catch(err => {
-        setChecksByRef(prev)
-        toast.error(`No se pudo guardar el aviso: ${(err as Error)?.message || 'sin detalles'}`)
-      })
-  }, [checksByRef])
+    saveRefCheckCntrs(ref, key, map).then(m => reconcile(norm, m)).catch(err => {
+      setChecksByRef(prev)
+      toast.error(`No se pudo guardar el aviso: ${(err as Error)?.message || 'sin detalles'}`)
+    })
+  }, [checksByRef, reconcile])
 
-  // Toggle del check "Aviso" de una tarjeta (marca y desmarca; toast + Deshacer
-  // en ambos sentidos). `label` = etiqueta de la columna (Avisar salida / cruce…).
-  const toggleAviso = useCallback((ref: string, key: CheckStepKey, label: string) => {
-    const cur = (checksByRef.get(normalizeRef(ref)) || {})[key]
-    if (cur?.done) {
-      applyAviso(ref, key, null)
-      toast.success(`${label} — aviso quitado`, {
+  // Toggle del check "Aviso" de una tarjeta = UN contenedor (op.CNTR_OP). Marca/
+  // desmarca solo ESA línea; los otros contenedores de la ref no se tocan.
+  const toggleAviso = useCallback((shipment: ParsedShipment, cntr: string, key: CheckStepKey, label: string) => {
+    const ref = shipment.REF
+    const step = checksByRef.get(normalizeRef(ref))?.[key]
+    if (!cntr) {
+      const done = !!step?.done
+      const mk = (d: boolean): RefCheckStep | null => (d ? { done: true, date: todayIso(), by: getAdminName() } : null)
+      applyAvisoStep(ref, key, mk(!done))
+      toast.success(done ? `${label} — aviso quitado` : `${label} avisado — ${fmtDateDMY(todayIso())}`, {
         description: ref,
-        action: { label: 'Deshacer', onClick: () => applyAviso(ref, key, { done: true, date: todayIso(), by: getAdminName() }) },
+        action: { label: 'Deshacer', onClick: () => applyAvisoStep(ref, key, mk(done)) },
       })
       return
     }
-    const date = todayIso()
-    applyAviso(ref, key, { done: true, date, by: getAdminName() })
-    toast.success(`${label} avisado — ${fmtDateDMY(date)}`, {
+    const cntrList = parseCntr(shipment.CNTR)
+    const wasDone = !!avisoForCntr(step, cntr)
+    const ctx = { date: todayIso(), by: getAdminName() }
+    applyAvisoCntrs(ref, key, buildAvisoCntrsMap(step, cntrList, cntr, !wasDone, ctx))
+    toast.success(wasDone ? `${label} — aviso quitado · ${cntr}` : `${label} avisado · ${cntr}`, {
       description: ref,
-      action: { label: 'Deshacer', onClick: () => applyAviso(ref, key, null) },
+      action: { label: 'Deshacer', onClick: () => applyAvisoCntrs(ref, key, buildAvisoCntrsMap(step, cntrList, cntr, wasDone, ctx)) },
     })
-  }, [checksByRef, applyAviso])
+  }, [checksByRef, applyAvisoStep, applyAvisoCntrs])
 
   // Transportes ya usados en las cargas → sugerencias del combo Transporte del quick-edit.
   const knownTransportes = useMemo(
@@ -478,8 +510,8 @@ interface TodayCardProps {
   column: TodayColumn
   /** Estado de los pasos por ref (ref_checks) — para pintar el chip verde/gris. */
   checksByRef: Map<string, RefCheckSteps>
-  /** Toggle del aviso de una fila (marca/desmarca el paso de ref_checks). */
-  onToggleAviso: (ref: string, key: CheckStepKey, label: string) => void
+  /** Toggle del aviso de UNA fila = un contenedor (op.CNTR_OP) de la ref. */
+  onToggleAviso: (shipment: ParsedShipment, cntr: string, key: CheckStepKey, label: string) => void
 }
 
 function TodayCard({ title, subtitle, icon, iconBg, barColor, matches, emptyLabel, onRowClick, column, checksByRef, onToggleAviso }: TodayCardProps) {
@@ -507,7 +539,10 @@ function TodayCard({ title, subtitle, icon, iconBg, barColor, matches, emptyLabe
           <div className="divide-y divide-border/60">
             {matches.map((match, idx) => {
               const { shipment, op } = match
-              const aviso = (checksByRef.get(normalizeRef(shipment.REF)) || {})[stepKey]
+              // Aviso POR CONTENEDOR: el estado de ESTA línea (op.CNTR_OP), no de
+              // toda la ref → 2 contenedores del mismo ref se marcan por separado.
+              const step = (checksByRef.get(normalizeRef(shipment.REF)) || {})[stepKey]
+              const aviso = avisoForCntr(step, op.CNTR_OP || '')
               return (
               <button
                 key={`${shipment.REF}-${op.CNTR_OP || idx}`}
@@ -545,7 +580,7 @@ function TodayCard({ title, subtitle, icon, iconBg, barColor, matches, emptyLabe
                 <AvisoChip
                   aviso={aviso}
                   label={avisoLabel}
-                  onToggle={() => onToggleAviso(shipment.REF, stepKey, avisoLabel)}
+                  onToggle={() => onToggleAviso(shipment, op.CNTR_OP || '', stepKey, avisoLabel)}
                 />
                 <CaretRight size={14} className="row-caret text-muted-foreground mt-1 shrink-0" />
               </button>

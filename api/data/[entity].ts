@@ -1497,10 +1497,31 @@ async function handleRefChecks(req: VercelRequest, res: VercelResponse, db: any,
     // (aceptable en V1, igual que el resto de los overlays por ref).
     const { data: prevRow, error: prevErr } = await db.from('ref_checks').select('steps').eq('ref', ref).maybeSingle()
     if (prevErr) throw prevErr
-    const prevSteps: Record<string, { done?: boolean; date?: string; by?: string }> = prevRow?.steps || {}
+    type CntrState = { done?: boolean; date?: string; by?: string }
+    type StoredStep = { done?: boolean; date?: string; by?: string; cntrs?: Record<string, CntrState> }
+    const prevSteps: Record<string, StoredStep> = prevRow?.steps || {}
     const merged: Record<string, unknown> = { ...prevSteps }
     for (const [key, step] of Object.entries(steps)) {
       if (step === undefined) continue
+      // Paso-aviso POR CONTENEDOR: el body trae el mapa `cntrs` completo de la
+      // ref (HOY lo siembra desde el estado efectivo). Mergeamos por contenedor
+      // y estampamos `by` del token (nunca del body); un contenedor ya marcado
+      // conserva su `by` original. Si ninguno queda avisado, el paso vuelve a
+      // pendiente (se borra), igual que done=false a nivel ref.
+      const cntrsPatch = (step as { cntrs?: Record<string, CntrState> }).cntrs
+      if (cntrsPatch) {
+        const prevC = prevSteps[key]?.cntrs || {}
+        const outC: Record<string, CntrState> = { ...prevC }
+        for (const [cntr, cs] of Object.entries(cntrsPatch)) {
+          if (!cs?.done) { outC[cntr] = { done: false }; continue }
+          const pc = prevC[cntr]
+          outC[cntr] = { done: true, date: cs.date || pc?.date || hoyIso, by: pc?.done && pc.by ? pc.by : who }
+        }
+        const anyDone = Object.values(outC).some(c => c.done)
+        if (!anyDone) { delete merged[key]; continue }
+        merged[key] = { done: true, cntrs: outC }
+        continue
+      }
       if (!step.done) { delete merged[key]; continue }
       const prevStep = prevSteps[key]
       merged[key] = {
@@ -1518,6 +1539,9 @@ async function handleRefChecks(req: VercelRequest, res: VercelResponse, db: any,
     }, { onConflict: 'ref' })
     if (error) throw error
     logAudit(db, payload, 'checks operativos', 'ref_checks', ref, { pasos: Object.keys(steps) })
+    // Timbre Realtime: avisar a los otros usuarios que cambió un check para que
+    // refetcheen (HOY/Checks). Best-effort — no rompe la escritura si falla.
+    void broadcastTrucksLive('ref_checks', undefined, clientIdFromRequest(req))
     return res.status(200).json({ saved: true, steps: merged })
   }
 

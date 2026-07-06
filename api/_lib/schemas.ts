@@ -325,6 +325,16 @@ export const RefCheckStepSchema = z.object({
   done: z.boolean(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'fecha YYYY-MM-DD').optional().or(z.literal('')),
   by: z.string().max(200).optional(),
+  // Solo pasos-aviso (salida/frontera/fiscal): estado POR CONTENEDOR. `by` de
+  // cada contenedor lo pisa el server con el usuario del token. Cap 40 cntr.
+  cntrs: z.record(
+    z.string().max(20),
+    z.object({
+      done: z.boolean(),
+      date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().or(z.literal('')),
+      by: z.string().max(200).optional(),
+    }),
+  ).refine(m => Object.keys(m).length <= 40, { message: 'demasiados contenedores' }).optional(),
 })
 
 /** Upsert de checks por ref: steps PARCIALES (solo las claves tocadas), que el

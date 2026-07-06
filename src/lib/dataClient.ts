@@ -12,7 +12,7 @@ import type { Truck, TruckLoad, LclAirShipment } from './truckTypes'
 import type { BillingRecord } from './billingTypes'
 import type { Operator, OperatorAssignment, DbShipment } from './operationsTypes'
 import { fclToColumns } from './operationsTypes'
-import type { RefCheckRecord, RefCheckSteps } from './checksTypes'
+import type { RefCheckRecord, RefCheckSteps, CheckStepKey } from './checksTypes'
 import { matchesPattern } from './clientMatching'
 
 // ── Shipments FCL (espejo en `shipments` → fallback cache JSON) ──
@@ -603,6 +603,27 @@ export async function saveRefCheckSteps(ref: string, steps: RefCheckSteps): Prom
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ ref, steps }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
+  const data = await res.json()
+  return data.steps || {}
+}
+
+/** Guarda un paso-aviso POR CONTENEDOR: manda el mapa `cntrs` COMPLETO de la ref
+ *  para ese paso (salida/frontera/fiscal). El server mergea por contenedor y
+ *  estampa `by` del token. Devuelve los steps completos guardados. */
+export async function saveRefCheckCntrs(
+  ref: string,
+  stepKey: CheckStepKey,
+  cntrs: Record<string, { done: boolean; date?: string; by?: string }>,
+): Promise<RefCheckSteps> {
+  const res = await authFetch('/api/data/ref-checks', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ref, steps: { [stepKey]: { done: true, cntrs } } }),
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
