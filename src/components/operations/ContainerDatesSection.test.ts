@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { resolveRecord, buildNextOperativas, computeFlush } from './ContainerDatesSection'
+import { resolveRecord, buildNextOperativas, reconcileOperativasToCntrs, computeFlush } from './ContainerDatesSection'
 import type { OperativasRecord } from '@/lib/shipmentTypes'
 import type { UnifiedOperation } from '@/lib/operationsTypes'
 
@@ -142,6 +142,72 @@ describe('buildNextOperativas — editing one container preserves sibling fields
     expect(next[0].LUGAR_SALIDA).toBe('GODILCO')
     expect(next[0].SALIDA).toBe('2026-06-10')
     expect(next[0].ETA_FISC).toBe('2026-06-15')
+  })
+})
+
+// ── reconcileOperativasToCntrs — sync al agregar/quitar contenedor ──────────
+describe('reconcileOperativasToCntrs — operativas en sync con la lista de contenedores', () => {
+  it('BUG: agregar un contenedor preserva el existente (por CNTR_OP) y sintetiza el nuevo', () => {
+    // Carga con 1 operativa cargada (C1 con datos). Se agrega C2.
+    const existing = [
+      record({ CNTR_OP: 'AAAA1111111', SALIDA: '2026-06-10', ETA_FISC: '2026-06-20', KG: 800 }),
+    ]
+    const o = op('AAAA1111111, BBBB2222222', existing)
+    const next = reconcileOperativasToCntrs(['AAAA1111111', 'BBBB2222222'], existing, o)
+    expect(next).toHaveLength(2)
+    // C1 intacto (no se pierde su data al agregar C2)
+    expect(next[0].CNTR_OP).toBe('AAAA1111111')
+    expect(next[0].SALIDA).toBe('2026-06-10')
+    expect(next[0].ETA_FISC).toBe('2026-06-20')
+    expect(next[0].KG).toBe(800)
+    // C2 sintetizado, con CNTR_OP seteado (para que el rollup NO lo borre del contenedor)
+    expect(next[1].CNTR_OP).toBe('BBBB2222222')
+    expect(next[1].SALIDA).toBe('')
+    // TODOS los CNTR_OP presentes → el rollup arma "AAAA1111111, BBBB2222222"
+    expect(next.map(o => o.CNTR_OP).filter(Boolean)).toEqual(['AAAA1111111', 'BBBB2222222'])
+  })
+
+  it('quitar un contenedor deja solo los que quedan', () => {
+    const existing = [
+      record({ CNTR_OP: 'AAAA1111111', SALIDA: '2026-06-10' }),
+      record({ CNTR_OP: 'BBBB2222222', SALIDA: '2026-06-12' }),
+    ]
+    const o = op('AAAA1111111', existing) // ya quitado B de la lista
+    const next = reconcileOperativasToCntrs(['AAAA1111111'], existing, o)
+    expect(next).toHaveLength(1)
+    expect(next[0].CNTR_OP).toBe('AAAA1111111')
+    expect(next[0].SALIDA).toBe('2026-06-10')
+  })
+
+  it('array vacío de operativas → sintetiza uno por contenedor (todos con CNTR_OP)', () => {
+    const o = op('AAAA1111111, BBBB2222222', [])
+    const next = reconcileOperativasToCntrs(['AAAA1111111', 'BBBB2222222'], [], o)
+    expect(next.map(o => o.CNTR_OP)).toEqual(['AAAA1111111', 'BBBB2222222'])
+  })
+})
+
+// ── Caso real A7808A: operativa con CNTR_OP VACÍO + fechas ya cargadas ──────
+describe('CNTR_OP vacío — el contenedor no se pierde al agregarlo (caso A7808A)', () => {
+  it('resolveRecord estampa el nº de contenedor en una operativa existente sin CNTR_OP', () => {
+    // A7808A real: 1 operativa con CNTR_OP='' pero SALIDA/ETA_FISC cargadas.
+    const existing = [record({ CNTR_OP: '', SALIDA: '2026-07-09', ETA_FISC: '2026-07-13', KG: 18240 })]
+    const o = op('HMMU2325664', existing)
+    const r = resolveRecord(['HMMU2325664'], existing, 0, o)
+    // Estampa el contenedor (para que el rollup NO lo borre) y preserva la data
+    expect(r.CNTR_OP).toBe('HMMU2325664')
+    expect(r.SALIDA).toBe('2026-07-09')
+    expect(r.ETA_FISC).toBe('2026-07-13')
+    expect(r.KG).toBe(18240)
+  })
+
+  it('reconcile: agregar el contenedor a A7808A conserva las fechas Y el contenedor sobrevive al rollup', () => {
+    const existing = [record({ CNTR_OP: '', SALIDA: '2026-07-09', ETA_FISC: '2026-07-13' })]
+    const o = op('HMMU2325664', existing)
+    const next = reconcileOperativasToCntrs(['HMMU2325664'], existing, o)
+    // El CNTR_OP quedó estampado → el rollup arma "HMMU2325664" (no vacío)
+    expect(next.map(o => o.CNTR_OP).filter(Boolean)).toEqual(['HMMU2325664'])
+    expect(next[0].SALIDA).toBe('2026-07-09')
+    expect(next[0].ETA_FISC).toBe('2026-07-13')
   })
 })
 

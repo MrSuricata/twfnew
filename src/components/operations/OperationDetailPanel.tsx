@@ -15,7 +15,7 @@ import { fmtDateDMY } from '@/lib/format'
 import { parseCntr, serializeCntr, normalizeCntr, isStandardCntr } from '@/lib/cntrUtils'
 import type { OriginPhoto, OperativeReport } from '@/lib/quotationTypes'
 import ViabilityBlock from './ViabilityBlock'
-import ContainerDatesSection, { type ContainerDatesHandle } from './ContainerDatesSection'
+import ContainerDatesSection, { reconcileOperativasToCntrs, type ContainerDatesHandle } from './ContainerDatesSection'
 import OperationMediaSection from './OperationMediaSection'
 
 interface TruckRefInfo { truckCode: string; status: string }
@@ -224,11 +224,25 @@ export default function OperationDetailPanel({
   // FCL con contenedores: Salida MVD y ETA fiscal se editan POR CONTENEDOR arriba
   // (ContainerDatesSection) → no mostrarlas de nuevo (colapsadas) en "Fechas".
   const hidePerContainerDates = op.mode === 'fcl' && cntrs.length > 0
-  const removeCntr = (i: number) => commit('cntr', serializeCntr(cntrs.filter((_, j) => j !== i)))
+  // Agregar/quitar contenedor: además de la columna `contenedor`, sincronizar el
+  // array `operativas` con la nueva lista (preserva por CNTR_OP, sintetiza el
+  // nuevo). Sin esto, `operativas` quedaba corto y la SIGUIENTE edición de un
+  // campo nivel-carga (buildPerContainerPatch mapea sobre op.operativas) colapsaba
+  // el array → el rollup recomputaba `contenedor` con menos contenedores y borraba
+  // el recién agregado (y su data por contenedor).
+  const commitCntrs = (nextCntrs: string[]) => {
+    const mode = editModeFor(op, 'cntr')
+    if (!mode || !op.dbId) return
+    // FCL espejo (cache legacy, vacío post-flip): comportamiento previo (sin operativas).
+    if (mode.kind !== 'db') { commit('cntr', serializeCntr(nextCntrs)); return }
+    const operativas = reconcileOperativasToCntrs(nextCntrs, op.operativas || [], op)
+    onPatch(op.dbId, { [mode.col]: serializeCntr(nextCntrs), operativas })
+  }
+  const removeCntr = (i: number) => commitCntrs(cntrs.filter((_, j) => j !== i))
   const addCntr = () => {
     const c = normalizeCntr(newCntr)
     if (!c || cntrs.includes(c)) { setNewCntr(''); return }
-    commit('cntr', serializeCntr([...cntrs, c]))
+    commitCntrs([...cntrs, c])
     setNewCntr('')
     // Mantener el input abierto para carga rápida múltiple
   }

@@ -89,9 +89,15 @@ export function resolveRecord(
     if (byNumber) return byNumber
   }
 
-  // Fallback: positional match (only if no CNTR_OP is set on either side)
+  // Fallback: positional match (only if the existing record has no CNTR_OP).
+  // Estampamos CNTR_OP = cntrs[i]: si la operativa existente vino SIN número de
+  // contenedor (dato viejo o cargado antes de asignar el contenedor), reusarla sin
+  // estampar dejaba su CNTR_OP vacío → el rollup (que arma `contenedor` juntando
+  // los CNTR_OP) BORRABA el contenedor. Preserva la data existente y le pone el nº.
   const byIndex = existing[i]
-  if (byIndex && !(byIndex.CNTR_OP || '').trim()) return byIndex
+  if (byIndex && !(byIndex.CNTR_OP || '').trim()) {
+    return cntrKey ? { ...byIndex, CNTR_OP: cntrs[i] } : byIndex
+  }
 
   // New container: synthetic blank (CNTR_OP set so future edits match by number)
   return {
@@ -139,6 +145,25 @@ export function buildNextOperativas(
     if (i === idx) return { ...base, ...patch }
     return base
   })
+}
+
+/**
+ * Reconcilia el array `operativas` con la lista de contenedores: UNA entrada por
+ * contenedor, preservando la existente por CNTR_OP y sintetizando (con CNTR_OP
+ * seteado) las nuevas. Lo usa el panel al AGREGAR/QUITAR un contenedor para que
+ * `operativas` no quede desalineado con la columna `contenedor`.
+ *
+ * Sin esto: agregar un contenedor solo crecía la columna `contenedor`; el array
+ * seguía corto → la siguiente edición de un campo nivel-carga (buildPerContainerPatch
+ * mapea sobre `op.operativas`) producía un array corto → el rollup recomputaba
+ * `contenedor` con MENOS contenedores y borraba el nuevo (y su data por contenedor).
+ */
+export function reconcileOperativasToCntrs(
+  cntrs: string[],
+  existing: OperativasRecord[],
+  op: UnifiedOperation,
+): OperativasRecord[] {
+  return cntrs.map((_, i) => resolveRecord(cntrs, existing, i, op))
 }
 
 /** Campos que el flush conoce (los mismos que se editan por contenedor). */
