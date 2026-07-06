@@ -80,9 +80,15 @@ export function resolveRecord(
     if (byNumber) return byNumber
   }
 
-  // Fallback: positional match (only if no CNTR_OP is set on either side)
+  // Fallback: positional match (only if the existing record has no CNTR_OP).
+  // Estampamos CNTR_OP = cntrs[i]: si la operativa existente vino SIN número de
+  // contenedor (dato viejo o cargado antes de asignar el contenedor), reusarla sin
+  // estampar dejaba su CNTR_OP vacío → el rollup (que arma `contenedor` juntando
+  // los CNTR_OP) BORRABA el contenedor. Preserva la data existente y le pone el nº.
   const byIndex = existing[i]
-  if (byIndex && !(byIndex.CNTR_OP || '').trim()) return byIndex
+  if (byIndex && !(byIndex.CNTR_OP || '').trim()) {
+    return cntrKey ? { ...byIndex, CNTR_OP: cntrs[i] } : byIndex
+  }
 
   // New container: synthetic blank (CNTR_OP set so future edits match by number)
   return {

@@ -185,3 +185,28 @@ describe('reconcileOperativasToCntrs — operativas en sync con la lista de cont
     expect(next.map(o => o.CNTR_OP)).toEqual(['AAAA1111111', 'BBBB2222222'])
   })
 })
+
+// ── Caso real A7808A: operativa con CNTR_OP VACÍO + fechas ya cargadas ──────
+describe('CNTR_OP vacío — el contenedor no se pierde al agregarlo (caso A7808A)', () => {
+  it('resolveRecord estampa el nº de contenedor en una operativa existente sin CNTR_OP', () => {
+    // A7808A real: 1 operativa con CNTR_OP='' pero SALIDA/ETA_FISC cargadas.
+    const existing = [record({ CNTR_OP: '', SALIDA: '2026-07-09', ETA_FISC: '2026-07-13', KG: 18240 })]
+    const o = op('HMMU2325664', existing)
+    const r = resolveRecord(['HMMU2325664'], existing, 0, o)
+    // Estampa el contenedor (para que el rollup NO lo borre) y preserva la data
+    expect(r.CNTR_OP).toBe('HMMU2325664')
+    expect(r.SALIDA).toBe('2026-07-09')
+    expect(r.ETA_FISC).toBe('2026-07-13')
+    expect(r.KG).toBe(18240)
+  })
+
+  it('reconcile: agregar el contenedor a A7808A conserva las fechas Y el contenedor sobrevive al rollup', () => {
+    const existing = [record({ CNTR_OP: '', SALIDA: '2026-07-09', ETA_FISC: '2026-07-13' })]
+    const o = op('HMMU2325664', existing)
+    const next = reconcileOperativasToCntrs(['HMMU2325664'], existing, o)
+    // El CNTR_OP quedó estampado → el rollup arma "HMMU2325664" (no vacío)
+    expect(next.map(o => o.CNTR_OP).filter(Boolean)).toEqual(['HMMU2325664'])
+    expect(next[0].SALIDA).toBe('2026-07-09')
+    expect(next[0].ETA_FISC).toBe('2026-07-13')
+  })
+})
