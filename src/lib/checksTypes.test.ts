@@ -7,6 +7,11 @@ import {
   mergeChecksSteps,
   nextPendingStep,
   stepsForOperativa,
+  avisoForCntr,
+  avisoAggregate,
+  buildAvisoCntrsMap,
+  isAvisoStep,
+  type RefCheckStep,
   type RefCheckSteps,
 } from './checksTypes'
 import type { UnifiedOperation } from './operationsTypes'
@@ -174,5 +179,77 @@ describe('nextPendingStep', () => {
     const casiTodo = { ...all }
     delete casiTodo.pagar_gatein
     expect(nextPendingStep(casiTodo, 'CONTENEDOR')).toBe('pagar_gatein')
+  })
+})
+
+// ── Avisos por contenedor (salida/frontera/fiscal) ──────────────────────
+describe('avisos por contenedor', () => {
+  const CNTRS = ['ABCU1111111', 'ABCU2222222']
+
+  it('isAvisoStep: solo salida/frontera/fiscal son por contenedor', () => {
+    expect(isAvisoStep('aviso_salida')).toBe(true)
+    expect(isAvisoStep('cruce_frontera')).toBe(true)
+    expect(isAvisoStep('arribo_fiscal')).toBe(true)
+    expect(isAvisoStep('bl_naviera')).toBe(false)
+    expect(isAvisoStep('carta_resp')).toBe(false)
+  })
+
+  it('avisoForCntr: con cntrs, cada contenedor es independiente', () => {
+    const step: RefCheckStep = { done: true, cntrs: { ABCU1111111: { done: true, date: '2026-07-06', by: 'brian' } } }
+    expect(avisoForCntr(step, 'ABCU1111111')?.done).toBe(true)
+    expect(avisoForCntr(step, 'ABCU2222222')).toBeUndefined() // no está en el mapa → NO avisado
+  })
+
+  it('avisoForCntr: contenedor con {done:false} explícito NO está avisado', () => {
+    const step: RefCheckStep = { done: true, cntrs: { ABCU1111111: { done: false } } }
+    expect(avisoForCntr(step, 'ABCU1111111')).toBeUndefined()
+  })
+
+  it('avisoForCntr: fila legacy (sin cntrs) — el done aplica a TODOS los contenedores', () => {
+    const legacy: RefCheckStep = { done: true, date: '2026-07-01', by: 'joaco' }
+    expect(avisoForCntr(legacy, 'ABCU1111111')?.done).toBe(true)
+    expect(avisoForCntr(legacy, 'CUALQUIERA')?.done).toBe(true)
+  })
+
+  it('avisoAggregate: cuenta avisados sobre la lista de contenedores', () => {
+    const step: RefCheckStep = { done: true, cntrs: { ABCU1111111: { done: true } } }
+    expect(avisoAggregate(step, CNTRS)).toEqual({ done: 1, total: 2 })
+    const both: RefCheckStep = { done: true, cntrs: { ABCU1111111: { done: true }, ABCU2222222: { done: true } } }
+    expect(avisoAggregate(both, CNTRS)).toEqual({ done: 2, total: 2 })
+    expect(avisoAggregate(undefined, CNTRS)).toEqual({ done: 0, total: 2 })
+  })
+
+  it('buildAvisoCntrsMap: siembra todos los contenedores y aplica el toggle a UNO', () => {
+    // Estado previo: contenedor 1 avisado (legacy nivel-ref → ambos avisados)
+    const legacy: RefCheckStep = { done: true, date: '2026-07-01', by: 'joaco' }
+    // Marco NO avisado el contenedor 2; el 1 debe conservarse avisado (no se pierde)
+    const map = buildAvisoCntrsMap(legacy, CNTRS, 'ABCU2222222', false, { date: '2026-07-06', by: 'brian' })
+    expect(map['ABCU1111111'].done).toBe(true)  // sembrado desde legacy
+    expect(map['ABCU2222222'].done).toBe(false) // el toggle
+  })
+
+  it('buildAvisoCntrsMap: target=null marca TODOS (bulk desde la pestaña Checks)', () => {
+    const map = buildAvisoCntrsMap(undefined, CNTRS, null, true, { date: '2026-07-06', by: 'brian' })
+    expect(map['ABCU1111111'].done).toBe(true)
+    expect(map['ABCU2222222'].done).toBe(true)
+  })
+
+  it('checksProgress: el paso-aviso cuenta hecho SOLO si todos los contenedores están avisados', () => {
+    const uno: RefCheckSteps = { aviso_salida: { done: true, cntrs: { ABCU1111111: { done: true } } } }
+    // con 2 contenedores: aviso_salida NO completo (1/2) → no suma
+    expect(checksProgress(uno, 'GODILCO', CNTRS).done).toBe(0)
+    const dos: RefCheckSteps = { aviso_salida: { done: true, cntrs: { ABCU1111111: { done: true }, ABCU2222222: { done: true } } } }
+    expect(checksProgress(dos, 'GODILCO', CNTRS).done).toBe(1)
+    // sin cntrList: cae al done del paso (compat con la pestaña que no pasa lista)
+    expect(checksProgress(uno, 'GODILCO').done).toBe(1)
+  })
+
+  it('nextPendingStep: un aviso a medias (1/2) sigue siendo el próximo pendiente', () => {
+    const steps: RefCheckSteps = {
+      salida_origen: { done: true }, arribo_buque: { done: true }, carta_resp: { done: true },
+      bl_naviera: { done: true }, pagos_liberacion: { done: true }, fotos_carga: { done: true },
+      aviso_salida: { done: true, cntrs: { ABCU1111111: { done: true } } }, // 1/2
+    }
+    expect(nextPendingStep(steps, 'DIRECTO', CNTRS)).toBe('aviso_salida')
   })
 })

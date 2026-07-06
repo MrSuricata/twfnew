@@ -620,7 +620,10 @@ function App() {
   useEffect(() => {
     if (!isAdminLoggedIn) return
     let timer: ReturnType<typeof setTimeout> | null = null
-    const unsub = subscribeTrucksLive(() => {
+    const unsub = subscribeTrucksLive(msg => {
+      // El canal ahora lleva también timbres de ref_checks (avisos de HOY/Checks),
+      // que refetchean SUS componentes por su cuenta. Acá solo interesan camiones.
+      if (msg.kind !== 'truck' && msg.kind !== 'truck_load') return
       if (timer) clearTimeout(timer)
       timer = setTimeout(() => { void refreshTrucksFromDb() }, 400)
     })
