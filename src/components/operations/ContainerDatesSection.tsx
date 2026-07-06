@@ -2,12 +2,21 @@
 // Se monta entre ViabilityBlock y la sección "Contenedores".
 // Editable solo cuando la operación es una fila DB (FCL horneada) no read-only.
 
-import { useState } from 'react'
+import { forwardRef, useImperativeHandle, useState } from 'react'
 import type { UnifiedOperation } from '@/lib/operationsTypes'
 import type { ParsedShipment, OperativasRecord } from '@/lib/shipmentTypes'
 import { getShipmentStatus } from '@/lib/shipmentTypes'
 import { parseCntr } from '@/lib/cntrUtils'
 import { isSalidaBeforeArrival, fmtDMY } from '@/lib/salidaCheck'
+
+/** Handle imperativo que el panel usa para forzar el commit de los borradores
+ *  pendientes ANTES de cerrar el Sheet (si no, el draft tipeado/elegido se pierde
+ *  al desmontar — el onBlur no llega a dispararse). */
+export interface ContainerDatesHandle {
+  /** Comitea todos los borradores pendientes (salida, arribo fiscal, bultos, kg,
+   *  m³). Devuelve true si hubo algo que comitear. */
+  flush: () => boolean
+}
 
 const LUGAR_OPTIONS = [
   { value: '', label: '— en terminal —' },
@@ -157,21 +166,155 @@ export function reconcileOperativasToCntrs(
   return cntrs.map((_, i) => resolveRecord(cntrs, existing, i, op))
 }
 
-export default function ContainerDatesSection({
-  op,
-  editable,
-  onCommitOperativas,
-}: {
+/** Campos que el flush conoce (los mismos que se editan por contenedor). */
+type FlushField = 'SALIDA' | 'ETA_FISC' | 'PKGS' | 'KG' | 'M3'
+const NUMERIC_FLUSH_FIELDS: ReadonlySet<FlushField> = new Set(['PKGS', 'KG', 'M3'])
+
+/** Parsea la clave de draft `${cntr}-${i}-${FIELD}`. El separador es el ÚLTIMO
+ *  "-" (los CNTR pueden tener guiones); el índice es el penúltimo token. */
+function parseDraftKey(key: string): { idx: number; field: FlushField } | null {
+  const lastDash = key.lastIndexOf('-')
+  if (lastDash < 0) return null
+  const field = key.slice(lastDash + 1) as FlushField
+  const rest = key.slice(0, lastDash)
+  const prevDash = rest.lastIndexOf('-')
+  if (prevDash < 0) return null
+  const idx = Number(rest.slice(prevDash + 1))
+  if (!Number.isInteger(idx) || idx < 0) return null
+  if (field !== 'SALIDA' && field !== 'ETA_FISC' && !NUMERIC_FLUSH_FIELDS.has(field)) return null
+  return { idx, field }
+}
+
+/** Normaliza un draft numérico como lo hace commitNumberDraft: trim, coma→punto,
+ *  vacío→0, y descarta (undefined) si no es un número finito ≥ 0. */
+function parseNumberDraft(raw: string): number | undefined {
+  const s = (raw || '').trim().replace(',', '.')
+  const num = s === '' ? 0 : Number(s)
+  if (!isFinite(num) || num < 0) return undefined
+  return num
+}
+
+/**
+ * Pliega TODOS los borradores pendientes en UN solo array operativas (evita
+ * dos PATCH pisándose cuando el usuario tocó varias fechas antes de cerrar).
+ *
+ * Es PURA: no toca el DOM ni pregunta (window.confirm). La regla "salida antes
+ * de llegada" se resuelve afuera — el caller pasa en `skipSalidaIdx` los índices
+ * cuyo SALIDA el usuario decidió NO guardar, y `salidaWarnings` lista los que
+ * requieren confirmación para que el caller pueda preguntar y recomputar.
+ *
+ * Devuelve `next=null` cuando no hay nada efectivo que comitear.
+ */
+export function computeFlush(
+  cntrs: string[],
+  existing: OperativasRecord[],
+  op: UnifiedOperation,
+  drafts: Record<string, string>,
+  skipSalidaIdx: ReadonlySet<number> = new Set()
+): {
+  next: OperativasRecord[] | null
+  salidaWarnings: { idx: number; cntr: string; salida: string; eta: string }[]
+} {
+  // patch acumulado por índice de contenedor
+  const patchByIdx = new Map<number, Partial<Pick<OperativasRecord, FlushField>>>()
+  const salidaWarnings: { idx: number; cntr: string; salida: string; eta: string }[] = []
+
+  for (const [key, rawValue] of Object.entries(drafts)) {
+    const parsed = parseDraftKey(key)
+    if (!parsed) continue
+    const { idx, field } = parsed
+    if (idx >= cntrs.length) continue // draft huérfano (contenedor removido)
+
+    if (field === 'SALIDA') {
+      if (skipSalidaIdx.has(idx)) continue // el usuario eligió no guardar esta salida
+      const rec = resolveRecord(cntrs, existing, idx, op)
+      const eta = rec.ETA_OP || op.eta || ''
+      if (isSalidaBeforeArrival(rawValue, eta)) {
+        salidaWarnings.push({ idx, cntr: cntrs[idx], salida: rawValue, eta })
+      }
+      const acc = patchByIdx.get(idx) || {}
+      acc.SALIDA = rawValue
+      patchByIdx.set(idx, acc)
+      continue
+    }
+
+    if (field === 'ETA_FISC') {
+      const acc = patchByIdx.get(idx) || {}
+      acc.ETA_FISC = rawValue
+      patchByIdx.set(idx, acc)
+      continue
+    }
+
+    // numérico (PKGS/KG/M3)
+    const num = parseNumberDraft(rawValue)
+    if (num === undefined) continue // basura tipeada → no comitear ese campo
+    const acc = patchByIdx.get(idx) || {}
+    acc[field] = num
+    patchByIdx.set(idx, acc)
+  }
+
+  if (patchByIdx.size === 0) return { next: null, salidaWarnings }
+
+  // Un solo array: parte de resolveRecord por índice y superpone TODOS los
+  // patches acumulados (preserva hermanos y campos no tocados, igual que
+  // buildNextOperativas pero para múltiples índices a la vez).
+  const next = cntrs.map((_, i) => {
+    const base = resolveRecord(cntrs, existing, i, op)
+    const patch = patchByIdx.get(i)
+    return patch ? { ...base, ...patch } : base
+  })
+  return { next, salidaWarnings }
+}
+
+const ContainerDatesSection = forwardRef<ContainerDatesHandle, {
   op: UnifiedOperation
   editable: boolean
   onCommitOperativas: (next: OperativasRecord[]) => void
-}) {
+}>(function ContainerDatesSection({
+  op,
+  editable,
+  onCommitOperativas,
+}, ref) {
   // Los hooks SIEMPRE primero, antes de cualquier return temprano (regla de hooks de React).
   // Fix 3: local draft state so date inputs commit on onBlur, not per-keystroke.
   // Key: `${cntr}-SALIDA` or `${cntr}-ETA_FISC`; value: string draft.
   const [drafts, setDrafts] = useState<Record<string, string>>({})
 
   const cntrs = parseCntr(op.cntr)
+
+  // flush(): comitea TODOS los borradores pendientes en un solo array. Lo llama
+  // el panel al cerrar el Sheet (onOpenChange(false)) ANTES de desmontar, así el
+  // arribo fiscal / salida recién elegidos en el calendario nativo no se pierden
+  // (el onBlur no llega a dispararse al cerrar con la X / Escape / click afuera).
+  // Corre mientras el componente sigue montado → el confirm de SALIDA funciona.
+  // Ojo: aunque haya returns tempranos abajo, el hook va SIEMPRE primero.
+  useImperativeHandle(ref, () => ({
+    flush: () => {
+      if (!editable) return false
+      const existingNow = op.operativas || []
+      const skip = new Set<number>()
+      // Resolver los avisos "salida antes de llegada" con confirm; si el usuario
+      // rechaza alguno, se excluye ese índice y se recomputa (una sola pasada:
+      // todos los confirmes se responden antes del commit).
+      let { next, salidaWarnings } = computeFlush(cntrs, existingNow, op, drafts, skip)
+      if (salidaWarnings.length > 0) {
+        for (const w of salidaWarnings) {
+          const ok = window.confirm(
+            `⏰ La salida (${fmtDMY(w.salida)}) del contenedor ${w.cntr} queda ANTES de la llegada a MVD (${fmtDMY(w.eta)}).\n\n¿Guardar igual?`
+          )
+          if (!ok) skip.add(w.idx)
+        }
+        if (skip.size > 0) {
+          ;({ next } = computeFlush(cntrs, existingNow, op, drafts, skip))
+        }
+      }
+      setDrafts({}) // limpiar SIEMPRE (incluye los rechazados: se descartan)
+      if (!next) return false
+      onCommitOperativas(next)
+      return true
+    },
+  }), [editable, op, cntrs, drafts, onCommitOperativas])
+
   // Si no hay contenedores, no hay nada que mostrar.
   if (cntrs.length === 0) return null
 
@@ -407,4 +550,6 @@ export default function ContainerDatesSection({
       </div>
     </section>
   )
-}
+})
+
+export default ContainerDatesSection

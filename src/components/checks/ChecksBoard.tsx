@@ -32,7 +32,9 @@ import { fmtDateDMY } from '@/lib/format'
 import { getAdminName } from '@/lib/authClient'
 import { buildOperations, buildPerContainerPatch, type DbShipment, type UnifiedOperation } from '@/lib/operationsTypes'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
-import { fetchRefChecks, saveRefCheckSteps } from '@/lib/dataClient'
+import { parseCntr } from '@/lib/cntrUtils'
+import { subscribeTrucksLive } from '@/lib/realtimeBus'
+import { fetchRefChecks, saveRefCheckSteps, saveRefCheckCntrs } from '@/lib/dataClient'
 import {
   buildChecksUniverse,
   checksProgress,
@@ -40,6 +42,9 @@ import {
   nextPendingStep,
   normalizeRef,
   stepsForOperativa,
+  isAvisoStep,
+  avisoAggregate,
+  buildAvisoCntrsMap,
   type CheckStepKey,
   type RefCheckStep,
   type RefCheckSteps,
@@ -102,6 +107,16 @@ export default function ChecksBoard({ shipments = [], dbShipments = [], onPatchS
     window.addEventListener('focus', onFocus)
     return () => window.removeEventListener('focus', onFocus)
   }, [refresh])
+  // Timbre Realtime: si otro usuario marca un aviso/check, refetchamos en vivo.
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | null = null
+    const unsub = subscribeTrucksLive(msg => {
+      if (msg.kind !== 'ref_checks') return
+      if (timer) clearTimeout(timer)
+      timer = setTimeout(() => { void refresh() }, 300)
+    })
+    return () => { if (timer) clearTimeout(timer); unsub() }
+  }, [refresh])
 
   const [search, setSearch] = useState('')
   const [soloPendientes, setSoloPendientes] = useState(false)
@@ -112,7 +127,7 @@ export default function ChecksBoard({ shipments = [], dbShipments = [], onPatchS
     return universe.filter(op => {
       if (q && !`${op.ref} ${op.cliente} ${op.cntr}`.toUpperCase().includes(q)) return false
       if (soloPendientes) {
-        const { done, total } = checksProgress(checksByRef.get(normalizeRef(op.ref)) || {}, op.operativa)
+        const { done, total } = checksProgress(checksByRef.get(normalizeRef(op.ref)) || {}, op.operativa, parseCntr(op.cntr))
         if (done >= total) return false
       }
       return true
@@ -120,7 +135,7 @@ export default function ChecksBoard({ shipments = [], dbShipments = [], onPatchS
   }, [universe, search, soloPendientes, checksByRef])
 
   const alDia = useMemo(() => universe.filter(op => {
-    const { done, total } = checksProgress(checksByRef.get(normalizeRef(op.ref)) || {}, op.operativa)
+    const { done, total } = checksProgress(checksByRef.get(normalizeRef(op.ref)) || {}, op.operativa, parseCntr(op.cntr))
     return done >= total
   }).length, [universe, checksByRef])
 
@@ -149,9 +164,50 @@ export default function ChecksBoard({ shipments = [], dbShipments = [], onPatchS
       })
   }, [checksByRef])
 
+  // Aviso POR CONTENEDOR (bulk desde la pestaña, que es por-ref): guarda el mapa
+  // completo de la ref para ese paso. Optimista + revert, igual que applyStep.
+  const applyAvisoCntrs = useCallback((ref: string, key: CheckStepKey, map: Record<string, { done: boolean; date?: string; by?: string }>) => {
+    const norm = normalizeRef(ref)
+    const prev = checksByRef
+    const anyDone = Object.values(map).some(c => c.done)
+    setChecksByRef(cur => {
+      const next = new Map(cur)
+      const steps: RefCheckSteps = { ...(cur.get(norm) || {}) }
+      if (anyDone) steps[key] = { done: true, cntrs: map }
+      else delete steps[key]
+      next.set(norm, steps)
+      return next
+    })
+    saveRefCheckCntrs(ref, key, map)
+      .then(merged => setChecksByRef(cur => { const next = new Map(cur); next.set(norm, merged); return next }))
+      .catch(err => {
+        setChecksByRef(prev)
+        toast.error(`No se pudo guardar el paso: ${(err as Error)?.message || 'sin detalles'}`)
+      })
+  }, [checksByRef])
+
   const handleToggleStep = useCallback((op: UnifiedOperation, key: CheckStepKey, label: string) => {
-    const cur = (checksByRef.get(normalizeRef(op.ref)) || {})[key]
-    if (cur?.done) {
+    const step = (checksByRef.get(normalizeRef(op.ref)) || {})[key]
+    // Los 3 pasos-aviso son POR CONTENEDOR. En esta pestaña (agregada) el toggle
+    // marca/desmarca TODOS los contenedores de la ref a la vez.
+    if (isAvisoStep(key)) {
+      const cntrList = parseCntr(op.cntr)
+      if (cntrList.length === 0) {
+        const done = !!step?.done
+        applyStep(op.ref, key, done ? null : { done: true, date: todayIso(), by: getAdminName() })
+        return
+      }
+      const agg = avisoAggregate(step, cntrList)
+      const allDone = agg.total > 0 && agg.done === agg.total
+      const ctx = { date: todayIso(), by: getAdminName() }
+      applyAvisoCntrs(op.ref, key, buildAvisoCntrsMap(step, cntrList, null, !allDone, ctx))
+      toast.success(allDone ? `${label} — quitado (todos)` : `${label} — avisados los ${cntrList.length} contenedores`, {
+        description: op.ref,
+        action: { label: 'Deshacer', onClick: () => applyAvisoCntrs(op.ref, key, buildAvisoCntrsMap(step, cntrList, null, allDone, ctx)) },
+      })
+      return
+    }
+    if (step?.done) {
       applyStep(op.ref, key, null)
       return
     }
@@ -161,7 +217,7 @@ export default function ChecksBoard({ shipments = [], dbShipments = [], onPatchS
       description: op.ref,
       action: { label: 'Deshacer', onClick: () => applyStep(op.ref, key, null) },
     })
-  }, [checksByRef, applyStep])
+  }, [checksByRef, applyStep, applyAvisoCntrs])
 
   const handleDateChange = useCallback((op: UnifiedOperation, key: CheckStepKey, date: string) => {
     const cur = (checksByRef.get(normalizeRef(op.ref)) || {})[key]
@@ -290,10 +346,21 @@ function ChecksRow({ op, steps, expanded, onToggleExpand, onToggleStep, onDateCh
   // columna telex de shipments (FCL horneada) o del TLX de operativas (cache
   // legacy). No se guarda nada en ref_checks. Semáforo del dueño: sí=verde, no=rojo.
   const hasTelex = op.tlx === 'SI'
-  const { done, total } = checksProgress(steps, operativa)
+  const cntrList = parseCntr(op.cntr)
+  const { done, total } = checksProgress(steps, operativa, cntrList)
   const complete = done >= total
-  const next = nextPendingStep(steps, operativa)
+  const next = nextPendingStep(steps, operativa, cntrList)
   const visibleSteps = stepsForOperativa(operativa)
+  // ¿Paso completo? Los avisos (por contenedor) cuentan hechos solo si TODOS los
+  // contenedores están avisados; el resto usa el done del paso.
+  const isStepDone = (key: CheckStepKey): boolean => {
+    const st = steps[key]
+    if (isAvisoStep(key) && cntrList.length > 0) {
+      const a = avisoAggregate(st, cntrList)
+      return a.total > 0 && a.done === a.total
+    }
+    return !!st?.done
+  }
   const nextDef = next ? visibleSteps.find(s => s.key === next) : undefined
   const pct = total > 0 ? Math.round((done / total) * 100) : 0
 
@@ -322,20 +389,26 @@ function ChecksRow({ op, steps, expanded, onToggleExpand, onToggleStep, onDateCh
         <span className="hidden sm:flex items-center gap-1 shrink-0">
           {visibleSteps.map((def, i) => {
             const st = steps[def.key]
-            const isNext = !st?.done && def.key === next
-            const detalle = st?.done
-              ? `hecho${st.date ? ` ${fmtDateDMY(st.date)}` : ''}${st.by ? ` por ${shortWho(st.by)}` : ''}`
-              : 'pendiente'
+            const stepDone = isStepDone(def.key)
+            const agg = isAvisoStep(def.key) ? avisoAggregate(st, cntrList) : null
+            const isNext = !stepDone && def.key === next
+            const detalle = stepDone
+              ? `hecho${!agg && st?.date ? ` ${fmtDateDMY(st.date)}` : ''}${!agg && st?.by ? ` por ${shortWho(st.by)}` : ''}`
+              : agg && agg.done > 0
+                ? `${agg.done}/${agg.total} avisados`
+                : 'pendiente'
             return (
               <span
                 key={def.key}
                 title={`${i + 1}. ${def.label} — ${detalle}`}
                 className={`h-2 w-2 rounded-full ${
-                  st?.done
+                  stepDone
                     ? 'bg-emerald-500'
                     : isNext
                       ? 'bg-background ring-2 ring-indigo-500'
-                      : 'bg-background border border-muted-foreground/35'
+                      : agg && agg.done > 0
+                        ? 'bg-amber-400'
+                        : 'bg-background border border-muted-foreground/35'
                 }`}
               />
             )
@@ -389,7 +462,9 @@ function ChecksRow({ op, steps, expanded, onToggleExpand, onToggleStep, onDateCh
           <div className="rounded-md border border-border/60 bg-background divide-y divide-border/60">
             {visibleSteps.map((def, i) => {
               const st = steps[def.key]
-              const isNext = !st?.done && def.key === next
+              const stepDone = isStepDone(def.key)
+              const agg = isAvisoStep(def.key) ? avisoAggregate(st, cntrList) : null
+              const isNext = !stepDone && def.key === next
               return (
                 <div
                   key={def.key}
@@ -398,19 +473,19 @@ function ChecksRow({ op, steps, expanded, onToggleExpand, onToggleStep, onDateCh
                   <button
                     type="button"
                     onClick={() => onToggleStep(def.key, def.label)}
-                    aria-label={st?.done ? `Desmarcar: ${def.label}` : `Marcar: ${def.label}`}
+                    aria-label={stepDone ? `Desmarcar: ${def.label}` : `Marcar: ${def.label}`}
                     className="shrink-0 rounded-full transition-transform hover:scale-110"
                   >
-                    {st?.done
+                    {stepDone
                       ? <CheckCircle size={22} weight="fill" className="text-emerald-500" />
-                      : <Circle size={22} className={isNext ? 'text-primary' : 'text-muted-foreground/40'} />}
+                      : <Circle size={22} className={isNext ? 'text-primary' : agg && agg.done > 0 ? 'text-amber-500' : 'text-muted-foreground/40'} />}
                   </button>
                   <button
                     type="button"
                     onClick={() => onToggleStep(def.key, def.label)}
                     className="flex-1 min-w-0 text-left"
                   >
-                    <span className={`text-sm ${st?.done ? 'text-muted-foreground' : 'text-foreground'}`}>
+                    <span className={`text-sm ${stepDone ? 'text-muted-foreground' : 'text-foreground'}`}>
                       <span className="tabular-nums text-muted-foreground mr-1.5">{i + 1}.</span>
                       {def.label}
                     </span>
@@ -420,7 +495,16 @@ function ChecksRow({ op, steps, expanded, onToggleExpand, onToggleStep, onDateCh
                       </span>
                     )}
                   </button>
-                  {st?.done && (
+                  {agg ? (
+                    // Aviso por contenedor: se marca en HOY (una tarjeta por
+                    // contenedor). Acá se ve el agregado; el toggle marca todos.
+                    <span
+                      className={`shrink-0 text-[11px] tabular-nums font-medium ${agg.done === agg.total ? 'text-emerald-600' : agg.done > 0 ? 'text-amber-600' : 'text-muted-foreground'}`}
+                      title="Avisos por contenedor (se marcan en la pestaña HOY)"
+                    >
+                      {agg.done}/{agg.total} avisados
+                    </span>
+                  ) : st?.done ? (
                     <div className="flex items-center gap-2 shrink-0">
                       <input
                         type="date"
@@ -435,7 +519,7 @@ function ChecksRow({ op, steps, expanded, onToggleExpand, onToggleStep, onDateCh
                         </span>
                       )}
                     </div>
-                  )}
+                  ) : null}
                 </div>
               )
             })}

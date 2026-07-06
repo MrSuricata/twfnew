@@ -9,7 +9,7 @@ import { getClientSessionId } from './clientSession'
 
 export const TRUCKS_LIVE_CHANNEL = 'trucks-live'
 
-export type TrucksLiveKind = 'truck' | 'truck_load'
+export type TrucksLiveKind = 'truck' | 'truck_load' | 'ref_checks'
 // clientId: id de sesión del browser que ORIGINÓ la escritura (el backend lo
 // copia del header X-Client-Id al payload del broadcast). Sirve para que el
 // que guarda ignore su propio timbre y no se refetchee en medio de su guardado.
@@ -28,7 +28,7 @@ export function resolveRealtimeConfig(
 export function isTrucksLiveMessage(x: unknown): x is TrucksLiveMessage {
   if (!x || typeof x !== 'object') return false
   const k = (x as { kind?: unknown }).kind
-  return k === 'truck' || k === 'truck_load'
+  return k === 'truck' || k === 'truck_load' || k === 'ref_checks'
 }
 
 /** true si el timbre lo originó ESTE browser (broadcast propio → ignorar).

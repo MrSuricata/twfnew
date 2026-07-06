@@ -72,6 +72,20 @@ export interface RefCheckStep {
   done: boolean
   date?: string   // YYYY-MM-DD (default: el día en que se marcó)
   by?: string     // quién lo marcó (email/usuario del token)
+  /** SOLO pasos-aviso (salida/frontera/fiscal): estado POR CONTENEDOR. Cuando
+   *  existe, manda `cntrs` (no el `done` de arriba, que queda como "algún
+   *  contenedor avisado"). Ausente = paso nivel-ref (resto de los pasos, y las
+   *  filas legacy previas a este cambio: su `done` aplica a TODOS los cntr). */
+  cntrs?: Record<string, { done: boolean; date?: string; by?: string }>
+}
+
+/** Los 3 pasos que son POR CONTENEDOR (eventos que ocurren por contenedor:
+ *  salida, cruce de frontera, arribo a fiscal). El resto es nivel-ref. */
+export const AVISO_STEP_KEYS: ReadonlySet<CheckStepKey> = new Set<CheckStepKey>([
+  'aviso_salida', 'cruce_frontera', 'arribo_fiscal',
+])
+export function isAvisoStep(key: CheckStepKey): boolean {
+  return AVISO_STEP_KEYS.has(key)
 }
 
 export type RefCheckSteps = Partial<Record<CheckStepKey, RefCheckStep>>
@@ -110,19 +124,85 @@ export function stepsForOperativa(operativa: string | null | undefined): CheckSt
   )
 }
 
+// ── Avisos POR CONTENEDOR (salida/frontera/fiscal) ──────────────────────
+// Los 3 pasos-aviso guardan estado por contenedor en `step.cntrs`. En HOY cada
+// tarjeta (= un contenedor) marca SU aviso; en la pestaña Checks (por-ref) el
+// paso se muestra AGREGADO: hecho cuando TODOS los contenedores están avisados
+// (progreso d/t mientras falta alguno). Una sola fuente de verdad (ref_checks).
+
+/** Estado EFECTIVO del aviso de UN contenedor. Si el paso tiene `cntrs`, manda
+ *  solo eso (contenedor ausente o {done:false} = NO avisado). Si NO tiene `cntrs`
+ *  (fila legacy nivel-ref), el `done` del paso aplica a TODOS los contenedores. */
+export function avisoForCntr(step: RefCheckStep | undefined, cntr: string): RefCheckStep | undefined {
+  if (!step) return undefined
+  if (step.cntrs) {
+    const c = step.cntrs[cntr]
+    return c?.done ? { done: true, date: c.date, by: c.by } : undefined
+  }
+  return step.done ? { done: true, date: step.date, by: step.by } : undefined
+}
+
+/** Agregado del aviso sobre la lista de contenedores de la ref: cuántos avisados
+ *  de cuántos. `total` = cantidad de contenedores (mínimo 1). Sin lista de
+ *  contenedores cae al `done` del paso (1/1 o 0/1). */
+export function avisoAggregate(step: RefCheckStep | undefined, cntrList: string[]): { done: number; total: number } {
+  if (cntrList.length === 0) {
+    const d = step?.done ? 1 : 0
+    return { done: d, total: 1 }
+  }
+  let done = 0
+  for (const c of cntrList) if (avisoForCntr(step, c)) done++
+  return { done, total: cntrList.length }
+}
+
+/** Construye el mapa `cntrs` COMPLETO de un paso-aviso a partir del estado
+ *  actual (sembrando TODOS los contenedores desde su estado efectivo — así una
+ *  fila legacy nivel-ref no "pierde" los contenedores que ya estaban avisados)
+ *  y aplica el toggle a `target` (un contenedor, o TODOS si target === null).
+ *  Lo usan HOY (un contenedor) y la pestaña Checks (bulk = todos). */
+export function buildAvisoCntrsMap(
+  step: RefCheckStep | undefined,
+  cntrList: string[],
+  target: string | null,
+  done: boolean,
+  ctx: { date: string; by: string },
+): Record<string, { done: boolean; date?: string; by?: string }> {
+  const map: Record<string, { done: boolean; date?: string; by?: string }> = {}
+  for (const c of cntrList) {
+    const eff = avisoForCntr(step, c)
+    map[c] = eff ? { done: true, date: eff.date, by: eff.by } : { done: false }
+  }
+  for (const c of target === null ? cntrList : [target]) {
+    map[c] = done ? { done: true, date: ctx.date, by: ctx.by } : { done: false }
+  }
+  return map
+}
+
+/** ¿El paso está COMPLETO? Para pasos-aviso con lista de contenedores: todos
+ *  avisados. Para el resto (o sin lista): el `done` del paso. */
+function stepComplete(step: RefCheckStep | undefined, key: CheckStepKey, cntrList?: string[]): boolean {
+  if (isAvisoStep(key) && cntrList && cntrList.length > 0) {
+    const { done, total } = avisoAggregate(step, cntrList)
+    return total > 0 && done === total
+  }
+  return !!step?.done
+}
+
 /** Progreso "hecho/total" contando SOLO los pasos visibles para la operativa
- *  (un paso condicional marcado no cuenta si la operativa ya no aplica). */
-export function checksProgress(steps: RefCheckSteps, operativa: string | null | undefined): { done: number; total: number } {
+ *  (un paso condicional marcado no cuenta si la operativa ya no aplica). Con
+ *  `cntrList`, los pasos-aviso cuentan hechos solo si TODOS los contenedores
+ *  están avisados. */
+export function checksProgress(steps: RefCheckSteps, operativa: string | null | undefined, cntrList?: string[]): { done: number; total: number } {
   const visible = stepsForOperativa(operativa)
-  const done = visible.filter(s => steps[s.key]?.done).length
+  const done = visible.filter(s => stepComplete(steps[s.key], s.key, cntrList)).length
   return { done, total: visible.length }
 }
 
-/** Próximo paso sugerido: el PRIMER paso visible sin marcar (o null si está
+/** Próximo paso sugerido: el PRIMER paso visible sin completar (o null si está
  *  todo hecho). Es una sugerencia de orden, no un bloqueo. */
-export function nextPendingStep(steps: RefCheckSteps, operativa: string | null | undefined): CheckStepKey | null {
+export function nextPendingStep(steps: RefCheckSteps, operativa: string | null | undefined, cntrList?: string[]): CheckStepKey | null {
   for (const s of stepsForOperativa(operativa)) {
-    if (!steps[s.key]?.done) return s.key
+    if (!stepComplete(steps[s.key], s.key, cntrList)) return s.key
   }
   return null
 }

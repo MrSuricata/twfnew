@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { resolveRecord, buildNextOperativas, reconcileOperativasToCntrs } from './ContainerDatesSection'
+import { resolveRecord, buildNextOperativas, reconcileOperativasToCntrs, computeFlush } from './ContainerDatesSection'
 import type { OperativasRecord } from '@/lib/shipmentTypes'
 import type { UnifiedOperation } from '@/lib/operationsTypes'
 
@@ -208,5 +208,142 @@ describe('CNTR_OP vacío — el contenedor no se pierde al agregarlo (caso A7808
     expect(next.map(o => o.CNTR_OP).filter(Boolean)).toEqual(['HMMU2325664'])
     expect(next[0].SALIDA).toBe('2026-07-09')
     expect(next[0].ETA_FISC).toBe('2026-07-13')
+  })
+})
+
+// ── computeFlush — commit pendiente al cerrar el modal (bug del arribo fiscal) ─
+// Clave de draft: `${cntr}-${i}-${FIELD}` (mismo formato que draftKey()).
+
+describe('computeFlush — flush de borradores al cerrar el Sheet', () => {
+  it('BUG REPRODUCIDO: arribo fiscal elegido y no blureado se comitea al cerrar', () => {
+    // El dueño elige ETA_FISC en el calendario nativo y cierra con la X: el
+    // draft quedó en estado local sin blurear. flush() debe comitearlo.
+    const cntrs = ['AAAA1111111']
+    const existing = [record({ CNTR_OP: 'AAAA1111111', ETA_FISC: '' })]
+    const o = op('AAAA1111111', existing)
+    const drafts = { 'AAAA1111111-0-ETA_FISC': '2026-07-15' }
+
+    const { next, salidaWarnings } = computeFlush(cntrs, existing, o, drafts)
+    expect(salidaWarnings).toHaveLength(0)
+    expect(next).not.toBeNull()
+    expect(next![0].ETA_FISC).toBe('2026-07-15')
+  })
+
+  it('sin borradores → next=null (nada que comitear, no dispara PATCH)', () => {
+    const cntrs = ['AAAA1111111']
+    const existing = [record({ CNTR_OP: 'AAAA1111111' })]
+    const o = op('AAAA1111111', existing)
+    const { next } = computeFlush(cntrs, existing, o, {})
+    expect(next).toBeNull()
+  })
+
+  it('pliega salida + arribo fiscal del MISMO contenedor en un solo array', () => {
+    const cntrs = ['AAAA1111111']
+    const existing = [record({ CNTR_OP: 'AAAA1111111', SALIDA: '', ETA_FISC: '' })]
+    const o = op('AAAA1111111', existing)
+    const drafts = {
+      'AAAA1111111-0-SALIDA': '2026-07-10',
+      'AAAA1111111-0-ETA_FISC': '2026-07-20',
+    }
+    const { next } = computeFlush(cntrs, existing, o, drafts)
+    expect(next![0].SALIDA).toBe('2026-07-10')
+    expect(next![0].ETA_FISC).toBe('2026-07-20')
+  })
+
+  it('pliega borradores de DISTINTOS contenedores en UN array (no dos PATCH)', () => {
+    const cntrs = ['AAAA1111111', 'BBBB2222222']
+    const existing = [
+      record({ CNTR_OP: 'AAAA1111111', SALIDA: '', DESCARGA: '2026-06-01', DEV: 'TCP' }),
+      record({ CNTR_OP: 'BBBB2222222', ETA_FISC: '', KG: 400 }),
+    ]
+    const o = op('AAAA1111111, BBBB2222222', existing)
+    const drafts = {
+      'AAAA1111111-0-SALIDA': '2026-07-05',
+      'BBBB2222222-1-ETA_FISC': '2026-07-22',
+    }
+    const { next } = computeFlush(cntrs, existing, o, drafts)
+    expect(next).toHaveLength(2)
+    // Contenedor 0: SALIDA seteada, hermanos preservados
+    expect(next![0].SALIDA).toBe('2026-07-05')
+    expect(next![0].DESCARGA).toBe('2026-06-01')
+    expect(next![0].DEV).toBe('TCP')
+    // Contenedor 1: ETA_FISC seteada, KG preservado
+    expect(next![1].ETA_FISC).toBe('2026-07-22')
+    expect(next![1].KG).toBe(400)
+  })
+
+  it('parsea correctamente CNTR con guiones (índice = penúltimo token)', () => {
+    const cntrs = ['AAA-111-1', 'BBB-222-2']
+    const existing = [
+      record({ CNTR_OP: 'AAA-111-1' }),
+      record({ CNTR_OP: 'BBB-222-2' }),
+    ]
+    const o = op('AAA-111-1, BBB-222-2', existing)
+    const drafts = { 'BBB-222-2-1-ETA_FISC': '2026-08-01' }
+    const { next } = computeFlush(cntrs, existing, o, drafts)
+    // Debe patchear el índice 1 (BBB), no el 0
+    expect(next![1].ETA_FISC).toBe('2026-08-01')
+    expect(next![0].ETA_FISC).toBe('')
+  })
+
+  it('normaliza numéricos como commitNumberDraft (coma→punto) y descarta basura', () => {
+    const cntrs = ['AAAA1111111']
+    // Valores existentes propios para verificar que la basura NO los pisa.
+    const existing = [record({ CNTR_OP: 'AAAA1111111', PKGS: 7, KG: 300, M3: 0 })]
+    const o = op('AAAA1111111', existing)
+    const drafts = {
+      'AAAA1111111-0-KG': '1.234,5',        // basura (dos separadores) → Number NaN → descartado
+      'AAAA1111111-0-M3': '12,5',           // 12.5 válido
+      'AAAA1111111-0-PKGS': '-3',           // negativo → descartado
+    }
+    const { next } = computeFlush(cntrs, existing, o, drafts)
+    // M3 sí entra; KG y PKGS basura se descartan → conservan el valor existente.
+    expect(next).not.toBeNull()
+    expect(next![0].M3).toBe(12.5)
+    expect(next![0].KG).toBe(300)  // basura descartada → valor previo intacto
+    expect(next![0].PKGS).toBe(7)  // negativo descartado → valor previo intacto
+  })
+
+  it('un draft numérico VÁLIDO con coma se guarda como número', () => {
+    const cntrs = ['AAAA1111111']
+    const existing = [record({ CNTR_OP: 'AAAA1111111', KG: 0 })]
+    const o = op('AAAA1111111', existing)
+    const { next } = computeFlush(cntrs, existing, o, { 'AAAA1111111-0-KG': '1500,75' })
+    expect(next![0].KG).toBe(1500.75)
+  })
+
+  it('reporta salida-antes-de-llegada en salidaWarnings sin frenar el resto', () => {
+    const cntrs = ['AAAA1111111']
+    // ETA de llegada 2026-07-10; salida 2026-07-05 es ANTERIOR
+    const existing = [record({ CNTR_OP: 'AAAA1111111', ETA_OP: '2026-07-10' })]
+    const o = op('AAAA1111111', existing)
+    const drafts = { 'AAAA1111111-0-SALIDA': '2026-07-05' }
+    const { next, salidaWarnings } = computeFlush(cntrs, existing, o, drafts)
+    expect(salidaWarnings).toHaveLength(1)
+    expect(salidaWarnings[0].idx).toBe(0)
+    // next incluye la salida (el caller decide con confirm si la conserva)
+    expect(next![0].SALIDA).toBe('2026-07-05')
+  })
+
+  it('skipSalidaIdx excluye la salida rechazada pero conserva otros campos', () => {
+    const cntrs = ['AAAA1111111']
+    const existing = [record({ CNTR_OP: 'AAAA1111111', ETA_OP: '2026-07-10', ETA_FISC: '' })]
+    const o = op('AAAA1111111', existing)
+    const drafts = {
+      'AAAA1111111-0-SALIDA': '2026-07-05',   // anterior a llegada → rechazada
+      'AAAA1111111-0-ETA_FISC': '2026-07-25', // debe guardarse igual
+    }
+    const { next } = computeFlush(cntrs, existing, o, drafts, new Set([0]))
+    expect(next![0].SALIDA).toBe('')          // salida NO se aplicó (rechazada)
+    expect(next![0].ETA_FISC).toBe('2026-07-25') // arribo fiscal sí
+  })
+
+  it('ignora borradores huérfanos de contenedores removidos (idx fuera de rango)', () => {
+    const cntrs = ['AAAA1111111']
+    const existing = [record({ CNTR_OP: 'AAAA1111111' })]
+    const o = op('AAAA1111111', existing)
+    const drafts = { 'ZZZZ9999999-3-ETA_FISC': '2026-07-15' } // idx 3 no existe
+    const { next } = computeFlush(cntrs, existing, o, drafts)
+    expect(next).toBeNull()
   })
 })

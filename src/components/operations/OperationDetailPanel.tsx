@@ -15,7 +15,7 @@ import { fmtDateDMY } from '@/lib/format'
 import { parseCntr, serializeCntr, normalizeCntr, isStandardCntr } from '@/lib/cntrUtils'
 import type { OriginPhoto, OperativeReport } from '@/lib/quotationTypes'
 import ViabilityBlock from './ViabilityBlock'
-import ContainerDatesSection, { reconcileOperativasToCntrs } from './ContainerDatesSection'
+import ContainerDatesSection, { reconcileOperativasToCntrs, type ContainerDatesHandle } from './ContainerDatesSection'
 import OperationMediaSection from './OperationMediaSection'
 
 interface TruckRefInfo { truckCode: string; status: string }
@@ -193,6 +193,10 @@ export default function OperationDetailPanel({
   const [renameBusy, setRenameBusy] = useState(false)
   // Fotos e informes: viven en un Dialog que se abre desde el chip del header.
   const [mediaOpen, setMediaOpen] = useState(false)
+  // Handle a las fechas por contenedor: al cerrar el Sheet forzamos el commit de
+  // los borradores pendientes (arribo fiscal / salida elegidos en el calendario
+  // que aún no blurearon) ANTES de desmontar, si no se pierden.
+  const datesRef = useRef<ContainerDatesHandle>(null)
 
   // El panel no se desmonta al cambiar de operación: limpiar el borrador.
   const opUid = op?.uid
@@ -277,7 +281,15 @@ export default function OperationDetailPanel({
   }
 
   return (
-    <Sheet open={!!op} onOpenChange={(v) => { if (!v) onClose() }}>
+    <Sheet open={!!op} onOpenChange={(v) => {
+      if (!v) {
+        // Comitear los borradores de fechas por contenedor ANTES de cerrar: el
+        // arribo fiscal / salida recién elegidos en el calendario nativo no
+        // blurean al cerrar con la X / Escape / click afuera → se perderían.
+        datesRef.current?.flush()
+        onClose()
+      }
+    }}>
       <SheetContent side="right" className="w-full sm:w-[480px] sm:max-w-[90vw] overflow-y-auto p-0" onEscapeKeyDown={e => { if ((e.target as HTMLElement)?.tagName === 'INPUT') e.preventDefault() }}>
         <SheetHeader className="border-b px-4 pt-4 pb-2">
           <SheetTitle className="flex items-center gap-2 flex-wrap pr-8">
@@ -373,6 +385,7 @@ export default function OperationDetailPanel({
 
           {/* Salidas y arribos por contenedor (FCL solamente) */}
           <ContainerDatesSection
+            ref={datesRef}
             op={op}
             editable={op.source === 'db' && !!op.dbId && !op.readOnly}
             onCommitOperativas={next => {
