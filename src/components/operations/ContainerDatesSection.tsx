@@ -132,6 +132,25 @@ export function buildNextOperativas(
   })
 }
 
+/**
+ * Reconcilia el array `operativas` con la lista de contenedores: UNA entrada por
+ * contenedor, preservando la existente por CNTR_OP y sintetizando (con CNTR_OP
+ * seteado) las nuevas. Lo usa el panel al AGREGAR/QUITAR un contenedor para que
+ * `operativas` no quede desalineado con la columna `contenedor`.
+ *
+ * Sin esto: agregar un contenedor solo crecía la columna `contenedor`; el array
+ * seguía corto → la siguiente edición de un campo nivel-carga (buildPerContainerPatch
+ * mapea sobre `op.operativas`) producía un array corto → el rollup recomputaba
+ * `contenedor` con MENOS contenedores y borraba el nuevo (y su data por contenedor).
+ */
+export function reconcileOperativasToCntrs(
+  cntrs: string[],
+  existing: OperativasRecord[],
+  op: UnifiedOperation,
+): OperativasRecord[] {
+  return cntrs.map((_, i) => resolveRecord(cntrs, existing, i, op))
+}
+
 export default function ContainerDatesSection({
   op,
   editable,
