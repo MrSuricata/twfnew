@@ -17,6 +17,13 @@ export function getRole(): UserRole | null { return _role }
 export function getUserData(): Record<string, string> | null { return _userData }
 export function isAuthenticated(): boolean { return _token !== null }
 
+/** ¿Hay un token persistido en sessionStorage? Lectura SÍNCRONA para decidir en
+ *  el primer render si restaurar la sesión (splash) en vez del formulario de
+ *  login — evita el flash del login viejo mientras verifySession() está en vuelo. */
+export function hasStoredToken(): boolean {
+  try { return !!sessionStorage.getItem('twf-token') } catch { return false }
+}
+
 /** Internal setter for auth state */
 function setAuth(token: string, role: UserRole, data?: Record<string, string>) {
   _token = token

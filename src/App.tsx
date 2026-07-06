@@ -12,12 +12,14 @@ import { withRollupColumns } from '@/lib/operativasRollup'
 import { subscribeTrucksLive } from '@/lib/realtimeBus'
 import { getDemoShipments } from '@/lib/demoShipments'
 import { filterShipments } from '@/lib/sheetsSync'
-import { verifySession, clearAuth, authFetch } from '@/lib/authClient'
+import { verifySession, clearAuth, authFetch, hasStoredToken } from '@/lib/authClient'
+import { shouldRestoreSession } from '@/lib/authGate'
 import { loadAdminData, saveQuotes, saveDocuments, saveReports, saveClients, saveTrucks, saveTruckLoads, saveLclAir, deleteTruck as apiDeleteTruck, deleteTruckLoad as apiDeleteTruckLoad, deleteLclAir as apiDeleteLclAir, saveBilling, deleteBilling as apiDeleteBilling, saveOperators, saveOperatorAssignment, deleteOperator as apiDeleteOperator, patchDbShipment, createDbShipment, deleteDbShipment, patchFclShipment, renameShipmentRef, fetchTrucks, fetchTruckLoads } from '@/lib/dataClient'
 
 import Login from './components/Login'
 import ClientLogin from './components/ClientLogin'
 import PartnerLogin from './components/PartnerLogin'
+import SessionRestoreScreen from './components/SessionRestoreScreen'
 import DashboardEnhanced from './components/DashboardEnhanced'
 import ClientPortal from './components/ClientPortal'
 import DepotDashboard from './components/DepotDashboard'
@@ -87,6 +89,13 @@ function getInitialView(): View {
 
 function App() {
   const [currentView, setCurrentView] = useState<View>(getInitialView)
+  // Restauración de sesión: si hay token guardado y la vista inicial es de login,
+  // mostramos un splash mientras verifySession() verifica (evita el flash del
+  // <Login/> viejo antes de entrar al dashboard). Sin token → false → el form sale
+  // al instante.
+  const [restoringSession, setRestoringSession] = useState(() =>
+    shouldRestoreSession(getInitialView(), hasStoredToken()),
+  )
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false)
   const [clientEmail, setClientEmail] = useState<string>('')
   const [partnerData, setPartnerData] = useState<{ role: string; name: string; filterValue: string } | null>(null)
@@ -281,6 +290,10 @@ function App() {
           setCurrentView('transport-dashboard')
         }
       }
+      // Verificación terminada (válida o no): salir del splash. Si fue válida, el
+      // setCurrentView de arriba ya apuntó al dashboard (se batchea junto a este
+      // setState → no hay render intermedio con el login). Si no, cae al form.
+      setRestoringSession(false)
     })
   }, [])
 
@@ -990,6 +1003,12 @@ function App() {
   const handleLanguageChange = (lang: Language) => {
     setLanguage(lang)
     setStoredLanguage(lang)
+  }
+
+  // Restaurando una sesión válida en una ruta protegida: splash en vez del form
+  // de login (evita el flash del <Login/> viejo mientras verifySession verifica).
+  if (restoringSession) {
+    return <SessionRestoreScreen />
   }
 
   if (currentView === 'admin-login') {
