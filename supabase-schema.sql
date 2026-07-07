@@ -70,7 +70,7 @@ CREATE TABLE IF NOT EXISTS shipments_cache (
 );
 INSERT INTO shipments_cache (id, data) VALUES (1, '[]'::JSONB) ON CONFLICT (id) DO NOTHING;
 
--- 6. Clients
+-- 6. Clients (catálogo: datos legales + aliases; email de contacto opcional '' )
 CREATE TABLE IF NOT EXISTS clients (
   id TEXT PRIMARY KEY,
   email TEXT NOT NULL,
@@ -78,7 +78,25 @@ CREATE TABLE IF NOT EXISTS clients (
   company TEXT DEFAULT '',
   created_at_ts BIGINT NOT NULL DEFAULT (EXTRACT(EPOCH FROM NOW()) * 1000)::BIGINT,
   cliente_pattern TEXT DEFAULT '',
+  razon_social TEXT,
+  cuit_doc TEXT,          -- CUIT / RUT / doc legal, formato libre
+  pais TEXT,
+  direccion TEXT,
+  aliases TEXT,           -- variantes del nombre en las cargas, separadas por coma
   created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 6.B Client users (accesos al portal de clientes por email+contraseña —
+--     reemplaza el OTP; espejo del patrón partner_users)
+CREATE TABLE IF NOT EXISTS client_users (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  client_id TEXT NOT NULL REFERENCES clients(id) ON DELETE CASCADE,
+  email TEXT UNIQUE NOT NULL,
+  name TEXT,
+  password_hash TEXT NOT NULL,
+  active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_login TIMESTAMPTZ
 );
 
 -- 7. Partner users (depot + transport)
@@ -229,6 +247,8 @@ CREATE INDEX IF NOT EXISTS idx_reports_shipment_ref ON reports(shipment_ref);
 CREATE INDEX IF NOT EXISTS idx_quotes_status ON quotes(status);
 CREATE INDEX IF NOT EXISTS idx_quotes_email ON quotes(email);
 CREATE INDEX IF NOT EXISTS idx_clients_email ON clients(email);
+CREATE INDEX IF NOT EXISTS idx_client_users_client_id ON client_users(client_id);
+CREATE INDEX IF NOT EXISTS idx_client_users_email ON client_users(email);
 CREATE INDEX IF NOT EXISTS idx_partner_email ON partner_users(email);
 CREATE INDEX IF NOT EXISTS idx_origin_photos_shipment_ref ON origin_photos(shipment_ref);
 CREATE INDEX IF NOT EXISTS idx_notif_tasks_due_status ON notification_tasks(due_date, status);
@@ -248,6 +268,7 @@ ALTER TABLE reports            ENABLE ROW LEVEL SECURITY;
 ALTER TABLE settings           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE shipments_cache    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE clients            ENABLE ROW LEVEL SECURITY;
+ALTER TABLE client_users       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE partner_users      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE otp_codes          ENABLE ROW LEVEL SECURITY;
 ALTER TABLE rate_limits        ENABLE ROW LEVEL SECURITY;
@@ -267,8 +288,8 @@ DECLARE t TEXT;
 BEGIN
   FOR t IN SELECT unnest(ARRAY[
     'quotes','documents','reports','settings','shipments_cache','clients',
-    'partner_users','otp_codes','rate_limits','origin_photos','notification_tasks',
-    'trucks','truck_loads','lcl_air_shipments','truck_counter'
+    'client_users','partner_users','otp_codes','rate_limits','origin_photos',
+    'notification_tasks','trucks','truck_loads','lcl_air_shipments','truck_counter'
   ]) LOOP
     EXECUTE format('DROP POLICY IF EXISTS "deny_anon" ON %I', t);
     EXECUTE format('CREATE POLICY "deny_anon" ON %I FOR ALL TO anon USING (false) WITH CHECK (false)', t);

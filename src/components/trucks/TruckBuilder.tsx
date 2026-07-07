@@ -47,6 +47,7 @@ import {
 } from '@/lib/truckUtils'
 import AvailableLoadsPanel from './AvailableLoadsPanel'
 import NewShipmentDialog from '@/components/operations/NewShipmentDialog'
+import { isSinTelex, SIN_TELEX_MSG } from '@/lib/telexCheck'
 import { exportTruckPdf } from '@/lib/truckExport'
 
 interface TruckBuilderProps {
@@ -92,19 +93,23 @@ export default function TruckBuilder(props: TruckBuilderProps) {
   const limits = getTruckLimits(merged.isSider)
   const healthIssues = useMemo(() => getTruckHealthIssues(merged, loads), [merged, loads])
 
-  // Cargas especiales en ESTE camión: NO apilable (va arriba de todo) e IMO
-  // (mercancía peligrosa). Los flags viven en la carga (tabla shipments).
+  // Cargas especiales en ESTE camión: NO apilable (va arriba de todo), IMO
+  // (mercancía peligrosa) y SIN TELEX (la naviera no liberó — no se puede
+  // retirar). Los flags viven en la carga (tabla shipments). Telex aplica solo
+  // a marítimo (FCL/LCL) — aéreo/terrestre no tienen.
   const specialLoads = useMemo(() => {
     const byRef = new Map(dbShipments.map(s => [s.ref, s]))
     const noApilables: string[] = []
     const imos: string[] = []
+    const sinTelex: string[] = []
     for (const l of loads) {
       const s = byRef.get(l.sourceRef)
       if (!s) continue
       if (s.no_apilable) noApilables.push(l.sourceRef)
       if (s.imo) imos.push(l.sourceRef)
+      if ((s.mode === 'fcl' || s.mode === 'lcl') && !s.telex) sinTelex.push(l.sourceRef)
     }
-    return { noApilables, imos }
+    return { noApilables, imos, sinTelex }
   }, [loads, dbShipments])
 
   // ── Truck-level update helpers ──
@@ -169,6 +174,8 @@ export default function TruckBuilder(props: TruckBuilderProps) {
     }
     onUpdateTruckLoads([...truckLoads, load], [load.id])
     toast.success(`${s.REF} agregado al camión`)
+    // Sin telex la carga no se puede retirar de la terminal.
+    if (isSinTelex(s.operativas?.[0]?.TLX)) toast.warning(`🚨 ${s.REF} — ${SIN_TELEX_MSG}`, { duration: 8000 })
   }
 
   const addLclAir = (s: LclAirShipment) => {
@@ -226,6 +233,8 @@ export default function TruckBuilder(props: TruckBuilderProps) {
     // Madera "a confirmar" (null) entra al camión como No — confirmarla ANTES
     // de imprimir el plan (WOOD=SI dispara SENASA en frontera).
     if (s.wood === null) toast.warning(`🪵 ${s.ref}: madera sin confirmar — confirmala en la carga antes de imprimir el plan`, { duration: 8000 })
+    // Sin telex la carga no se puede retirar del depósito/terminal.
+    if ((s.mode === 'fcl' || s.mode === 'lcl') && !s.telex) toast.warning(`🚨 ${s.ref} — ${SIN_TELEX_MSG}`, { duration: 8000 })
   }
 
   // ── Crear carga desde el armador ──
@@ -384,8 +393,14 @@ export default function TruckBuilder(props: TruckBuilderProps) {
       </div>
 
       {/* Alerts */}
-      {(totals.overKg || totals.overM3 || totals.multifiscal || healthIssues.length > 0 || specialLoads.noApilables.length > 0 || specialLoads.imos.length > 0) && (
+      {(totals.overKg || totals.overM3 || totals.multifiscal || healthIssues.length > 0 || specialLoads.noApilables.length > 0 || specialLoads.imos.length > 0 || specialLoads.sinTelex.length > 0) && (
         <div className="space-y-2">
+          {specialLoads.sinTelex.length > 0 && (
+            <AlertBanner kind="error">
+              <Warning size={16} weight="fill" />
+              🚨 Carga SIN TELEX en el camión: {specialLoads.sinTelex.join(', ')} — la naviera no liberó el documento; sin telex esa carga no se puede retirar. Reclamar la liberación antes de la fecha de carga.
+            </AlertBanner>
+          )}
           {specialLoads.noApilables.length > 0 && (
             <AlertBanner kind="warning">
               <Warning size={16} weight="fill" />
@@ -492,7 +507,14 @@ export default function TruckBuilder(props: TruckBuilderProps) {
                 <FieldDate
                   label="Fecha de carga / salida"
                   value={merged.departureDate || merged.loadDate}
-                  onChange={v => updateTruck({ loadDate: v, departureDate: v })}
+                  onChange={v => {
+                    // Pedido de Brian: al PONER la fecha de carga, avisar si alguna
+                    // carga del camión sigue sin telex (no bloquea el guardado).
+                    if (v && specialLoads.sinTelex.length > 0) {
+                      toast.warning(`🚨 Fecha de carga puesta con cargas SIN TELEX: ${specialLoads.sinTelex.join(', ')} — reclamar la liberación a la naviera.`, { duration: 8000 })
+                    }
+                    updateTruck({ loadDate: v, departureDate: v })
+                  }}
                 />
                 <FieldDate
                   label="Arribo a fiscal"

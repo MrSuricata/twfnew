@@ -31,6 +31,8 @@ import ContainerQuickEdit, { buildPatchedOperativas } from '../operations/Contai
 import { deriveKnownTransportes } from '@/lib/operationsTypes'
 import { dropPatch } from './agendaDnd'
 import { isSalidaBeforeArrival } from '@/lib/salidaCheck'
+import { isSinTelex, SIN_TELEX_MSG } from '@/lib/telexCheck'
+import { toast } from 'sonner'
 
 interface AgendaCalendarProps {
   shipments: ParsedShipment[]
@@ -50,6 +52,8 @@ interface AgendaCalendarProps {
   onPatchShipment?: (id: string, fields: Record<string, unknown>) => void
   /** Opens the OperationDetailPanel for the given FCL ref (navigates to operaciones tab). */
   onOpenDetail?: (ref: string) => void
+  /** Refs (UPPER/trim) de cargas SIN telex — alerta 🚨 en los hitos de camiones. */
+  sinTelexRefs?: Set<string>
 }
 
 export default function AgendaCalendar({
@@ -64,6 +68,7 @@ export default function AgendaCalendar({
   editable = false,
   onPatchShipment,
   onOpenDetail,
+  sinTelexRefs,
 }: AgendaCalendarProps) {
   const [view, setView] = useState<AgendaView>(defaultView)
   const [currentDate, setCurrentDate] = useState(new Date())
@@ -92,10 +97,10 @@ export default function AgendaCalendar({
   // Transform all shipments into calendar events (+ hitos de camiones)
   const allEvents = useMemo(() => {
     const list = shipmentsToEvents(shipments, depotFilter, transportFilter)
-    if (trucks?.length) list.push(...trucksToEvents(trucks, truckLoads || []))
+    if (trucks?.length) list.push(...trucksToEvents(trucks, truckLoads || [], sinTelexRefs))
     list.sort((a, b) => a.date.localeCompare(b.date))
     return list
-  }, [shipments, trucks, truckLoads, depotFilter, transportFilter])
+  }, [shipments, trucks, truckLoads, depotFilter, transportFilter, sinTelexRefs])
 
   // Extract unique depots from events
   const availableDepots = useMemo(() => {
@@ -345,6 +350,10 @@ export default function AgendaCalendar({
         ` del contenedor ${event.cntr || ''}.\n\n¿Guardar igual?`
       )
       if (!ok) return
+    }
+    // Aviso (no bloquea): se movió la salida de una carga cuyo telex sigue sin liberar.
+    if (event?.type === 'salida' && newDate && isSinTelex(event.op?.TLX)) {
+      toast.warning(`🚨 ${event.ref} — ${SIN_TELEX_MSG}`)
     }
     onPatchShipment?.(result.dbId, result.fields)
   }, [onPatchShipment])

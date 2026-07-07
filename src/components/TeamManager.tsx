@@ -27,6 +27,8 @@ import {
   CheckCircle,
   ClockCounterClockwise,
   BellRinging,
+  Pulse,
+  XCircle,
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import { authFetch } from '@/lib/authClient'
@@ -58,6 +60,49 @@ interface AuditEntry {
   details: Record<string, unknown> | null
 }
 
+// ─── Diagnóstico push (respuesta de /api/notifications/push-status) ──
+interface PushDiag {
+  proyecto: string
+  vapid: 'ok' | 'missing' | 'mismatch' | 'invalid'
+  cronSecret: boolean
+  suscripciones: Array<{
+    email: string
+    navegador: string
+    creada: string | null
+    prefs: { libre: boolean; salidas: boolean; fiscal: boolean; frontera: boolean }
+  }>
+  ultimosEnvios: Array<{ date_key: string; sent_at: string; payload_resumen: string }>
+}
+
+/** Resumen corto del user-agent para mostrar qué dispositivo es. */
+function uaShort(ua: string): string {
+  if (/iPhone|iPad/i.test(ua)) return 'iPhone (PWA/Safari)'
+  if (/Edg\//.test(ua)) return 'Edge (PC)'
+  if (/Chrome\//.test(ua)) return 'Chrome (PC)'
+  if (/Firefox\//.test(ua)) return 'Firefox'
+  if (/Android/i.test(ua)) return 'Android'
+  return ua ? ua.slice(0, 40) : '—'
+}
+
+const VAPID_DIAG: Record<PushDiag['vapid'], { ok: boolean; label: string; detail?: string }> = {
+  ok: { ok: true, label: 'Clave VAPID configurada y correcta' },
+  missing: {
+    ok: false,
+    label: 'FALTA la env var VAPID_PRIVATE_KEY en este proyecto de Vercel',
+    detail: 'Sin la clave privada no sale NINGÚN push (ni los crons ni el botón de prueba). Cargala en Vercel → Settings → Environment Variables y hacé Redeploy.',
+  },
+  mismatch: {
+    ok: false,
+    label: 'La clave VAPID privada NO corresponde a la pública del código',
+    detail: 'Los push services rechazan los envíos con 403 en silencio. Hay que cargar la privada correcta (el par de la pública) o regenerar el par y re-suscribir los dispositivos.',
+  },
+  invalid: {
+    ok: false,
+    label: 'La clave VAPID privada tiene un formato inválido',
+    detail: 'Revisá que se haya pegado completa (base64url, sin espacios ni saltos de línea) y redeployá.',
+  },
+}
+
 export default function TeamManager({ refreshKey = 0 }: { refreshKey?: number }) {
   const [users, setUsers] = useState<AdminUser[]>([])
   const [log, setLog] = useState<AuditEntry[]>([])
@@ -72,6 +117,8 @@ export default function TeamManager({ refreshKey = 0 }: { refreshKey?: number })
   const [migrating, setMigrating] = useState(false)
   const [baking, setBaking] = useState(false)
   const [sendingPush, setSendingPush] = useState(false)
+  const [diag, setDiag] = useState<PushDiag | null>(null)
+  const [diagLoading, setDiagLoading] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -208,6 +255,23 @@ export default function TeamManager({ refreshKey = 0 }: { refreshKey?: number })
       toast.error(`Error: ${(err as Error)?.message || 'falló el envío de prueba'}`, { id: t })
     } finally {
       setSendingPush(false)
+    }
+  }
+
+  // Diagnóstico push del proyecto que sirve ESTE dominio (twf y med tienen sus
+  // propias env vars): clave VAPID, CRON_SECRET, suscripciones y últimos envíos.
+  const runPushDiag = async () => {
+    if (diagLoading) return
+    setDiagLoading(true)
+    try {
+      const res = await authFetch('/api/notifications/push-status')
+      const data = await res.json().catch(() => ({} as Record<string, unknown>))
+      if (!res.ok) throw new Error((data as { error?: string }).error || `HTTP ${res.status}`)
+      setDiag(data as unknown as PushDiag)
+    } catch (err) {
+      toast.error(`No se pudo diagnosticar: ${(err as Error)?.message || 'error de conexión'}`)
+    } finally {
+      setDiagLoading(false)
     }
   }
 
@@ -371,6 +435,10 @@ export default function TeamManager({ refreshKey = 0 }: { refreshKey?: number })
             <BellRinging size={15} className="mr-1.5" />
             {sendingPush ? 'Enviando…' : 'Enviar resumen de prueba'}
           </Button>
+          <Button onClick={runPushDiag} disabled={diagLoading} variant="outline">
+            <Pulse size={15} className="mr-1.5" />
+            {diagLoading ? 'Verificando…' : 'Diagnóstico push'}
+          </Button>
           <Button onClick={runPhotoMigration} disabled={migrating} variant="outline">
             {migrating ? 'Migrando…' : 'Migrar fotos a Storage'}
           </Button>
@@ -378,6 +446,82 @@ export default function TeamManager({ refreshKey = 0 }: { refreshKey?: number })
             {baking ? 'Horneando…' : 'Hornear FCL a la base (flip)'}
           </Button>
         </div>
+
+        {diag && (
+          <Card className="mt-4">
+            <CardContent className="pt-4 space-y-4 text-sm">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <h4 className="font-semibold flex items-center gap-1.5">
+                  <BellRinging size={16} className="text-primary" />
+                  Avisos push — diagnóstico de este dominio
+                </h4>
+                <span className="text-xs text-muted-foreground">proyecto: {diag.proyecto}</span>
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-start gap-2">
+                  {VAPID_DIAG[diag.vapid]?.ok
+                    ? <CheckCircle size={18} weight="fill" className="text-emerald-600 shrink-0 mt-0.5" />
+                    : <XCircle size={18} weight="fill" className="text-red-600 shrink-0 mt-0.5" />}
+                  <div>
+                    <div className="font-medium">{VAPID_DIAG[diag.vapid]?.label || diag.vapid}</div>
+                    {VAPID_DIAG[diag.vapid]?.detail && (
+                      <p className="text-xs text-muted-foreground">{VAPID_DIAG[diag.vapid].detail}</p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-start gap-2">
+                  {diag.cronSecret
+                    ? <CheckCircle size={18} weight="fill" className="text-emerald-600 shrink-0 mt-0.5" />
+                    : <XCircle size={18} weight="fill" className="text-red-600 shrink-0 mt-0.5" />}
+                  <div>
+                    <div className="font-medium">{diag.cronSecret ? 'CRON_SECRET configurado' : 'FALTA la env var CRON_SECRET en este proyecto'}</div>
+                    {!diag.cronSecret && (
+                      <p className="text-xs text-muted-foreground">
+                        Sin CRON_SECRET, Vercel no puede autenticar los crons de las 07:00 y ~16:00 → no hay avisos automáticos (el botón de prueba sí anda). Cargala y hacé Redeploy.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <div className="font-medium mb-1">
+                  Dispositivos suscriptos ({diag.suscripciones.length})
+                  {diag.suscripciones.length === 0 && <span className="font-normal text-muted-foreground"> — nadie recibe avisos: activá la campana 🔔 del navbar en cada dispositivo</span>}
+                </div>
+                {diag.suscripciones.length > 0 && (
+                  <ul className="space-y-1">
+                    {diag.suscripciones.map((s, i) => {
+                      const activas = Object.entries(s.prefs).filter(([, v]) => v).map(([k]) => k)
+                      return (
+                        <li key={i} className="text-xs text-muted-foreground">
+                          <span className="font-medium text-foreground">{s.email}</span> · {uaShort(s.navegador)}
+                          {s.creada ? ` · desde ${new Date(s.creada).toLocaleDateString('es-UY')}` : ''} · avisos: {activas.length === 4 ? 'todos' : (activas.join(', ') || 'ninguno')}
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
+              </div>
+
+              <div>
+                <div className="font-medium mb-1">Últimos envíos registrados</div>
+                {diag.ultimosEnvios.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Ninguno — los crons nunca llegaron a enviar (mirá los checks de arriba).</p>
+                ) : (
+                  <ul className="space-y-1">
+                    {diag.ultimosEnvios.map(l => (
+                      <li key={l.date_key} className="text-xs text-muted-foreground">
+                        <span className="font-mono">{l.date_key}</span> — {l.payload_resumen}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
 
       {/* ── Crear / editar usuario ── */}

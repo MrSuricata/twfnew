@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -10,29 +10,24 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { InputOTP, InputOTPGroup, InputOTPSlot, InputOTPSeparator } from '@/components/ui/input-otp'
 import {
   LockKey,
-  ShieldCheck,
   Users,
   Package,
   Handshake,
-  EnvelopeSimple,
   CircleNotch,
-  ArrowCounterClockwise,
-  CaretLeft,
   SignIn,
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
-import { loginAdmin, requestOTP, verifyOTPServer, loginPartner } from '@/lib/authClient'
+import { loginAdmin, loginClient, loginPartner } from '@/lib/authClient'
 import { useTranslation, getStoredLanguage } from '@/lib/i18n'
 
 // ─── Diálogo de acceso unificado para la landing ──────────────────────────
 // Un solo botón "Ingresar" que abre este diálogo, con 3 pestañas: Equipo,
 // Cliente y Partner. Cada pestaña reusa EXACTAMENTE la lógica de submit de su
-// pantalla dedicada (loginAdmin / requestOTP+verifyOTPServer / loginPartner de
-// authClient). Al éxito, esas funciones ya persisten el token en sessionStorage
-// vía setAuth(); acá redirigimos con window.location a la ruta correspondiente
+// pantalla dedicada (loginAdmin / loginClient / loginPartner de authClient).
+// Al éxito, esas funciones ya persisten el token en sessionStorage vía
+// setAuth(); acá redirigimos con window.location a la ruta correspondiente
 // (/admin · /portal · /depot|/transport) y el verifySession() de App.tsx
 // restaura la sesión al montar. Así no duplicamos estado ni tocamos los flujos
 // existentes.
@@ -54,39 +49,25 @@ export default function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
   const [adminPass, setAdminPass] = useState('')
   const [adminLoading, setAdminLoading] = useState(false)
 
-  // ── Cliente (OTP en 2 pasos) ──
-  const [clientStep, setClientStep] = useState<'email' | 'otp'>('email')
+  // ── Cliente (email + contraseña) ──
   const [clientEmail, setClientEmail] = useState('')
-  const [otpValue, setOtpValue] = useState('')
+  const [clientPass, setClientPass] = useState('')
   const [clientLoading, setClientLoading] = useState(false)
-  const [countdown, setCountdown] = useState(0)
 
   // ── Partner ──
   const [partnerEmail, setPartnerEmail] = useState('')
   const [partnerPass, setPartnerPass] = useState('')
   const [partnerLoading, setPartnerLoading] = useState(false)
 
-  // Reset de estado al cerrar (no dejar credenciales ni pasos a medio camino).
+  // Reset de estado al cerrar (no dejar credenciales a medio camino).
   useEffect(() => {
     if (!open) {
       setTab('equipo')
       setAdminUser(''); setAdminPass(''); setAdminLoading(false)
-      setClientStep('email'); setClientEmail(''); setOtpValue(''); setClientLoading(false); setCountdown(0)
+      setClientEmail(''); setClientPass(''); setClientLoading(false)
       setPartnerEmail(''); setPartnerPass(''); setPartnerLoading(false)
     }
   }, [open])
-
-  // Countdown de reenvío de OTP.
-  useEffect(() => {
-    if (countdown <= 0) return
-    const timer = setInterval(() => {
-      setCountdown(prev => {
-        if (prev <= 1) { clearInterval(timer); return 0 }
-        return prev - 1
-      })
-    }, 1000)
-    return () => clearInterval(timer)
-  }, [countdown])
 
   // ── Equipo: mismo endpoint/flujo que Login.tsx ──
   const handleAdminSubmit = async (e: React.FormEvent) => {
@@ -104,61 +85,26 @@ export default function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
     }
   }
 
-  // ── Cliente paso 1: pedir OTP (mismo flujo que ClientLogin.tsx) ──
-  const handleClientSendCode = useCallback(async (isResend = false) => {
-    if (!clientEmail.trim()) {
-      toast.error(t.auth.enterEmail)
-      return
-    }
-    if (isResend && countdown > 0) {
-      toast.error(t.auth.waitCountdown.replace('{s}', String(countdown)))
-      return
-    }
+  // ── Cliente: email + contraseña (mismo flujo que ClientLogin.tsx) ──
+  const handleClientSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
     setClientLoading(true)
     try {
-      const result = await requestOTP(clientEmail.trim())
-      if (result.success) {
-        setClientStep('otp')
-        setOtpValue('')
-        setCountdown(60)
-        toast.success(isResend ? t.auth.newCodeSent : t.auth.codeSent.replace('{email}', clientEmail))
-      } else {
-        toast.error(result.error || t.auth.otpSendError)
-      }
-    } catch {
-      toast.error(t.auth.otpProcessError)
-    } finally {
-      setClientLoading(false)
-    }
-  }, [clientEmail, countdown, t])
-
-  // ── Cliente paso 2: verificar OTP ──
-  const handleClientVerify = useCallback(async (code: string) => {
-    if (code.length !== 6) return
-    setClientLoading(true)
-    try {
-      const result = await verifyOTPServer(clientEmail.toLowerCase().trim(), code)
+      const result = await loginClient(clientEmail, clientPass)
       if (result.success) {
         const name = result.clientData?.name || ''
         toast.success(`${t.auth.welcome}${name ? `, ${name}` : ''}`)
         // Token ya persistido → /portal restaura la sesión.
         window.location.assign('/portal')
       } else {
-        toast.error(result.error || t.auth.otpIncorrect)
-        setOtpValue('')
+        toast.error(result.error || 'Usuario o contraseña incorrectos')
         setClientLoading(false)
       }
     } catch {
-      toast.error(t.auth.otpVerifyError)
-      setOtpValue('')
+      toast.error(t.auth.connectionError)
       setClientLoading(false)
     }
-  }, [clientEmail, t])
-
-  const handleOtpChange = useCallback((value: string) => {
-    setOtpValue(value)
-    if (value.length === 6) handleClientVerify(value)
-  }, [handleClientVerify])
+  }
 
   // ── Partner: mismo endpoint/flujo que PartnerLogin.tsx ──
   const handlePartnerSubmit = async (e: React.FormEvent) => {
@@ -240,106 +186,45 @@ export default function LoginDialog({ open, onOpenChange }: LoginDialogProps) {
             </form>
           </TabsContent>
 
-          {/* ===== Cliente (OTP) ===== */}
+          {/* ===== Cliente (email + contraseña) ===== */}
           <TabsContent value="cliente" className="mt-4">
-            {clientStep === 'email' ? (
-              <form
-                onSubmit={(e) => { e.preventDefault(); handleClientSendCode(false) }}
-                className="space-y-4"
-              >
-                <div className="space-y-2">
-                  <Label htmlFor="dlg-client-email">Email</Label>
-                  <Input
-                    id="dlg-client-email"
-                    type="email"
-                    value={clientEmail}
-                    onChange={(e) => setClientEmail(e.target.value)}
-                    placeholder="tu@email.com"
-                    autoComplete="email"
-                    required
-                  />
-                </div>
-                <Button type="submit" className="w-full" disabled={clientLoading}>
-                  {clientLoading ? (
-                    <CircleNotch size={18} className="mr-2 animate-spin" />
-                  ) : (
-                    <EnvelopeSimple size={18} className="mr-2" />
-                  )}
-                  {clientLoading ? t.auth.sending : 'Enviar código de acceso'}
-                </Button>
-                <p className="text-xs text-muted-foreground text-center">
-                  Te enviamos un código de 6 dígitos si tu correo está autorizado.
-                </p>
-              </form>
-            ) : (
-              <div className="space-y-4">
-                <p className="text-sm text-muted-foreground text-center">
-                  Ingresá el código enviado a{' '}
-                  <span className="font-medium text-foreground">{clientEmail}</span>
-                </p>
-                <div className="flex justify-center">
-                  <InputOTP
-                    maxLength={6}
-                    value={otpValue}
-                    onChange={handleOtpChange}
-                    disabled={clientLoading}
-                    inputMode="numeric"
-                    autoComplete="one-time-code"
-                    autoFocus
-                  >
-                    <InputOTPGroup>
-                      <InputOTPSlot index={0} className="h-11 w-10 text-lg" />
-                      <InputOTPSlot index={1} className="h-11 w-10 text-lg" />
-                      <InputOTPSlot index={2} className="h-11 w-10 text-lg" />
-                    </InputOTPGroup>
-                    <InputOTPSeparator />
-                    <InputOTPGroup>
-                      <InputOTPSlot index={3} className="h-11 w-10 text-lg" />
-                      <InputOTPSlot index={4} className="h-11 w-10 text-lg" />
-                      <InputOTPSlot index={5} className="h-11 w-10 text-lg" />
-                    </InputOTPGroup>
-                  </InputOTP>
-                </div>
-                <Button
-                  onClick={() => handleClientVerify(otpValue)}
-                  className="w-full"
-                  disabled={clientLoading || otpValue.length !== 6}
-                >
-                  {clientLoading ? (
-                    <CircleNotch size={18} className="mr-2 animate-spin" />
-                  ) : (
-                    <ShieldCheck size={18} className="mr-2" />
-                  )}
-                  {clientLoading ? t.auth.verifying : 'Verificar'}
-                </Button>
-                <div className="flex items-center justify-between">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => { setClientStep('email'); setOtpValue('') }}
-                    className="text-muted-foreground"
-                  >
-                    <CaretLeft size={15} className="mr-1" /> Cambiar email
-                  </Button>
-                  {countdown > 0 ? (
-                    <span className="text-xs text-muted-foreground">
-                      Reenviar en <span className="font-mono font-semibold text-foreground">{countdown}s</span>
-                    </span>
-                  ) : (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleClientSendCode(true)}
-                      disabled={clientLoading}
-                    >
-                      <ArrowCounterClockwise size={15} className="mr-1" /> Reenviar código
-                    </Button>
-                  )}
-                </div>
+            <form onSubmit={handleClientSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="dlg-client-email">Email</Label>
+                <Input
+                  id="dlg-client-email"
+                  type="email"
+                  value={clientEmail}
+                  onChange={(e) => setClientEmail(e.target.value)}
+                  placeholder="tu@email.com"
+                  autoComplete="email"
+                  required
+                />
               </div>
-            )}
+              <div className="space-y-2">
+                <Label htmlFor="dlg-client-pass">Contraseña</Label>
+                <Input
+                  id="dlg-client-pass"
+                  type="password"
+                  value={clientPass}
+                  onChange={(e) => setClientPass(e.target.value)}
+                  placeholder="••••••••"
+                  autoComplete="current-password"
+                  required
+                />
+              </div>
+              <Button type="submit" className="w-full" disabled={clientLoading}>
+                {clientLoading ? (
+                  <CircleNotch size={18} className="mr-2 animate-spin" />
+                ) : (
+                  <SignIn size={18} className="mr-2" />
+                )}
+                {clientLoading ? t.auth.verifying : t.auth.login}
+              </Button>
+              <p className="text-xs text-muted-foreground text-center">
+                Acceso para clientes. ¿No tenés usuario? Pedilo a tu contacto comercial.
+              </p>
+            </form>
           </TabsContent>
 
           {/* ===== Partner ===== */}

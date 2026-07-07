@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
 import { LockSimple, CheckCircle, ArrowCounterClockwise } from '@phosphor-icons/react'
@@ -168,6 +168,10 @@ function StatBox({
 }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
+  const boxRef = useRef<HTMLDivElement>(null)
+  // true cuando la edición arrancó tipeando una letra (type-to-edit): el foco
+  // va al final del seed en vez de seleccionar todo (si no, la 2ª tecla lo pisa).
+  const seededRef = useRef(false)
 
   // Fechas: se muestran dd/MM/yyyy (display only); el editor type=date sigue
   // trabajando con el valor ISO crudo. Textos como "DEVUELTO" pasan tal cual.
@@ -177,9 +181,10 @@ function StatBox({
       ? (fmtDateDMY(String(value ?? '')) || '—')
       : (String(value ?? '') || '—')
 
-  const start = () => {
+  const start = (seed?: string) => {
     if (!editable) return
-    setDraft(String(value ?? ''))
+    seededRef.current = seed !== undefined
+    setDraft(seed !== undefined ? seed : String(value ?? ''))
     setEditing(true)
   }
   const save = () => {
@@ -194,10 +199,14 @@ function StatBox({
     const v = upper ? draft.trim().toUpperCase() : draft.trim()
     if (String(value ?? '') !== String(v)) onCommit(v)
   }
+  // Al guardar con Enter (o cancelar con Escape) el input se desmonta y el foco
+  // caía al body → se cortaba la cadena de Tab. Devolverlo al cuadro. (Con Tab
+  // no hace falta: el blur guarda y el foco ya saltó solo al siguiente cuadro.)
+  const refocus = () => requestAnimationFrame(() => boxRef.current?.querySelector('button')?.focus())
 
   const listId = `dep-${label}`
   return (
-    <div className="rounded-lg border bg-background p-2.5 min-w-0">
+    <div ref={boxRef} className="rounded-lg border bg-background p-2.5 min-w-0">
       <div className="text-[11px] text-muted-foreground leading-none mb-1">{label}</div>
       {editing ? (
         <>
@@ -207,9 +216,16 @@ function StatBox({
             type={kind === 'date' ? 'date' : 'text'}
             value={draft}
             onChange={e => setDraft(e.target.value)}
-            onFocus={e => e.target.select()}
+            onFocus={e => {
+              const el = e.target as HTMLInputElement
+              if (seededRef.current) { try { el.setSelectionRange(el.value.length, el.value.length) } catch { /* type=date no soporta selección */ } }
+              else el.select()
+            }}
             onBlur={save}
-            onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
+            onKeyDown={e => {
+              if (e.key === 'Enter') { save(); refocus() }
+              if (e.key === 'Escape') { setEditing(false); refocus() }
+            }}
             inputMode={kind === 'number' ? 'decimal' : undefined}
             className={`h-8 text-sm px-1.5 ${upper ? 'uppercase' : ''}`}
           />
@@ -222,10 +238,20 @@ function StatBox({
       ) : (
         <button
           type="button"
-          onClick={start}
+          onClick={() => start()}
+          onKeyDown={e => {
+            // Type-to-edit: tipear una letra/número abre la edición con ese
+            // carácter ya puesto (las fechas se abren con Enter — el editor
+            // type=date no acepta un seed suelto).
+            if (!editable || kind === 'date') return
+            if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+              e.preventDefault()
+              start(e.key)
+            }
+          }}
           disabled={!editable}
-          className={`text-left w-full leading-tight ${editable ? 'cursor-text hover:opacity-70' : 'cursor-default'}`}
-          title={editable ? 'Hacé clic para editar' : sumHint ? 'Total = suma de los contenedores (editá cada uno abajo, en “Salidas y arribos por contenedor”)' : 'Solo lectura (viene de la planilla)'}
+          className={`text-left w-full leading-tight rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-1 ${editable ? 'cursor-text hover:opacity-70' : 'cursor-default'}`}
+          title={editable ? 'Hacé clic o Enter para editar · Tab guarda y salta al siguiente' : sumHint ? 'Total = suma de los contenedores (editá cada uno abajo, en “Salidas y arribos por contenedor”)' : 'Solo lectura (viene de la planilla)'}
         >
           <span className={`text-[22px] font-medium ${display === '—' ? 'text-muted-foreground' : ''} ${upper ? 'uppercase' : ''} ${valueClass || ''}`}>{display}</span>
           {unit && display !== '—' && <span className="text-xs text-muted-foreground ml-1">{unit}</span>}
@@ -256,7 +282,7 @@ function Toggle({
   onToggle: () => void
 }) {
   const seg = (active: boolean, color: 'green' | 'red') => {
-    const base = 'flex-1 h-9 text-sm rounded-md border transition-colors'
+    const base = 'flex-1 h-9 text-sm rounded-md border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-1'
     if (active) return `${base} ${TOGGLE_ON[color]}`
     return `${base} bg-background border-border text-muted-foreground ${editable ? 'hover:bg-muted' : ''}`
   }
@@ -285,7 +311,7 @@ function TriToggle({
   onSet: (v: boolean | null) => void
 }) {
   const seg = (active: boolean, onCls: string, flex = 'flex-1') => {
-    const base = `${flex} h-9 text-sm rounded-md border transition-colors`
+    const base = `${flex} h-9 text-sm rounded-md border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-1`
     if (active) return `${base} ${onCls}`
     return `${base} bg-background border-border text-muted-foreground ${editable ? 'hover:bg-muted' : ''}`
   }

@@ -2,6 +2,7 @@ import type { ParsedShipment, OperativasRecord } from './shipmentTypes'
 import { parseLocalDate } from './shipmentTypes'
 import { fmtDateDMY } from './format'
 import { isSalidaBeforeArrival } from './salidaCheck'
+import { needsTelexAlert, SIN_TELEX_MSG } from './telexCheck'
 import type { CalendarEvent, AlertEmoji, EventType } from './agendaTypes'
 import { getShipmentStatus, processShipmentRecord } from './shipmentTypes'
 import type { Truck, TruckLoad } from './truckTypes'
@@ -251,6 +252,11 @@ export function shipmentsToEvents(
           type: 'salida_antes_llegada',
         })
       }
+      // Sin telex con salida agendada: sin la liberación de la naviera el
+      // contenedor no se puede retirar — la fecha está comprometida al pedo.
+      if (needsTelexAlert({ tlx: op.TLX, fecha: op.SALIDA })) {
+        alerts.push({ emoji: '🚨', label: SIN_TELEX_MSG, type: 'sin_telex' })
+      }
       const baseId = `${shipment.REF}-${op.CNTR_OP || 'NOCNTR'}`
 
       // Helper to create an event
@@ -302,7 +308,13 @@ export function shipmentsToEvents(
 // arribo a fiscal. Se sintetiza un ParsedShipment mínimo para reusar las
 // cards del calendario sin tocar el modelo de eventos.
 
-export function trucksToEvents(trucks: Truck[], truckLoads: TruckLoad[]): CalendarEvent[] {
+export function trucksToEvents(
+  trucks: Truck[],
+  truckLoads: TruckLoad[],
+  /** Refs (normalizadas UPPER/trim) de cargas SIN telex — para alertar 🚨 en
+   *  los hitos del camión que las lleva. El caller la arma desde dbShipments. */
+  sinTelexRefs?: Set<string>
+): CalendarEvent[] {
   const events: CalendarEvent[] = []
   const today = new Date()
   today.setHours(0, 0, 0, 0)
@@ -329,6 +341,19 @@ export function trucksToEvents(trucks: Truck[], truckLoads: TruckLoad[]): Calend
       TRANSPORTE: t.transport || '', HORARIO: '',
     }
 
+    // Cargas del camión que siguen SIN telex: el consolidado tiene fecha pero
+    // esas cargas no se pueden retirar — alerta en cada hito del camión.
+    const sinTelex = sinTelexRefs
+      ? refs.filter(r => sinTelexRefs.has(r.trim().toUpperCase()))
+      : []
+    const alerts: AlertEmoji[] = sinTelex.length
+      ? [{
+          emoji: '🚨',
+          label: `SIN TELEX: ${sinTelex.join(', ')} — sin la liberación de la naviera esa carga no se puede retirar.`,
+          type: 'sin_telex',
+        }]
+      : []
+
     const make = (type: EventType, dateStr: string): CalendarEvent | null => {
       if (!isValidDateStr(dateStr)) return null
       const d = parseDateLocal(dateStr)
@@ -347,7 +372,7 @@ export function trucksToEvents(trucks: Truck[], truckLoads: TruckLoad[]): Calend
         descripcion,
         kg, pkgs, m3,
         transporte: t.transport || '',
-        alerts: [],
+        alerts,
         shipment,
         op,
         statusColor: 'blue',

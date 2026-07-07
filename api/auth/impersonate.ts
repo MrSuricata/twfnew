@@ -9,6 +9,19 @@ interface ClientConfig {
   name: string
   company: string
   clientePattern: string
+  aliases?: string
+}
+
+/** Patrón efectivo: el guardado, o derivado de name+aliases (tokens ≥4 chars).
+ *  Espejo de deriveClientePattern en src/lib/clientCatalog.ts y de
+ *  effectiveClientePattern en admin-login.ts — mantener en sync. */
+function effectivePattern(c: ClientConfig): string {
+  const stored = (c.clientePattern || '').trim()
+  if (stored) return stored
+  const parts = [String(c.name || '').replace(/,/g, ' '), ...String(c.aliases || '').split(',')]
+    .map(p => p.replace(/\s+/g, ' ').trim().toUpperCase())
+    .filter(p => p.length >= 4)
+  return Array.from(new Set(parts)).join(',')
 }
 
 // ─── Get clients from env var + Supabase (mirrors otp.ts) ───────────
@@ -50,7 +63,7 @@ async function getClients(): Promise<ClientConfig[]> {
 
 // ─── Handler ────────────────────────────────────────────────────────
 // Admin-only endpoint. Given a client email, returns a valid client session
-// token — identical shape to /api/auth/otp verify — without requiring OTP.
+// token — identical shape to the client login response — without password.
 // Used by admin to "view portal as client X" for debugging / QA.
 // ─────────────────────────────────────────────────────────────────────
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -73,20 +86,42 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(403).json({ error: 'Solo el owner puede ver el portal como cliente.' })
   }
 
-  const { email } = req.body || {}
-  if (!email || typeof email !== 'string') {
-    return res.status(400).json({ error: 'Email required' })
+  const { email, id } = req.body || {}
+  if ((!email || typeof email !== 'string') && (!id || typeof id !== 'string')) {
+    return res.status(400).json({ error: 'Email or id required' })
   }
 
-  const normalizedEmail = email.toLowerCase().trim()
-
-  // Validate client exists (env + Supabase)
-  const clients = await getClients()
-  const client = clients.find(c => c.email.toLowerCase().trim() === normalizedEmail)
+  // Por id: lookup directo en la tabla (los clientes del catálogo pueden no
+  // tener email de contacto). Por email: flujo histórico (env + Supabase).
+  let client: ClientConfig | undefined
+  if (id && typeof id === 'string') {
+    try {
+      const db = getSupabase()
+      const { data } = await db.from('clients').select('*').eq('id', id).maybeSingle()
+      if (data) {
+        client = {
+          email: data.email || '',
+          name: data.name,
+          company: data.company || '',
+          clientePattern: data.cliente_pattern || '',
+          aliases: data.aliases || '',
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to fetch client by id:', err)
+    }
+  } else {
+    const normalizedEmail = String(email).toLowerCase().trim()
+    const clients = await getClients()
+    client = clients.find(c => (c.email || '').toLowerCase().trim() === normalizedEmail)
+  }
 
   if (!client) {
     return res.status(404).json({ error: 'Cliente no encontrado' })
   }
+  // Puede quedar vacío si el cliente del catálogo no tiene email de contacto —
+  // el portal identifica por nombre/empresa, el email del token es informativo.
+  const normalizedEmail = (client.email || '').toLowerCase().trim()
 
   // Audit trail (best-effort) — queda registrado en audit_log quién impersonó a
   // quién (antes era solo un console.info que no dejaba rastro auditable).
@@ -95,19 +130,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       usuario: auditUser(payload),
       action: 'impersonar',
       entity: 'clients',
-      ref: normalizedEmail,
+      ref: normalizedEmail || client.name,
       details: { by: payload.user },
     }).then(() => {}, (e: any) => console.warn('[impersonate audit] failed:', e?.message))
   } catch (e: any) {
     console.warn('[impersonate audit] failed:', e?.message)
   }
 
-  // Sign client JWT (identical to OTP verify flow)
+  // Sign client JWT (misma forma que el login por contraseña; sin uid — el
+  // token de impersonate valida solo firma en verify-session).
   const token = signClientToken(
-    client.email,
+    normalizedEmail,
     client.name,
-    client.company,
-    client.clientePattern
+    client.company || client.name,
+    effectivePattern(client)
   )
 
   return res.status(200).json({

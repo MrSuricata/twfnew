@@ -116,8 +116,9 @@ export function welcomeClientEmail(opts: { name: string; email: string }, brand:
     </p>
     ${button(portalUrl, 'Ingresar al portal')}
     <p style="margin:0 0 8px;font-size:14px;line-height:1.6;color:${TEXT};">
-      El acceso es con tu email (<strong>${escapeHtml(opts.email)}</strong>). Cada vez que ingresés te enviamos un
-      <strong>código de un solo uso</strong> por email — no necesitás contraseña.
+      El acceso es con tu email (<strong>${escapeHtml(opts.email)}</strong>) y tu contraseña.
+      La contraseña te la comunica ${escapeHtml(brand.name)} por otro canal (WhatsApp o teléfono) —
+      si no la recibiste, escribinos.
     </p>
     <p style="margin:16px 0 0;font-size:13px;line-height:1.5;color:${MUTED};">
       Si tenés cualquier consulta, escribinos a <a href="mailto:${brand.contactEmail}" style="color:${brand.primary};">${escapeHtml(brand.contactEmail)}</a>.

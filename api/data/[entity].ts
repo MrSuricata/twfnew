@@ -101,6 +101,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return handleReports(req, res, db, payload)
       case 'clients':
         return handleClients(req, res, db)
+      case 'client-users':
+        return handleClientUsers(req, res, db, payload)
       case 'settings':
         return handleSettings(req, res, db)
       case 'origin-photos':
@@ -385,6 +387,11 @@ async function handleClients(req: VercelRequest, res: VercelResponse, db: any) {
       company: c.company,
       createdAt: c.created_at_ts,
       clientePattern: c.cliente_pattern,
+      razonSocial: c.razon_social || '',
+      cuitDoc: c.cuit_doc || '',
+      pais: c.pais || '',
+      direccion: c.direccion || '',
+      aliases: c.aliases || '',
     }))
     return res.status(200).json({ clients })
   }
@@ -394,11 +401,16 @@ async function handleClients(req: VercelRequest, res: VercelResponse, db: any) {
     if (!v.ok) return res.status(400).json({ error: v.error })
     const rows = v.items.map((c) => ({
       id: c.id,
-      email: c.email,
+      email: (c.email || '').toLowerCase().trim(),
       name: c.name,
       company: c.company || '',
       created_at_ts: c.createdAt || c.created_at_ts || Date.now(),
       cliente_pattern: c.clientePattern || '',
+      razon_social: c.razonSocial ?? c.razon_social ?? '',
+      cuit_doc: c.cuitDoc ?? c.cuit_doc ?? '',
+      pais: c.pais ?? '',
+      direccion: c.direccion ?? '',
+      aliases: c.aliases ?? '',
     }))
 
     // Detect brand-new clients (by email) BEFORE the upsert so we can
@@ -452,6 +464,121 @@ async function handleClients(req: VercelRequest, res: VercelResponse, db: any) {
     if (!id) return res.status(400).json({ error: 'id query parameter required' })
     const { error } = await db.from('clients').delete().eq('id', id)
     if (error) throw error
+    return res.status(200).json({ deleted: true })
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' })
+}
+
+// ── Usuarios del portal de clientes (client_users) ──────────────────
+// Accesos con contraseña por cliente del catálogo (reemplaza el OTP).
+// GET ?clientId= (o todos) · POST {clientId, email, name?, password} ·
+// PATCH ?id= {active|password|name} · DELETE ?id=.
+// Gate: cualquier admin (mismo criterio que 'clients'). El login vive en
+// api/auth/admin-login.ts (type:'client').
+
+async function handleClientUsers(req: VercelRequest, res: VercelResponse, db: any, payload: TokenPayload | null) {
+  if (req.method === 'GET') {
+    let q = db.from('client_users')
+      .select('id, client_id, email, name, active, created_at, last_login') // nunca password_hash
+      .order('created_at', { ascending: true })
+      .limit(1000)
+    const clientId = req.query.clientId as string
+    if (clientId) q = q.eq('client_id', clientId)
+    const { data, error } = await q
+    if (error) throw error
+    return res.status(200).json({ users: (data || []).map((u: any) => ({
+      id: u.id,
+      clientId: u.client_id,
+      email: u.email,
+      name: u.name || '',
+      active: u.active ?? true,
+      createdAt: u.created_at,
+      lastLogin: u.last_login || null,
+    })) })
+  }
+
+  if (req.method === 'POST') {
+    const v = validate(z.object({
+      clientId: z.string().min(1).max(100),
+      email: z.string().email('El email no tiene un formato válido').max(200),
+      name: z.string().max(200).optional(),
+      password: z.string().min(8, 'La contraseña debe tener al menos 8 caracteres').max(200),
+    }), req.body)
+    if (!v.ok) return res.status(400).json({ error: v.error })
+    const { clientId, email, name, password } = v.data
+    const cleanEmail = email.toLowerCase().trim()
+
+    const { data: client } = await db.from('clients').select('id, name').eq('id', clientId).maybeSingle()
+    if (!client) return res.status(404).json({ error: 'Cliente no encontrado' })
+
+    const password_hash = await hashPassword(password)
+    const { data: created, error } = await db.from('client_users').insert({
+      client_id: clientId,
+      email: cleanEmail,
+      name: (name || '').trim(),
+      password_hash,
+      active: true,
+    }).select('id').single()
+    if (error) {
+      if (String(error.code) === '23505') {
+        return res.status(409).json({ error: `Ya existe un acceso con el email ${cleanEmail}` })
+      }
+      throw error
+    }
+    logAudit(db, payload, 'crear acceso cliente', 'client_users', cleanEmail, { client_id: clientId })
+
+    // Email de bienvenida fire-and-forget (la contraseña NUNCA viaja por email;
+    // se comunica por otro canal, igual que los partners).
+    const emailBrand = resolveEmailBrand(req.headers.origin || req.headers.referer)
+    try {
+      sendMail({
+        to: cleanEmail,
+        from: emailBrand.displayName,
+        ...welcomeClientEmail({ name: (name || '').trim() || client.name || cleanEmail, email: cleanEmail }, emailBrand),
+      })
+        .then(result => {
+          if (!result.ok) console.warn(`[welcome-client-user] not sent to ${cleanEmail}: ${result.error}`)
+        })
+        .catch(err => console.warn('[welcome-client-user] failed:', err))
+    } catch (err) {
+      console.warn('[welcome-client-user] failed:', err)
+    }
+
+    return res.status(201).json({ created: true, id: created.id })
+  }
+
+  if (req.method === 'PATCH') {
+    const id = req.query.id as string
+    if (!id) return res.status(400).json({ error: 'id required' })
+    const v = validate(z.object({
+      active: z.boolean().optional(),
+      password: z.string().min(8, 'La contraseña debe tener al menos 8 caracteres').max(200).optional(),
+      name: z.string().max(200).optional(),
+    }), req.body || {})
+    if (!v.ok) return res.status(400).json({ error: v.error })
+    const updates: Record<string, unknown> = {}
+    if (typeof v.data.active === 'boolean') updates.active = v.data.active
+    if (v.data.password) updates.password_hash = await hashPassword(v.data.password)
+    if (v.data.name !== undefined) updates.name = v.data.name.trim()
+    if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No valid fields' })
+    const { data: u, error } = await db.from('client_users').update(updates).eq('id', id).select('email').maybeSingle()
+    if (error) throw error
+    if (!u) return res.status(404).json({ error: 'Acceso no encontrado' })
+    logAudit(db, payload, 'active' in updates
+      ? (updates.active ? 'activar acceso cliente' : 'desactivar acceso cliente')
+      : ('password_hash' in updates ? 'resetear contraseña cliente' : 'editar acceso cliente'),
+      'client_users', u.email || id)
+    return res.status(200).json({ updated: true })
+  }
+
+  if (req.method === 'DELETE') {
+    const id = req.query.id as string
+    if (!id) return res.status(400).json({ error: 'id required' })
+    const { data: u } = await db.from('client_users').select('email').eq('id', id).maybeSingle()
+    const { error } = await db.from('client_users').delete().eq('id', id)
+    if (error) throw error
+    logAudit(db, payload, 'eliminar acceso cliente', 'client_users', u?.email || id)
     return res.status(200).json({ deleted: true })
   }
 

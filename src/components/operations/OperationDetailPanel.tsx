@@ -13,6 +13,7 @@ import {
 } from '@/lib/operationsTypes'
 import { fmtDateDMY } from '@/lib/format'
 import { parseCntr, serializeCntr, normalizeCntr, isStandardCntr } from '@/lib/cntrUtils'
+import { canonicalizeCliente, type CatalogClient } from '@/lib/clientCatalog'
 import type { OriginPhoto, OperativeReport } from '@/lib/quotationTypes'
 import ViabilityBlock from './ViabilityBlock'
 import ContainerDatesSection, { reconcileOperativasToCntrs, type ContainerDatesHandle } from './ContainerDatesSection'
@@ -154,6 +155,7 @@ export default function OperationDetailPanel({
   hoy,
   knownDepositos = [],
   knownTransportes = [],
+  knownClientes = [],
   originPhotos,
   reports,
   onUpdateOriginPhotos,
@@ -171,6 +173,8 @@ export default function OperationDetailPanel({
   operatorById: Map<string, Operator>
   hoy: Date
   knownDepositos?: string[]
+  /** Catálogo de clientes → datalist + canonicalización del campo Cliente. */
+  knownClientes?: CatalogClient[]
   knownTransportes?: string[]
   /** Fotos e informes de todas las operaciones (sección "Fotos e informes");
    *  el panel filtra por op.ref. Si no se threadean, la sección no se muestra. */
@@ -208,6 +212,9 @@ export default function OperationDetailPanel({
   const commit = (key: keyof UnifiedOperation, v: unknown) => {
     const mode = editModeFor(op, key)
     if (!mode || !op.dbId) return
+    // Cliente: si lo tipeado matchea un alias del catálogo, guardar el nombre
+    // canónico (unificación de clientes). Texto libre sigue permitido.
+    if (key === 'cliente' && typeof v === 'string') v = canonicalizeCliente(v, knownClientes)
     if (mode.kind === 'db') {
       // Campos que viven también por contenedor (operativa, libre, depósito, dev,
       // descarga…) se propagan al array operativas: la Agenda/HOY/chips leen el
@@ -250,6 +257,8 @@ export default function OperationDetailPanel({
 
   const assigned = op.operatorId ? operatorById.get(op.operatorId) : null
   const eligible = operatorsForMode(operators, op.mode)
+  // Nombres canónicos del catálogo → datalist del campo Cliente.
+  const clienteOptions = knownClientes.map(c => c.name).filter(Boolean).sort((a, b) => a.localeCompare(b, 'es'))
   // El estado de la FCL es DERIVADO (de las fechas de operativa) — read-only, como
   // en la planilla. Editable solo en LCL/aéreo/terrestre sin camión.
   const statusEditable = op.source === 'db' && op.mode !== 'fcl' && !!op.dbId && !truckStatus
@@ -469,6 +478,7 @@ export default function OperationDetailPanel({
                     dateDisplay={f.dateDisplay}
                     segVencido={f.key === 'seguimiento' && segVencido}
                     boxClass={tone.box}
+                    options={f.key === 'cliente' && clienteOptions.length > 0 ? clienteOptions : undefined}
                     onCommit={commit}
                   />
                 ))}
@@ -581,6 +591,7 @@ function FieldRow({
   dateDisplay,
   segVencido,
   boxClass,
+  options,
   onCommit,
 }: {
   label: string
@@ -593,10 +604,16 @@ function FieldRow({
   segVencido?: boolean
   /** Borde teñido según la sección (SECTION_TONES.box). */
   boxClass?: string
+  /** Sugerencias conocidas (datalist) — texto libre sigue permitido. */
+  options?: string[]
   onCommit: (key: keyof UnifiedOperation, v: unknown) => void
 }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
+  const boxRef = useRef<HTMLDivElement>(null)
+  // true cuando la edición arrancó tipeando (type-to-edit): caret al final del
+  // seed en vez de seleccionar todo (si no, la 2ª tecla pisa la 1ª).
+  const seededRef = useRef(false)
   const mode = editModeFor(op, fieldKey)
   const raw = (op as unknown as Record<string, unknown>)[fieldKey]
 
@@ -612,9 +629,10 @@ function FieldRow({
   const rawStr = String(raw ?? '')
   const editAsDate = (kind === 'date' || dateDisplay) && (rawStr === '' || /^\d{4}-\d{2}-\d{2}$/.test(rawStr))
 
-  const startEdit = () => {
+  const startEdit = (seed?: string) => {
     if (!mode) return
-    setDraft(String(raw ?? ''))
+    seededRef.current = seed !== undefined
+    setDraft(seed !== undefined ? seed : String(raw ?? ''))
     setEditing(true)
   }
   const save = () => {
@@ -629,33 +647,62 @@ function FieldRow({
     const v = draft.trim()
     if (String(raw ?? '') !== String(v)) onCommit(fieldKey, v)
   }
+  // Al guardar con Enter (o cancelar con Escape) el input se desmonta y el foco
+  // caía al body → se cortaba la cadena de Tab. Devolverlo al cuadro. (Con Tab
+  // no hace falta: el blur guarda y el foco salta solo al siguiente cuadro.)
+  const refocus = () => requestAnimationFrame(() => boxRef.current?.querySelector('button')?.focus())
 
   return (
     <div
+      ref={boxRef}
       className={`group rounded-lg border p-2.5 min-w-0 ${
         segVencido ? 'border-red-300 bg-red-50' : `bg-card ${boxClass || ''}`
       } ${wide ? 'col-span-2' : ''}`}
     >
       <div className="text-[10px] uppercase tracking-wide text-muted-foreground leading-none mb-1">{label}</div>
       {editing ? (
-        <Input
-          autoFocus
-          type={editAsDate ? 'date' : undefined}
-          value={draft}
-          onChange={e => setDraft(e.target.value)}
-          onFocus={e => e.target.select()}
-          onBlur={save}
-          onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
-          className="h-8 text-sm px-1.5"
-          inputMode={kind === 'number' ? 'decimal' : undefined}
-        />
+        <>
+          <Input
+            autoFocus
+            type={editAsDate ? 'date' : undefined}
+            list={options ? `fr-list-${String(fieldKey)}` : undefined}
+            value={draft}
+            onChange={e => setDraft(e.target.value)}
+            onFocus={e => {
+              const el = e.target as HTMLInputElement
+              if (seededRef.current) { try { el.setSelectionRange(el.value.length, el.value.length) } catch { /* type=date no soporta selección */ } }
+              else el.select()
+            }}
+            onBlur={save}
+            onKeyDown={e => {
+              if (e.key === 'Enter') { save(); refocus() }
+              if (e.key === 'Escape') { setEditing(false); refocus() }
+            }}
+            className="h-8 text-sm px-1.5"
+            inputMode={kind === 'number' ? 'decimal' : undefined}
+          />
+          {options && (
+            <datalist id={`fr-list-${String(fieldKey)}`}>
+              {options.map(o => <option key={o} value={o} />)}
+            </datalist>
+          )}
+        </>
       ) : (
         <button
           type="button"
-          onClick={startEdit}
+          onClick={() => startEdit()}
+          onKeyDown={e => {
+            // Type-to-edit: tipear abre la edición con ese carácter ya puesto
+            // (fechas se abren con Enter — el editor type=date no acepta seed).
+            if (!mode || editAsDate) return
+            if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+              e.preventDefault()
+              startEdit(e.key)
+            }
+          }}
           disabled={!mode}
-          className={`text-left w-full min-w-0 ${mode ? 'cursor-text hover:opacity-70' : 'cursor-default'}`}
-          title={mode ? 'Hacé clic para editar (Enter guarda · Esc cancela)' : 'Solo lectura (viene de la planilla)'}
+          className={`text-left w-full min-w-0 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-1 ${mode ? 'cursor-text hover:opacity-70' : 'cursor-default'}`}
+          title={mode ? 'Hacé clic o Enter para editar · Tab guarda y salta al siguiente' : 'Solo lectura (viene de la planilla)'}
         >
           <span
             className={`text-[15px] leading-tight break-words ${

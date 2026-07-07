@@ -46,6 +46,7 @@ import type { ParsedShipment } from '@/lib/shipmentTypes'
 import type { Operator, OperatorAssignment, Modality, UnifiedOperation, DbShipment } from '@/lib/operationsTypes'
 import type { Truck, TruckLoad } from '@/lib/truckTypes'
 import type { OriginPhoto, OperativeReport } from '@/lib/quotationTypes'
+import type { CatalogClient } from '@/lib/clientCatalog'
 import {
   buildOperations,
   deriveKnownTransportes,
@@ -62,6 +63,7 @@ import {
   statusBadgeClass,
 } from '@/lib/operationsTypes'
 import { fmtDateDMY, fmtNum as fmtNumUY } from '@/lib/format'
+import { needsTelexAlert } from '@/lib/telexCheck'
 import { useBrand } from '@/lib/brand'
 import { listPlanClientes, downloadPlanOperativoPdf } from '@/lib/planOperativoPdf'
 
@@ -75,6 +77,9 @@ interface OperationsGridProps {
   truckLoads?: TruckLoad[]
   operators: Operator[]
   assignments: OperatorAssignment[]
+  /** Catálogo de clientes → datalist + canonicalización del campo Cliente
+   *  (alta y panel de detalle). */
+  clients?: CatalogClient[]
   /** Fotos de carga + informes PDF → sección "Fotos e informes" del panel de detalle. */
   originPhotos?: OriginPhoto[]
   reports?: OperativeReport[]
@@ -128,6 +133,7 @@ export default function OperationsGrid({
   truckLoads,
   operators,
   assignments,
+  clients = [],
   originPhotos,
   reports,
   onUpdateOriginPhotos,
@@ -917,6 +923,7 @@ export default function OperationsGrid({
             return ok
           }}
           suggestedRef={suggestedRef}
+          clientes={clients}
         />
       )}
 
@@ -1022,6 +1029,7 @@ export default function OperationsGrid({
         hoy={hoy}
         knownDepositos={knownDepositos}
         knownTransportes={knownTransportes}
+        knownClientes={clients}
         originPhotos={originPhotos}
         reports={reports}
         onUpdateOriginPhotos={onUpdateOriginPhotos}
@@ -1293,6 +1301,10 @@ function ExpandedSummary({ op, truckStatus }: { op: UnifiedOperation; truckStatu
   if (op.oog) flags.push({ text: 'OOG', cls: 'bg-red-100 text-red-700' })
   if (op.imo) flags.push({ text: 'IMO', cls: 'bg-red-100 text-red-700' })
   if (op.tlx === 'SI') flags.push({ text: 'Telex', cls: 'bg-emerald-100 text-emerald-700' })
+  // Sin telex con salida ya coordinada = fuego: no se puede retirar el contenedor.
+  else if ((op.mode === 'fcl' || op.mode === 'lcl') && needsTelexAlert({ tlx: op.tlx, fecha: op.salida })) {
+    flags.push({ text: '🚨 SIN TELEX', cls: 'bg-red-100 text-red-700' })
+  }
 
   return (
     <div className="space-y-1.5">

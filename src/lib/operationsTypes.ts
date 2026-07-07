@@ -410,7 +410,7 @@ function fclColumnsStatus(s: DbShipment): string {
 export function dbFclToParsedShipment(d: DbShipment): ParsedShipment {
   const hasOp = !!(d.salida || d.eta_fiscal || d.libre || d.operativa || d.deposito || d.descarga || d.dev)
   const op: OperativasRecord = {
-    REF: d.ref, TLX: '', DEPOSITO: d.deposito || '', ETA_OP: '', SALIDA: d.salida || '',
+    REF: d.ref, TLX: d.telex ? 'SI' : '', DEPOSITO: d.deposito || '', ETA_OP: '', SALIDA: d.salida || '',
     ETA_FISC: d.eta_fiscal || '', LIBRE: d.libre || '', OPERATIVA: d.operativa || '',
     CNTR_OP: d.contenedor || '', PKGS: d.pkgs || 0, KG: d.kg || 0, M3: d.m3 || 0,
     DESCRIPCION: d.observacion || '', FISCAL: d.fiscal || '', DESCARGA: d.descarga || '',
@@ -421,7 +421,9 @@ export function dbFclToParsedShipment(d: DbShipment): ParsedShipment {
   // si no (legacy/colapsado), reconstruir 1 operativa desde las columnas.
   const ops: OperativasRecord[] = Array.isArray(d.operativas) && d.operativas.length
     ? d.operativas.map(o => ({
-        REF: d.ref, TLX: '', DEPOSITO: o.DEPOSITO || d.deposito || '', ETA_OP: o.ETA_OP || '',
+        // TLX: el telex vive en la columna booleana `telex` (nivel carga) — el
+        // array por contenedor no lo trae. Sin esto, Agenda/HOY veían '' siempre.
+        REF: d.ref, TLX: o.TLX || (d.telex ? 'SI' : ''), DEPOSITO: o.DEPOSITO || d.deposito || '', ETA_OP: o.ETA_OP || '',
         SALIDA: o.SALIDA || '', ETA_FISC: o.ETA_FISC || '', LIBRE: o.LIBRE || d.libre || '',
         OPERATIVA: o.OPERATIVA || d.operativa || '', CNTR_OP: o.CNTR_OP || '',
         PKGS: o.PKGS || 0, KG: o.KG || 0, M3: o.M3 || 0, DESCRIPCION: o.DESCRIPCION || '',

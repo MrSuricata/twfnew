@@ -17,6 +17,7 @@ import {
   DEPOSITOS_UY, STATUS_OPTIONS,
 } from '@/lib/operationsTypes'
 import { parseCntr } from '@/lib/cntrUtils'
+import { canonicalizeCliente, type CatalogClient } from '@/lib/clientCatalog'
 
 // ── Alta de carga COMPLETA ───────────────────────────────────────────────
 // Obligatorios: Ref + Cliente + Modalidad (decisión tomada — no cambiar).
@@ -120,6 +121,7 @@ export default function NewShipmentDialog({
   operators,
   onCreate,
   suggestedRef = '',
+  clientes = [],
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
@@ -128,6 +130,10 @@ export default function NewShipmentDialog({
   onCreate: (row: DbShipment) => boolean | void
   /** Próxima ref FCL libre (máx A#### + 1) — se ofrece al elegir modo FCL. */
   suggestedRef?: string
+  /** Catálogo de clientes: alimenta el datalist del campo Cliente y la
+   *  canonicalización al blur (alias tipeado → nombre canónico). Texto libre
+   *  sigue permitido. */
+  clientes?: CatalogClient[]
 }) {
   // Modalidad SIN default: es obligatoria y el operativo la elige a conciencia.
   const [mode, setMode] = useState<Modality | null>(null)
@@ -321,14 +327,27 @@ export default function NewShipmentDialog({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="ns-cli">Cliente / Cnee <span className="text-red-600">*</span></Label>
+              {/* Datalist con los nombres canónicos del catálogo. Texto libre
+                  permitido; si lo tipeado matchea un alias conocido, al blur se
+                  reemplaza por el nombre canónico (unificación de clientes). */}
               <Input
                 id="ns-cli"
+                list="ns-cli-list"
                 value={f.cliente}
                 onChange={e => set('cliente', e.target.value)}
+                onBlur={() => {
+                  const canon = canonicalizeCliente(f.cliente, clientes)
+                  if (canon !== f.cliente) set('cliente', canon)
+                }}
                 placeholder="Cliente"
                 aria-invalid={showErrors && missingCliente}
                 className={showErrors && missingCliente ? 'border-red-400' : undefined}
               />
+              <datalist id="ns-cli-list">
+                {[...clientes].sort((a, b) => a.name.localeCompare(b.name, 'es')).map(c => (
+                  <option key={c.name} value={c.name} />
+                ))}
+              </datalist>
               {showErrors && missingCliente && <p className="text-xs text-red-600">Completá el cliente</p>}
             </div>
             <div className="space-y-1.5 col-span-2">

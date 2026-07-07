@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { createECDH } from 'node:crypto'
 import { getSupabase } from '../_lib/supabase.js'
 import { authenticateRequest, type AdminPayload } from '../_lib/jwt.js'
 import {
@@ -36,6 +37,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (action === 'push-alerts') return handlePushAlerts(req, res)
   // Alias legacy: el botón de prueba de Equipo sigue pegándole a push-daily.
   if (action === 'push-daily') return handlePushAlerts(req, res, 'manana')
+  if (action === 'push-status') return handlePushStatus(req, res)
   return res.status(404).json({ error: `Unknown action: ${action}` })
 }
 
@@ -285,6 +287,69 @@ function resolveSlot(req: VercelRequest, forced?: PushSlot): PushSlot | null {
   return null
 }
 
+/** Compara la clave privada de la env var con la pública hardcodeada (par P-256).
+ *  Detecta el caso silencioso en que la privada cargada en Vercel es de OTRO par:
+ *  los push services devuelven 403 y nada llega, sin error visible. */
+function vapidPairStatus(priv: string | undefined): 'ok' | 'missing' | 'mismatch' | 'invalid' {
+  if (!priv || !priv.trim()) return 'missing'
+  try {
+    const ecdh = createECDH('prime256v1')
+    ecdh.setPrivateKey(Buffer.from(priv.trim(), 'base64url'))
+    const pub = ecdh.getPublicKey(undefined, 'uncompressed').toString('base64url')
+    return pub === VAPID_PUBLIC_KEY ? 'ok' : 'mismatch'
+  } catch {
+    return 'invalid'
+  }
+}
+
+// GET /api/notifications/push-status — diagnóstico (solo owner). Responde por
+// ESTE proyecto Vercel (twf y med tienen env vars separadas): estado de la
+// clave VAPID, CRON_SECRET, suscripciones vivas y últimos envíos del push_log.
+// Existe porque los logs runtime de Hobby duran 1 hora — sin esto, un cron que
+// falla (401/503) es invisible.
+async function handlePushStatus(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
+  const payload = authenticateRequest(req.headers.authorization)
+  const isOwner = !!payload && payload.role === 'admin' && (payload as AdminPayload).level !== 'admin'
+  if (!isOwner) return res.status(401).json({ error: 'Unauthorized' })
+
+  try {
+    const db = getSupabase()
+    const [subsRes, logRes] = await Promise.all([
+      db.from('push_subscriptions')
+        .select('admin_email, user_agent, created_at, alert_libre, alert_salidas, alert_fiscal, alert_frontera')
+        .order('created_at', { ascending: false }),
+      db.from('push_log')
+        .select('date_key, sent_at, payload_resumen')
+        .order('sent_at', { ascending: false })
+        .limit(10),
+    ])
+    if (subsRes.error) throw subsRes.error
+    if (logRes.error) throw logRes.error
+
+    return res.status(200).json({
+      proyecto: process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL || 'local',
+      vapid: vapidPairStatus(process.env.VAPID_PRIVATE_KEY),
+      cronSecret: !!process.env.CRON_SECRET,
+      suscripciones: (subsRes.data || []).map(s => ({
+        email: s.admin_email,
+        navegador: s.user_agent || '',
+        creada: s.created_at,
+        prefs: {
+          libre: s.alert_libre !== false,
+          salidas: s.alert_salidas !== false,
+          fiscal: s.alert_fiscal !== false,
+          frontera: s.alert_frontera !== false,
+        },
+      })),
+      ultimosEnvios: logRes.data || [],
+    })
+  } catch (error: any) {
+    console.error('[push-status] Error:', error?.message || error)
+    return res.status(500).json({ error: 'No se pudo armar el diagnóstico' })
+  }
+}
+
 async function handlePushAlerts(req: VercelRequest, res: VercelResponse, forcedSlot?: PushSlot) {
   // GET = cron de Vercel · POST = botón "Enviar resumen de prueba" (Equipo)
   if (req.method !== 'GET' && req.method !== 'POST') {
@@ -373,6 +438,10 @@ async function handlePushAlerts(req: VercelRequest, res: VercelResponse, forcedS
 
     let sent = 0
     const dead = new Set<string>()
+    // Errores de envío por código HTTP (403 = clave VAPID que no corresponde al
+    // par de la pública; network = sin respuesta) — visibles en push_log y en la
+    // respuesta del botón de prueba, si no quedan invisibles con Hobby (logs 1h).
+    const errores: Record<string, number> = {}
     const porTipo: Array<{ kind: string; count: number; sentTo: number }> = []
 
     // Tipo por tipo (secuencial) para que las notificaciones lleguen en orden;
@@ -404,7 +473,11 @@ async function handlePushAlerts(req: VercelRequest, res: VercelResponse, forcedS
             const code = e?.statusCode
             // 404/410 = suscripción muerta (navegador la dio de baja) → limpiarla
             if (code === 404 || code === 410) dead.add(s.endpoint)
-            else console.error('[push-alerts] send falló:', code, e?.message || e)
+            else {
+              const k = String(code || 'network')
+              errores[k] = (errores[k] || 0) + 1
+              console.error('[push-alerts] send falló:', code, e?.message || e)
+            }
           }
         })
       )
@@ -415,14 +488,16 @@ async function handlePushAlerts(req: VercelRequest, res: VercelResponse, forcedS
       await db.from('push_subscriptions').delete().in('endpoint', [...dead])
     }
 
+    const fallidos = Object.entries(errores).map(([k, n]) => `${n}×${k}`).join(', ')
+    const resumenFinal = `[${slot}] ${resumenTipos} → ${sent} enviados${fallidos ? ` · ⚠️ fallidos: ${fallidos}` : ''}`
     await db.from('push_log').upsert(
-      { date_key: dateKey, sent_at: new Date().toISOString(), payload_resumen: `[${slot}] ${resumenTipos} → ${sent} enviados` },
+      { date_key: dateKey, sent_at: new Date().toISOString(), payload_resumen: resumenFinal },
       { onConflict: 'date_key' }
     )
 
-    return res.status(200).json({ slot, sent, muertas: dead.size, resumen: resumenTipos, alerts: porTipo })
+    return res.status(200).json({ slot, sent, muertas: dead.size, errores, resumen: resumenTipos, alerts: porTipo })
   } catch (error: any) {
     console.error('[push-alerts] Error:', error?.message || error)
-    return res.status(500).json({ error: 'No se pudieron enviar las alertas push' })
+    return res.status(500).json({ error: `No se pudieron enviar las alertas push${error?.message ? ` — ${error.message}` : ''}` })
   }
 }
