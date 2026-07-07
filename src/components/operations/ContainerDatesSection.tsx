@@ -411,7 +411,7 @@ const ContainerDatesSection = forwardRef<ContainerDatesHandle, {
                 <span className="text-[12px] font-mono font-medium text-foreground truncate" title={cntr}>
                   {cntr}
                 </span>
-                <span className="text-[11px] text-muted-foreground whitespace-nowrap shrink-0" title="Estado derivado">
+                <span className="text-[11px] text-muted-foreground whitespace-nowrap shrink-0" title="Estado calculado según las fechas del contenedor (no se edita)">
                   {status}
                 </span>
               </div>
@@ -436,7 +436,7 @@ const ContainerDatesSection = forwardRef<ContainerDatesHandle, {
                     </span>
                   )}
                   {isSalidaBeforeArrival(getDraft(i, 'SALIDA', rec.SALIDA || ''), rec.ETA_OP || op.eta || '') && (
-                    <span className="text-[10px] font-medium text-red-600 leading-tight">⏰ antes de llegada</span>
+                    <span className="text-[10px] font-medium text-red-600 leading-tight">⏰ salida antes de la llegada a MVD</span>
                   )}
                 </div>
 
@@ -461,7 +461,7 @@ const ContainerDatesSection = forwardRef<ContainerDatesHandle, {
 
                 {/* Lugar de salida — discrete pick: commit onChange */}
                 <div className="flex flex-col gap-0.5">
-                  <span className="text-[10px] text-muted-foreground leading-none">Lugar</span>
+                  <span className="text-[10px] text-muted-foreground leading-none">Lugar de salida</span>
                   {editable ? (
                     <select
                       value={rec.LUGAR_SALIDA || ''}

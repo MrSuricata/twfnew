@@ -110,8 +110,9 @@ const SECTIONS: { title: string; tone: SectionTone; fields: { key: keyof Unified
       // 'camion' NO va acá: era un texto editable que confundía (setearlo NO sube
       // la carga al camión — eso se hace en el armador → "cargas disponibles").
       // El camión real se muestra derivado en el badge del header (truckStatus).
+      // 'dev' se movió a "Datos clave de la carga" (ViabilityBlock, "Devuelve en",
+      // al lado del LIBRE) — no duplicar acá.
       { key: 'despacho', label: 'Despacho' },
-      { key: 'dev', label: 'DEV' },
     ],
   },
 ]
@@ -404,7 +405,7 @@ export default function OperationDetailPanel({
                 <span
                   key={`${c}-${i}`}
                   className={`inline-flex items-center gap-1 rounded-full border px-3 py-1 text-sm font-mono ${isStandardCntr(c) ? 'bg-muted/50' : 'bg-amber-50 border-amber-300 text-amber-800'}`}
-                  title={isStandardCntr(c) ? c : `${c} — formato no estándar`}
+                  title={isStandardCntr(c) ? c : `${c} — no parece un número de contenedor válido, revisalo`}
                 >
                   {c}
                   {cntrEditable && (
@@ -654,7 +655,7 @@ function FieldRow({
           onClick={startEdit}
           disabled={!mode}
           className={`text-left w-full min-w-0 ${mode ? 'cursor-text hover:opacity-70' : 'cursor-default'}`}
-          title={mode ? 'Click para editar (Enter guarda · Esc cancela)' : 'Solo lectura (viene de la planilla)'}
+          title={mode ? 'Hacé clic para editar (Enter guarda · Esc cancela)' : 'Solo lectura (viene de la planilla)'}
         >
           <span
             className={`text-[15px] leading-tight break-words ${

@@ -251,10 +251,12 @@ export default function AgendaCalendar({
     return count
   }, [shipments])
 
-  // Event selection → admin: open ContainerQuickEdit for FCL containers (have __dbId);
-  // read-only views or truck/non-FCL events: open ShipmentDetailsDialog.
+  // Event selection → admin: open ContainerQuickEdit for editable DB rows (have
+  // __dbId) AUNQUE la carga no tenga contenedor asignado todavía (cntr '') — si
+  // no, una carga recién creada caía a la vista VIEJA de solo lectura. Los hitos
+  // de camión 🚛 (shipment sintético SIN __dbId) siguen en ShipmentDetailsDialog.
   const handleSelectShipment = useCallback((event: CalendarEvent) => {
-    if (editable && event.shipment?.__dbId && event.cntr) {
+    if (editable && event.shipment?.__dbId) {
       setQuickEditEvent(event)
       setQuickEditOpen(true)
     } else {
@@ -272,9 +274,12 @@ export default function AgendaCalendar({
 
   // Opens ContainerQuickEdit for a pending-salida card.
   // Builds a minimal synthetic CalendarEvent with all required CalendarEvent fields.
+  // cntr puede ser '' (carga sin contenedor asignado): matchea la operativa con
+  // CNTR_OP vacío o cae a la primera — el quick-edit funciona igual.
   const openQuickEditFor = useCallback((shipment: ParsedShipment, cntr: string) => {
-    if (!editable || !shipment.__dbId || !cntr) return
-    const op = (shipment.operativas ?? []).find(o => (o.CNTR_OP || shipment.CNTR) === cntr)
+    if (!editable || !shipment.__dbId) return
+    const ops = shipment.operativas ?? []
+    const op = ops.find(o => (o.CNTR_OP || shipment.CNTR || '') === cntr) ?? (cntr === '' ? ops[0] : undefined)
     if (!op) return
     const synthEvent: CalendarEvent = {
       id: `${shipment.REF}-${cntr}-salida`,
@@ -516,12 +521,13 @@ export default function AgendaCalendar({
         />
       )}
 
-      {/* Admin quick-edit modal — ContainerQuickEdit (editable=true only) */}
-      {editable && quickEditEvent?.shipment && quickEditEvent.cntr && (
+      {/* Admin quick-edit modal — ContainerQuickEdit (editable=true only). cntr
+          puede ser '' (carga sin contenedor asignado): edita su única operativa. */}
+      {editable && quickEditEvent?.shipment && (
         <ContainerQuickEdit
-          key={`${quickEditEvent.cntr}-${quickEditEvent.shipment.REF}`}
+          key={`${quickEditEvent.cntr || 'sin-cntr'}-${quickEditEvent.shipment.REF}`}
           shipment={quickEditEvent.shipment}
-          cntr={quickEditEvent.cntr}
+          cntr={quickEditEvent.cntr || ''}
           editable={!!onPatchShipment}
           knownTransportes={knownTransportes}
           open={quickEditOpen}

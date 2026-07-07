@@ -223,6 +223,9 @@ export default function TruckBuilder(props: TruckBuilderProps) {
     // Aviso inmediato al agregar una carga especial
     if (s.no_apilable) toast.warning(`📦 ${s.ref} es NO APILABLE — va arriba de todo`, { duration: 6000 })
     if (s.imo) toast.warning(`☢️ ${s.ref} lleva mercancía peligrosa (IMO)`, { duration: 6000 })
+    // Madera "a confirmar" (null) entra al camión como No — confirmarla ANTES
+    // de imprimir el plan (WOOD=SI dispara SENASA en frontera).
+    if (s.wood === null) toast.warning(`🪵 ${s.ref}: madera sin confirmar — confirmala en la carga antes de imprimir el plan`, { duration: 8000 })
   }
 
   // ── Crear carga desde el armador ──
