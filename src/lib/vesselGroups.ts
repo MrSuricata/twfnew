@@ -8,6 +8,9 @@
 
 import { parseLocalDate } from './shipmentTypes'
 import type { OperativasRecord } from './shipmentTypes'
+import type { UnifiedOperation } from './operationsTypes'
+import { parseCntr } from './cntrUtils'
+import { resolveRecord } from '@/components/operations/ContainerDatesSection'
 
 /** Días máximos entre ETAs consecutivas para considerarlas el MISMO viaje. */
 export const VOYAGE_WINDOW_DAYS = 25
@@ -83,19 +86,43 @@ export function groupByVoyage<T extends { buque: string; eta: string }>(ops: T[]
 }
 
 /**
- * Patch para correr la ETA de UNA carga del viaje: columna `eta` + propagación
- * de ETA_OP a todos los contenedores del array (preservando el resto de los
- * campos — el rollup del server recomputa salida/eta_fiscal/contenedor desde el
- * MISMO array, así que nada cambia salvo la ETA). ETA_OP alimenta los chequeos
- * "salida antes de llegada", por eso debe viajar junto con la columna.
+ * Patch para correr la ETA de UNA carga del viaje: columna `eta` + ETA_OP
+ * propagado al array por contenedor (alimenta el chequeo "salida antes de
+ * llegada" y el micro-status).
+ *
+ * ⚠️ El rollup del server recomputa TODAS las columnas (salida/eta_fiscal/dev/
+ * descarga/deposito/operativa/contenedor) desde el array que mandamos — un
+ * campo VACÍO en el array BORRARÍA la columna. Muchas cargas legacy tienen
+ * drift (array con DEV/SALIDA/CNTR_OP vacíos pero columna con dato), así que
+ * acá se CURA antes de mandar:
+ *  1. reconciliación por contenedor (resolveRecord: una entrada por CNTR, con
+ *     CNTR_OP estampado — el contenedor no se pierde), y
+ *  2. siembra de campos vacíos del array desde la columna correspondiente.
+ * Los valores ya cargados en el array NUNCA se pisan (solo se llenan vacíos).
  */
-export function buildEtaShiftPatch(
-  op: { eta: string; operativas?: OperativasRecord[] },
-  newEta: string,
-): Record<string, unknown> {
+export function buildEtaShiftPatch(op: UnifiedOperation, newEta: string): Record<string, unknown> {
   const patch: Record<string, unknown> = { eta: newEta }
-  if (op.operativas && op.operativas.length > 0) {
-    patch.operativas = op.operativas.map(o => ({ ...o, ETA_OP: newEta }))
-  }
+  const cntrs = parseCntr(op.cntr)
+  const existing = op.operativas || []
+  // Sin array NI contenedores → solo la columna (no fabricar operativas de la nada).
+  if (cntrs.length === 0 && existing.length === 0) return patch
+
+  // Una entrada por contenedor (preserva las matcheadas por CNTR_OP, sintetiza
+  // las nuevas con CNTR_OP estampado); sin lista de contenedores, las existentes.
+  const base = cntrs.length > 0
+    ? cntrs.map((_, i) => resolveRecord(cntrs, existing, i, op))
+    : existing
+
+  patch.operativas = base.map(o => ({
+    ...o,
+    ETA_OP: newEta,
+    SALIDA: o.SALIDA || op.salida || '',
+    ETA_FISC: o.ETA_FISC || op.etaFisc || '',
+    DEV: o.DEV || op.dev || '',
+    DESCARGA: o.DESCARGA || op.descarga || '',
+    DEPOSITO: o.DEPOSITO || op.deposito || '',
+    OPERATIVA: o.OPERATIVA || op.operativa || '',
+    LIBRE: o.LIBRE || op.libre || '',
+  }))
   return patch
 }

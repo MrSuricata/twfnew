@@ -638,13 +638,15 @@ export interface ColumnDef {
 
 // Ancho FIJO de la 1ª columna congelada (Ref). Debe coincidir con su `w` y con
 // el `stickyLeft` de la 2ª congelada (Cliente arranca donde termina Ref).
-// 92px = chevron de expansión (16) + la ref ("A7808 B").
-const STICKY_REF_W = 92
+// 134px = chevron (12) + cuadrito modalidad (8) + ref dividida ("A7808 B") +
+// candado readOnly + ✏️ web-edited + padding — medido en navegador real; con
+// table-fixed la celda trunca, así que el ancho tiene que cubrir los indicadores.
+const STICKY_REF_W = 134
 
 export const OPERATION_COLUMNS: ColumnDef[] = [
   // Congeladas (sticky-left): Ref y Cliente quedan fijas al scrollear horizontal.
   // Van SIEMPRE primeras (Ref, luego Cliente), no se arrastran ni se ocultan.
-  { key: 'ref', label: 'Ref', defaultOn: true, sticky: true, stickyLeft: 0, w: 'w-[92px] max-w-[92px]' },
+  { key: 'ref', label: 'Ref', defaultOn: true, sticky: true, stickyLeft: 0, w: 'w-[134px] max-w-[134px]' },
   { key: 'cliente', label: 'Cliente / Cnee', defaultOn: true, sticky: true, stickyLeft: STICKY_REF_W, wrap: true, w: 'w-[150px] max-w-[150px]' },
   { key: 'clientRef', label: 'Ref Cliente', defaultOn: false, w: 'max-w-[90px]' },
   { key: 'operator', label: 'Operativo', defaultOn: true },

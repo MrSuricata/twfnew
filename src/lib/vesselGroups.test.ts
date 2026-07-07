@@ -1,9 +1,25 @@
 import { describe, it, expect } from 'vitest'
 import { groupByVoyage, buildEtaShiftPatch, VOYAGE_WINDOW_DAYS } from './vesselGroups'
 import type { OperativasRecord } from './shipmentTypes'
+import type { UnifiedOperation } from './operationsTypes'
 
 // El agrupador es genérico estructural: alcanza con { buque, eta }.
 const o = (buque: string, eta: string, ref = 'X') => ({ buque, eta, ref })
+
+// Factory de UnifiedOperation para buildEtaShiftPatch (campos relevantes).
+const mkOp = (over: Partial<UnifiedOperation> = {}): UnifiedOperation => ({
+  uid: 'u1', ref: 'A7881', clientRef: '', mode: 'fcl', source: 'db', dbId: 'id1',
+  readOnly: false, operatorId: null, cliente: 'AGROALDAO', shipper: '', agente: '',
+  incoterm: '', tlx: '', deposito: 'GODILCO', origin: '', etd: '', eta: '2026-07-10',
+  salida: '', etaFisc: '', libre: '', operativa: 'TRASIEGO', cntr: '',
+  docNumber: '', buque: 'EVER FAR', linea: '', camion: '', pkgs: 0, kg: 0, m3: 0,
+  descripcion: '', fiscal: '', dischargePort: '', pais: 'UY', destPort: '',
+  descarga: '', desconsol: '', entregaPlanta: false, dev: '', despacho: '',
+  tipo: '40HC', terminal: '', n: 1, wood: false, noApilable: false, oog: false,
+  imo: false, transporte: '', seguimiento: '', seguro: false, certi: false,
+  impresa: false, archived: false, status: '',
+  ...over,
+} as UnifiedOperation)
 
 describe('groupByVoyage — un grupo por VIAJE, no por buque', () => {
   it('mismo buque con ETAs cercanas (≤ ventana) → UN viaje', () => {
@@ -93,10 +109,11 @@ describe('buildEtaShiftPatch — cambiar la ETA del viaje sin romper nada', () =
   })
 
   it('setea la columna eta Y propaga ETA_OP a todos los contenedores, preservando el resto', () => {
-    const patch = buildEtaShiftPatch(
-      { eta: '2026-07-10', operativas: [rec({}), rec({ CNTR_OP: 'BBBB2222222', KG: 800 })] },
-      '2026-07-18',
-    )
+    const op = mkOp({
+      cntr: 'AAAA1111111, BBBB2222222',
+      operativas: [rec({}), rec({ CNTR_OP: 'BBBB2222222', KG: 800 })],
+    })
+    const patch = buildEtaShiftPatch(op, '2026-07-18')
     expect(patch.eta).toBe('2026-07-18')
     const ops = patch.operativas as OperativasRecord[]
     expect(ops).toHaveLength(2)
@@ -109,8 +126,57 @@ describe('buildEtaShiftPatch — cambiar la ETA del viaje sin romper nada', () =
     expect(ops[1].CNTR_OP).toBe('BBBB2222222')
   })
 
-  it('sin array operativas → patch solo de la columna eta', () => {
-    const patch = buildEtaShiftPatch({ eta: '2026-07-10' }, '2026-07-18')
+  it('sin array operativas NI contenedores → patch solo de la columna eta', () => {
+    const patch = buildEtaShiftPatch(mkOp({ cntr: '', operativas: undefined }), '2026-07-18')
     expect(patch).toEqual({ eta: '2026-07-18' })
+  })
+
+  // ── Cura del drift array↔columna (hallazgos del review adversarial) ──
+  // El rollup del server recomputa las columnas desde el array que mandamos:
+  // un campo vacío en el array BORRARÍA la columna. buildEtaShiftPatch siembra.
+
+  it('DRIFT DEV (caso A7881): array con DEV vacío + columna dev con valor → el array sale con el DEV de la columna (no se borra)', () => {
+    const op = mkOp({
+      cntr: 'AAAA1111111',
+      dev: 'STL',
+      operativas: [rec({ DEV: '' })],
+    })
+    const ops = buildEtaShiftPatch(op, '2026-07-18').operativas as OperativasRecord[]
+    expect(ops[0].DEV).toBe('STL')      // sembrado de la columna
+    expect(ops[0].ETA_OP).toBe('2026-07-18')
+  })
+
+  it('DRIFT CNTR: array sin CNTR_OP + columna contenedor con valor → CNTR_OP estampado (el rollup no borra el contenedor)', () => {
+    const op = mkOp({
+      cntr: 'HMMU2325664',
+      operativas: [rec({ CNTR_OP: '', SALIDA: '2026-07-09' })],
+    })
+    const ops = buildEtaShiftPatch(op, '2026-07-18').operativas as OperativasRecord[]
+    expect(ops.map(r => r.CNTR_OP).filter(Boolean)).toEqual(['HMMU2325664'])
+    expect(ops[0].SALIDA).toBe('2026-07-09') // la data existente se preserva
+  })
+
+  it('DRIFT SALIDA/DEPOSITO: vacíos en el array se siembran de la columna; los valores YA cargados no se pisan', () => {
+    const op = mkOp({
+      cntr: 'AAAA1111111, BBBB2222222',
+      salida: '2026-07-15',
+      deposito: 'PLANIR',
+      operativas: [
+        rec({ SALIDA: '', DEPOSITO: '' }),                        // vacíos → sembrar
+        rec({ CNTR_OP: 'BBBB2222222', SALIDA: '2026-07-16', DEPOSITO: 'GODILCO' }), // cargados → intactos
+      ],
+    })
+    const ops = buildEtaShiftPatch(op, '2026-07-18').operativas as OperativasRecord[]
+    expect(ops[0].SALIDA).toBe('2026-07-15')
+    expect(ops[0].DEPOSITO).toBe('PLANIR')
+    expect(ops[1].SALIDA).toBe('2026-07-16')
+    expect(ops[1].DEPOSITO).toBe('GODILCO')
+  })
+
+  it('carga con contenedores pero SIN array → sintetiza una entrada por contenedor con ETA_OP', () => {
+    const op = mkOp({ cntr: 'AAAA1111111, BBBB2222222', operativas: [] })
+    const ops = buildEtaShiftPatch(op, '2026-07-18').operativas as OperativasRecord[]
+    expect(ops.map(r => r.CNTR_OP)).toEqual(['AAAA1111111', 'BBBB2222222'])
+    expect(ops.every(r => r.ETA_OP === '2026-07-18')).toBe(true)
   })
 })

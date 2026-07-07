@@ -431,7 +431,8 @@ export default function OperationsGrid({
   const cellText = (op: UnifiedOperation, key: string): string => {
     switch (key) {
       case 'operator': return op.operatorId ? (operatorById.get(op.operatorId)?.name || '') : ''
-      case 'wood': return op.wood ? 'SI' : ''
+      // Tri-estado: null = a confirmar debe distinguirse de No en el CSV y el orden.
+      case 'wood': return op.wood ? 'SI' : op.wood === null ? 'A CONFIRMAR' : ''
       case 'noApilable': return op.noApilable ? 'SI' : ''
       case 'oog': return op.oog ? 'SI' : ''
       case 'imo': return op.imo ? 'SI' : ''

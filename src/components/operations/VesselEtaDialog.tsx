@@ -6,7 +6,7 @@
 // eta + ETA_OP propagada al array, todo lo demás intacto). Deshacer restaura
 // las ETAs previas exactas de cada carga.
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
@@ -39,6 +39,19 @@ export default function VesselEtaDialog({ open, onOpenChange, ops, onPatch }: Ve
   // Selección por grupo: set de uids EXCLUIDOS (default = todas seleccionadas).
   const [excluded, setExcluded] = useState<Set<string>>(new Set())
   const [newEta, setNewEta] = useState('')
+
+  // Estado LIMPIO en cada apertura: exclusiones/búsqueda/fecha de la sesión
+  // anterior no deben arrastrarse (una exclusión vieja invisible = carga que
+  // silenciosamente NO recibe la ETA nueva).
+  useEffect(() => {
+    if (open) { setSearch(''); setExpanded(null); setExcluded(new Set()); setNewEta('') }
+  }, [open])
+
+  // Ref siempre-fresco de las ops: el Deshacer del toast corre DESPUÉS (hasta
+  // 8s) y debe rearmar el patch sobre el estado ACTUAL de la carga, no sobre el
+  // snapshot del click (pisaría ediciones hechas en el medio).
+  const opsRef = useRef(ops)
+  opsRef.current = ops
 
   const groups = useMemo(() => groupByVoyage(ops), [ops])
 
@@ -73,18 +86,21 @@ export default function VesselEtaDialog({ open, onOpenChange, ops, onPatch }: Ve
   const applyToGroup = (g: VoyageGroup<UnifiedOperation>) => {
     const selected = g.ops.filter(o => !excluded.has(o.uid) && o.dbId)
     if (!newEta || selected.length === 0) return
-    // Snapshot para Deshacer: la ETA y el array previos de CADA carga.
-    const prev = selected.map(o => ({
-      dbId: o.dbId!,
-      patch: o.operativas && o.operativas.length > 0
-        ? { eta: o.eta, operativas: o.operativas }
-        : { eta: o.eta },
-    }))
+    // Para Deshacer guardamos SOLO la ETA previa de cada carga; el patch de
+    // undo se rearma sobre el estado FRESCO (opsRef) al momento del click —
+    // así no pisa otras ediciones hechas entre el aplicar y el deshacer.
+    const prev = selected.map(o => ({ uid: o.uid, dbId: o.dbId!, eta: o.eta }))
     for (const o of selected) onPatch(o.dbId!, buildEtaShiftPatch(o, newEta))
     toast.success(`ETA ${fmtDateDMY(newEta)} aplicada a ${selected.length} carga${selected.length === 1 ? '' : 's'} — ${g.buque}`, {
       action: {
         label: 'Deshacer',
-        onClick: () => { for (const p of prev) onPatch(p.dbId, p.patch) },
+        onClick: () => {
+          for (const p of prev) {
+            const fresh = opsRef.current.find(o => o.uid === p.uid)
+            if (fresh) onPatch(p.dbId, buildEtaShiftPatch(fresh, p.eta))
+            else onPatch(p.dbId, { eta: p.eta }) // ya no está en la lista: solo la columna
+          }
+        },
       },
       duration: 8000,
     })

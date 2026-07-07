@@ -87,7 +87,8 @@ interface FormState {
   // Indicadores
   telex: boolean
   noApilable: boolean
-  wood: boolean
+  /** Madera tri-estado: null = a confirmar (default de toda carga nueva). */
+  wood: boolean | null
   entregaPlanta: boolean
   seguro: boolean
   certi: boolean
@@ -104,7 +105,7 @@ const EMPTY_FORM: FormState = {
   docNumber: '', buque: '', linea: '', shipper: '', agente: '', incoterm: '', clientRef: '',
   contenedor: '', tipo: '', pkgs: '', kg: '', m3: '', descripcion: '',
   transporte: '', despacho: '', dev: '', terminal: '', descarga: '', status: 'en_origen',
-  telex: false, noApilable: false, wood: false, entregaPlanta: false,
+  telex: false, noApilable: false, wood: null, entregaPlanta: false,
   seguro: false, certi: false, impresa: false, imo: false, oog: false,
 }
 
@@ -244,10 +245,10 @@ export default function NewShipmentDialog({
   }
 
   // Indicadores según modalidad (IMO solo FCL/LCL, OOG solo FCL).
+  // Madera NO va acá: es tri-estado (Sí/No/a confirmar) y tiene su selector propio.
   const flags: [string, keyof FormState][] = [
     ['Telex', 'telex'],
     ['No apilable', 'noApilable'],
-    ['Madera', 'wood'],
     ['Entrega en planta', 'entregaPlanta'],
     ['Seguro', 'seguro'],
     ['Certificada', 'certi'],
@@ -400,7 +401,21 @@ export default function NewShipmentDialog({
                 <Field label="Descripción" value={f.descripcion} onChange={v => set('descripcion', v)} placeholder="Mercadería…" wide />
                 <div className="col-span-2 space-y-1.5">
                   <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Indicadores</p>
-                  <div className="flex flex-wrap gap-x-4 gap-y-2">
+                  <div className="flex flex-wrap gap-x-4 gap-y-2 items-center">
+                    {/* Madera: tri-estado — toda carga nueva nace "A confirmar" (null),
+                        no "No": false diría confirmado sin que nadie lo haya chequeado. */}
+                    <label className="flex items-center gap-2 text-sm select-none">
+                      Madera
+                      <select
+                        value={f.wood === null ? 'confirmar' : f.wood ? 'si' : 'no'}
+                        onChange={e => set('wood', (e.target.value === 'confirmar' ? null : e.target.value === 'si') as FormState['wood'])}
+                        className={`h-7 rounded-md border border-input px-1.5 text-xs ${f.wood ? 'text-red-600 font-semibold' : f.wood === null ? 'text-amber-600 font-medium' : 'text-foreground'}`}
+                      >
+                        <option value="confirmar">A confirmar</option>
+                        <option value="si">Sí</option>
+                        <option value="no">No</option>
+                      </select>
+                    </label>
                     {flags.map(([label, key]) => (
                       <label key={key} className="flex items-center gap-2 text-sm cursor-pointer select-none">
                         <input

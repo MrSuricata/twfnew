@@ -41,6 +41,12 @@ export default function ViabilityBlock({
   // ANTES de pisar). Con LIBRE ya DEVUELTO, el botón pasa a "Deshacer devuelto"
   // y limpia a '' (sin toast: el cambio se ve al instante).
   const libreDevuelto = isLibreDevuelto(op.libre)
+  // ¿Los contenedores tienen terminales de devolución DISTINTAS? Editar el
+  // cuadro "Devuelve en" propaga UN valor a todos (nivel-carga) — avisar antes.
+  const devsDistintos = Array.from(new Set(
+    (op.operativas ?? []).map(r => (r.DEV || '').trim().toUpperCase()).filter(Boolean),
+  ))
+  const devVaria = devsDistintos.length > 1
   const toggleDevuelto = () => {
     if (!editable) return
     const { next, prev } = libreDevueltoToggle(op.libre)
@@ -105,7 +111,20 @@ export default function ViabilityBlock({
         {/* Devuelve en: terminal donde se devuelve el vacío (DEV) — al lado del
             LIBRE porque se leen juntos (hasta cuándo y dónde devolver). Nivel-carga:
             propaga a todos los contenedores (dev está en OP_ARRAY_FIELD_BY_COL). */}
-        <StatBox label="Devuelve en" value={op.dev} kind="combo" options={DEV_OPTIONS} upper editable={editable} onCommit={v => onCommit('dev', v)} />
+        <StatBox
+          label="Devuelve en"
+          value={op.dev}
+          kind="combo"
+          options={DEV_OPTIONS}
+          upper
+          editable={editable}
+          footer={devVaria ? (
+            <p className="mt-1 text-[10px] leading-tight text-amber-600" title={`Devoluciones por contenedor: ${devsDistintos.join(', ')}`}>
+              ⚠ Contenedores con devolución distinta ({devsDistintos.join(', ')}) — editar acá las unifica
+            </p>
+          ) : undefined}
+          onCommit={v => onCommit('dev', v)}
+        />
       </div>
 
       <div className="grid grid-cols-3 gap-2">
