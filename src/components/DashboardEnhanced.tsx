@@ -118,6 +118,18 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
     () => mergeFclShipments(shipments || [], dbShipments),
     [shipments, dbShipments],
   )
+  // Refs de cargas marítimas (FCL/LCL) SIN telex — la Agenda las usa para el 🚨
+  // en los hitos de camiones que llevan alguna de esas cargas. Aéreo/terrestre
+  // no tienen telex → afuera para no alarmar al pedo.
+  const sinTelexRefs = useMemo(() => {
+    const set = new Set<string>()
+    for (const s of dbShipments || []) {
+      if (s.archived) continue
+      if (s.mode !== 'fcl' && s.mode !== 'lcl') continue
+      if (!s.telex && s.ref) set.add(s.ref.trim().toUpperCase())
+    }
+    return set
+  }, [dbShipments])
   // TWF brand has no ops tabs → land on the first content tab.
   const [activeTab, setActiveTab] = useState(ops ? 'hoy' : 'contenido')
   // Sub-pestaña de "Contenido web" (Casos de éxito / Testimonios). Vive acá para
@@ -427,6 +439,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
               editable
               onPatchShipment={onPatchShipment}
               onOpenDetail={onOpenDetail}
+              sinTelexRefs={sinTelexRefs}
             />
           </TabsContent>
 

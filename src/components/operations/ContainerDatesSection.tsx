@@ -9,6 +9,8 @@ import type { ParsedShipment, OperativasRecord } from '@/lib/shipmentTypes'
 import { getShipmentStatus } from '@/lib/shipmentTypes'
 import { parseCntr } from '@/lib/cntrUtils'
 import { isSalidaBeforeArrival, fmtDMY } from '@/lib/salidaCheck'
+import { isSinTelex, SIN_TELEX_MSG } from '@/lib/telexCheck'
+import { toast } from 'sonner'
 
 /** Handle imperativo que el panel usa para forzar el commit de los borradores
  *  pendientes ANTES de cerrar el Sheet (si no, el draft tipeado/elegido se pierde
@@ -311,6 +313,11 @@ const ContainerDatesSection = forwardRef<ContainerDatesHandle, {
       }
       setDrafts({}) // limpiar SIEMPRE (incluye los rechazados: se descartan)
       if (!next) return false
+      // Aviso (no bloquea): quedó una salida coordinada con el telex sin liberar.
+      const flushedSalida = Object.entries(drafts).some(([k, v]) => k.endsWith('-SALIDA') && (v || '').trim())
+      if (flushedSalida && isSinTelex(op.tlx)) {
+        toast.warning(`🚨 ${op.ref} — ${SIN_TELEX_MSG}`)
+      }
       onCommitOperativas(next)
       return true
     },
@@ -354,6 +361,10 @@ const ContainerDatesSection = forwardRef<ContainerDatesHandle, {
       }
     }
     setDrafts(prev => { const next = { ...prev }; delete next[k]; return next })
+    // Aviso (no bloquea): se coordinó una salida pero el telex sigue sin liberar.
+    if (field === 'SALIDA' && value.trim() && isSinTelex(op.tlx)) {
+      toast.warning(`🚨 ${op.ref} — ${SIN_TELEX_MSG}`)
+    }
     onCommitOperativas(buildNextOperativas(cntrs, existing, op, i, { [field]: value }))
   }
 
