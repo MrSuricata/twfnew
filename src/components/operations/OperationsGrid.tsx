@@ -26,6 +26,8 @@ import {
   Trash,
   Scales,
   Clock,
+  CaretDown,
+  CaretRight,
 } from '@phosphor-icons/react'
 import {
   Dialog,
@@ -39,6 +41,7 @@ import OperatorsManager from './OperatorsManager'
 import PasteImportDialog from './PasteImportDialog'
 import NewShipmentDialog from './NewShipmentDialog'
 import OperationDetailPanel from './OperationDetailPanel'
+import VesselEtaDialog from './VesselEtaDialog'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
 import type { Operator, OperatorAssignment, Modality, UnifiedOperation, DbShipment } from '@/lib/operationsTypes'
 import type { Truck, TruckLoad } from '@/lib/truckTypes'
@@ -214,6 +217,16 @@ export default function OperationsGrid({
   const [dragKey, setDragKey] = useState<string | null>(null)
   const [overKey, setOverKey] = useState<string | null>(null)
 
+  // Fila expandida (chevron junto a la Ref): resumen completo de la carga sin
+  // scroll lateral. Una sola abierta a la vez.
+  const [expandedUid, setExpandedUid] = useState<string | null>(null)
+  const toggleExpand = useCallback((uid: string) => {
+    setExpandedUid(cur => (cur === uid ? null : uid))
+  }, [])
+
+  // Diálogo "ETA por buque" (corrección de ETA por viaje).
+  const [vesselOpen, setVesselOpen] = useState(false)
+
   // Render incremental: con 1.176 filas montar todo el DOM congela el cambio
   // de filtros. Se montan ROWS_STEP y el sentinel agrega más al scrollear.
   // Totales/CSV siguen usando sorted/filtered COMPLETOS.
@@ -234,6 +247,13 @@ export default function OperationsGrid({
     [allOperations, showArchived]
   )
   const archivedCount = useMemo(() => dbShipments.filter(s => s.archived).length, [dbShipments])
+
+  // Cargas candidatas para "ETA por buque": activas (nunca archivadas, aunque el
+  // toggle esté en modo archivadas), editables (fila DB) y con buque cargado.
+  const vesselOps = useMemo(
+    () => allOperations.filter(o => !o.archived && o.source === 'db' && !!o.dbId && !o.readOnly && !!(o.buque || '').trim()),
+    [allOperations],
+  )
 
   // Depósitos UY ya usados → alimentan el combobox del bloque de viabilidad.
   // (Sobre TODAS las cargas: el modo archivadas no empobrece las sugerencias.)
@@ -326,7 +346,7 @@ export default function OperationsGrid({
       if (eligible.length === 1) { assignOp(op, eligible[0].id); count++ }
     }
     toast[count > 0 ? 'success' : 'info'](
-      count > 0 ? `${count} carga${count === 1 ? '' : 's'} auto-asignada${count === 1 ? '' : 's'}` : 'No hay cargas auto-asignables (modos con un solo operativo)'
+      count > 0 ? `${count} carga${count === 1 ? '' : 's'} auto-asignada${count === 1 ? '' : 's'}` : 'No hay cargas para auto-asignar: solo aplica a modos con un único operativo (aéreo/terrestre)'
     )
   }
 
@@ -439,7 +459,7 @@ export default function OperationsGrid({
     a.download = `operaciones_${new Date().toISOString().slice(0, 10)}.csv`
     a.click()
     URL.revokeObjectURL(url)
-    toast.success(`${filtered.length} cargas exportadas a CSV`)
+    toast.success(`${filtered.length} carga${filtered.length === 1 ? '' : 's'} exportada${filtered.length === 1 ? '' : 's'} a CSV`)
   }
 
   // ── Plan operativo (PDF por cliente) ──
@@ -466,7 +486,7 @@ export default function OperationsGrid({
     setPlanBusy(true)
     try {
       const totals = await downloadPlanOperativoPdf(shipments, dbShipments, clientes, brand)
-      toast.success(`Plan operativo descargado — ${totals.contenedores} contenedor(es) de ${clientes.length} cliente(s)`)
+      toast.success(`Plan operativo descargado — ${totals.contenedores} contenedor${totals.contenedores === 1 ? '' : 'es'} de ${clientes.length} cliente${clientes.length === 1 ? '' : 's'}`)
       setPlanOpen(false)
     } catch {
       toast.error('No se pudo generar el PDF del plan operativo')
@@ -621,7 +641,7 @@ export default function OperationsGrid({
         {segVencidos > 0 && (
           <button
             onClick={() => setSegFilter(v => !v)}
-            title={`${segVencidos} carga(s) activas con seguimiento sin actualizar hace 7+ días — click para ver solo esas`}
+            title={`${segVencidos} carga${segVencidos === 1 ? ' activa' : 's activas'} sin actualizar el seguimiento hace 7 días o más — hacé clic para ver solo esas`}
             className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 border text-xs transition-all hover:shadow-sm ${
               segFilter ? 'bg-red-100 border-red-400 text-red-800 font-semibold' : 'bg-red-50 border-red-300 text-red-700'
             }`}
@@ -658,7 +678,7 @@ export default function OperationsGrid({
         <Popover>
           <PopoverTrigger asChild>
             <Button variant="outline" size="sm" className={`h-9 ${pesoVolActivo ? 'border-primary text-primary' : ''}`} title="Filtrar por rango de kilos y m³ (ej: entre 5.000 y 10.000 kg, o menos de 20 m³)">
-              <Scales size={16} className="mr-1.5" /> Peso/Vol{pesoVolActivo ? ' ●' : ''}
+              <Scales size={16} className="mr-1.5" /> Kg / m³{pesoVolActivo ? ' ●' : ''}
             </Button>
           </PopoverTrigger>
           <PopoverContent align="start" className="w-64 p-3 space-y-2.5">
@@ -672,7 +692,7 @@ export default function OperationsGrid({
               <Input value={m3Min} onChange={e => setM3Min(e.target.value)} placeholder="Desde (m³)" inputMode="decimal" className="h-8 text-sm" />
               <Input value={m3Max} onChange={e => setM3Max(e.target.value)} placeholder="Hasta (m³)" inputMode="decimal" className="h-8 text-sm" />
             </div>
-            <p className="text-[10px] text-muted-foreground">Dejá vacío el que no uses: "hasta 5.000 kg" = solo el segundo campo. Para ordenar por kg/m³, click en el encabezado de la columna.</p>
+            <p className="text-[10px] text-muted-foreground">Dejá vacío el que no uses: "hasta 5.000 kg" = solo el segundo campo. Para ordenar por kg/m³, hacé clic en el encabezado de la columna.</p>
             {pesoVolActivo && (
               <Button variant="ghost" size="sm" className="h-7 w-full text-xs" onClick={() => { setKgMin(''); setKgMax(''); setM3Min(''); setM3Max('') }}>
                 Limpiar filtro
@@ -693,7 +713,7 @@ export default function OperationsGrid({
         </select>
 
         {/* Auto-assign by mode */}
-        <Button variant="outline" size="sm" className="h-9" onClick={handleAutoAssign} title="Asigna automáticamente los modos con un solo operativo (aéreo/terrestre)">
+        <Button variant="outline" size="sm" className="h-9" onClick={handleAutoAssign} title="Asigna operativo automáticamente a las cargas cuyo modo tiene un solo operativo (aéreo/terrestre)">
           <MagicWand size={16} className="mr-1.5" /> Auto-asignar
         </Button>
 
@@ -721,6 +741,18 @@ export default function OperationsGrid({
           title="PDF por cliente con sus cargas activas que todavía no llegaron a fiscal — salidas programadas y pendientes de programar"
         >
           <FilePdf size={16} className="mr-1.5" /> Plan operativo
+        </Button>
+
+        {/* ETA por buque: corregir la ETA de un VIAJE entero de una (agrupa por
+            buque + cercanía de fecha — el histórico del mismo buque no se toca). */}
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-9"
+          onClick={() => setVesselOpen(true)}
+          title="Corregí la ETA de un viaje entero: elegí el buque, marcá las cargas y aplicá la nueva fecha a todas de una"
+        >
+          <Boat size={16} className="mr-1.5" /> ETA por buque
         </Button>
 
         {/* Column picker */}
@@ -756,9 +788,11 @@ export default function OperationsGrid({
         </Popover>
       </div>
 
-      {/* Grid — desktop table */}
-      <div className="hidden md:block border rounded-lg overflow-auto max-h-[68vh] bg-card">
-        <table className="w-full text-xs">
+      {/* Grid — desktop table. SIN scroll lateral (pedido 07/07): table-fixed +
+          overflow-x-hidden reparte el ancho y trunca; el detalle completo de cada
+          fila se ve con el chevron de expansión (o abriendo el panel). */}
+      <div className="hidden md:block border rounded-lg overflow-x-hidden overflow-y-auto max-h-[68vh] bg-card">
+        <table className="w-full text-xs table-fixed">
           <thead className="sticky top-0 z-10">
             <tr className="bg-[#1e3a8a] text-white">
               {cols.map(c => {
@@ -776,8 +810,8 @@ export default function OperationsGrid({
                     onDragEnd={() => { setDragKey(null); setOverKey(null) }}
                     onClick={() => toggleSort(c.key)}
                     style={c.sticky ? { left: c.stickyLeft ?? 0 } : undefined}
-                    title="Click: ordenar · Arrastrá para reordenar"
-                    className={`px-2 py-2 text-left font-semibold uppercase tracking-wide text-[10px] align-bottom cursor-pointer select-none hover:bg-[#274aa3] ${c.w || ''} ${c.numeric ? 'text-right' : ''} ${c.sticky ? 'sticky bg-[#1e3a8a] z-30' : ''} ${c.key === lastStickyKey ? 'shadow-[6px_0_6px_-4px_rgba(0,0,0,0.45)]' : ''} ${overKey === c.key && dragKey ? 'border-l-2 border-[#9bd1e5]' : ''} ${dragKey === c.key ? 'opacity-50' : ''}`}
+                    title="Hacé clic para ordenar · arrastrá para reordenar"
+                    className={`px-2 py-2 text-left font-semibold uppercase tracking-wide text-[10px] align-bottom cursor-pointer select-none overflow-hidden hover:bg-[#274aa3] ${c.w || ''} ${c.numeric ? 'text-right' : ''} ${c.sticky ? 'sticky bg-[#1e3a8a] z-30' : ''} ${c.key === lastStickyKey ? 'shadow-[6px_0_6px_-4px_rgba(0,0,0,0.45)]' : ''} ${overKey === c.key && dragKey ? 'border-l-2 border-[#9bd1e5]' : ''} ${dragKey === c.key ? 'opacity-50' : ''}`}
                   >
                     <span className={`inline-flex items-center gap-1 ${c.numeric ? 'flex-row-reverse' : ''}`}>
                       {c.label}
@@ -792,7 +826,7 @@ export default function OperationsGrid({
           <tbody className="divide-y">
             {sorted.length === 0 ? (
               <tr><td colSpan={cols.length + 1} className="text-center py-12 text-muted-foreground">Sin operaciones para los filtros actuales.</td></tr>
-            ) : visibleRows.map((op) => (
+            ) : visibleRows.map((op, i) => (
               <OperationRow
                 key={op.uid}
                 op={op}
@@ -801,6 +835,9 @@ export default function OperationsGrid({
                 operatorById={operatorById}
                 truckStatus={truckByRef.get(op.ref)}
                 hoy={hoy}
+                zebra={i % 2 === 1}
+                expanded={expandedUid === op.uid}
+                onToggleExpand={toggleExpand}
                 onAssign={assignOp}
                 onPatch={onPatchShipment}
                 onDelete={requestDelete}
@@ -850,7 +887,7 @@ export default function OperationsGrid({
       </div>
 
       <p className="text-xs text-muted-foreground">
-        <LockSimple size={12} className="inline align-[-2px] mr-1" /><strong>Hacé clic en una carga</strong> para ver y editar el detalle. Salida y arribo fiscal se editan por contenedor; LIBRE y operativa en “Datos clave”. La REF no se edita (flujo aparte con PIN).
+        <LockSimple size={12} className="inline align-[-2px] mr-1" /><strong>Hacé clic en una carga</strong> para ver y editar el detalle, o en la flechita junto a la ref para ver el resumen acá. Salida y arribo fiscal se editan por contenedor; LIBRE y operativa en “Datos clave de la carga”. La REF se cambia desde el detalle, con PIN.
       </p>
 
       <OperatorsManager
@@ -942,7 +979,7 @@ export default function OperationsGrid({
             <div className="max-h-[280px] overflow-y-auto border rounded-md p-1">
               {planFiltered.length === 0 && (
                 <div className="text-sm text-muted-foreground text-center py-6">
-                  {planClientes.length === 0 ? 'No hay cargas FCL activas sin llegar a fiscal' : 'Sin resultados para esa búsqueda'}
+                  {planClientes.length === 0 ? 'No hay cargas FCL activas pendientes de llegar a fiscal' : 'Sin resultados para esa búsqueda'}
                 </div>
               )}
               {planFiltered.map(c => (
@@ -960,7 +997,7 @@ export default function OperationsGrid({
             </div>
             <div className="flex items-center justify-between pt-1">
               <span className="text-xs text-muted-foreground">
-                {planSelected.size === 0 ? 'Ningún cliente seleccionado' : `${planSelected.size} cliente(s) seleccionado(s)`}
+                {planSelected.size === 0 ? 'Ningún cliente seleccionado' : `${planSelected.size} cliente${planSelected.size === 1 ? ' seleccionado' : 's seleccionados'}`}
               </span>
               <div className="flex gap-2">
                 {planSelected.size > 0 && (
@@ -995,6 +1032,12 @@ export default function OperationsGrid({
         onRequestDelete={onDeleteShipment ? requestDelete : undefined}
         onClose={() => setSelectedUid(null)}
       />
+      <VesselEtaDialog
+        open={vesselOpen}
+        onOpenChange={setVesselOpen}
+        ops={vesselOps}
+        onPatch={onPatchShipment}
+      />
     </div>
   )
 }
@@ -1008,6 +1051,9 @@ const OperationRow = memo(function OperationRow({
   operatorById,
   truckStatus,
   hoy,
+  zebra,
+  expanded,
+  onToggleExpand,
   onAssign,
   onPatch,
   onDelete,
@@ -1019,6 +1065,12 @@ const OperationRow = memo(function OperationRow({
   operatorById: Map<string, Operator>
   truckStatus?: TruckRefInfo
   hoy: Date
+  /** Fila par → fondo alternado. Explícito (no CSS even:) porque la fila de
+   *  expansión insertada rompería la paridad nth-child. */
+  zebra: boolean
+  /** Resumen expandido debajo de la fila (chevron junto a la Ref). */
+  expanded: boolean
+  onToggleExpand: (uid: string) => void
   onAssign: (op: UnifiedOperation, operatorId: string | null) => void
   onPatch: (id: string, fields: Record<string, unknown>) => void
   onDelete?: (op: UnifiedOperation) => void
@@ -1033,7 +1085,17 @@ const OperationRow = memo(function OperationRow({
     switch (key) {
       case 'ref':
         return (
-          <span className="inline-flex items-center gap-1.5 font-semibold">
+          <span className="inline-flex items-center gap-1 font-semibold">
+            {/* Chevron de expansión: resumen completo debajo, sin abrir el panel */}
+            <button
+              type="button"
+              onClick={e => { e.stopPropagation(); onToggleExpand(op.uid) }}
+              title={expanded ? 'Cerrar el resumen' : 'Ver todos los datos de la carga acá'}
+              aria-expanded={expanded}
+              className="p-0.5 -ml-1 rounded text-muted-foreground/60 hover:text-primary hover:bg-primary/10 shrink-0"
+            >
+              {expanded ? <CaretDown size={12} weight="bold" /> : <CaretRight size={12} weight="bold" />}
+            </button>
             <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: MODALITY_COLORS[op.mode] }} />
             {op.ref}
             {op.readOnly && <LockSimple size={11} className="text-muted-foreground" />}
@@ -1057,7 +1119,12 @@ const OperationRow = memo(function OperationRow({
           </select>
         )
       case 'wood':
-        return op.wood ? <span className="text-green-600 font-semibold">SI</span> : ''
+        // Semáforo: SÍ = rojo (dispara SENASA) · ¿? = ámbar (a confirmar) · No = vacío.
+        return op.wood
+          ? <span className="text-red-600 font-semibold">SÍ</span>
+          : op.wood === null
+            ? <span className="text-amber-600 font-semibold" title="Madera a confirmar">¿?</span>
+            : ''
       case 'pkgs': return fmtNum(op.pkgs)
       case 'kg': return fmtNum(op.kg)
       case 'm3': return fmtNum(op.m3)
@@ -1085,22 +1152,25 @@ const OperationRow = memo(function OperationRow({
   })()
 
   return (
-    // Zebra via CSS (even:) instead of an index prop → rows don't re-render on
-    // sort/reorder, only the DOM nodes move (memo stays valid).
-    <tr onClick={() => onOpen(op.uid)} className="bg-card even:bg-muted/30 hover:bg-primary/5 transition-colors cursor-pointer">
+    <>
+    {/* Zebra EXPLÍCITA por índice de fila de datos (clase row-even): la fila de
+        expansión insertada rompería la paridad de CSS nth-child even:. */}
+    <tr onClick={() => onOpen(op.uid)} className={`${zebra ? 'row-even bg-muted/30' : 'bg-card'} hover:bg-primary/5 transition-colors cursor-pointer`}>
       {cols.map((c) => {
         // Seguimiento 7+ días sin actualizar (carga activa) → celda en rojo.
         const segRojo = c.key === 'seguimiento' && segVencido
         // Columnas congeladas (Ref/Cliente): fondo SÓLIDO opaco (si no, el
         // contenido de atrás se ve al scrollear), replicando el zebra/hover de
-        // la fila con variantes que leen la paridad/hover del <tr>. z-20 para
-        // quedar por encima de las celdas normales que scrollean por debajo.
+        // la fila con variantes que leen la clase row-even/hover del <tr>. z-20
+        // para quedar por encima de las celdas normales.
         // La última congelada suma una sombra sutil a la derecha (borde del
         // área fija).
         const stickyCls = c.sticky
-          ? `sticky z-20 bg-ops-sticky [tr:nth-child(even)_&]:bg-ops-sticky-even [tr:hover_&]:bg-ops-sticky-hover ${c.key === lastStickyKey ? 'shadow-[6px_0_6px_-4px_rgba(0,0,0,0.22)]' : ''}`
+          ? `sticky z-20 bg-ops-sticky [tr.row-even_&]:bg-ops-sticky-even [tr:hover_&]:bg-ops-sticky-hover ${c.key === lastStickyKey ? 'shadow-[6px_0_6px_-4px_rgba(0,0,0,0.22)]' : ''}`
           : ''
-        const tdClass = `px-2 py-1.5 align-top ${c.w || ''} ${c.numeric ? 'text-right tabular-nums' : ''} ${c.wrap ? 'whitespace-normal break-words' : 'whitespace-nowrap'} ${stickyCls} ${segRojo ? 'bg-red-50 text-red-700 font-semibold' : ''}`
+        // overflow-hidden text-ellipsis: con table-fixed (sin scroll lateral) las
+        // celdas truncan en vez de desbordar; el resumen expandido muestra todo.
+        const tdClass = `px-2 py-1.5 align-top ${c.w || ''} ${c.numeric ? 'text-right tabular-nums' : ''} ${c.wrap ? 'whitespace-normal break-words' : 'whitespace-nowrap overflow-hidden text-ellipsis'} ${stickyCls} ${segRojo ? 'bg-red-50 text-red-700 font-semibold' : ''}`
         const stickyStyle = c.sticky ? { left: c.stickyLeft ?? 0 } : undefined
 
         // Estado of a cargo loaded on a truck is driven by the truck (read-only).
@@ -1154,8 +1224,101 @@ const OperationRow = memo(function OperationRow({
         )}
       </td>
     </tr>
+    {/* Resumen expandido: TODOS los datos de la carga sin scroll lateral. NO
+        cuenta para el zebra (la paridad es por fila de datos, no nth-child). */}
+    {expanded && (
+      <tr className={zebra ? 'bg-muted/30' : 'bg-card'}>
+        <td colSpan={cols.length + 1} className="px-4 pt-1 pb-3">
+          <ExpandedSummary op={op} truckStatus={truckStatus} />
+        </td>
+      </tr>
+    )}
+    </>
   )
 })
+
+// ── Resumen expandido de una fila (todos los datos, compacto) ──────────────
+// Pares label/valor en flex-wrap; solo se muestran los campos CON valor. Las
+// fechas van dd/mm/aaaa y los números en formato es-UY.
+const SUMMARY_FIELDS: { key: keyof UnifiedOperation; label: string; kind?: 'date' | 'num' }[] = [
+  { key: 'cliente', label: 'Cliente / Cnee' },
+  { key: 'shipper', label: 'Shipper' },
+  { key: 'agente', label: 'Agente' },
+  { key: 'incoterm', label: 'Incoterm' },
+  { key: 'docNumber', label: 'BL / MAWB / CRT' },
+  { key: 'buque', label: 'Buque' },
+  { key: 'linea', label: 'Línea' },
+  { key: 'cntr', label: 'Contenedores' },
+  { key: 'tipo', label: 'Tipo' },
+  { key: 'origin', label: 'Origen' },
+  { key: 'dischargePort', label: 'Pto. descarga' },
+  { key: 'destPort', label: 'Destino' },
+  { key: 'terminal', label: 'Terminal' },
+  { key: 'etd', label: 'ETD', kind: 'date' },
+  { key: 'eta', label: 'ETA', kind: 'date' },
+  { key: 'salida', label: 'Salida', kind: 'date' },
+  { key: 'etaFisc', label: 'ETA fiscal', kind: 'date' },
+  { key: 'libre', label: 'Libre', kind: 'date' },
+  { key: 'dev', label: 'Devuelve en' },
+  { key: 'deposito', label: 'Depósito UY' },
+  { key: 'transporte', label: 'Transporte' },
+  { key: 'fiscal', label: 'Fiscal (destino)' },
+  { key: 'despacho', label: 'Despacho' },
+  { key: 'operativa', label: 'Operativa' },
+  { key: 'pkgs', label: 'Bultos', kind: 'num' },
+  { key: 'kg', label: 'Kg', kind: 'num' },
+  { key: 'm3', label: 'M³', kind: 'num' },
+  { key: 'seguimiento', label: 'Seguimiento', kind: 'date' },
+]
+
+function ExpandedSummary({ op, truckStatus }: { op: UnifiedOperation; truckStatus?: TruckRefInfo }) {
+  const items: { label: string; value: string }[] = []
+  for (const f of SUMMARY_FIELDS) {
+    const raw = (op as unknown as Record<string, unknown>)[f.key]
+    if (raw === null || raw === undefined || raw === '' || raw === 0) continue
+    const value = f.kind === 'date'
+      ? (fmtDateDMY(String(raw)) || String(raw))
+      : f.kind === 'num'
+        ? fmtNum(raw as number)
+        : String(raw)
+    items.push({ label: f.label, value })
+  }
+  if (truckStatus) items.push({ label: 'Camión', value: truckStatus.truckCode })
+  // Flags como chips: solo los que aportan (madera Sí/a confirmar, OOG, IMO, no apilable).
+  const flags: { text: string; cls: string }[] = []
+  if (op.wood) flags.push({ text: 'Madera SÍ', cls: 'bg-red-100 text-red-700' })
+  else if (op.wood === null) flags.push({ text: 'Madera a confirmar', cls: 'bg-amber-100 text-amber-700' })
+  if (op.noApilable) flags.push({ text: 'No apilable', cls: 'bg-red-100 text-red-700' })
+  if (op.oog) flags.push({ text: 'OOG', cls: 'bg-red-100 text-red-700' })
+  if (op.imo) flags.push({ text: 'IMO', cls: 'bg-red-100 text-red-700' })
+  if (op.tlx === 'SI') flags.push({ text: 'Telex', cls: 'bg-emerald-100 text-emerald-700' })
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex flex-wrap gap-x-5 gap-y-1.5">
+        {items.map(it => (
+          <div key={it.label} className="min-w-0">
+            <div className="text-[9px] uppercase tracking-wide text-muted-foreground leading-none mb-0.5">{it.label}</div>
+            <div className="text-xs font-medium text-foreground break-words max-w-[260px]">{it.value}</div>
+          </div>
+        ))}
+        {items.length === 0 && <span className="text-xs text-muted-foreground italic">Sin más datos cargados — abrí el detalle para completarla.</span>}
+      </div>
+      {(flags.length > 0 || op.descripcion) && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          {flags.map(fl => (
+            <span key={fl.text} className={`rounded-full px-2 py-px text-[10px] font-semibold ${fl.cls}`}>{fl.text}</span>
+          ))}
+          {op.descripcion && (
+            <span className="text-[11px] text-muted-foreground truncate max-w-full" title={op.descripcion}>
+              {op.descripcion}
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
 
 // ── Mobile card (one cargo) — replaces the wide table on phones ──
 const CARD_FIELDS: { key: keyof UnifiedOperation; label: string }[] = [
@@ -1222,7 +1385,7 @@ const OperationCard = memo(function OperationCard({
           className="w-full h-8 text-sm rounded-md border border-border bg-card px-2"
           style={assigned ? { color: assigned.color || undefined } : undefined}
         >
-          <option value="">— operativo sin asignar —</option>
+          <option value="">— sin asignar —</option>
           {eligible.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
         </select>
       </div>

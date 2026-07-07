@@ -190,7 +190,8 @@ export interface DbShipment {
   terminal: string
   n_cntr: number
   origin_ref: string
-  wood: boolean
+  /** Madera tri-estado: true=Sí · false=No · null=a confirmar (columna nullable en DB). */
+  wood: boolean | null
   no_apilable: boolean
   oog: boolean
   desconsol_date?: string
@@ -253,7 +254,7 @@ export interface UnifiedOperation {
   tipo: string
   terminal: string               // FCL: terminal del SG (TCP/MONTECON) · DB: ''
   n: number                      // FCL: cantidad de contenedores (col N) · DB: 0
-  wood: boolean
+  wood: boolean | null           // madera: true=Sí · false=No · null=a confirmar
   noApilable: boolean            // carga NO apilable
   oog: boolean                   // sobredimensionada (out of gauge) — FCL
   imo: boolean                   // mercancía peligrosa — FCL/LCL
@@ -502,7 +503,8 @@ export function dbShipmentToOperation(s: DbShipment): UnifiedOperation {
     tipo: s.mode === 'fcl' ? (s.tipo || 'FCL') : (MODALITY_LABELS[s.mode] || ''),
     terminal: s.terminal || '',
     n: s.n_cntr || 0,
-    wood: !!s.wood,
+    // Tri-estado: null (columna sin dato) = madera a confirmar — NO colapsar a false.
+    wood: s.wood ?? null,
     noApilable: !!s.no_apilable,
     oog: !!s.oog,
     imo: !!s.imo,
@@ -636,12 +638,13 @@ export interface ColumnDef {
 
 // Ancho FIJO de la 1ª columna congelada (Ref). Debe coincidir con su `w` y con
 // el `stickyLeft` de la 2ª congelada (Cliente arranca donde termina Ref).
-const STICKY_REF_W = 76
+// 92px = chevron de expansión (16) + la ref ("A7808 B").
+const STICKY_REF_W = 92
 
 export const OPERATION_COLUMNS: ColumnDef[] = [
   // Congeladas (sticky-left): Ref y Cliente quedan fijas al scrollear horizontal.
   // Van SIEMPRE primeras (Ref, luego Cliente), no se arrastran ni se ocultan.
-  { key: 'ref', label: 'Ref', defaultOn: true, sticky: true, stickyLeft: 0, w: 'w-[76px] max-w-[76px]' },
+  { key: 'ref', label: 'Ref', defaultOn: true, sticky: true, stickyLeft: 0, w: 'w-[92px] max-w-[92px]' },
   { key: 'cliente', label: 'Cliente / Cnee', defaultOn: true, sticky: true, stickyLeft: STICKY_REF_W, wrap: true, w: 'w-[150px] max-w-[150px]' },
   { key: 'clientRef', label: 'Ref Cliente', defaultOn: false, w: 'max-w-[90px]' },
   { key: 'operator', label: 'Operativo', defaultOn: true },
@@ -676,7 +679,7 @@ export const OPERATION_COLUMNS: ColumnDef[] = [
   { key: 'tipo', label: 'Tipo', defaultOn: false },
   { key: 'status', label: 'Estado', defaultOn: true, w: 'max-w-[130px]' },
   { key: 'seguimiento', label: 'Seguimiento', defaultOn: true, w: 'max-w-[92px]' },
-  { key: 'wood', label: 'Wood', defaultOn: false, w: 'max-w-[56px]' },
+  { key: 'wood', label: 'Madera', defaultOn: false, w: 'max-w-[56px]' },
   { key: 'noApilable', label: 'No apilable', defaultOn: false, w: 'max-w-[64px]' },
   { key: 'oog', label: 'OOG', defaultOn: false, w: 'max-w-[56px]' },
   { key: 'imo', label: 'IMO', defaultOn: false, w: 'max-w-[56px]' },
@@ -846,7 +849,8 @@ export function newDbShipment(fields: Partial<DbShipment> & { mode: Modality }):
     // FCL: default UY — dest_country vacío se mapea a PAIS 'OTRO' y el armador
     // de camiones (isFclAvailable) la excluiría. El campo País sigue editable.
     transporte: '', camion: '', dest_country: fields.mode === 'fcl' ? 'UY' : '', discharge_port: '', dest_port: '',
-    fiscal: '', wood: false, no_apilable: false, oog: false, imo: false, tipo: '',
+    // Madera arranca "a confirmar" (null): false diría "No" sin que nadie lo haya chequeado.
+    fiscal: '', wood: null, no_apilable: false, oog: false, imo: false, tipo: '',
     libre: '', salida: '', eta_fiscal: '', operativa: '', descarga: '', dev: '', terminal: '', n_cntr: 0, origin_ref: '',
     ftl_ltl: '', costo_extra: '', observacion: '', status: 'en_origen', operator_id: null,
     notes: '', source: 'web', archived: false,

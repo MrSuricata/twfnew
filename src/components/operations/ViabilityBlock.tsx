@@ -12,6 +12,9 @@ const NUM_FMT = new Intl.NumberFormat('es-UY', { maximumFractionDigits: 2 })
 // Tipos de operativa de la carga (combo editable, no restrictivo).
 const OPERATIVA_OPTIONS = ['TRASIEGO', 'CONTENEDOR', 'CARGA A PISO']
 
+// Terminales habituales de devolución del vacío (combo sugerido, no restrictivo).
+const DEV_OPTIONS = ['TCP', 'MONTECON', 'STL', 'PLP']
+
 // Bloque destacado arriba del panel: los datos que se miran para decidir si una
 // carga es viable, en cuadros grandes + toggles. Editable solo para filas DB
 // (LCL/aéreo/terrestre); FCL muestra los valores con candadito (hasta el flip).
@@ -78,6 +81,7 @@ export default function ViabilityBlock({
             buildPerContainerPatch en el commit del panel). Antes LIBRE se editaba
             por contenedor y "no persistía" al abrir otro. */}
         <StatBox label="Operativa" value={op.operativa} kind="combo" options={OPERATIVA_OPTIONS} editable={editable} onCommit={v => onCommit('operativa', v)} />
+        <StatBox label="Desconsolidación" value={op.desconsol} kind="date" editable={editable} onCommit={v => onCommit('desconsol', v)} />
         <StatBox
           label="Libre (máx. devolución)"
           value={op.libre}
@@ -98,7 +102,10 @@ export default function ViabilityBlock({
           }
           onCommit={v => onCommit('libre', v)}
         />
-        <StatBox label="Desconsolidación" value={op.desconsol} kind="date" editable={editable} onCommit={v => onCommit('desconsol', v)} />
+        {/* Devuelve en: terminal donde se devuelve el vacío (DEV) — al lado del
+            LIBRE porque se leen juntos (hasta cuándo y dónde devolver). Nivel-carga:
+            propaga a todos los contenedores (dev está en OP_ARRAY_FIELD_BY_COL). */}
+        <StatBox label="Devuelve en" value={op.dev} kind="combo" options={DEV_OPTIONS} upper editable={editable} onCommit={v => onCommit('dev', v)} />
       </div>
 
       <div className="grid grid-cols-3 gap-2">
@@ -107,8 +114,9 @@ export default function ViabilityBlock({
             SELECCIONADO; el otro queda outline neutro. */}
         {/* Apilable es la NEGACIÓN de noApilable: togglear Apilable invierte noApilable */}
         <Toggle label="Apilable" on={!op.noApilable} colors={{ si: 'green', no: 'red' }} editable={editable} onToggle={() => onCommit('noApilable', !op.noApilable)} />
-        {/* Madera Sí dispara SENASA → rojo */}
-        <Toggle label="Madera" on={op.wood} colors={{ si: 'red', no: 'green' }} editable={editable} onToggle={() => onCommit('wood', !op.wood)} />
+        {/* Madera Sí dispara SENASA → rojo. Tri-estado con punto intermedio:
+            Sí · ¿? (a confirmar, ámbar) · No — null en la columna = sin confirmar. */}
+        <TriToggle label="Madera" value={op.wood} editable={editable} onSet={v => onCommit('wood', v)} />
         <Toggle label="Entrega en planta" on={op.entregaPlanta} colors={{ si: 'red', no: 'green' }} editable={editable} onToggle={() => onCommit('entregaPlanta', !op.entregaPlanta)} />
         {/* tlx es string 'SI'|'' en el modelo; el commit envía boolean (col telex) */}
         <Toggle label="Telex" on={op.tlx === 'SI'} colors={{ si: 'green', no: 'red' }} editable={editable} onToggle={() => onCommit('tlx', op.tlx !== 'SI')} />
@@ -198,7 +206,7 @@ function StatBox({
           onClick={start}
           disabled={!editable}
           className={`text-left w-full leading-tight ${editable ? 'cursor-text hover:opacity-70' : 'cursor-default'}`}
-          title={editable ? 'Click para editar' : sumHint ? 'Total = suma de los contenedores (editá cada uno abajo, en “Salidas y arribos por contenedor”)' : 'Solo lectura (viene de la planilla)'}
+          title={editable ? 'Hacé clic para editar' : sumHint ? 'Total = suma de los contenedores (editá cada uno abajo, en “Salidas y arribos por contenedor”)' : 'Solo lectura (viene de la planilla)'}
         >
           <span className={`text-[22px] font-medium ${display === '—' ? 'text-muted-foreground' : ''} ${upper ? 'uppercase' : ''} ${valueClass || ''}`}>{display}</span>
           {unit && display !== '—' && <span className="text-xs text-muted-foreground ml-1">{unit}</span>}
@@ -239,6 +247,45 @@ function Toggle({
       <div className="flex gap-1">
         <button type="button" disabled={!editable || on} onClick={() => { if (!on) onToggle() }} className={seg(on, colors.si)}>Sí</button>
         <button type="button" disabled={!editable || !on} onClick={() => { if (on) onToggle() }} className={seg(!on, colors.no)}>No</button>
+      </div>
+    </div>
+  )
+}
+
+// Toggle TRI-estado (Madera): Sí (rojo: dispara SENASA) · punto intermedio "¿?"
+// (ámbar: falta confirmar con el shipper) · No (verde). value=null = a confirmar.
+// Mismo look del Toggle binario, con el segmento del medio más angosto.
+const TOGGLE_ON_AMBER = 'bg-amber-500 border-amber-500 text-white font-medium'
+
+function TriToggle({
+  label, value, editable, onSet,
+}: {
+  label: string
+  value: boolean | null
+  editable: boolean
+  onSet: (v: boolean | null) => void
+}) {
+  const seg = (active: boolean, onCls: string, flex = 'flex-1') => {
+    const base = `${flex} h-9 text-sm rounded-md border transition-colors`
+    if (active) return `${base} ${onCls}`
+    return `${base} bg-background border-border text-muted-foreground ${editable ? 'hover:bg-muted' : ''}`
+  }
+  return (
+    <div>
+      <div className="text-[11px] text-muted-foreground text-center mb-1 truncate" title={label}>{label}</div>
+      <div className="flex gap-1">
+        <button type="button" disabled={!editable || value === true} onClick={() => onSet(true)} className={seg(value === true, TOGGLE_ON.red)}>Sí</button>
+        <button
+          type="button"
+          disabled={!editable || value === null}
+          onClick={() => onSet(null)}
+          title="A confirmar — todavía no se sabe si lleva madera"
+          aria-label={`${label}: a confirmar`}
+          className={seg(value === null, TOGGLE_ON_AMBER, 'w-9 shrink-0')}
+        >
+          ¿?
+        </button>
+        <button type="button" disabled={!editable || value === false} onClick={() => onSet(false)} className={seg(value === false, TOGGLE_ON.green)}>No</button>
       </div>
     </div>
   )
