@@ -6,8 +6,7 @@ import {
   SettingsUpsertSchema,
   PartnerUserCreateSchema,
   AdminLoginSchema,
-  OtpRequestSchema,
-  OtpVerifySchema,
+  ClientLoginSchema,
   SETTINGS_ALLOWLIST,
 } from './schemas.js'
 
@@ -79,6 +78,21 @@ describe('ClientRowSchema', () => {
     })
     expect(r.success).toBe(false)
   })
+  it('acepta cliente sin email ni patrón (solo nombre obligatorio)', () => {
+    expect(ClientRowSchema.safeParse({ id: 'c1', name: 'Acme' }).success).toBe(true)
+    expect(ClientRowSchema.safeParse({ id: 'c1', name: 'Acme', email: '', clientePattern: '' }).success).toBe(true)
+  })
+  it('acepta los campos legales nuevos y patrones con acentos', () => {
+    const r = ClientRowSchema.safeParse({
+      id: 'c1', name: 'Fass', razonSocial: 'FASS EVOLUCIÓN S.A.S.', cuitDoc: '30-1234-5',
+      pais: 'AR', direccion: 'Calle 1', aliases: 'FASS, FASS EVOLUCION',
+      clientePattern: 'FASS EVOLUCIÓN',
+    })
+    expect(r.success).toBe(true)
+  })
+  it('rechaza cliente sin nombre', () => {
+    expect(ClientRowSchema.safeParse({ id: 'c1', email: 'a@b.co' }).success).toBe(false)
+  })
 })
 
 describe('SettingsUpsertSchema', () => {
@@ -117,15 +131,11 @@ describe('AdminLoginSchema', () => {
   })
 })
 
-describe('OtpRequestSchema / OtpVerifySchema', () => {
-  it('OtpRequestSchema requires email', () => {
-    const r = OtpRequestSchema.safeParse({ action: 'request' })
-    expect(r.success).toBe(false)
-  })
-  it('OtpVerifySchema requires 6-digit code', () => {
-    const r1 = OtpVerifySchema.safeParse({ action: 'verify', email: 'a@b.co', code: '123' })
-    expect(r1.success).toBe(false)
-    const r2 = OtpVerifySchema.safeParse({ action: 'verify', email: 'a@b.co', code: '123456' })
-    expect(r2.success).toBe(true)
+describe('ClientLoginSchema', () => {
+  it('requiere email válido, contraseña y type client', () => {
+    expect(ClientLoginSchema.safeParse({ email: 'a@b.co', password: 'x', type: 'client' }).success).toBe(true)
+    expect(ClientLoginSchema.safeParse({ email: 'nomail', password: 'x', type: 'client' }).success).toBe(false)
+    expect(ClientLoginSchema.safeParse({ email: 'a@b.co', password: '', type: 'client' }).success).toBe(false)
+    expect(ClientLoginSchema.safeParse({ email: 'a@b.co', password: 'x', type: 'partner' }).success).toBe(false)
   })
 })

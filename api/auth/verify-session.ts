@@ -42,8 +42,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({ role: 'admin', user: payload.user })
   }
 
-  // Client: OTP already single-use, JWT already validated
+  // Client: los tokens de login por contraseña traen `uid` (id de
+  // client_users) → revalidar que el acceso siga activo (mismo alcance que el
+  // chequeo de admin: corre solo al restaurar sesión; fail-open acotado en
+  // fallo transitorio de DB). Tokens legacy sin uid (impersonate del owner)
+  // validan solo firma, como siempre.
   if (payload.role === 'client') {
+    if (payload.uid) {
+      try {
+        const db = getSupabase()
+        const { data } = await db
+          .from('client_users')
+          .select('active')
+          .eq('id', payload.uid)
+          .maybeSingle()
+        if (!data || data.active !== true) {
+          return res.status(401).json({ error: 'Cuenta desactivada' })
+        }
+      } catch (err) {
+        console.error('[verify-session] client check failed:', err)
+      }
+    }
     return res.status(200).json({
       role: 'client',
       email: payload.email,

@@ -21,6 +21,10 @@ export interface ClientPayload {
   name: string
   company: string
   clientePattern: string
+  /** id de client_users cuando el login fue por email+contraseña — permite a
+   *  verify-session revalidar `active`. Tokens legacy (impersonate) no lo
+   *  traen y validan solo firma. */
+  uid?: string
 }
 
 export interface DepotPayload {
@@ -68,14 +72,17 @@ export function auditUser(payload: { user?: string; name?: string; email?: strin
   return payload.name || payload.user || payload.email || 'desconocido'
 }
 
-/** Sign a client JWT (24h expiry) */
+/** Sign a client JWT (24h expiry). `uid` = id de client_users (login con
+ *  contraseña); omitido en impersonate/tokens legacy. */
 export function signClientToken(
   email: string,
   name: string,
   company: string,
-  clientePattern: string
+  clientePattern: string,
+  uid?: string
 ): string {
   const payload: ClientPayload = { role: 'client', email, name, company, clientePattern }
+  if (uid) payload.uid = uid
   return jwt.sign(payload, getSecret(), { expiresIn: '24h' })
 }
 

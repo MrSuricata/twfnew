@@ -40,19 +40,30 @@ export const QuoteRowSchema = z.object({
   language: z.string().max(8).optional(),
 })
 
-/** Client row (admin CRUD) */
-const clientePatternRe = /^[A-Z0-9 .&,/-]+(,[A-Z0-9 .&,/-]+)*$/i
+/** Client row (admin CRUD).
+ *  Nada es obligatorio salvo `name`: el catálogo de clientes existe aunque no
+ *  tenga email ni datos legales todavía. El patrón es opcional — si falta, el
+ *  login del portal lo deriva de name+aliases (ver admin-login.ts). */
+const clientePatternRe = /^[A-Z0-9ÁÉÍÓÚÜÑ .&,/-]+(,[A-Z0-9ÁÉÍÓÚÜÑ .&,/-]+)*$/i
+const optTrimmed = (max: number) => z.string().max(max).transform(s => s.trim()).optional()
 export const ClientRowSchema = z.object({
   id: z.string().min(1).max(100),
-  email: z.string().email().max(200),
+  email: z.string().email().max(200).optional().or(z.literal('')),
   name: z.string().min(1).max(200),
   company: z.string().max(200).optional().default(''),
+  razonSocial: optTrimmed(200),
+  razon_social: optTrimmed(200),
+  cuitDoc: optTrimmed(100),
+  cuit_doc: optTrimmed(100),
+  pais: optTrimmed(100),
+  direccion: optTrimmed(300),
+  aliases: optTrimmed(1000),
   createdAt: z.number().int().optional(),
   created_at_ts: z.number().int().optional(),
-  clientePattern: z.string().min(4).max(400).regex(clientePatternRe, 'invalid chars').refine(
+  clientePattern: z.string().max(400).regex(clientePatternRe, 'invalid chars').refine(
     (s) => s.split(',').map(t => t.trim()).every(t => t.length >= 4),
     { message: 'cada cliente del patrón (separado por coma) debe tener al menos 4 caracteres' }
-  ),
+  ).optional().or(z.literal('')),
 })
 
 /** Settings upsert (PUT) */
@@ -377,17 +388,11 @@ export const PartnerLoginSchema = z.object({
   type: z.literal('partner'),
 })
 
-/** OTP request body */
-export const OtpRequestSchema = z.object({
-  action: z.literal('request'),
+/** Client login body (portal de clientes por email + contraseña — reemplaza OTP) */
+export const ClientLoginSchema = z.object({
   email: z.string().email().max(200),
-})
-
-/** OTP verify body */
-export const OtpVerifySchema = z.object({
-  action: z.literal('verify'),
-  email: z.string().email().max(200),
-  code: z.string().regex(/^\d{6}$/, 'must be 6 digits'),
+  password: z.string().min(1).max(200),
+  type: z.literal('client'),
 })
 
 /** Suscripción Web Push (JSON estándar de PushSubscription.toJSON()).
