@@ -160,11 +160,15 @@ export default function NewShipmentDialog({
   const eligibleOps = mode ? operatorsForMode(operators, mode) : operators.filter(o => o.active)
 
   // Cuántos campos opcionales ya tienen algo (hint en el toggle colapsado).
+  // OJO: wood es boolean | null (null = "a confirmar", el default del alta) —
+  // null NO cuenta como cargado y NO se puede trimear (crasheaba el tab entero:
+  // este memo corre aunque el diálogo esté cerrado).
   const filledCount = useMemo(() => {
     const skip = new Set(['ref', 'cliente', 'operatorId', 'status'])
-    return (Object.entries(f) as [keyof FormState, string | boolean][]).filter(([k, v]) => {
+    return (Object.entries(f) as [keyof FormState, string | boolean | null][]).filter(([k, v]) => {
       if (skip.has(k)) return false
-      return typeof v === 'boolean' ? v : v.trim() !== ''
+      if (v === null || v === undefined) return false
+      return typeof v === 'boolean' ? v : String(v).trim() !== ''
     }).length
   }, [f])
 
