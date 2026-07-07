@@ -4,6 +4,7 @@
 
 import { forwardRef, useImperativeHandle, useState } from 'react'
 import type { UnifiedOperation } from '@/lib/operationsTypes'
+import { applyLugarSalida } from '@/lib/operationsTypes'
 import type { ParsedShipment, OperativasRecord } from '@/lib/shipmentTypes'
 import { getShipmentStatus } from '@/lib/shipmentTypes'
 import { parseCntr } from '@/lib/cntrUtils'
@@ -357,8 +358,13 @@ const ContainerDatesSection = forwardRef<ContainerDatesHandle, {
   }
 
   // Fix 3: LUGAR_SALIDA is a discrete pick — commit onChange (no draft needed).
-  const handleLugarChange = (i: number, value: string) => {
-    onCommitOperativas(buildNextOperativas(cntrs, existing, op, i, { LUGAR_SALIDA: value }))
+  // Lugar de salida = decisión de la CARGA (regla Brian 07/07): se propaga a
+  // TODOS los contenedores, y si es un depósito también actualiza DEPOSITO
+  // ("manda Depósito UY" — la columna la materializa el rollup). Base: una
+  // entrada por contenedor (reconcilia por si el array estaba corto).
+  const handleLugarChange = (_i: number, value: string) => {
+    const base = cntrs.map((_, j) => resolveRecord(cntrs, existing, j, op))
+    onCommitOperativas(applyLugarSalida(base, value))
   }
 
   // Bultos/Kg/M³ por contenedor: inputs numéricos, commit onBlur. El total

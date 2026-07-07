@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dialog'
 import type { ParsedShipment, OperativasRecord } from '@/lib/shipmentTypes'
 import { getShipmentStatus } from '@/lib/shipmentTypes'
-import { buildPerContainerPatch } from '@/lib/operationsTypes'
+import { buildPerContainerPatch, applyLugarSalida } from '@/lib/operationsTypes'
 import { isSalidaBeforeArrival, fmtDMY } from '@/lib/salidaCheck'
 import { fmtDateDMY } from '@/lib/format'
 import { isLibreDevuelto, libreDevueltoToggle, LIBRE_DEVUELTO } from '@/lib/libreDevuelto'
@@ -261,6 +261,17 @@ export default function ContainerQuickEdit({
         const p = buildPerContainerPatch({ operativas: propagated }, 'libre', libreV)
         propagated = (p.operativas as OperativasRecord[] | undefined) ?? propagated
         Object.assign(fields, p)
+      }
+      // LUGAR DE SALIDA también es nivel-carga (regla Brian 07/07: "manda
+      // Depósito UY"): si cambió, propagar a TODOS los contenedores; si el
+      // lugar elegido es un depósito, applyLugarSalida actualiza también el
+      // DEPOSITO del array (la columna deposito la materializa el rollup).
+      // Solo cuando cambió, igual que transporte/libre.
+      let prevLugar = currentOp.LUGAR_SALIDA || ''
+      try { prevLugar = (JSON.parse(lastCommittedRef.current).lugar as string) ?? prevLugar } catch { /* sin commit previo */ }
+      if (lugarVal !== prevLugar) {
+        propagated = applyLugarSalida(propagated, lugarVal)
+        fields.operativas = propagated
       }
       await onPatch(shipment.__dbId!, fields)
       lastCommittedRef.current = serialized

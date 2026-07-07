@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildOperations, isOperationActive, dbShipmentToOperation, fclToColumns, dbFclToParsedShipment, mergeFclShipments, newDbShipment, suggestNextRef, buildTruckByRef, buildPerContainerPatch, deriveKnownTransportes, EDITABLE_FIELDS, DEPOSITOS_UY, type UnifiedOperation, type DbShipment } from './operationsTypes'
+import { buildOperations, isOperationActive, dbShipmentToOperation, fclToColumns, dbFclToParsedShipment, mergeFclShipments, newDbShipment, suggestNextRef, buildTruckByRef, buildPerContainerPatch, applyLugarSalida, deriveKnownTransportes, EDITABLE_FIELDS, DEPOSITOS_UY, type UnifiedOperation, type DbShipment } from './operationsTypes'
 import type { ParsedShipment } from './shipmentTypes'
 import type { OperativasRecord } from './shipmentTypes'
 import type { Truck, TruckLoad } from './truckTypes'
@@ -63,12 +63,24 @@ describe('buildPerContainerPatch — propaga campos por-contenedor al array oper
     expect(next.LUGAR_SALIDA).toBe('GODILCO') // lugar automático sigue al depósito
   })
 
-  it('DEPOSITO: el LUGAR_SALIDA manual (!= depósito viejo) se respeta', () => {
+  // Regla Brian 07/07: "manda SIEMPRE Depósito UY" — al setear un depósito, el
+  // lugar de salida de TODOS los contenedores lo sigue, aunque fuera manual
+  // (si le ponés depósito a una directa, ya no sale de la terminal).
+  it('DEPOSITO manda: setear un depósito arrastra el LUGAR_SALIDA aunque fuera manual', () => {
     const ops = [{ ...rec(), CNTR_OP: 'C1', DEPOSITO: 'PLANIR', LUGAR_SALIDA: 'TCP' }]
     const patch = buildPerContainerPatch(op({ operativas: ops }), 'deposito', 'GODILCO')
     const next = (patch.operativas as OperativasRecord[])[0]
     expect(next.DEPOSITO).toBe('GODILCO')
-    expect(next.LUGAR_SALIDA).toBe('TCP') // lugar manual NO se pisa
+    expect(next.LUGAR_SALIDA).toBe('GODILCO')
+  })
+
+  it('DEPOSITO vaciado: el lugar manual (TCP) NO se pisa; el automático sí se vacía', () => {
+    const manual = [{ ...rec(), CNTR_OP: 'C1', DEPOSITO: 'PLANIR', LUGAR_SALIDA: 'TCP' }]
+    const p1 = buildPerContainerPatch(op({ operativas: manual }), 'deposito', '')
+    expect((p1.operativas as OperativasRecord[])[0].LUGAR_SALIDA).toBe('TCP')
+    const auto = [{ ...rec(), CNTR_OP: 'C1', DEPOSITO: 'PLANIR', LUGAR_SALIDA: 'PLANIR' }]
+    const p2 = buildPerContainerPatch(op({ operativas: auto }), 'deposito', '')
+    expect((p2.operativas as OperativasRecord[])[0].LUGAR_SALIDA).toBe('')
   })
 
   // Transporte es nivel-carga (como Depósito): columna + TODOS los contenedores.
@@ -472,5 +484,36 @@ describe('suggestNextRef — próxima ref A#### libre', () => {
   it('sin refs A#### → vacío (no sugiere)', () => {
     expect(suggestNextRef(['E198', ''])).toBe('')
     expect(suggestNextRef([])).toBe('')
+  })
+})
+
+// ── applyLugarSalida — lugar de salida nivel-carga, "manda Depósito UY" ────
+describe('applyLugarSalida — propaga a TODOS los contenedores y linkea el depósito', () => {
+  const rec = (over: Partial<OperativasRecord> = {}): OperativasRecord =>
+    ({ REF: 'A7811', CNTR_OP: 'C1', DEPOSITO: '', LUGAR_SALIDA: '', SALIDA: '2026-07-08', ...over } as OperativasRecord)
+
+  it('elegir un DEPÓSITO como lugar → LUGAR_SALIDA y DEPOSITO en todos los contenedores', () => {
+    const next = applyLugarSalida([rec(), rec({ CNTR_OP: 'C2', LUGAR_SALIDA: 'TCP' })], 'PLANIR')
+    expect(next.map(o => o.LUGAR_SALIDA)).toEqual(['PLANIR', 'PLANIR'])
+    expect(next.map(o => o.DEPOSITO)).toEqual(['PLANIR', 'PLANIR'])
+    expect(next[0].SALIDA).toBe('2026-07-08') // el resto no se toca
+  })
+
+  it('elegir una TERMINAL (TCP/MONTECON) → propaga el lugar pero NO toca el depósito', () => {
+    const next = applyLugarSalida([rec({ DEPOSITO: 'GODILCO' }), rec({ CNTR_OP: 'C2', DEPOSITO: 'GODILCO' })], 'TCP')
+    expect(next.map(o => o.LUGAR_SALIDA)).toEqual(['TCP', 'TCP'])
+    expect(next.map(o => o.DEPOSITO)).toEqual(['GODILCO', 'GODILCO'])
+  })
+
+  it('vaciar el lugar ("— en terminal —") → propaga vacío sin tocar el depósito', () => {
+    const next = applyLugarSalida([rec({ LUGAR_SALIDA: 'PLANIR', DEPOSITO: 'PLANIR' })], '')
+    expect(next[0].LUGAR_SALIDA).toBe('')
+    expect(next[0].DEPOSITO).toBe('PLANIR')
+  })
+
+  it('normaliza a MAYÚSCULAS (godilco → GODILCO)', () => {
+    const next = applyLugarSalida([rec()], 'godilco')
+    expect(next[0].LUGAR_SALIDA).toBe('GODILCO')
+    expect(next[0].DEPOSITO).toBe('GODILCO')
   })
 })
