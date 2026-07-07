@@ -44,6 +44,7 @@ import { parseCntr } from '@/lib/cntrUtils'
 import { subscribeTrucksLive } from '@/lib/realtimeBus'
 import { getAdminName } from '@/lib/authClient'
 import { fmtDateDMY } from '@/lib/format'
+import { isSinTelex } from '@/lib/telexCheck'
 
 // ─── Avisos por tarjeta (unificados con la pestaña Checks) ────────────────
 // El check "Aviso" de cada tarjeta marca EXACTAMENTE un paso de ref_checks
@@ -567,6 +568,12 @@ function TodayCard({ title, subtitle, icon, iconBg, barColor, matches, emptyLabe
                       {op.CLIENTE_OP || shipment.CLIENTE || '—'}
                     </span>
                   </div>
+                  {/* Sale HOY con el telex sin liberar → no se puede retirar el contenedor. */}
+                  {column === 'salientes' && isSinTelex(op.TLX) && (
+                    <span className="inline-block mb-0.5 rounded-full px-1.5 py-px text-[10px] font-semibold bg-red-100 text-red-700">
+                      🚨 SIN TELEX
+                    </span>
+                  )}
                   <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
                     <Package size={11} />
                     <span className="truncate">

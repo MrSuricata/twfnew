@@ -423,6 +423,22 @@ describe('fclToColumns — horneado FCL a columnas (PR-C flip)', () => {
 })
 
 describe('operativas array model', () => {
+  it('dbFclToParsedShipment propaga el telex (columna bool) al TLX de cada operativa', () => {
+    const conTelex: any = {
+      id: 'x', ref: 'A1', mode: 'fcl', source: 'fcl', telex: true,
+      operativas: [{ CNTR_OP: 'A111', SALIDA: '2026-06-16' }],
+    }
+    expect(dbFclToParsedShipment(conTelex).operativas?.[0].TLX).toBe('SI')
+    const sinTelex: any = {
+      id: 'y', ref: 'A2', mode: 'fcl', source: 'fcl', telex: false,
+      operativas: [{ CNTR_OP: 'B222', SALIDA: '2026-06-16' }],
+    }
+    expect(dbFclToParsedShipment(sinTelex).operativas?.[0].TLX).toBe('')
+    // Fallback colapsado (sin array) también lo lleva.
+    const legacy: any = { id: 'z', ref: 'A3', mode: 'fcl', source: 'fcl', telex: true, salida: '2026-06-16' }
+    expect(dbFclToParsedShipment(legacy).operativas?.[0].TLX).toBe('SI')
+  })
+
   it('dbFclToParsedShipment expone operativas[] con LUGAR_SALIDA', () => {
     const row: any = {
       id: 'x', ref: 'A1', mode: 'fcl', source: 'fcl',

@@ -13,6 +13,7 @@ import type { ParsedShipment, OperativasRecord } from '@/lib/shipmentTypes'
 import { getShipmentStatus } from '@/lib/shipmentTypes'
 import { buildPerContainerPatch, applyLugarSalida } from '@/lib/operationsTypes'
 import { isSalidaBeforeArrival, fmtDMY } from '@/lib/salidaCheck'
+import { isSinTelex, SIN_TELEX_MSG } from '@/lib/telexCheck'
 import { fmtDateDMY } from '@/lib/format'
 import { isLibreDevuelto, libreDevueltoToggle, LIBRE_DEVUELTO } from '@/lib/libreDevuelto'
 
@@ -275,6 +276,10 @@ export default function ContainerQuickEdit({
       }
       await onPatch(shipment.__dbId!, fields)
       lastCommittedRef.current = serialized
+      // Aviso (no bloquea): se coordinó una salida con el telex sin liberar.
+      if (salida !== prevSalida && (salida || '').trim() && isSinTelex(currentOp.TLX)) {
+        toast.warning(`🚨 ${shipment.REF} — ${SIN_TELEX_MSG}`)
+      }
       // NO cerrar al guardar: el usuario edita varios campos (salida → arribo →
       // lugar) en el mismo modal. El cierre lo manejan "Listo" y Escape. Cerrar
       // en cada commit (vía onBlur) hacía que al pasar de un campo a otro se
