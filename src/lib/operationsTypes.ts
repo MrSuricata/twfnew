@@ -815,14 +815,40 @@ export function buildPerContainerPatch(op: Pick<UnifiedOperation, 'operativas'>,
       // lectura del cliente (lugarOrDeposito en ContainerDatesSection); el server
       // NO lo materializa (no existe linkLugar). Así depósito y lugar coinciden.
       if (col === 'deposito') {
+        // Depósito UY MANDA (regla Brian 07/07): al cambiarlo, el LUGAR DE SALIDA
+        // de TODOS los contenedores lo sigue. Si se VACÍA el depósito, solo se
+        // arrastra el lugar que coincidía con el depósito viejo (no pisa un
+        // TCP/MONTECON puesto a mano en una operativa directa).
         const oldDep = String(o.DEPOSITO ?? '').trim().toUpperCase()
         const oldLugar = String(o.LUGAR_SALIDA ?? '').trim().toUpperCase()
-        if (oldLugar && oldLugar === oldDep) next.LUGAR_SALIDA = newVal
+        if (newVal) next.LUGAR_SALIDA = newVal
+        else if (oldLugar && oldLugar === oldDep) next.LUGAR_SALIDA = newVal
       }
       return next
     })
   }
   return patch
+}
+
+/** Lugares de salida que son TERMINAL (operativa directa), no depósito. */
+const LUGAR_TERMINALES: ReadonlySet<string> = new Set(['', 'TCP', 'MONTECON'])
+
+/**
+ * Aplica un LUGAR DE SALIDA a TODOS los contenedores del array (regla Brian
+ * 07/07: el lugar es una decisión de la CARGA — editarlo en un contenedor lo
+ * cambia en todos). Si el lugar elegido es un DEPÓSITO (no TCP/MONTECON/vacío),
+ * también actualiza DEPOSITO en todos los registros: "manda Depósito UY" — la
+ * columna `deposito` la materializa el rollup (cliente y server) desde el array.
+ * Elegir una terminal NO toca el depósito (puede seguir vacío o ser el previo).
+ */
+export function applyLugarSalida(operativas: OperativasRecord[], value: string): OperativasRecord[] {
+  const v = String(value ?? '').trim().toUpperCase()
+  const esDeposito = !LUGAR_TERMINALES.has(v)
+  return operativas.map(o => ({
+    ...o,
+    LUGAR_SALIDA: v,
+    ...(esDeposito ? { DEPOSITO: v } : {}),
+  }))
 }
 
 /** Próxima ref "A####" libre: máximo A#### entre TODAS las refs + 1. El espacio
