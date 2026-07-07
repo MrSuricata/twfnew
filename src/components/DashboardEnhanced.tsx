@@ -487,6 +487,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
               truckLoads={truckLoads}
               operators={operators}
               assignments={assignments}
+              clients={clients}
               originPhotos={originPhotos}
               reports={reports}
               onUpdateOriginPhotos={onUpdateOriginPhotos}

@@ -97,38 +97,20 @@ export async function loginAdmin(username: string, password: string): Promise<{ 
   }
 }
 
-// ─── Client OTP ─────────────────────────────────────────────────────
-export async function requestOTP(email: string): Promise<{ success: boolean; error?: string }> {
+// ─── Client Login (portal de clientes, email + contraseña) ──────────
+// Reemplaza el flujo OTP (2026-07): mismo endpoint que el login de partners,
+// discriminado por type:'client'.
+export async function loginClient(email: string, password: string): Promise<{ success: boolean; error?: string; clientData?: Record<string, string> }> {
   try {
-    const res = await fetch('/api/auth/otp', {
+    const res = await fetch('/api/auth/admin-login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'request', email }),
+      body: JSON.stringify({ email: email.toLowerCase().trim(), password, type: 'client' }),
     })
 
     if (!res.ok) {
       const data = await res.json().catch(() => ({}))
-      return { success: false, error: data.error || 'Error al enviar código' }
-    }
-
-    return { success: true }
-  } catch (err) {
-    console.error('OTP request error:', err)
-    return { success: false, error: 'Error de conexión con el servidor' }
-  }
-}
-
-export async function verifyOTPServer(email: string, code: string): Promise<{ success: boolean; error?: string; clientData?: Record<string, string> }> {
-  try {
-    const res = await fetch('/api/auth/otp', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'verify', email, code }),
-    })
-
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}))
-      return { success: false, error: data.error || 'Código inválido' }
+      return { success: false, error: data.error || 'Usuario o contraseña incorrectos' }
     }
 
     const data = await res.json()
@@ -142,7 +124,7 @@ export async function verifyOTPServer(email: string, code: string): Promise<{ su
       clientData: { email: data.email, name: data.name, company: data.company }
     }
   } catch (err) {
-    console.error('OTP verify error:', err)
+    console.error('Client login error:', err)
     return { success: false, error: 'Error de conexión con el servidor' }
   }
 }

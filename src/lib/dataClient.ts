@@ -5,7 +5,7 @@
 // ─────────────────────────────────────────────────────────────────────
 
 import { authFetch } from './authClient'
-import type { QuoteFormData, ClientAccount, ShipmentDocument, OperativeReport, OriginPhoto } from './quotationTypes'
+import type { QuoteFormData, ClientAccount, ClientPortalUser, ShipmentDocument, OperativeReport, OriginPhoto } from './quotationTypes'
 import type { ParsedShipment } from './shipmentTypes'
 import { applyWebEdits } from './shipmentTypes'
 import type { Truck, TruckLoad, LclAirShipment } from './truckTypes'
@@ -278,11 +278,16 @@ export async function fetchClients(): Promise<ClientAccount[]> {
   const data = await res.json()
   return (data.clients || []).map((c: any) => ({
     id: c.id,
-    email: c.email,
+    email: c.email || '',
     name: c.name,
-    company: c.company,
+    company: c.company || '',
     createdAt: c.created_at_ts || c.createdAt,
     clientePattern: c.cliente_pattern || c.clientePattern || '',
+    razonSocial: c.razonSocial ?? c.razon_social ?? '',
+    cuitDoc: c.cuitDoc ?? c.cuit_doc ?? '',
+    pais: c.pais ?? '',
+    direccion: c.direccion ?? '',
+    aliases: c.aliases ?? '',
   }))
 }
 
@@ -309,11 +314,12 @@ export async function deleteClient(id: string): Promise<void> {
 }
 
 /**
- * Admin-only: request a client session token for the given email without
- * going through the OTP flow. Used to "view portal as client X" for QA/debug.
- * Returns the same shape as /api/auth/otp verify: { token, role, email, name, company }.
+ * Admin(owner)-only: request a client session token without contraseña.
+ * Used to "view portal as client X" for QA/debug. Acepta id del cliente del
+ * catálogo (preferido — funciona aunque no tenga email) o email de contacto.
+ * Returns { token, role, email, name, company }.
  */
-export async function impersonateClient(email: string): Promise<{
+export async function impersonateClient(ref: { id?: string; email?: string }): Promise<{
   token: string
   role: 'client'
   email: string
@@ -323,13 +329,65 @@ export async function impersonateClient(email: string): Promise<{
   const res = await authFetch('/api/auth/impersonate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email }),
+    body: JSON.stringify(ref),
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
     throw new Error(err.error || `HTTP ${res.status}`)
   }
   return res.json()
+}
+
+// ── Client users (accesos al portal de clientes, email+contraseña) ──
+
+export async function fetchClientUsers(clientId?: string): Promise<ClientPortalUser[]> {
+  const qs = clientId ? `?clientId=${encodeURIComponent(clientId)}` : ''
+  const res = await authFetch(`/api/data/client-users${qs}`)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const data = await res.json()
+  return data.users || []
+}
+
+export async function createClientUser(input: {
+  clientId: string
+  email: string
+  name?: string
+  password: string
+}): Promise<void> {
+  const res = await authFetch('/api/data/client-users', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
+}
+
+export async function patchClientUser(
+  id: string,
+  fields: { active?: boolean; password?: string; name?: string },
+): Promise<void> {
+  const res = await authFetch(`/api/data/client-users?id=${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(fields),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
+}
+
+export async function deleteClientUser(id: string): Promise<void> {
+  const res = await authFetch(`/api/data/client-users?id=${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
 }
 
 /**

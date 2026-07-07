@@ -38,12 +38,31 @@ export interface QuoteFormData {
 
 export interface ClientAccount {
   id: string
+  /** Email de CONTACTO del cliente (opcional, '' si no hay). El login del
+   *  portal es por client_users (email+contraseña por usuario), no por acá. */
   email: string
-  // password field removed — auth is via OTP, no passwords stored
   name: string
   company: string
   createdAt: number
   clientePattern: string
+  // ── Datos legales del catálogo (todos opcionales) ──
+  razonSocial?: string
+  cuitDoc?: string
+  pais?: string
+  direccion?: string
+  /** Otras formas en que el cliente aparece escrito en las cargas, separadas por coma. */
+  aliases?: string
+}
+
+/** Usuario del portal de clientes (tabla client_users) — email + contraseña. */
+export interface ClientPortalUser {
+  id: string
+  clientId: string
+  email: string
+  name: string
+  active: boolean
+  createdAt?: string
+  lastLogin?: string | null
 }
 
 export interface ShipmentDocument {

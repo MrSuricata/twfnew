@@ -46,6 +46,7 @@ import type { ParsedShipment } from '@/lib/shipmentTypes'
 import type { Operator, OperatorAssignment, Modality, UnifiedOperation, DbShipment } from '@/lib/operationsTypes'
 import type { Truck, TruckLoad } from '@/lib/truckTypes'
 import type { OriginPhoto, OperativeReport } from '@/lib/quotationTypes'
+import type { CatalogClient } from '@/lib/clientCatalog'
 import {
   buildOperations,
   deriveKnownTransportes,
@@ -75,6 +76,9 @@ interface OperationsGridProps {
   truckLoads?: TruckLoad[]
   operators: Operator[]
   assignments: OperatorAssignment[]
+  /** Catálogo de clientes → datalist + canonicalización del campo Cliente
+   *  (alta y panel de detalle). */
+  clients?: CatalogClient[]
   /** Fotos de carga + informes PDF → sección "Fotos e informes" del panel de detalle. */
   originPhotos?: OriginPhoto[]
   reports?: OperativeReport[]
@@ -128,6 +132,7 @@ export default function OperationsGrid({
   truckLoads,
   operators,
   assignments,
+  clients = [],
   originPhotos,
   reports,
   onUpdateOriginPhotos,
@@ -917,6 +922,7 @@ export default function OperationsGrid({
             return ok
           }}
           suggestedRef={suggestedRef}
+          clientes={clients}
         />
       )}
 
@@ -1022,6 +1028,7 @@ export default function OperationsGrid({
         hoy={hoy}
         knownDepositos={knownDepositos}
         knownTransportes={knownTransportes}
+        knownClientes={clients}
         originPhotos={originPhotos}
         reports={reports}
         onUpdateOriginPhotos={onUpdateOriginPhotos}
