@@ -610,6 +610,10 @@ function FieldRow({
 }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
+  const boxRef = useRef<HTMLDivElement>(null)
+  // true cuando la edición arrancó tipeando (type-to-edit): caret al final del
+  // seed en vez de seleccionar todo (si no, la 2ª tecla pisa la 1ª).
+  const seededRef = useRef(false)
   const mode = editModeFor(op, fieldKey)
   const raw = (op as unknown as Record<string, unknown>)[fieldKey]
 
@@ -625,9 +629,10 @@ function FieldRow({
   const rawStr = String(raw ?? '')
   const editAsDate = (kind === 'date' || dateDisplay) && (rawStr === '' || /^\d{4}-\d{2}-\d{2}$/.test(rawStr))
 
-  const startEdit = () => {
+  const startEdit = (seed?: string) => {
     if (!mode) return
-    setDraft(String(raw ?? ''))
+    seededRef.current = seed !== undefined
+    setDraft(seed !== undefined ? seed : String(raw ?? ''))
     setEditing(true)
   }
   const save = () => {
@@ -642,9 +647,14 @@ function FieldRow({
     const v = draft.trim()
     if (String(raw ?? '') !== String(v)) onCommit(fieldKey, v)
   }
+  // Al guardar con Enter (o cancelar con Escape) el input se desmonta y el foco
+  // caía al body → se cortaba la cadena de Tab. Devolverlo al cuadro. (Con Tab
+  // no hace falta: el blur guarda y el foco salta solo al siguiente cuadro.)
+  const refocus = () => requestAnimationFrame(() => boxRef.current?.querySelector('button')?.focus())
 
   return (
     <div
+      ref={boxRef}
       className={`group rounded-lg border p-2.5 min-w-0 ${
         segVencido ? 'border-red-300 bg-red-50' : `bg-card ${boxClass || ''}`
       } ${wide ? 'col-span-2' : ''}`}
@@ -658,9 +668,16 @@ function FieldRow({
             list={options ? `fr-list-${String(fieldKey)}` : undefined}
             value={draft}
             onChange={e => setDraft(e.target.value)}
-            onFocus={e => e.target.select()}
+            onFocus={e => {
+              const el = e.target as HTMLInputElement
+              if (seededRef.current) { try { el.setSelectionRange(el.value.length, el.value.length) } catch { /* type=date no soporta selección */ } }
+              else el.select()
+            }}
             onBlur={save}
-            onKeyDown={e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') setEditing(false) }}
+            onKeyDown={e => {
+              if (e.key === 'Enter') { save(); refocus() }
+              if (e.key === 'Escape') { setEditing(false); refocus() }
+            }}
             className="h-8 text-sm px-1.5"
             inputMode={kind === 'number' ? 'decimal' : undefined}
           />
@@ -673,10 +690,19 @@ function FieldRow({
       ) : (
         <button
           type="button"
-          onClick={startEdit}
+          onClick={() => startEdit()}
+          onKeyDown={e => {
+            // Type-to-edit: tipear abre la edición con ese carácter ya puesto
+            // (fechas se abren con Enter — el editor type=date no acepta seed).
+            if (!mode || editAsDate) return
+            if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+              e.preventDefault()
+              startEdit(e.key)
+            }
+          }}
           disabled={!mode}
-          className={`text-left w-full min-w-0 ${mode ? 'cursor-text hover:opacity-70' : 'cursor-default'}`}
-          title={mode ? 'Hacé clic para editar (Enter guarda · Esc cancela)' : 'Solo lectura (viene de la planilla)'}
+          className={`text-left w-full min-w-0 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-1 ${mode ? 'cursor-text hover:opacity-70' : 'cursor-default'}`}
+          title={mode ? 'Hacé clic o Enter para editar · Tab guarda y salta al siguiente' : 'Solo lectura (viene de la planilla)'}
         >
           <span
             className={`text-[15px] leading-tight break-words ${
