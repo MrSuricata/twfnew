@@ -261,9 +261,12 @@ async function handleCheckPending(req: VercelRequest, res: VercelResponse) {
 // Cada tipo sale como notificación SEPARADA (título propio + hasta 6 líneas
 // de detalle) y solo a las suscripciones con ese tipo en true.
 
-/** Clave pública VAPID (no secreta) — par de process.env.VAPID_PRIVATE_KEY. */
+/** Clave pública VAPID (no secreta) — par de process.env.VAPID_PRIVATE_KEY.
+ *  Par ROTADO el 08/07/2026 (la privada original nunca llegó a Vercel y se
+ *  perdió) — las suscripciones anteriores a la rotación quedan inválidas:
+ *  re-activar la campana en cada dispositivo. */
 const VAPID_PUBLIC_KEY =
-  'BGeJ3K_9CI-VQrzpEwtraxp3w2UZlDxqNeZKgeQUrtAStcBdSIq8ZFh315fmgZgA7RhHwuKrk12p-rWo6WKQBx4'
+  'BAF-BlktBTYnH7evtFhiFHf1i4CPU2ZTEQVA370q-I2AZWqVDchpxBX084hCvGK3c7s6PNJrBVVFQ2V3vGXXnAE'
 
 interface PushSubRow {
   endpoint: string
