@@ -24,9 +24,10 @@ export const DEFAULT_PUSH_PREFS: PushPrefs = {
 }
 
 /** Clave pública VAPID — NO es secreta (identifica a nuestro servidor de push;
- *  el par privado vive en Vercel como VAPID_PRIVATE_KEY). */
+ *  el par privado vive en Vercel como VAPID_PRIVATE_KEY).
+ *  Par ROTADO el 08/07/2026 — debe coincidir con api/notifications/[action].ts. */
 export const VAPID_PUBLIC_KEY =
-  'BGeJ3K_9CI-VQrzpEwtraxp3w2UZlDxqNeZKgeQUrtAStcBdSIq8ZFh315fmgZgA7RhHwuKrk12p-rWo6WKQBx4'
+  'BAF-BlktBTYnH7evtFhiFHf1i4CPU2ZTEQVA370q-I2AZWqVDchpxBX084hCvGK3c7s6PNJrBVVFQ2V3vGXXnAE'
 
 /** ¿El navegador soporta Web Push? (si no, la campana ni se muestra) */
 export function isPushSupported(): boolean {
