@@ -7,9 +7,12 @@
 // columna booleana `telex`, convertida a 'SI'/'' al armar los modelos
 // (buildOperations / dbFclToParsedShipment).
 
-/** ¿El telex está liberado? Centraliza el `=== 'SI'` disperso por el repo. */
+/** ¿El telex está liberado? Centraliza el `=== 'SI'` disperso por el repo.
+ *  Acepta también 'TRUE' (texto del checkbox de la planilla vieja — los datos
+ *  se normalizaron a SI/'' el 10/07, esto cubre cualquier rezagado). */
 export function hasTelex(tlx: string | undefined | null): boolean {
-  return (tlx || '').trim().toUpperCase() === 'SI'
+  const v = (tlx || '').trim().toUpperCase()
+  return v === 'SI' || v === 'TRUE'
 }
 
 /** ¿Falta el telex? (inverso legible de hasTelex) */

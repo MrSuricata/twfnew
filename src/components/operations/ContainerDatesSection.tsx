@@ -4,7 +4,7 @@
 
 import { forwardRef, useImperativeHandle, useState } from 'react'
 import type { UnifiedOperation } from '@/lib/operationsTypes'
-import { applyLugarSalida } from '@/lib/operationsTypes'
+import { applyLugarSalida, lugarOrDeposito } from '@/lib/operationsTypes'
 import type { ParsedShipment, OperativasRecord } from '@/lib/shipmentTypes'
 import { getShipmentStatus } from '@/lib/shipmentTypes'
 import { parseCntr } from '@/lib/cntrUtils'
@@ -476,22 +476,32 @@ const ContainerDatesSection = forwardRef<ContainerDatesHandle, {
                   )}
                 </div>
 
-                {/* Lugar de salida — discrete pick: commit onChange */}
+                {/* Lugar de salida — discrete pick: commit onChange. Default de
+                    LECTURA: lugar vacío → muestra el DEPÓSITO ("manda Depósito UY",
+                    bug 10/07: decía "en terminal" con depósito cargado). Se
+                    materializa recién cuando el usuario elige. */}
                 <div className="flex flex-col gap-0.5">
                   <span className="text-[10px] text-muted-foreground leading-none">Lugar de salida</span>
                   {editable ? (
                     <select
-                      value={rec.LUGAR_SALIDA || ''}
+                      value={lugarOrDeposito(rec.LUGAR_SALIDA, rec.DEPOSITO)}
                       onChange={e => handleLugarChange(i, e.target.value)}
                       className="h-9 w-full rounded border border-input bg-background px-1 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
                     >
                       {LUGAR_OPTIONS.map(o => (
                         <option key={o.value} value={o.value}>{o.label}</option>
                       ))}
+                      {/* Depósito fuera de la lista fija (ej. LOBRAUS) → opción dinámica */}
+                      {lugarOrDeposito(rec.LUGAR_SALIDA, rec.DEPOSITO) &&
+                        !LUGAR_OPTIONS.some(o => o.value === lugarOrDeposito(rec.LUGAR_SALIDA, rec.DEPOSITO)) && (
+                          <option value={lugarOrDeposito(rec.LUGAR_SALIDA, rec.DEPOSITO)}>
+                            {lugarOrDeposito(rec.LUGAR_SALIDA, rec.DEPOSITO)}
+                          </option>
+                        )}
                     </select>
                   ) : (
-                    <span className={`text-[13px] font-medium ${rec.LUGAR_SALIDA ? '' : 'text-muted-foreground'}`}>
-                      {rec.LUGAR_SALIDA || '—'}
+                    <span className={`text-[13px] font-medium ${lugarOrDeposito(rec.LUGAR_SALIDA, rec.DEPOSITO) ? '' : 'text-muted-foreground'}`}>
+                      {lugarOrDeposito(rec.LUGAR_SALIDA, rec.DEPOSITO) || '—'}
                     </span>
                   )}
                 </div>

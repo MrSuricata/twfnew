@@ -806,6 +806,15 @@ const OP_ARRAY_FIELD_BY_COL: Partial<Record<string, keyof OperativasRecord>> = {
  */
 export function buildPerContainerPatch(op: Pick<UnifiedOperation, 'operativas'>, col: string, value: unknown): Record<string, unknown> {
   const patch: Record<string, unknown> = { [col]: value }
+  // TELEX vive en DOS lados con TIPOS distintos: columna boolean `telex` y
+  // TLX string ('SI'/'') en el array (Agenda/HOY/espejo leen el array). El
+  // toggle escribía SOLO la columna → la pantalla seguía leyendo el TLX viejo
+  // y la alerta SIN TELEX no se apagaba (bug A7759, 10/07). Propagar ambos.
+  if (col === 'telex' && op.operativas && op.operativas.length > 0) {
+    const tlx = value ? 'SI' : ''
+    patch.operativas = op.operativas.map(o => ({ ...o, TLX: tlx }))
+    return patch
+  }
   const opField = OP_ARRAY_FIELD_BY_COL[col]
   if (opField && op.operativas && op.operativas.length > 0) {
     const newVal = String(value ?? '')
@@ -834,6 +843,20 @@ export function buildPerContainerPatch(op: Pick<UnifiedOperation, 'operativas'>,
 
 /** Lugares de salida que son TERMINAL (operativa directa), no depósito. */
 const LUGAR_TERMINALES: ReadonlySet<string> = new Set(['', 'TCP', 'MONTECON'])
+
+/**
+ * Lugar de salida EFECTIVO para MOSTRAR: el guardado o, si está vacío, el
+ * DEPÓSITO ("manda Depósito UY" — regla Brian 07/07). Muchas cargas viejas
+ * tienen LUGAR_SALIDA vacío aunque el depósito ya dice de dónde sale (bug
+ * reportado 10/07: el quick-edit mostraba "— en terminal —" con depósito
+ * cargado). Es default de LECTURA: se materializa en datos recién cuando el
+ * usuario edita (applyLugarSalida / propagación de depósito).
+ */
+export function lugarOrDeposito(lugar: string | undefined | null, deposito: string | undefined | null): string {
+  const l = String(lugar ?? '').trim()
+  if (l) return l.toUpperCase()
+  return String(deposito ?? '').trim().toUpperCase()
+}
 
 /**
  * Aplica un LUGAR DE SALIDA a TODOS los contenedores del array (regla Brian
