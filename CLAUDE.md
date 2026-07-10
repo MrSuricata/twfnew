@@ -40,6 +40,9 @@ App de gestión de cargas en producción (Vite + React + TS + Tailwind 4 + Supab
 - `src/lib/operationsTypes.ts` — modelo unificado (UnifiedOperation, buildOperations, EDITABLE_FIELDS,
   EDITABLE_FCL_FIELDS, isOperationActive, isSeguimientoVencido)
 - `src/lib/billingTypes.ts` — facturación universal (buildBillableItems)
+- `src/lib/pagosVencimientos.ts` — vencimientos de pagos derive-on-read (VTO NUNCA se guarda;
+  ETA + forma de pago efectiva + terminal; montos null=sin datos · 0=pagado · >0=pendiente) ·
+  UI: `PagosManagement` (pestaña Pagos). pago_*_by lo estampa el server ([entity].ts PATCH).
 - `src/lib/truckTypes.ts` — camiones (deriveTruckDisplayStatus/Info)
 - `src/lib/agendaUtils.ts` — eventos agenda (shipmentsToEvents FCL por SALIDA; trucksToEvents por
   carga 🟡 + salida 🔵, arribo NO se agenda)
