@@ -112,6 +112,8 @@ export interface PagoItem {
   cliente: string
   linea: string
   terminal: string
+  /** A quién se le paga este rubro: flete/locales → naviera · terminal → terminal · devolución → DEV. */
+  empresa: string
   rubro: PagoRubro
   monto: number
   vence: string | null
@@ -130,9 +132,20 @@ const montoNum = (v: unknown): number | null => {
   return isFinite(n) ? n : null
 }
 
+/** Cargas por Chile (POD San Antonio/Valparaíso → dest_country CL): las maneja
+ *  el equipo de Chile, sus pagos no entran acá (pedido Brian 10/07, caso A7793). */
+const esCargaChile = (s: DbShipment): boolean => up(s.dest_country) === 'CL'
+
+/** A quién se le paga cada rubro. */
+export function empresaRubro(rubro: PagoRubro, s: Pick<DbShipment, 'linea' | 'terminal' | 'dev'>): string {
+  if (rubro === 'devolucion') return (s.dev || '').trim()
+  if (rubro === 'terminal') return (s.terminal || '').trim()
+  return (s.linea || '').trim()
+}
+
 /** "Sin datos de pago": FCL viva y vigente (ETA ISO no más vieja de 60 días) sin ningún monto cargado. */
 export function esCargaSinDatosPago(s: DbShipment, hoyISO: string): boolean {
-  if (s.archived || s.mode !== 'fcl' || s.source === 'sheet') return false
+  if (s.archived || s.mode !== 'fcl' || s.source === 'sheet' || esCargaChile(s)) return false
   if (PAGO_RUBROS.some(r => montoNum(s[MONTO_KEYS[r]]) !== null)) return false
   const limite = addDaysISO(s.eta, SIN_DATOS_ETA_MAX_DIAS)
   return limite !== null && limite >= hoyISO
@@ -142,7 +155,7 @@ export function buildPagoItems(dbShipments: DbShipment[], hoyISO: string): { ite
   const items: PagoItem[] = []
   const sinDatos: DbShipment[] = []
   for (const s of dbShipments || []) {
-    if (!s || s.archived || s.source === 'sheet') continue
+    if (!s || s.archived || s.source === 'sheet' || esCargaChile(s)) continue
     const fp = formaPagoEfectiva(s)
     let alguno = false
     for (const rubro of PAGO_RUBROS) {
@@ -153,6 +166,7 @@ export function buildPagoItems(dbShipments: DbShipment[], hoyISO: string): { ite
       const vence = venceRubro(rubro, s.eta, fp.value, s.terminal)
       items.push({
         id: s.id, ref: s.ref, cliente: s.cliente || '', linea: s.linea || '', terminal: s.terminal || '',
+        empresa: empresaRubro(rubro, s),
         rubro, monto, vence,
         dias: vence ? diffDaysISO(hoyISO, vence) : null,
         pagadoAt, pagadoBy: s[PAGO_BY_KEYS[rubro]] || '',

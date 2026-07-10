@@ -132,6 +132,22 @@ describe('buildPagoItems', () => {
     ], hoy)
     expect(items).toHaveLength(0)
   })
+  it('cargas por Chile (dest_country CL) quedan fuera — las maneja el equipo de Chile (caso A7793)', () => {
+    const { items, sinDatos } = buildPagoItems([
+      base({ id: 'cl-con-montos', dest_country: 'CL', monto_flete: 2600 }),
+      base({ id: 'cl-sin-montos', dest_country: 'CL', eta: '2026-08-01' }),
+    ], hoy)
+    expect(items).toHaveLength(0)
+    expect(sinDatos).toHaveLength(0)
+  })
+  it('empresa por rubro: flete/locales → naviera · terminal → terminal · devolución → DEV', () => {
+    const { items } = buildPagoItems([base({
+      linea: 'HMM', terminal: 'MONTECON', dev: 'STL',
+      monto_flete: 1, monto_locales: 1, monto_terminal: 1, monto_devolucion: 1,
+    })], hoy)
+    const by = Object.fromEntries(items.map(i => [i.rubro, i.empresa]))
+    expect(by).toEqual({ flete: 'HMM', locales: 'HMM', terminal: 'MONTECON', devolucion: 'STL' })
+  })
   it('el vencimiento usa la forma de pago efectiva (ONE cta cte: flete ETA+35)', () => {
     const { items } = buildPagoItems([base({ linea: 'ONE', forma_pago: null, eta: '2026-07-01', monto_flete: 1000 })], hoy)
     expect(items[0].vence).toBe('2026-08-05')
