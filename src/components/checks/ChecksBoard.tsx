@@ -33,6 +33,7 @@ import { getAdminName } from '@/lib/authClient'
 import { buildOperations, buildPerContainerPatch, type DbShipment, type UnifiedOperation } from '@/lib/operationsTypes'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
 import { parseCntr } from '@/lib/cntrUtils'
+import { hasTelex as hasTelexValue } from '@/lib/telexCheck'
 import { subscribeTrucksLive } from '@/lib/realtimeBus'
 import { fetchRefChecks, saveRefCheckSteps, saveRefCheckCntrs } from '@/lib/dataClient'
 import {
@@ -226,16 +227,16 @@ export default function ChecksBoard({ shipments = [], dbShipments = [], onPatchS
   }, [checksByRef, applyStep])
 
   // ── Telex desde la fila — MISMO camino que el toggle Telex del panel ──
-  // ViabilityBlock hace onCommit('tlx', op.tlx !== 'SI') y el commit del panel
-  // lo traduce a onPatch(op.dbId, buildPerContainerPatch(op, 'telex', boolean))
-  // (EDITABLE_FIELDS.tlx → col 'telex' bool). Como 'telex' NO está en
-  // OP_ARRAY_FIELD_BY_COL, el patch resultante es { telex: boolean } — solo la
-  // columna de shipments, sin tocar el array operativas. onPatchShipment es el
+  // ViabilityBlock hace onCommit('tlx', !hasTelex(op.tlx)) y el commit del panel
+  // lo traduce a onPatch(op.dbId, buildPerContainerPatch(op, 'telex', boolean)).
+  // Desde el 10/07 ese patch propaga la columna boolean Y el TLX 'SI'/'' a todo
+  // el array operativas (antes solo la columna → la pantalla leía el TLX viejo
+  // y el toggle "no agarraba", bug A7759). onPatchShipment es el
   // handlePatchShipment de App: optimista con revert en error. Deshacer del
   // toast = el mismo patch con el valor anterior.
   const handleToggleTelex = useCallback((op: UnifiedOperation) => {
     if (!onPatchShipment || !op.dbId) return
-    const next = op.tlx !== 'SI'
+    const next = !hasTelexValue(op.tlx)
     const apply = (v: boolean) => onPatchShipment(op.dbId!, buildPerContainerPatch(op, 'telex', v))
     apply(next)
     toast.success(next ? `Telex marcado — ${op.ref}` : `Telex quitado — ${op.ref}`, {
@@ -342,10 +343,10 @@ function ChecksRow({ op, steps, expanded, onToggleExpand, onToggleStep, onDateCh
   // Operativa desconocida (mapa devuelve "Otro") → mostrar el valor real.
   const badgeLabel = !opColor ? 'TBD' : opColor.label === 'Otro' ? operativa : opColor.label
   // Telex: derive-on-read con EXACTAMENTE el mismo criterio que el toggle del
-  // panel de detalle (ViabilityBlock: on={op.tlx === 'SI'}) — tlx viene de la
+  // panel de detalle (ViabilityBlock: hasTelex de telexCheck) — tlx viene de la
   // columna telex de shipments (FCL horneada) o del TLX de operativas (cache
   // legacy). No se guarda nada en ref_checks. Semáforo del dueño: sí=verde, no=rojo.
-  const hasTelex = op.tlx === 'SI'
+  const hasTelex = hasTelexValue(op.tlx)
   const cntrList = parseCntr(op.cntr)
   const { done, total } = checksProgress(steps, operativa, cntrList)
   const complete = done >= total

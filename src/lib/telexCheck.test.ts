@@ -8,6 +8,12 @@ describe('hasTelex / isSinTelex', () => {
     expect(hasTelex('Si')).toBe(true)
   })
 
+  it("legacy 'TRUE' (checkbox de la planilla vieja) también cuenta como liberado", () => {
+    expect(hasTelex('TRUE')).toBe(true)
+    expect(hasTelex('true')).toBe(true)
+    expect(hasTelex('FALSE')).toBe(false)
+  })
+
   it('vacío, null, undefined o cualquier otro valor = falta telex', () => {
     expect(hasTelex('')).toBe(false)
     expect(hasTelex(null)).toBe(false)

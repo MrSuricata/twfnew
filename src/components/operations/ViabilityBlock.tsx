@@ -6,6 +6,7 @@ import type { UnifiedOperation } from '@/lib/operationsTypes'
 import { DEPOSITOS_UY } from '@/lib/operationsTypes'
 import { fmtDateDMY } from '@/lib/format'
 import { isLibreDevuelto, libreDevueltoToggle, LIBRE_DEVUELTO } from '@/lib/libreDevuelto'
+import { hasTelex } from '@/lib/telexCheck'
 
 const NUM_FMT = new Intl.NumberFormat('es-UY', { maximumFractionDigits: 2 })
 
@@ -138,7 +139,7 @@ export default function ViabilityBlock({
         <TriToggle label="Madera" value={op.wood} editable={editable} onSet={v => onCommit('wood', v)} />
         <Toggle label="Entrega en planta" on={op.entregaPlanta} colors={{ si: 'red', no: 'green' }} editable={editable} onToggle={() => onCommit('entregaPlanta', !op.entregaPlanta)} />
         {/* tlx es string 'SI'|'' en el modelo; el commit envía boolean (col telex) */}
-        <Toggle label="Telex" on={op.tlx === 'SI'} colors={{ si: 'green', no: 'red' }} editable={editable} onToggle={() => onCommit('tlx', op.tlx !== 'SI')} />
+        <Toggle label="Telex" on={hasTelex(op.tlx)} colors={{ si: 'green', no: 'red' }} editable={editable} onToggle={() => onCommit('tlx', !hasTelex(op.tlx))} />
         <Toggle label="IMO" on={op.imo} colors={{ si: 'red', no: 'green' }} editable={editable} onToggle={() => onCommit('imo', !op.imo)} />
       </div>
     </section>

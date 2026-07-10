@@ -38,14 +38,19 @@ describe('buildPerContainerPatch — propaga campos por-contenedor al array oper
     expect(patch.operativas).toBeUndefined()
   })
 
-  // El toggle de telex (panel de detalle Y chip de la fila en Checks) escribe
-  // por este camino: EDITABLE_FIELDS.tlx → col 'telex' bool → como 'telex' no
-  // está en OP_ARRAY_FIELD_BY_COL, el patch es { telex: boolean } a secas.
-  it('TELEX → { telex: boolean } solo columna (camino del toggle del panel y de la fila de Checks)', () => {
+  // INVERTIDO A PROPÓSITO (10/07): el toggle escribía SOLO la columna y la
+  // pantalla/Agenda leen el TLX del array → el telex "no agarraba" (bug A7759).
+  // Ahora el patch propaga columna boolean + TLX 'SI'/'' a TODOS los cntrs.
+  it('TELEX → columna boolean + TLX SI/vacío en todo el array (bug A7759)', () => {
     expect(EDITABLE_FIELDS.tlx).toEqual({ col: 'telex', type: 'bool' })
     const patch = buildPerContainerPatch(op({ operativas: [rec(), rec({ CNTR_OP: 'C2' })] }), 'telex', true)
-    expect(patch).toEqual({ telex: true })
-    expect(buildPerContainerPatch(op({ operativas: [rec()] }), 'telex', false)).toEqual({ telex: false })
+    expect(patch.telex).toBe(true)
+    expect((patch.operativas as OperativasRecord[]).map(o => o.TLX)).toEqual(['SI', 'SI'])
+    const off = buildPerContainerPatch(op({ operativas: [rec()] }), 'telex', false)
+    expect(off.telex).toBe(false)
+    expect((off.operativas as OperativasRecord[])[0].TLX).toBe('')
+    // sin array → solo la columna, igual que siempre
+    expect(buildPerContainerPatch(op({ operativas: undefined }), 'telex', true)).toEqual({ telex: true })
   })
 
   it('array vacío → solo la columna', () => {

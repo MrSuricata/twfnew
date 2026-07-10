@@ -63,7 +63,7 @@ import {
   statusBadgeClass,
 } from '@/lib/operationsTypes'
 import { fmtDateDMY, fmtNum as fmtNumUY } from '@/lib/format'
-import { needsTelexAlert } from '@/lib/telexCheck'
+import { hasTelex, needsTelexAlert } from '@/lib/telexCheck'
 import { useBrand } from '@/lib/brand'
 import { listPlanClientes, downloadPlanOperativoPdf } from '@/lib/planOperativoPdf'
 
@@ -1300,7 +1300,7 @@ function ExpandedSummary({ op, truckStatus }: { op: UnifiedOperation; truckStatu
   if (op.noApilable) flags.push({ text: 'No apilable', cls: 'bg-red-100 text-red-700' })
   if (op.oog) flags.push({ text: 'OOG', cls: 'bg-red-100 text-red-700' })
   if (op.imo) flags.push({ text: 'IMO', cls: 'bg-red-100 text-red-700' })
-  if (op.tlx === 'SI') flags.push({ text: 'Telex', cls: 'bg-emerald-100 text-emerald-700' })
+  if (hasTelex(op.tlx)) flags.push({ text: 'Telex', cls: 'bg-emerald-100 text-emerald-700' })
   // Sin telex con salida ya coordinada = fuego: no se puede retirar el contenedor.
   else if ((op.mode === 'fcl' || op.mode === 'lcl') && needsTelexAlert({ tlx: op.tlx, fecha: op.salida })) {
     flags.push({ text: '🚨 SIN TELEX', cls: 'bg-red-100 text-red-700' })

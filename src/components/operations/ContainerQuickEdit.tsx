@@ -11,7 +11,7 @@ import {
 } from '@/components/ui/dialog'
 import type { ParsedShipment, OperativasRecord } from '@/lib/shipmentTypes'
 import { getShipmentStatus } from '@/lib/shipmentTypes'
-import { buildPerContainerPatch, applyLugarSalida } from '@/lib/operationsTypes'
+import { buildPerContainerPatch, applyLugarSalida, lugarOrDeposito } from '@/lib/operationsTypes'
 import { isSalidaBeforeArrival, fmtDMY } from '@/lib/salidaCheck'
 import { isSinTelex, SIN_TELEX_MSG } from '@/lib/telexCheck'
 import { fmtDateDMY } from '@/lib/format'
@@ -159,7 +159,12 @@ export default function ContainerQuickEdit({
     salida: currentOp.SALIDA || '',
     etaFisc: currentOp.ETA_FISC || '',
   })
-  const [lugar, setLugar] = useState<string>(currentOp.LUGAR_SALIDA || '')
+  // Lugar EFECTIVO: si el guardado está vacío, mostrar el DEPÓSITO ("manda
+  // Depósito UY" — bug 10/07: el quick-edit decía "— en terminal —" con el
+  // depósito PLANIR/GODILCO cargado). Default de lectura: entra a los datos
+  // recién cuando el usuario edita algo (commitSave lo lleva en el patch).
+  const lugarEfectivo = lugarOrDeposito(currentOp.LUGAR_SALIDA, currentOp.DEPOSITO)
+  const [lugar, setLugar] = useState<string>(lugarEfectivo)
   // Transporte es dato de la CARGA: valor actual = el del contenedor o, si está
   // vacío, el primero no-vacío del array (misma semántica firstWith del rollup).
   const normTrans = (s: string) => s.trim().toUpperCase()
@@ -186,7 +191,9 @@ export default function ContainerQuickEdit({
     JSON.stringify({
       salida: currentOp.SALIDA || '',
       etaFisc: currentOp.ETA_FISC || '',
-      lugar: currentOp.LUGAR_SALIDA || '',
+      // Mismo valor EFECTIVO que el estado inicial: un blur sin ediciones sigue
+      // siendo no-op (el default de lectura no dispara un patch espurio).
+      lugar: lugarEfectivo,
       transporte: initialTransporte,
       libre: storedLibre,
     })
@@ -436,6 +443,10 @@ export default function ContainerQuickEdit({
                 {LUGAR_OPTIONS.map(o => (
                   <option key={o.value} value={o.value}>{o.label}</option>
                 ))}
+                {/* Depósito fuera de la lista fija (ej. LOBRAUS) → opción dinámica */}
+                {lugar && !LUGAR_OPTIONS.some(o => o.value === lugar) && (
+                  <option value={lugar}>{lugar}</option>
+                )}
               </select>
             ) : (
               <span className={`text-sm font-medium ${lugar ? 'text-foreground' : 'text-muted-foreground'}`}>
