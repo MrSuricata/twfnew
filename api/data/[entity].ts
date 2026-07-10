@@ -1737,6 +1737,11 @@ const SHIPMENT_COLS = new Set([
   'dest_country','discharge_port','dest_port','fiscal','wood','no_apilable','oog','imo','tipo','ftl_ltl','costo_extra','observacion','status',
   'operator_id','notes','archived','source','desconsol_date','entrega_planta',
   'libre','salida','eta_fiscal','operativa','descarga','dev','terminal','n_cntr','origin_ref',
+  // Pagos: montos por rubro (null=sin datos · 0=pagado · >0=pendiente) + forma de
+  // pago override + fecha de pago. Los pago_*_by NO están acá a propósito: los
+  // estampa el server desde el token (el cliente no puede falsificar quién pagó).
+  'monto_flete','monto_locales','monto_terminal','monto_devolucion','forma_pago',
+  'pago_flete_at','pago_locales_at','pago_terminal_at','pago_devolucion_at',
   'operativas',
 ])
 
@@ -1876,12 +1881,19 @@ async function handleShipments(req: VercelRequest, res: VercelResponse, db: any,
       if (r.m3 > 0) updates.m3 = r.m3
     }
     if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No valid fields' })
+    // Pagos: el "quién pagó" lo estampa SIEMPRE el server desde el token.
+    // Marcar (fecha) → by = usuario del token · desmarcar (null) → by = null.
+    let esPago = false
+    for (const k of Object.keys(updates)) {
+      const m = /^pago_(flete|locales|terminal|devolucion)_at$/.exec(k)
+      if (m) { esPago = true; updates[`pago_${m[1]}_by`] = updates[k] ? auditUser(payload as any) : null }
+    }
     updates.updated_at_ts = Date.now()
     const { data: updRow, error } = await db.from('shipments').update(updates).eq('id', id).select('ref').maybeSingle()
     if (error) throw error
     logAudit(db, payload, 'archived' in updates && Object.keys(updates).length === 1
       ? (updates.archived ? 'archivar' : 'restaurar')
-      : 'editar', 'shipments', updRow?.ref || id, updates)
+      : esPago ? 'pago' : 'editar', 'shipments', updRow?.ref || id, updates)
     return res.status(200).json({ updated: true })
   }
 
