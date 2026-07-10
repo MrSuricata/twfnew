@@ -207,6 +207,23 @@ export interface DbShipment {
   source: string
   archived: boolean
   operativas?: OperativasRecord[] | null
+  // Pagos (pestaña Pagos, 10/07/2026): montos por rubro a nivel carga. Convención:
+  // null = sin datos · 0 = ya pagado (regla histórica de la SG) · >0 = pendiente
+  // salvo pago_*_at estampado. El vencimiento NUNCA se guarda (derive-on-read:
+  // pagosVencimientos.ts). pago_*_by lo estampa el server desde el token.
+  monto_flete?: number | null
+  monto_locales?: number | null
+  monto_terminal?: number | null
+  monto_devolucion?: number | null
+  forma_pago?: string | null
+  pago_flete_at?: string | null
+  pago_locales_at?: string | null
+  pago_terminal_at?: string | null
+  pago_devolucion_at?: string | null
+  pago_flete_by?: string | null
+  pago_locales_by?: string | null
+  pago_terminal_by?: string | null
+  pago_devolucion_by?: string | null
 }
 
 // ── Fila unificada de la grilla ──
