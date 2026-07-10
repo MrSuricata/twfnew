@@ -20,6 +20,7 @@ import {
   Star,
   ChatCircleText,
   ShieldCheck,
+  CurrencyDollar,
 } from '@phosphor-icons/react'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
 import type { ClientAccount } from '@/lib/quotationTypes'
@@ -36,6 +37,7 @@ const TABS: Array<{ id: string; label: string; icon: typeof Package; shortcut?: 
   { id: 'agenda', label: 'Agenda', icon: CalendarBlank, shortcut: 'G A' },
   { id: 'analytics', label: 'Analíticas', icon: ChartBar },
   { id: 'operaciones', label: 'Operaciones', icon: Package, shortcut: 'G C' },
+  { id: 'pagos', label: 'Pagos', icon: CurrencyDollar },
   { id: 'quotes', label: 'Cotizaciones', icon: ChatCircleText, shortcut: 'G Q' },
   { id: 'clients', label: 'Clientes', icon: UsersThree, shortcut: 'G L' },
   { id: 'partners', label: 'Partners', icon: Truck, shortcut: 'G P' },

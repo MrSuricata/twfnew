@@ -21,6 +21,7 @@ import {
   Globe,
   Bell,
   BellRinging,
+  CurrencyDollar,
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import { authFetch, getAdminLevel } from '@/lib/authClient'
@@ -45,6 +46,8 @@ import TrucksManagement from './trucks/TrucksManagement'
 import BrandLogo from './BrandLogo'
 import { useBrand } from '@/lib/brand'
 import BillingManagement from './BillingManagement'
+import PagosManagement from './PagosManagement'
+import { buildPagoItems } from '@/lib/pagosVencimientos'
 import OperationsGrid from './operations/OperationsGrid'
 import OperationDetailOverlay from './operations/OperationDetailOverlay'
 import ChecksBoard from './checks/ChecksBoard'
@@ -229,6 +232,14 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
     q => q.status === 'pending' && Date.now() - q.timestamp > ONE_DAY_MS
   ).length
 
+  // Badge Pagos: pendientes vencidos o que vencen HOY (vencimiento derivado).
+  const pagosAlertCount = useMemo(() => {
+    const d = new Date()
+    const hoy = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    return buildPagoItems(dbShipments || [], hoy).items
+      .filter(i => i.estado === 'pendiente' && i.dias !== null && i.dias <= 0).length
+  }, [dbShipments])
+
   const getBreadcrumbs = () => {
     const breadcrumbMap: Record<string, string> = {
       hoy: 'Hoy',
@@ -242,6 +253,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
       quotes: 'Cotizaciones',
       trucks: 'Camiones',
       billing: 'Facturación',
+      pagos: 'Pagos',
       operaciones: 'Operaciones',
       checks: 'Checks',
       equipo: 'Equipo',
@@ -383,6 +395,15 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
                 </span>
               )}
             </TabsTrigger>
+            <TabsTrigger value="pagos" className="tab-underline" aria-label="Pagos">
+              <CurrencyDollar size={16} className="mr-1.5" weight="fill" />
+              <span className="hidden sm:inline">Pagos</span>
+              {pagosAlertCount > 0 && (
+                <span className="ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold rounded-full text-white shrink-0 bg-red-500">
+                  {pagosAlertCount}
+                </span>
+              )}
+            </TabsTrigger>
             {SHOW_IMPORT_TAB && (
             <TabsTrigger value="excel-import" className="tab-underline" aria-label="Importar datos">
               <Database size={16} className="mr-1.5" />
@@ -489,6 +510,13 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
               billing={billing}
               onUpdateBilling={onUpdateBilling}
               onClearBilling={onClearBilling}
+            />
+          </TabsContent>
+
+          <TabsContent value="pagos">
+            <PagosManagement
+              dbShipments={dbShipments}
+              onPatchShipment={(id, fields) => { if (onPatchShipment) onPatchShipment(id, fields) }}
             />
           </TabsContent>
 
