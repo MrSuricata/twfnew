@@ -2,7 +2,7 @@
 // deriva SIEMPRE de ETA + forma de pago efectiva + terminal).
 // Reglas Brian 10/07/2026 (WEB_TWF/SPEC_PAGOS_2026-07-10.md):
 //   FLETE      · cuenta corriente (ONE)       → ETA + 35 días
-//              · programado (MAERSK/Repremar) → ETA + 30 días
+//              · programado (MAERSK/Repremar) → ETA + 40 días
 //              · al arribo (resto)            → ETA
 //   LOCALES    · cuenta corriente             → ETA + 35 días
 //              · programado / al arribo       → ETA
@@ -37,7 +37,7 @@ export const PAGO_BY_KEYS = {
 } as const satisfies Record<PagoRubro, keyof DbShipment>
 
 export const FLETE_CTA_CTE_DIAS = 35
-export const FLETE_PROGRAMADO_DIAS = 30   // Brian 10/07/2026 (docs anteriores decían 40)
+export const FLETE_PROGRAMADO_DIAS = 40   // confirmado por Brian 10/07/2026
 export const LOCALES_CTA_CTE_DIAS = 35
 export const TERMINAL_MONTECON_DIAS = -5
 // "Sin datos de pago" solo molesta con cargas vigentes: ETA no más vieja que esto.

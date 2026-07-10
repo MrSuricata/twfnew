@@ -73,9 +73,9 @@ describe('normalizeFormaPago / formaPagoEfectiva', () => {
 
 describe('venceRubro — matriz de reglas', () => {
   const eta = '2026-07-01'
-  it('FLETE: cta cte +35 · programado +30 · al arribo ETA', () => {
+  it('FLETE: cta cte +35 · programado +40 · al arribo ETA', () => {
     expect(venceRubro('flete', eta, 'cuenta corriente', 'TCP')).toBe('2026-08-05')
-    expect(venceRubro('flete', eta, 'programado', 'TCP')).toBe('2026-07-31')
+    expect(venceRubro('flete', eta, 'programado', 'TCP')).toBe('2026-08-10')
     expect(venceRubro('flete', eta, 'al arribo', 'TCP')).toBe('2026-07-01')
   })
   it('LOCALES: cta cte +35 · resto ETA', () => {
