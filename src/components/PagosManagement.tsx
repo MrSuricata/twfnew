@@ -180,7 +180,7 @@ export default function PagosManagement({ dbShipments = [], onPatchShipment }: P
       corte.items.map(i => ({
         Ref: i.ref,
         Cliente: i.cliente,
-        Naviera: i.linea,
+        Empresa: i.empresa,
         Rubro: RUBRO_LABELS[i.rubro],
         'Monto USD': i.monto,
         Vence: i.vence ? fmtDateDMY(i.vence) : 'sin ETA',
@@ -314,7 +314,7 @@ export default function PagosManagement({ dbShipments = [], onPatchShipment }: P
                     <tr>
                       <th className="px-3 py-2 text-left">Ref</th>
                       <th className="px-3 py-2 text-left">Cliente</th>
-                      <th className="px-3 py-2 text-left">Naviera</th>
+                      <th className="px-3 py-2 text-left">Empresa</th>
                       <th className="px-3 py-2 text-left">Rubro</th>
                       <th className="px-3 py-2 text-right">Monto USD</th>
                       <th className="px-3 py-2 text-left">Vence</th>
@@ -328,10 +328,12 @@ export default function PagosManagement({ dbShipments = [], onPatchShipment }: P
                         <td className="px-3 py-2 font-medium whitespace-nowrap">{it.ref}</td>
                         <td className="px-3 py-2 max-w-[220px] truncate" title={it.cliente}>{it.cliente || '—'}</td>
                         <td className="px-3 py-2 whitespace-nowrap">
-                          {it.linea || '—'}
-                          <span className="ml-1.5 text-[10px] text-muted-foreground" title={it.formaPagoOverride ? 'Forma de pago fijada en la carga' : 'Forma de pago derivada de la naviera'}>
-                            {FORMA_PAGO_LABELS[it.formaPago]}{it.formaPagoOverride ? ' ✏️' : ''}
-                          </span>
+                          {it.empresa || '—'}
+                          {(it.rubro === 'flete' || it.rubro === 'locales') && (
+                            <span className="ml-1.5 text-[10px] text-muted-foreground" title={it.formaPagoOverride ? 'Forma de pago fijada en la carga' : 'Forma de pago derivada de la naviera'}>
+                              {FORMA_PAGO_LABELS[it.formaPago]}{it.formaPagoOverride ? ' ✏️' : ''}
+                            </span>
+                          )}
                         </td>
                         <td className="px-3 py-2 whitespace-nowrap">{RUBRO_LABELS[it.rubro]}</td>
                         <td className="px-3 py-2 text-right tabular-nums font-medium">{fmtMoneyUY(it.monto)}</td>
