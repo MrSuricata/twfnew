@@ -248,13 +248,10 @@ describe('AVISO_STEP_BY_COLUMN', () => {
     }
   })
 
-  it('los 3 avisos son pasos comunes (sin condición de operativa) → aplican a cualquier modalidad', () => {
-    // aviso_salida / cruce_frontera / arribo_fiscal NO llevan `solo`, así que se
-    // marcan sin importar TRASIEGO / CONTENEDOR / etc. (HOY muestra cargas de
-    // cualquier operativa).
+  it('los 3 avisos están marcados con flag `aviso` (viven en HOY, no en la pestaña Checks)', () => {
     for (const step of Object.values(AVISO_STEP_BY_COLUMN)) {
       const def = CHECK_STEPS.find(s => s.key === step)
-      expect(def?.solo).toBeUndefined()
+      expect(def?.aviso).toBe(true)
     }
   })
 
