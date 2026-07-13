@@ -349,29 +349,22 @@ export const RefCheckStepSchema = z.object({
 })
 
 /** Upsert de checks por ref: steps PARCIALES (solo las claves tocadas), que el
- *  server mergea sobre el jsonb existente — nunca pisa todo. Claves fijas del
- *  PROCEDIMIENTO OPERATIVO (9 comunes + 2 solo-TRASIEGO + 4 solo-CONTENEDOR,
- *  espejo de CHECK_STEPS en src/lib/checksTypes.ts); .strict() rechaza
- *  cualquier otra. */
+ *  server mergea sobre el jsonb existente — nunca pisa todo. Claves fijas: los
+ *  4 checks documentarios (Brian 13/07/2026) + los 3 avisos por contenedor de
+ *  HOY (espejo de CHECK_STEPS en src/lib/checksTypes.ts); .strict() rechaza
+ *  cualquier otra. Las keys del checklist viejo pueden persistir en el jsonb
+ *  guardado (se ignoran al leer) pero ya no se aceptan al escribir. */
 const checkStep = RefCheckStepSchema.optional()
 export const RefChecksUpsertSchema = z.object({
   ref: z.string().min(1).max(100),
   steps: z.object({
-    salida_origen: checkStep,
-    arribo_buque: checkStep,
-    carta_resp: checkStep,
-    bl_naviera: checkStep,
-    pagos_liberacion: checkStep,
-    confirmar_dev_arg: checkStep,
-    traslado_deposito: checkStep,
-    coord_trasiego: checkStep,
-    fotos_carga: checkStep,
+    bl_entregado: checkStep,
+    carta_entregada: checkStep,
+    docs_transporte: checkStep,
+    docs_deposito: checkStep,
     aviso_salida: checkStep,
     cruce_frontera: checkStep,
     arribo_fiscal: checkStep,
-    transferir_cntr: checkStep,
-    pagar_dropoff: checkStep,
-    pagar_gatein: checkStep,
   }).strict().refine(s => Object.values(s).some(v => v !== undefined), { message: 'steps vacío' }),
 })
 

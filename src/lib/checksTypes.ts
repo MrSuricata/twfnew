@@ -1,17 +1,20 @@
-// ─── Checks operativos por referencia (pestaña Checks) ─────────────────
-// Checklist del PROCEDIMIENTO OPERATIVO (redacción textual del dueño) para
-// FCL que operan por Uruguay, con pasos condicionales por operativa:
-//   TRASIEGO   → 11 pasos (9 comunes + traslado a depósito + coordinar trasiego)
-//   CONTENEDOR → 13 pasos (9 comunes + confirmar devolución en AR antes del
-//                viaje + transferencia / drop off / gate in post-arribo)
-//   resto      → 9 pasos comunes
-// La tabla `ref_checks` guarda SOLO el estado de los pasos: el universo de
-// refs se deriva SIEMPRE de las cargas al leer (derive-on-read) — nunca se
-// copia a la tabla.
+// ─── Checks documentarios por referencia (pestaña Checks) ───────────────
+// 4 checks por carga (Brian, 13/07/2026 — reemplazan el checklist largo del
+// procedimiento, que no se usaba):
+//   BL entregado · Carta entregada · Docs transporte · Docs depósito
+// Regla de negocio: los 4 tienen que estar listos 2 SEMANAS antes de la ETA
+// (un digest diario de n8n avisa los que faltan).
+// La tabla `ref_checks` guarda SOLO el estado: el universo de refs se deriva
+// SIEMPRE de las cargas al leer (derive-on-read) — nunca se copia a la tabla.
 //
-// V1: todos los pasos se marcan a MANO. "Avisar cruce de frontera" y
-// "Avisar arribo a fiscal" NO se auto-marcan desde las fechas de la
-// operativa (salida/ETA fiscal) — mejora futura.
+// En el MISMO jsonb conviven los 3 AVISOS por contenedor que usa la pestaña
+// HOY (aviso_salida / cruce_frontera / arribo_fiscal): están en CHECK_STEPS
+// con flag `aviso` y NO se muestran en la pestaña Checks.
+//
+// Las keys del checklist viejo (salida_origen, carta_resp, bl_naviera, …)
+// pueden seguir apareciendo en el jsonb guardado de filas previas: se ignoran
+// al leer y el schema del server ya no las acepta al escribir. Los datos de
+// carta_resp/bl_naviera se migraron a carta_entregada/bl_entregado (13/07).
 // ────────────────────────────────────────────────────────────────────────
 
 import type { UnifiedOperation } from './operationsTypes'
@@ -19,52 +22,34 @@ import { isOperationActive } from './operationsTypes'
 import { parseLocalDate } from './shipmentTypes'
 
 export type CheckStepKey =
-  | 'salida_origen'
-  | 'arribo_buque'
-  | 'carta_resp'
-  | 'bl_naviera'
-  | 'pagos_liberacion'
-  | 'confirmar_dev_arg'
-  | 'traslado_deposito'
-  | 'coord_trasiego'
-  | 'fotos_carga'
+  // Checks documentarios (pestaña Checks)
+  | 'bl_entregado'
+  | 'carta_entregada'
+  | 'docs_transporte'
+  | 'docs_deposito'
+  // Avisos por contenedor (se marcan desde HOY)
   | 'aviso_salida'
   | 'cruce_frontera'
   | 'arribo_fiscal'
-  | 'transferir_cntr'
-  | 'pagar_dropoff'
-  | 'pagar_gatein'
 
 export interface CheckStepDef {
   key: CheckStepKey
   label: string
-  /** Paso condicional: solo aplica cuando la OPERATIVA es esta.
-   *  'TRASIEGO' → traslado a depósito + coordinar trasiego ·
-   *  'CONTENEDOR' → confirmar devolución en AR + transferencia/drop off/gate in. */
-  solo?: 'TRASIEGO' | 'CONTENEDOR'
+  /** Aviso por contenedor: vive en la pestaña HOY (una tarjeta = un cntr) y
+   *  NO se muestra en la pestaña Checks. */
+  aviso?: boolean
 }
 
-/** Los pasos del PROCEDIMIENTO OPERATIVO — mantener este orden y esta
- *  redacción (labels textuales del dueño). Los condicionales se intercalan
- *  donde ocurren en la operación real: confirmar devolución en AR es PREVIO
- *  al viaje (tras pagar la liberación); transferencia, drop off y gate in
- *  son POST-arribo a fiscal. */
+/** Todos los pasos conocidos del jsonb `steps`: los 4 checks documentarios
+ *  (orden y redacción de Brian) + los 3 avisos de HOY. */
 export const CHECK_STEPS: CheckStepDef[] = [
-  { key: 'salida_origen', label: 'Avisar salida de origen' },
-  { key: 'arribo_buque', label: 'Avisar arribo del buque a destino' },
-  { key: 'carta_resp', label: 'Entregar carta de responsabilidad' },
-  { key: 'bl_naviera', label: 'Entregar BL a naviera' },
-  { key: 'pagos_liberacion', label: 'Pagar gastos para liberar' },
-  { key: 'confirmar_dev_arg', label: 'Confirmar si puede devolver en Argentina', solo: 'CONTENEDOR' },
-  { key: 'traslado_deposito', label: 'Avisar traslado de contenedor a depósito en Uruguay', solo: 'TRASIEGO' },
-  { key: 'coord_trasiego', label: 'Coordinar fecha de trasiego', solo: 'TRASIEGO' },
-  { key: 'fotos_carga', label: 'Mandar fotos día de carga' },
-  { key: 'aviso_salida', label: 'Avisar salida en el día de carga' },
-  { key: 'cruce_frontera', label: 'Avisar cruce de frontera' },
-  { key: 'arribo_fiscal', label: 'Avisar arribo a fiscal' },
-  { key: 'transferir_cntr', label: 'Transferir el contenedor', solo: 'CONTENEDOR' },
-  { key: 'pagar_dropoff', label: 'Pagar drop off a la línea', solo: 'CONTENEDOR' },
-  { key: 'pagar_gatein', label: 'Pagar gate in a la terminal en Argentina', solo: 'CONTENEDOR' },
+  { key: 'bl_entregado', label: 'BL entregado' },
+  { key: 'carta_entregada', label: 'Carta entregada' },
+  { key: 'docs_transporte', label: 'Docs transporte' },
+  { key: 'docs_deposito', label: 'Docs depósito' },
+  { key: 'aviso_salida', label: 'Avisar salida en el día de carga', aviso: true },
+  { key: 'cruce_frontera', label: 'Avisar cruce de frontera', aviso: true },
+  { key: 'arribo_fiscal', label: 'Avisar arribo a fiscal', aviso: true },
 ]
 
 /** Estado guardado de un paso. `by` lo estampa el server desde el token. */
@@ -103,25 +88,11 @@ export function normalizeRef(ref: string | null | undefined): string {
   return String(ref || '').trim().toUpperCase()
 }
 
-/** ¿La operativa es trasiego? (habilita traslado_deposito + coord_trasiego). */
-export function isTrasiego(operativa: string | null | undefined): boolean {
-  return String(operativa || '').toUpperCase().includes('TRASIEGO')
-}
-
-/** ¿La operativa es contenedor (retiro directo de terminal a fiscal AR)?
- *  Habilita confirmar_dev_arg + transferir_cntr + pagar_dropoff + pagar_gatein. */
-export function isContenedor(operativa: string | null | undefined): boolean {
-  return String(operativa || '').toUpperCase().includes('CONTENEDOR')
-}
-
-/** Pasos visibles para una operativa: 11 si es TRASIEGO, 13 si es CONTENEDOR,
- *  9 en el resto (se ocultan los condicionales que no aplican). */
-export function stepsForOperativa(operativa: string | null | undefined): CheckStepDef[] {
-  const trasiego = isTrasiego(operativa)
-  const contenedor = isContenedor(operativa)
-  return CHECK_STEPS.filter(s =>
-    !s.solo || (s.solo === 'TRASIEGO' && trasiego) || (s.solo === 'CONTENEDOR' && contenedor)
-  )
+/** Checks visibles en la pestaña Checks: los 4 documentarios (los avisos se
+ *  marcan desde HOY). La operativa ya no condiciona pasos — el parámetro se
+ *  conserva por compatibilidad de firma con los callers. */
+export function stepsForOperativa(_operativa: string | null | undefined): CheckStepDef[] {
+  return CHECK_STEPS.filter(s => !s.aviso)
 }
 
 // ── Avisos POR CONTENEDOR (salida/frontera/fiscal) ──────────────────────

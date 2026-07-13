@@ -33,84 +33,80 @@ const mkOp = (over: Partial<UnifiedOperation> = {}): UnifiedOperation => ({
   ...over,
 })
 
+// Los 4 checks documentarios de Brian (13/07/2026), en su orden.
+const DOC_KEYS = ['bl_entregado', 'carta_entregada', 'docs_transporte', 'docs_deposito']
+
 describe('stepsForOperativa', () => {
-  it('TRASIEGO muestra 11 pasos: los 9 comunes + los 2 de trasiego intercalados', () => {
-    const keys = stepsForOperativa('TRASIEGO').map(s => s.key)
-    expect(keys).toEqual([
-      'salida_origen', 'arribo_buque', 'carta_resp', 'bl_naviera', 'pagos_liberacion',
-      'traslado_deposito', 'coord_trasiego',
-      'fotos_carga', 'aviso_salida', 'cruce_frontera', 'arribo_fiscal',
-    ])
-    // Los pasos solo-CONTENEDOR no aparecen en trasiego
-    expect(keys).not.toContain('confirmar_dev_arg')
-    expect(keys).not.toContain('transferir_cntr')
-  })
-
-  it('CONTENEDOR muestra 13 pasos: confirmar dev AR tras liberar + transferencia/drop off/gate in al final', () => {
-    const keys = stepsForOperativa('CONTENEDOR').map(s => s.key)
-    expect(keys).toEqual([
-      'salida_origen', 'arribo_buque', 'carta_resp', 'bl_naviera', 'pagos_liberacion',
-      'confirmar_dev_arg',
-      'fotos_carga', 'aviso_salida', 'cruce_frontera', 'arribo_fiscal',
-      'transferir_cntr', 'pagar_dropoff', 'pagar_gatein',
-    ])
-    expect(keys).not.toContain('traslado_deposito')
-    expect(keys).not.toContain('coord_trasiego')
-  })
-
-  it('resto de operativas (CARGA A PISO / vacío) → solo los 9 pasos comunes', () => {
-    for (const operativa of ['CARGA A PISO', '', undefined]) {
-      const keys = stepsForOperativa(operativa).map(s => s.key)
-      expect(keys).toHaveLength(9)
-      expect(keys).toEqual(CHECK_STEPS.filter(s => !s.solo).map(s => s.key))
+  it('siempre son los 4 checks documentarios, para cualquier operativa', () => {
+    for (const operativa of ['TRASIEGO', 'CONTENEDOR', 'CARGA A PISO', '', undefined]) {
+      expect(stepsForOperativa(operativa).map(s => s.key)).toEqual(DOC_KEYS)
     }
+  })
+
+  it('los avisos de HOY están en CHECK_STEPS (con flag) pero NO en la pestaña', () => {
+    const keys = new Set(CHECK_STEPS.map(s => s.key))
+    expect(keys.has('aviso_salida')).toBe(true)
+    expect(keys.has('cruce_frontera')).toBe(true)
+    expect(keys.has('arribo_fiscal')).toBe(true)
+    const visibles = stepsForOperativa('TRASIEGO').map(s => s.key)
+    expect(visibles).not.toContain('aviso_salida')
+    expect(visibles).not.toContain('cruce_frontera')
+    expect(visibles).not.toContain('arribo_fiscal')
   })
 })
 
 describe('checksProgress', () => {
-  it('cuenta hechos sobre el total visible según la operativa (11 / 13 / 9)', () => {
+  it('cuenta hechos sobre los 4 checks (la operativa ya no cambia el total)', () => {
     const steps: RefCheckSteps = {
-      salida_origen: { done: true, date: '2026-06-01' },
-      coord_trasiego: { done: true, date: '2026-06-20' },
+      bl_entregado: { done: true, date: '2026-06-01' },
+      docs_deposito: { done: true, date: '2026-06-20' },
     }
-    expect(checksProgress(steps, 'TRASIEGO')).toEqual({ done: 2, total: 11 })
-    // En CONTENEDOR el paso de trasiego marcado NO cuenta (no es visible)
-    expect(checksProgress(steps, 'CONTENEDOR')).toEqual({ done: 1, total: 13 })
-    expect(checksProgress({}, '')).toEqual({ done: 0, total: 9 })
+    expect(checksProgress(steps, 'TRASIEGO')).toEqual({ done: 2, total: 4 })
+    expect(checksProgress(steps, 'CONTENEDOR')).toEqual({ done: 2, total: 4 })
+    expect(checksProgress({}, '')).toEqual({ done: 0, total: 4 })
   })
 
-  it('los pasos solo-CONTENEDOR cuentan en CONTENEDOR pero no en TRASIEGO', () => {
+  it('los avisos marcados NO suman al progreso de la pestaña', () => {
     const steps: RefCheckSteps = {
-      confirmar_dev_arg: { done: true, date: '2026-06-25' },
-      pagar_gatein: { done: true, date: '2026-07-01' },
+      aviso_salida: { done: true },
+      cruce_frontera: { done: true },
+      carta_entregada: { done: true },
     }
-    expect(checksProgress(steps, 'CONTENEDOR')).toEqual({ done: 2, total: 13 })
-    expect(checksProgress(steps, 'TRASIEGO')).toEqual({ done: 0, total: 11 })
+    expect(checksProgress(steps, '')).toEqual({ done: 1, total: 4 })
+  })
+
+  it('las keys del checklist viejo que queden en el jsonb se ignoran', () => {
+    const legacy = {
+      salida_origen: { done: true },
+      pagos_liberacion: { done: true },
+      bl_entregado: { done: true },
+    } as unknown as RefCheckSteps
+    expect(checksProgress(legacy, 'TRASIEGO')).toEqual({ done: 1, total: 4 })
   })
 })
 
 describe('mergeChecksSteps', () => {
   it('mergea el patch parcial sin pisar los pasos no tocados', () => {
     const base: RefCheckSteps = {
-      salida_origen: { done: true, date: '2026-06-01', by: 'brian@twf.uy' },
+      bl_entregado: { done: true, date: '2026-06-01', by: 'brian@twf.uy' },
     }
-    const out = mergeChecksSteps(base, { arribo_buque: { done: true, date: '2026-06-28', by: 'diego' } })
-    expect(out.salida_origen).toEqual({ done: true, date: '2026-06-01', by: 'brian@twf.uy' })
-    expect(out.arribo_buque?.date).toBe('2026-06-28')
+    const out = mergeChecksSteps(base, { carta_entregada: { done: true, date: '2026-06-28', by: 'diego' } })
+    expect(out.bl_entregado).toEqual({ done: true, date: '2026-06-01', by: 'brian@twf.uy' })
+    expect(out.carta_entregada?.date).toBe('2026-06-28')
     // Reemplaza solo la clave tocada (edición de fecha)
-    const out2 = mergeChecksSteps(out, { arribo_buque: { done: true, date: '2026-06-29', by: 'diego' } })
-    expect(out2.arribo_buque?.date).toBe('2026-06-29')
+    const out2 = mergeChecksSteps(out, { carta_entregada: { done: true, date: '2026-06-29', by: 'diego' } })
+    expect(out2.carta_entregada?.date).toBe('2026-06-29')
     expect(Object.keys(out2)).toHaveLength(2)
   })
 
   it('done=false elimina el paso (vuelve a pendiente)', () => {
     const base: RefCheckSteps = {
-      salida_origen: { done: true, date: '2026-06-01' },
-      arribo_buque: { done: true, date: '2026-06-28' },
+      bl_entregado: { done: true, date: '2026-06-01' },
+      docs_transporte: { done: true, date: '2026-06-28' },
     }
-    const out = mergeChecksSteps(base, { salida_origen: { done: false } })
-    expect(out.salida_origen).toBeUndefined()
-    expect(out.arribo_buque?.done).toBe(true)
+    const out = mergeChecksSteps(base, { bl_entregado: { done: false } })
+    expect(out.bl_entregado).toBeUndefined()
+    expect(out.docs_transporte?.done).toBe(true)
   })
 })
 
@@ -154,35 +150,24 @@ describe('buildChecksUniverse', () => {
 })
 
 describe('nextPendingStep', () => {
-  it('sugiere el primer paso visible sin marcar según la operativa', () => {
-    const steps: RefCheckSteps = {
-      salida_origen: { done: true },
-      arribo_buque: { done: true },
-      carta_resp: { done: true },
-      bl_naviera: { done: true },
-      pagos_liberacion: { done: true },
-    }
-    expect(nextPendingStep(steps, 'TRASIEGO')).toBe('traslado_deposito')
-    // En CONTENEDOR lo que sigue a la liberación es confirmar la devolución en AR
-    expect(nextPendingStep(steps, 'CONTENEDOR')).toBe('confirmar_dev_arg')
-    expect(nextPendingStep(steps, 'CARGA A PISO')).toBe('fotos_carga')
-    expect(nextPendingStep({}, 'TRASIEGO')).toBe('salida_origen')
+  it('sugiere el primer check sin marcar, en el orden de Brian', () => {
+    expect(nextPendingStep({}, '')).toBe('bl_entregado')
+    expect(nextPendingStep({ bl_entregado: { done: true } }, '')).toBe('carta_entregada')
+    expect(nextPendingStep({
+      bl_entregado: { done: true },
+      carta_entregada: { done: true },
+      docs_transporte: { done: true },
+    }, '')).toBe('docs_deposito')
   })
 
-  it('devuelve null cuando todos los pasos visibles están hechos; los post-arribo cierran CONTENEDOR', () => {
+  it('devuelve null cuando los 4 están hechos', () => {
     const all: RefCheckSteps = {}
-    for (const s of stepsForOperativa('CONTENEDOR')) all[s.key] = { done: true }
-    expect(nextPendingStep(all, 'CONTENEDOR')).toBeNull()
-    // Pero en TRASIEGO faltan los 2 pasos propios
-    expect(nextPendingStep(all, 'TRASIEGO')).toBe('traslado_deposito')
-    // Y si en CONTENEDOR falta solo el gate in, es lo próximo
-    const casiTodo = { ...all }
-    delete casiTodo.pagar_gatein
-    expect(nextPendingStep(casiTodo, 'CONTENEDOR')).toBe('pagar_gatein')
+    for (const s of stepsForOperativa('')) all[s.key] = { done: true }
+    expect(nextPendingStep(all, '')).toBeNull()
   })
 })
 
-// ── Avisos por contenedor (salida/frontera/fiscal) ──────────────────────
+// ── Avisos por contenedor (salida/frontera/fiscal — pestaña HOY) ────────
 describe('avisos por contenedor', () => {
   const CNTRS = ['ABCU1111111', 'ABCU2222222']
 
@@ -190,8 +175,10 @@ describe('avisos por contenedor', () => {
     expect(isAvisoStep('aviso_salida')).toBe(true)
     expect(isAvisoStep('cruce_frontera')).toBe(true)
     expect(isAvisoStep('arribo_fiscal')).toBe(true)
-    expect(isAvisoStep('bl_naviera')).toBe(false)
-    expect(isAvisoStep('carta_resp')).toBe(false)
+    expect(isAvisoStep('bl_entregado')).toBe(false)
+    expect(isAvisoStep('carta_entregada')).toBe(false)
+    expect(isAvisoStep('docs_transporte')).toBe(false)
+    expect(isAvisoStep('docs_deposito')).toBe(false)
   })
 
   it('avisoForCntr: con cntrs, cada contenedor es independiente', () => {
@@ -220,7 +207,7 @@ describe('avisos por contenedor', () => {
   })
 
   it('buildAvisoCntrsMap: siembra todos los contenedores y aplica el toggle a UNO', () => {
-    // Estado previo: contenedor 1 avisado (legacy nivel-ref → ambos avisados)
+    // Estado previo: legacy nivel-ref → ambos avisados
     const legacy: RefCheckStep = { done: true, date: '2026-07-01', by: 'joaco' }
     // Marco NO avisado el contenedor 2; el 1 debe conservarse avisado (no se pierde)
     const map = buildAvisoCntrsMap(legacy, CNTRS, 'ABCU2222222', false, { date: '2026-07-06', by: 'brian' })
@@ -228,28 +215,9 @@ describe('avisos por contenedor', () => {
     expect(map['ABCU2222222'].done).toBe(false) // el toggle
   })
 
-  it('buildAvisoCntrsMap: target=null marca TODOS (bulk desde la pestaña Checks)', () => {
+  it('buildAvisoCntrsMap: target=null marca TODOS (bulk)', () => {
     const map = buildAvisoCntrsMap(undefined, CNTRS, null, true, { date: '2026-07-06', by: 'brian' })
     expect(map['ABCU1111111'].done).toBe(true)
     expect(map['ABCU2222222'].done).toBe(true)
-  })
-
-  it('checksProgress: el paso-aviso cuenta hecho SOLO si todos los contenedores están avisados', () => {
-    const uno: RefCheckSteps = { aviso_salida: { done: true, cntrs: { ABCU1111111: { done: true } } } }
-    // con 2 contenedores: aviso_salida NO completo (1/2) → no suma
-    expect(checksProgress(uno, 'GODILCO', CNTRS).done).toBe(0)
-    const dos: RefCheckSteps = { aviso_salida: { done: true, cntrs: { ABCU1111111: { done: true }, ABCU2222222: { done: true } } } }
-    expect(checksProgress(dos, 'GODILCO', CNTRS).done).toBe(1)
-    // sin cntrList: cae al done del paso (compat con la pestaña que no pasa lista)
-    expect(checksProgress(uno, 'GODILCO').done).toBe(1)
-  })
-
-  it('nextPendingStep: un aviso a medias (1/2) sigue siendo el próximo pendiente', () => {
-    const steps: RefCheckSteps = {
-      salida_origen: { done: true }, arribo_buque: { done: true }, carta_resp: { done: true },
-      bl_naviera: { done: true }, pagos_liberacion: { done: true }, fotos_carga: { done: true },
-      aviso_salida: { done: true, cntrs: { ABCU1111111: { done: true } } }, // 1/2
-    }
-    expect(nextPendingStep(steps, 'DIRECTO', CNTRS)).toBe('aviso_salida')
   })
 })

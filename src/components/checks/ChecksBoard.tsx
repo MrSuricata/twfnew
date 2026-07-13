@@ -1,5 +1,8 @@
-// ─── Pestaña Checks — checklist del PROCEDIMIENTO OPERATIVO por ref ────
-// V1: solo FCL activas que operan por Uruguay (criterio en checksTypes:
+// ─── Pestaña Checks — 4 checks documentarios por ref ────────────────────
+// BL entregado · Carta entregada · Docs transporte · Docs depósito
+// (Brian 13/07/2026 — deben estar listos 2 semanas antes de la ETA; los
+// avisos salida/frontera/fiscal viven en HOY, no acá.)
+// Solo FCL activas que operan por Uruguay (criterio en checksTypes:
 // PAIS='UY' ⇔ POD Montevideo; incluye AR-vía-MVD, excluye Chile/Buenos
 // Aires directo). El universo de refs se DERIVA de las cargas del admin
 // (buildOperations sobre shipments+dbShipments, igual que Operaciones);
@@ -251,10 +254,10 @@ export default function ChecksBoard({ shipments = [], dbShipments = [], onPatchS
         <div className="min-w-0">
           <h2 className="text-lg font-semibold flex items-center gap-2">
             <ListChecks size={20} weight="fill" className="text-primary" />
-            Checks operativos
+            Checks documentarios
           </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Procedimiento por referencia — FCL activas que operan por Uruguay · {universe.length} cargas · {alDia} al día
+            BL · Carta · Docs transporte · Docs depósito — listos 2 semanas antes de la ETA · {universe.length} cargas · {alDia} al día
           </p>
         </div>
         <div className="sm:ml-auto flex flex-wrap items-center gap-3">
@@ -317,7 +320,7 @@ export default function ChecksBoard({ shipments = [], dbShipments = [], onPatchS
       )}
 
       <p className="text-[11px] text-muted-foreground">
-        Los pasos se marcan a mano — el cruce de frontera y el arribo a fiscal no se marcan solos desde las fechas de la operativa (mejora futura).
+        Los checks se marcan a mano. Los avisos de salida, frontera y fiscal se marcan desde la pestaña HOY.
       </p>
     </div>
   )
@@ -382,8 +385,7 @@ function ChecksRow({ op, steps, expanded, onToggleExpand, onToggleStep, onDateCh
           : <CaretRight size={14} className="text-muted-foreground shrink-0" />}
         <span className="font-mono text-sm font-semibold shrink-0 min-w-[64px]">{op.ref}</span>
         <span className="text-sm text-foreground/85 truncate flex-1 min-w-0">{op.cliente || '—'}</span>
-        {/* Mini-línea del procedimiento: un punto por paso aplicable (9/11/13
-            según operativa, mismo stepsForOperativa del detalle). Relleno
+        {/* Mini-línea: un punto por check (los 4 documentarios). Relleno
             emerald = hecho · hueco gris = pendiente · anillo índigo = el
             SIGUIENTE pendiente. En pantallas chicas se oculta (hidden sm:flex)
             para que la fila no se rompa. */}
@@ -456,7 +458,7 @@ function ChecksRow({ op, steps, expanded, onToggleExpand, onToggleStep, onDateCh
         <div className="px-4 pb-3 pt-0.5 sm:pl-9">
           <div className="flex items-center gap-2 mb-1.5">
             <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
-              Procedimiento operativo{operativa && !opColor?.label.startsWith('Otro') ? ` · ${badgeLabel.toLowerCase()}` : ''}
+              Checks documentarios — listos 2 semanas antes de la ETA
             </p>
             {telexChip}
           </div>
