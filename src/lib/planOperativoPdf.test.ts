@@ -111,3 +111,39 @@ describe('buildPlanOperativoData — filtro por cliente y una fila por contenedo
     ])
   })
 })
+
+describe('filtro por zona/puerto (PAIS del POD)', () => {
+  const cacheZonas = [
+    fcl({ REF: 'A7601', CLIENTE: 'BICI PERETTI S.A.', PAIS: 'UY' } as Partial<ParsedShipment>),
+    fcl({ REF: 'A7602', CLIENTE: 'BICI PERETTI S.A.', PAIS: 'CL' } as Partial<ParsedShipment>),
+    fcl({ REF: 'A7603', CLIENTE: 'BICI PERETTI S.A.', PAIS: 'AR' } as Partial<ParsedShipment>),
+    fcl({ REF: 'A7604', CLIENTE: 'BICI PERETTI S.A.', PAIS: undefined } as Partial<ParsedShipment>),
+  ]
+
+  it('solo UY → quedan solo las cargas por Montevideo', () => {
+    const data = buildPlanOperativoData(cacheZonas, [], ['PERETTI'], HOY, ['UY'])
+    const refs = [...data.blocks[0].programadas, ...data.blocks[0].pendientes].map(r => r.ref)
+    expect(refs).toEqual(['7601'])
+  })
+
+  it('UY + CL → entran ambas; PAIS sin dato cae en OTRO', () => {
+    const data = buildPlanOperativoData(cacheZonas, [], ['PERETTI'], HOY, ['UY', 'CL'])
+    const refs = [...data.blocks[0].programadas, ...data.blocks[0].pendientes].map(r => r.ref).sort()
+    expect(refs).toEqual(['7601', '7602'])
+    const otros = buildPlanOperativoData(cacheZonas, [], ['PERETTI'], HOY, ['OTRO'])
+    expect([...otros.blocks[0].pendientes].map(r => r.ref)).toEqual(['7604'])
+  })
+
+  it('sin zonas (undefined) o todas → sin filtro (comportamiento histórico)', () => {
+    const todas = buildPlanOperativoData(cacheZonas, [], ['PERETTI'], HOY, ['UY', 'CL', 'AR', 'OTRO'])
+    const sinParam = buildPlanOperativoData(cacheZonas, [], ['PERETTI'], HOY)
+    expect(todas.totals.contenedores).toBe(4)
+    expect(sinParam.totals.contenedores).toBe(4)
+  })
+
+  it('listPlanClientes respeta la zona (cliente sin cargas en la zona no aparece)', () => {
+    const soloChile = [fcl({ REF: 'A7610', CLIENTE: 'SOLO CHILE SA', PAIS: 'CL' } as Partial<ParsedShipment>)]
+    expect(listPlanClientes(soloChile, [], HOY, ['UY'])).toHaveLength(0)
+    expect(listPlanClientes(soloChile, [], HOY, ['CL']).map(c => c.name)).toEqual(['SOLO CHILE SA'])
+  })
+})

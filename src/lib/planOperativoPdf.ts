@@ -51,6 +51,24 @@ export interface PlanOperativoData {
 
 export interface PlanClienteOption { name: string; cargas: number }
 
+// ── Filtro por zona/puerto (pedido Brian 14/07) ──────────────────────
+// Zona = PAIS derivado del POD: a veces el plan es solo de las cargas por
+// Uruguay, o solo Chile — no siempre todo el plan de todos los puertos.
+export type PlanZona = 'UY' | 'CL' | 'AR' | 'OTRO'
+export const PLAN_ZONAS: { value: PlanZona; label: string; corto: string }[] = [
+  { value: 'UY', label: 'Por Uruguay (Montevideo)', corto: 'Uruguay' },
+  { value: 'CL', label: 'Por Chile (San Antonio/Valparaíso)', corto: 'Chile' },
+  { value: 'AR', label: 'Buenos Aires directo', corto: 'Buenos Aires' },
+  { value: 'OTRO', label: 'Otros puertos', corto: 'Otros' },
+]
+const zonaOf = (s: ParsedShipment): PlanZona => {
+  const p = String(s.PAIS || '').trim().toUpperCase()
+  return p === 'UY' || p === 'CL' || p === 'AR' ? p : 'OTRO'
+}
+/** null = sin filtro (todas las zonas). */
+const zonaSetOf = (zonas?: PlanZona[]): Set<PlanZona> | null =>
+  zonas && zonas.length > 0 && zonas.length < PLAN_ZONAS.length ? new Set(zonas) : null
+
 // ── Datos (puro) ─────────────────────────────────────────────────────
 
 const midnight = (d: Date): Date => { const t = new Date(d); t.setHours(0, 0, 0, 0); return t }
@@ -132,10 +150,12 @@ export function buildPlanOperativoData(
   cache: ParsedShipment[],
   dbShipments: DbShipment[],
   clientes: string[],
-  today: Date = new Date()
+  today: Date = new Date(),
+  zonas?: PlanZona[]
 ): PlanOperativoData {
   const t0 = midnight(today)
-  const all = activeFcl(cache, dbShipments)
+  const zonaSet = zonaSetOf(zonas)
+  const all = activeFcl(cache, dbShipments).filter(s => !zonaSet || zonaSet.has(zonaOf(s)))
   const byId = new Map((dbShipments || []).map(d => [d.id, d]))
   const blocks: PlanClientBlock[] = []
   const totals = { contenedores: 0, bultos: 0, kg: 0, programadas: 0, pendientes: 0 }
@@ -162,12 +182,15 @@ export function buildPlanOperativoData(
 export function listPlanClientes(
   cache: ParsedShipment[],
   dbShipments: DbShipment[],
-  today: Date = new Date()
+  today: Date = new Date(),
+  zonas?: PlanZona[]
 ): PlanClienteOption[] {
   const t0 = midnight(today)
+  const zonaSet = zonaSetOf(zonas)
   const byId = new Map((dbShipments || []).map(d => [d.id, d]))
   const m = new Map<string, PlanClienteOption>()
   for (const s of activeFcl(cache, dbShipments)) {
+    if (zonaSet && !zonaSet.has(zonaOf(s))) continue
     const name = (s.CLIENTE || '').trim()
     if (!name) continue
     const n = activeRows(s, t0, s.__dbId ? byId.get(s.__dbId) : undefined).length
@@ -217,9 +240,14 @@ export async function downloadPlanOperativoPdf(
   dbShipments: DbShipment[],
   clientes: string[],
   brand: Brand,
-  now: Date = new Date()
+  now: Date = new Date(),
+  zonas?: PlanZona[]
 ): Promise<PlanOperativoData['totals']> {
-  const data = buildPlanOperativoData(cache, dbShipments, clientes, now)
+  const data = buildPlanOperativoData(cache, dbShipments, clientes, now, zonas)
+  const zonaSet = zonaSetOf(zonas)
+  const zonaLabel = zonaSet
+    ? PLAN_ZONAS.filter(z => zonaSet.has(z.value)).map(z => z.corto).join(' + ')
+    : ''
   const { jsPDF } = await import('jspdf')
   const autoTable = (await import('jspdf-autotable')).default
   const doc = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' })
@@ -250,7 +278,7 @@ export async function downloadPlanOperativoPdf(
     doc.text(brand.displayName.toUpperCase(), margin, 17)
   }
   const multi = clientes.length > 1
-  const title = `PLAN OPERATIVO — ${multi ? 'VARIOS CLIENTES' : (clientes[0] || '').toUpperCase()}`
+  const title = `PLAN OPERATIVO — ${multi ? 'VARIOS CLIENTES' : (clientes[0] || '').toUpperCase()}${zonaLabel ? ` (${zonaLabel.toUpperCase()})` : ''}`
   doc.setTextColor(ACCENT)
   doc.setFontSize(15)
   doc.setFont('helvetica', 'bold')
@@ -260,9 +288,10 @@ export async function downloadPlanOperativoPdf(
   doc.setFontSize(9)
   doc.setFont('helvetica', 'normal')
   const generado = now.toLocaleDateString('es-UY', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  const zonaSub = zonaLabel ? `Cargas por: ${zonaLabel}  ·  ` : ''
   const sub = multi
-    ? `${clientes.length} clientes  ·  ${data.totals.contenedores} contenedor(es) activo(s)  ·  Generado: ${generado}`
-    : `${data.totals.contenedores} contenedor(es) activo(s)  ·  Generado: ${generado}`
+    ? `${zonaSub}${clientes.length} clientes  ·  ${data.totals.contenedores} contenedor(es) activo(s)  ·  Generado: ${generado}`
+    : `${zonaSub}${data.totals.contenedores} contenedor(es) activo(s)  ·  Generado: ${generado}`
   doc.text(sub, margin, 33)
   doc.setDrawColor(...ACCENT_RGB)
   doc.setLineWidth(0.6)
@@ -363,6 +392,7 @@ export async function downloadPlanOperativoPdf(
   }
 
   const who = multi ? 'Varios' : slugify(clientes[0] || '')
-  doc.save(`Plan_Operativo_${who}_${now.toISOString().slice(0, 10)}.pdf`)
+  const zonaFile = zonaLabel ? `_${slugify(zonaLabel)}` : ''
+  doc.save(`Plan_Operativo_${who}${zonaFile}_${now.toISOString().slice(0, 10)}.pdf`)
   return data.totals
 }
