@@ -86,6 +86,34 @@ describe('planSplit — contenedores enteros (2/2) con detalle por contenedor', 
   })
 })
 
+describe('planSplit — las fechas viajan con el contenedor', () => {
+  it('B hereda las fechas de SUS contenedores (registro entero) y el rollup colapsado', () => {
+    const original = base({
+      contenedor: 'MSKU1111111, MSKU2222222',
+      n_cntr: 2,
+      operativas: [
+        op({ CNTR_OP: 'MSKU1111111', SALIDA: '2026-08-05', ETA_FISC: '2026-08-08', LIBRE: '2026-08-20', DEPOSITO: 'GODILCO', TRANSPORTE: 'OLAVERRY' }),
+        op({ CNTR_OP: 'MSKU2222222', SALIDA: '2026-08-12', ETA_FISC: '2026-08-15', LIBRE: '2026-08-25', DEPOSITO: 'GODILCO', TRANSPORTE: 'TRANSCAL' }),
+      ],
+    })
+    const plan = planSplit({ original, refB: 'A9000 B', cntrsB: ['MSKU2222222'] })
+    const bOp = (plan.rowB.operativas as OperativasRecord[])[0]
+    // El registro del contenedor pasa ENTERO a B: fecha de carga/salida, fiscal, libre, depósito, transporte.
+    expect(bOp.SALIDA).toBe('2026-08-12')
+    expect(bOp.ETA_FISC).toBe('2026-08-15')
+    expect(bOp.LIBRE).toBe('2026-08-25')
+    expect(bOp.TRANSPORTE).toBe('TRANSCAL')
+    // Y las columnas colapsadas de la fila B quedan coherentes desde el alta.
+    expect(plan.rowB.salida).toBe('2026-08-12')
+    expect(plan.rowB.eta_fiscal).toBe('2026-08-15')
+    expect(plan.rowB.deposito).toBe('GODILCO')
+    // La parte A conserva las suyas.
+    const aOp = (plan.patchA.operativas as OperativasRecord[])[0]
+    expect(aOp.SALIDA).toBe('2026-08-05')
+    expect(plan.patchA.contenedor).toBe('MSKU1111111')
+  })
+})
+
 describe('planSplit — contenedor compartido (uno entero + parte de otro)', () => {
   const original = base({
     contenedor: 'MSKU1111111, MSKU2222222',
