@@ -552,6 +552,44 @@ export async function fetchBilling(): Promise<BillingRecord[]> {
   return data.billing || []
 }
 
+// ── Preferencias de UI por cuenta (user_prefs) ─────────────────────────
+// Columnas/orden/toggles de la grilla viajan con el LOGIN (no con el
+// navegador). localStorage queda como caché local y fallback offline.
+
+export async function fetchUserPrefs(): Promise<Record<string, unknown>> {
+  const res = await authFetch('/api/data/user-prefs')
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const data = await res.json()
+  return data.prefs || {}
+}
+
+export async function saveUserPrefs(patch: Record<string, unknown>): Promise<void> {
+  const res = await authFetch('/api/data/user-prefs', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prefs: patch }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
+}
+
+// Guardado laxo: junta los cambios de prefs 800 ms y manda UN solo POST
+// (merge parcial server-side). Fire-and-forget: si falla queda el localStorage.
+let prefsBuffer: Record<string, unknown> = {}
+let prefsTimer: ReturnType<typeof setTimeout> | null = null
+export function saveUserPrefsDebounced(patch: Record<string, unknown>): void {
+  prefsBuffer = { ...prefsBuffer, ...patch }
+  if (prefsTimer) clearTimeout(prefsTimer)
+  prefsTimer = setTimeout(() => {
+    const send = prefsBuffer
+    prefsBuffer = {}
+    prefsTimer = null
+    void saveUserPrefs(send).catch(() => { /* offline / sin permiso: queda el caché local */ })
+  }, 800)
+}
+
 export async function saveBilling(rows: BillingRecord[]): Promise<void> {
   if (rows.length === 0) return
   const res = await authFetch('/api/data/billing', {

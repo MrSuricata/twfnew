@@ -66,6 +66,7 @@ import {
 import { fmtDateDMY, fmtNum as fmtNumUY } from '@/lib/format'
 import { hasTelex, needsTelexAlert } from '@/lib/telexCheck'
 import { useBrand } from '@/lib/brand'
+import { fetchUserPrefs, saveUserPrefsDebounced } from '@/lib/dataClient'
 import { listPlanClientes, downloadPlanOperativoPdf, PLAN_ZONAS, type PlanZona } from '@/lib/planOperativoPdf'
 
 // Per-ref truck info for the Estado column (LCL/aéreo driven by their truck).
@@ -168,6 +169,7 @@ export default function OperationsGrid({
   })
   useEffect(() => {
     try { localStorage.setItem(ACTIVE_ONLY_KEY, activeOnly ? '1' : '0') } catch { /* ignore */ }
+    if (prefsReady.current) saveUserPrefsDebounced({ opsActiveOnly: activeOnly })
   }, [activeOnly])
   const [managerOpen, setManagerOpen] = useState(false)
   const [pasteOpen, setPasteOpen] = useState(false)
@@ -207,6 +209,7 @@ export default function OperationsGrid({
   })
   useEffect(() => {
     try { localStorage.setItem(COLS_STORAGE_KEY, JSON.stringify([...visibleCols])) } catch { /* ignore */ }
+    if (prefsReady.current) saveUserPrefsDebounced({ opsVisibleCols: [...visibleCols] })
   }, [visibleCols])
 
   // Column order (per-user, drag-and-drop). Defaults to the canonical order.
@@ -219,7 +222,35 @@ export default function OperationsGrid({
   })
   useEffect(() => {
     try { localStorage.setItem(COL_ORDER_KEY, JSON.stringify(colOrder)) } catch { /* ignore */ }
+    if (prefsReady.current) saveUserPrefsDebounced({ opsColOrder: colOrder })
   }, [colOrder])
+
+  // ── Preferencias por CUENTA (14/07): columnas visibles, orden y "Solo
+  // activas" viajan con el login (tabla user_prefs). Al montar, lo del server
+  // PISA el estado local (localStorage queda de caché/fallback offline).
+  // Nada se guarda al server hasta que la carga inicial termina — si no, el
+  // primer render con defaults pisaría lo guardado de la cuenta.
+  const prefsReady = useRef(false)
+  useEffect(() => {
+    let alive = true
+    const validKey = (k: unknown): k is string =>
+      typeof k === 'string' && OPERATION_COLUMNS.some(c => c.key === k)
+    fetchUserPrefs()
+      .then(p => {
+        if (!alive) return
+        if (Array.isArray(p.opsVisibleCols) && p.opsVisibleCols.some(validKey)) {
+          setVisibleCols(new Set(p.opsVisibleCols.filter(validKey)))
+        }
+        if (Array.isArray(p.opsColOrder) && p.opsColOrder.some(validKey)) {
+          setColOrder(p.opsColOrder.filter(validKey))
+        }
+        if (typeof p.opsActiveOnly === 'boolean') setActiveOnly(p.opsActiveOnly)
+      })
+      .catch(() => { /* sin sesión o sin red: quedan localStorage/defaults */ })
+      .finally(() => { prefsReady.current = true })
+    return () => { alive = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Sort by a column (click header → asc → desc → none).
   const [sort, setSort] = useState<{ key: string; dir: 'asc' | 'desc' } | null>(null)
