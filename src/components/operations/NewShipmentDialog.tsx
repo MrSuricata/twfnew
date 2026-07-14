@@ -19,12 +19,15 @@ import {
 import { parseCntr } from '@/lib/cntrUtils'
 import { canonicalizeCliente, type CatalogClient } from '@/lib/clientCatalog'
 
-// ── Alta de carga COMPLETA ───────────────────────────────────────────────
+// ── Alta de carga GUIADA ─────────────────────────────────────────────────
 // Obligatorios: Ref + Cliente + Modalidad (decisión tomada — no cambiar).
-// El resto son TODOS los campos editables de una carga (los mismos que edita
-// el panel de detalle), agrupados en las mismas secciones visuales del panel
-// (Datos clave / Fechas / Ruta / Documental / Carga / Operativa) y colapsados
-// bajo "Más campos" para que el alta rápida de 3 campos siga siendo rápida.
+// Rediseño 14/07 (pedido Brian): los DATOS PRINCIPALES van siempre visibles
+// (shipper, incoterm, país/puerto de origen, puerto de destino, país/zona de
+// destino, destino final), todos con combos creables (datalist: sugiere los
+// ya usados y acepta uno nuevo — "agregar si no existe"). Si falta alguno,
+// el primer click en Guardar avisa qué falta y el segundo guarda igual
+// (obligatorios duros siguen siendo solo Ref+Cliente+Modo).
+// El resto de los campos queda colapsado bajo "Más campos".
 // Guarda en la tabla unificada `shipments` (source='web') vía onCreate
 // (App.handleCreateShipment → POST /api/data/shipments, whitelist SHIPMENT_COLS).
 // Lo reusa también el armador de camiones (crear carga sin salir del armador).
@@ -36,10 +39,31 @@ const OPERATIVA_OPTIONS = ['TRASIEGO', 'CONTENEDOR', 'CARGA A PISO']
 
 const PAIS_OPTIONS = [
   { value: '', label: '—' },
-  { value: 'UY', label: 'Uruguay' },
-  { value: 'AR', label: 'Argentina' },
-  { value: 'CL', label: 'Chile' },
+  { value: 'UY', label: 'Uruguay (descarga en MVD)' },
+  { value: 'AR', label: 'Argentina (Buenos Aires directo)' },
+  { value: 'CL', label: 'Chile (San Antonio/Valparaíso)' },
   { value: 'OTRO', label: 'Otro' },
+]
+
+// Incoterms estándar para el combo (creable: acepta otro valor).
+const INCOTERMS = ['EXW', 'FCA', 'FOB', 'CFR', 'CIF', 'CPT', 'CIP', 'DAP', 'DPU', 'DDP']
+
+// Países de origen frecuentes — semilla del datalist; se mezclan con los ya
+// usados en las cargas (prop knownPaisesOrigen).
+const PAISES_ORIGEN_BASE = [
+  'CHINA', 'INDIA', 'VIETNAM', 'TURQUIA', 'COREA DEL SUR', 'TAIWAN', 'JAPON',
+  'BRASIL', 'ESTADOS UNIDOS', 'ALEMANIA', 'ITALIA', 'ESPAÑA',
+]
+
+// Los "datos principales" del alta (pedido 14/07): si falta alguno se avisa
+// antes de guardar (soft — el segundo click guarda igual).
+const PRINCIPALES: { key: keyof FormState; label: string }[] = [
+  { key: 'shipper', label: 'Shipper' },
+  { key: 'incoterm', label: 'Incoterm' },
+  { key: 'paisOrigen', label: 'País de origen' },
+  { key: 'origin', label: 'Puerto de origen' },
+  { key: 'dischargePort', label: 'Puerto de destino' },
+  { key: 'pais', label: 'País/zona de destino' },
 ]
 
 interface FormState {
@@ -60,6 +84,7 @@ interface FormState {
   seguimiento: string
   // Ruta
   origin: string
+  paisOrigen: string
   dischargePort: string
   destPort: string
   pais: string
@@ -102,7 +127,7 @@ const EMPTY_FORM: FormState = {
   ref: '', cliente: '', operatorId: '',
   deposito: '', operativa: '', libre: '', fiscal: '', desconsol: '',
   etd: '', eta: '', salida: '', etaFisc: '', seguimiento: '',
-  origin: '', dischargePort: '', destPort: '', pais: '',
+  origin: '', paisOrigen: '', dischargePort: '', destPort: '', pais: '',
   docNumber: '', buque: '', linea: '', shipper: '', agente: '', incoterm: '', clientRef: '',
   contenedor: '', tipo: '', pkgs: '', kg: '', m3: '', descripcion: '',
   transporte: '', despacho: '', dev: '', terminal: '', descarga: '', status: 'en_origen',
@@ -122,6 +147,10 @@ export default function NewShipmentDialog({
   onCreate,
   suggestedRef = '',
   clientes = [],
+  knownShippers = [],
+  knownPaisesOrigen = [],
+  knownOrigenes = [],
+  knownDescargas = [],
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
@@ -134,6 +163,11 @@ export default function NewShipmentDialog({
    *  canonicalización al blur (alias tipeado → nombre canónico). Texto libre
    *  sigue permitido. */
   clientes?: CatalogClient[]
+  /** Sugerencias derivadas de las cargas existentes (datalist creables). */
+  knownShippers?: string[]
+  knownPaisesOrigen?: string[]
+  knownOrigenes?: string[]
+  knownDescargas?: string[]
 }) {
   // Modalidad SIN default: es obligatoria y el operativo la elige a conciencia.
   const [mode, setMode] = useState<Modality | null>(null)
@@ -141,6 +175,14 @@ export default function NewShipmentDialog({
   const [moreOpen, setMoreOpen] = useState(false)
   // Se prende al intentar guardar con obligatorios vacíos → errores inline.
   const [showErrors, setShowErrors] = useState(false)
+  // Soft-check de los datos principales: el 1er Guardar con faltantes solo
+  // avisa; el 2do guarda igual (nunca bloquea — a veces el dato aún no existe).
+  const [softWarned, setSoftWarned] = useState(false)
+
+  const paisesOrigenOptions = useMemo(
+    () => Array.from(new Set([...PAISES_ORIGEN_BASE, ...knownPaisesOrigen])).sort(),
+    [knownPaisesOrigen],
+  )
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setF(prev => ({ ...prev, [key]: value }))
@@ -150,6 +192,7 @@ export default function NewShipmentDialog({
     setF(EMPTY_FORM)
     setMoreOpen(false)
     setShowErrors(false)
+    setSoftWarned(false)
   }
 
   const pickMode = (m: Modality) => {
@@ -181,6 +224,7 @@ export default function NewShipmentDialog({
   const missingRef = !f.ref.trim()
   const missingCliente = !f.cliente.trim()
   const missingMode = mode === null
+  const faltanPrincipales = PRINCIPALES.filter(p => !String(f[p.key] ?? '').trim())
 
   const save = () => {
     if (missingMode || missingRef || missingCliente) {
@@ -191,6 +235,14 @@ export default function NewShipmentDialog({
         missingCliente ? 'Cliente' : null,
       ].filter(Boolean).join(', ')
       toast.error(`Faltan campos obligatorios: ${faltan}`)
+      return
+    }
+    // Datos principales incompletos → avisar UNA vez; el 2do click guarda igual.
+    if (faltanPrincipales.length > 0 && !softWarned) {
+      setSoftWarned(true)
+      toast.warning(`Datos principales sin completar: ${faltanPrincipales.map(p => p.label).join(', ')}`, {
+        description: 'Podés guardar igual y completarlos después en la grilla.',
+      })
       return
     }
     const m = mode as Modality
@@ -207,6 +259,7 @@ export default function NewShipmentDialog({
       buque: f.buque.trim(),
       linea: f.linea.trim(),
       origin: f.origin.trim(),
+      origin_country: f.paisOrigen.trim(),
       discharge_port: f.dischargePort.trim(),
       dest_port: f.destPort.trim(),
       // País vacío → queda el default de newDbShipment (FCL nace 'UY').
@@ -274,7 +327,8 @@ export default function NewShipmentDialog({
           <DialogTitle className="flex items-center gap-2"><Plus size={20} /> Nueva carga</DialogTitle>
           <DialogDescription>
             <span className="text-red-600 font-semibold">*</span> Ref, cliente y modalidad son obligatorios.
-            El resto lo podés cargar ahora en “Más campos” o después en la grilla.
+            Los demás datos principales conviene cargarlos ahora (si no existe el shipper o el puerto, escribilo y queda creado);
+            el resto va en “Más campos” o después en la grilla.
           </DialogDescription>
         </DialogHeader>
 
@@ -350,7 +404,22 @@ export default function NewShipmentDialog({
               </datalist>
               {showErrors && missingCliente && <p className="text-xs text-red-600">Completá el cliente</p>}
             </div>
-            <div className="space-y-1.5 col-span-2">
+            {/* ── Datos principales (pedido 14/07): siempre visibles, combos
+                creables — el datalist sugiere lo ya usado y acepta un valor
+                nuevo (así se "agrega" un shipper/puerto que no existe). ── */}
+            <ComboField label="Shipper" value={f.shipper} options={knownShippers} onChange={v => set('shipper', v)} placeholder="Elegí o escribí uno nuevo…" />
+            <ComboField label="Incoterm" value={f.incoterm} options={INCOTERMS} onChange={v => set('incoterm', v.toUpperCase())} placeholder="FOB, EXW…" />
+            <ComboField label="País de origen" value={f.paisOrigen} options={paisesOrigenOptions} onChange={v => set('paisOrigen', v)} placeholder="CHINA…" />
+            <ComboField label="Puerto de origen (POL)" value={f.origin} options={knownOrigenes} onChange={v => set('origin', v)} placeholder="SHANGHAI, NINGBO…" />
+            <ComboField label="Puerto de destino (POD)" value={f.dischargePort} options={knownDescargas} onChange={v => set('dischargePort', v)} placeholder="MONTEVIDEO…" />
+            <div className="space-y-1 min-w-0">
+              <SelectField label="País / zona de destino" value={f.pais} options={PAIS_OPTIONS} onChange={v => set('pais', v)} />
+              <p className="text-[10px] text-muted-foreground leading-snug">
+                Es la zona del puerto de descarga: una carga a Argentina vía Montevideo va como <strong>Uruguay</strong>.
+              </p>
+            </div>
+            <Field label="Destino final" value={f.destPort} onChange={v => set('destPort', v)} placeholder="CÓRDOBA, SAN FRANCISCO…" />
+            <div className="space-y-1.5">
               <Label htmlFor="ns-op">Operativo</Label>
               <select
                 id="ns-op"
@@ -363,6 +432,12 @@ export default function NewShipmentDialog({
               </select>
             </div>
           </div>
+
+          {softWarned && faltanPrincipales.length > 0 && (
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2.5 py-1.5">
+              Sin completar: {faltanPrincipales.map(p => p.label).join(', ')}. Tocá <strong>Guardar igual</strong> para crear la carga así.
+            </p>
+          )}
 
           {/* ── Más campos (opcionales, colapsables) ── */}
           <button
@@ -395,23 +470,13 @@ export default function NewShipmentDialog({
                 <Field label="Seguimiento" type="date" value={f.seguimiento} onChange={v => set('seguimiento', v)} />
               </Section>
 
-              {/* Ruta */}
-              <Section title="Ruta">
-                <Field label="Origen (POL)" value={f.origin} onChange={v => set('origin', v)} placeholder="SHANGHAI…" />
-                <Field label="Pto. descarga (POD)" value={f.dischargePort} onChange={v => set('dischargePort', v)} placeholder="MONTEVIDEO…" />
-                <Field label="Destino" value={f.destPort} onChange={v => set('destPort', v)} />
-                <SelectField label="País destino" value={f.pais} options={PAIS_OPTIONS} onChange={v => set('pais', v)} />
-              </Section>
-
-              {/* Documental */}
+              {/* Documental (ruta y shipper/incoterm subieron a Datos principales) */}
               <Section title="Documental">
                 <Field label="Booking / BL / AWB / CRT" value={f.docNumber} onChange={v => set('docNumber', v)} placeholder="Documento" />
                 <Field label="Buque" value={f.buque} onChange={v => set('buque', v)} />
                 <Field label="Línea" value={f.linea} onChange={v => set('linea', v)} placeholder="MAERSK, COSCO…" />
                 <Field label="Ref cliente" value={f.clientRef} onChange={v => set('clientRef', v)} />
-                <Field label="Shipper" value={f.shipper} onChange={v => set('shipper', v)} />
                 <Field label="Agente" value={f.agente} onChange={v => set('agente', v)} />
-                <Field label="Incoterm" value={f.incoterm} onChange={v => set('incoterm', v)} placeholder="FOB, EXW…" />
               </Section>
 
               {/* Carga */}
@@ -476,7 +541,9 @@ export default function NewShipmentDialog({
 
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="outline" onClick={() => { reset(); onOpenChange(false) }}>Cancelar</Button>
-          <Button onClick={save} className="gap-1.5"><Plus size={16} /> Agregar carga</Button>
+          <Button onClick={save} className="gap-1.5">
+            <Plus size={16} /> {softWarned && faltanPrincipales.length > 0 ? 'Guardar igual' : 'Agregar carga'}
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

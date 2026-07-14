@@ -22,7 +22,7 @@ const TODAY = new Date(2026, 6, 3)
 const mkOp = (over: Partial<UnifiedOperation> = {}): UnifiedOperation => ({
   uid: 'u1', ref: 'A7600', clientRef: '', mode: 'fcl', source: 'db', dbId: 'id1',
   readOnly: false, operatorId: null, cliente: 'PERETTI', shipper: '', agente: '',
-  incoterm: '', tlx: '', deposito: 'GODILCO', origin: '', etd: '', eta: '2026-07-10',
+  incoterm: '', tlx: '', deposito: 'GODILCO', origin: '', paisOrigen: '', etd: '', eta: '2026-07-10',
   salida: '', etaFisc: '', libre: '2026-07-20', operativa: 'TRASIEGO', cntr: '',
   docNumber: '', buque: '', linea: '', camion: '', pkgs: 0, kg: 0, m3: 0,
   descripcion: '', fiscal: '', dischargePort: 'MONTEVIDEO', pais: 'UY', destPort: '',

@@ -127,6 +127,18 @@ export function deriveKnownTransportes(raw: Iterable<string | null | undefined>)
   return Array.from(set).sort()
 }
 
+/** Valores distintos ya usados en un campo (shippers, puertos, países…) para
+ *  sugerir en los datalist del alta guiada: trim + MAYÚSCULAS, únicos y
+ *  ordenados. El input igual acepta un valor nuevo (datalist). */
+export function deriveKnownValues(raw: Iterable<string | null | undefined>): string[] {
+  const set = new Set<string>()
+  for (const v of raw) {
+    const t = String(v ?? '').trim().toUpperCase()
+    if (t) set.add(t)
+  }
+  return Array.from(set).sort()
+}
+
 // ── Operativo (lista editable; base de cuentas nombradas en C1b) ──
 export interface Operator {
   id: string
@@ -179,6 +191,8 @@ export interface DbShipment {
   discharge_port: string
   dest_port: string
   fiscal: string
+  /** País de origen de la mercadería (alta guiada 14/07) — informativo, sin lógica derivada. */
+  origin_country?: string
   // FCL operativas (PR-A flip Etapa 4): columnas reales para los campos de la hoja Operativas.
   // Vacías en LCL/aéreo/terrestre; se pueblan al hornear las FCL (PR-C).
   libre: string
@@ -244,6 +258,7 @@ export interface UnifiedOperation {
   tlx: string
   deposito: string
   origin: string
+  paisOrigen: string             // país de origen de la mercadería (DB: origin_country)
   etd: string
   eta: string                    // ETA MVD / arribo
   salida: string
@@ -291,7 +306,7 @@ const num = (v: unknown): number => {
 }
 
 const EMPTY = {
-  clientRef: '', shipper: '', agente: '', incoterm: '', origin: '', etd: '',
+  clientRef: '', shipper: '', agente: '', incoterm: '', origin: '', paisOrigen: '', etd: '',
   buque: '', linea: '', camion: '', docNumber: '', destPort: '', despacho: '',
   dischargePort: '', pais: '', noApilable: false, oog: false, imo: false,
   seguimiento: '', seguro: false, certi: false, impresa: false,
@@ -512,6 +527,7 @@ export function dbShipmentToOperation(s: DbShipment): UnifiedOperation {
     fiscal: s.fiscal || '',
     dischargePort: s.discharge_port || '',
     pais: s.dest_country || '',
+    paisOrigen: s.origin_country || '',
     destPort: s.dest_port || '',
     descarga: s.descarga || '',
     desconsol: s.desconsol_date || '',
@@ -727,6 +743,7 @@ export const EDITABLE_FIELDS: Partial<Record<keyof UnifiedOperation, EditableFie
   agente: { col: 'agente', type: 'text' },
   incoterm: { col: 'incoterm', type: 'text' },
   origin: { col: 'origin', type: 'text' },
+  paisOrigen: { col: 'origin_country', type: 'text' },
   dischargePort: { col: 'discharge_port', type: 'text' },
   docNumber: { col: 'doc_number', type: 'text' },
   deposito: { col: 'deposito', type: 'text' },
@@ -918,7 +935,7 @@ export function newDbShipment(fields: Partial<DbShipment> & { mode: Modality }):
     certi: false, telex: false, impresa: false, despacho: '', deposito: '', fecha_consol: '',
     // FCL: default UY — dest_country vacío se mapea a PAIS 'OTRO' y el armador
     // de camiones (isFclAvailable) la excluiría. El campo País sigue editable.
-    transporte: '', camion: '', dest_country: fields.mode === 'fcl' ? 'UY' : '', discharge_port: '', dest_port: '',
+    transporte: '', camion: '', dest_country: fields.mode === 'fcl' ? 'UY' : '', discharge_port: '', dest_port: '', origin_country: '',
     // Madera arranca "a confirmar" (null): false diría "No" sin que nadie lo haya chequeado.
     fiscal: '', wood: null, no_apilable: false, oog: false, imo: false, tipo: '',
     libre: '', salida: '', eta_fiscal: '', operativa: '', descarga: '', dev: '', terminal: '', n_cntr: 0, origin_ref: '',

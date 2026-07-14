@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildOperations, isOperationActive, dbShipmentToOperation, fclToColumns, dbFclToParsedShipment, mergeFclShipments, newDbShipment, suggestNextRef, buildTruckByRef, buildPerContainerPatch, applyLugarSalida, deriveKnownTransportes, EDITABLE_FIELDS, DEPOSITOS_UY, type UnifiedOperation, type DbShipment } from './operationsTypes'
+import { buildOperations, isOperationActive, dbShipmentToOperation, fclToColumns, dbFclToParsedShipment, mergeFclShipments, newDbShipment, suggestNextRef, buildTruckByRef, buildPerContainerPatch, applyLugarSalida, deriveKnownTransportes, deriveKnownValues, EDITABLE_FIELDS, DEPOSITOS_UY, type UnifiedOperation, type DbShipment } from './operationsTypes'
 import type { ParsedShipment } from './shipmentTypes'
 import type { OperativasRecord } from './shipmentTypes'
 import type { Truck, TruckLoad } from './truckTypes'
@@ -536,5 +536,15 @@ describe('applyLugarSalida — propaga a TODOS los contenedores y linkea el dep�
     const next = applyLugarSalida([rec()], 'godilco')
     expect(next[0].LUGAR_SALIDA).toBe('GODILCO')
     expect(next[0].DEPOSITO).toBe('GODILCO')
+  })
+})
+
+describe('deriveKnownValues', () => {
+  it('trim + MAYÚSCULAS, únicos y ordenados; vacíos y null afuera', () => {
+    expect(deriveKnownValues([' shanghai ', 'NINGBO', 'Shanghai', '', null, undefined, 'ningbo']))
+      .toEqual(['NINGBO', 'SHANGHAI'])
+  })
+  it('lista vacía → []', () => {
+    expect(deriveKnownValues([])).toEqual([])
   })
 })

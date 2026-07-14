@@ -50,6 +50,7 @@ import type { CatalogClient } from '@/lib/clientCatalog'
 import {
   buildOperations,
   deriveKnownTransportes,
+  deriveKnownValues,
   indexAssignments,
   isOperationActive,
   isSeguimientoVencido,
@@ -272,6 +273,11 @@ export default function OperationsGrid({
     () => deriveKnownTransportes(allOperations.map(o => o.transporte)),
     [allOperations]
   )
+  // Shippers/puertos/países ya usados → combos creables del alta guiada.
+  const knownShippers = useMemo(() => deriveKnownValues(allOperations.map(o => o.shipper)), [allOperations])
+  const knownOrigenes = useMemo(() => deriveKnownValues(allOperations.map(o => o.origin)), [allOperations])
+  const knownDescargas = useMemo(() => deriveKnownValues(allOperations.map(o => o.dischargePort)), [allOperations])
+  const knownPaisesOrigen = useMemo(() => deriveKnownValues(allOperations.map(o => o.paisOrigen)), [allOperations])
 
   // Panel de detalle: la op se busca fresca en cada render
   // (derive-on-read: un patch refresca el panel solo).
@@ -924,6 +930,10 @@ export default function OperationsGrid({
           }}
           suggestedRef={suggestedRef}
           clientes={clients}
+          knownShippers={knownShippers}
+          knownPaisesOrigen={knownPaisesOrigen}
+          knownOrigenes={knownOrigenes}
+          knownDescargas={knownDescargas}
         />
       )}
 
@@ -1260,6 +1270,7 @@ const SUMMARY_FIELDS: { key: keyof UnifiedOperation; label: string; kind?: 'date
   { key: 'cntr', label: 'Contenedores' },
   { key: 'tipo', label: 'Tipo' },
   { key: 'origin', label: 'Origen' },
+  { key: 'paisOrigen', label: 'País origen' },
   { key: 'dischargePort', label: 'Pto. descarga' },
   { key: 'destPort', label: 'Destino' },
   { key: 'terminal', label: 'Terminal' },

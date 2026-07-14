@@ -9,7 +9,7 @@ const op = (cntr: string, operativas?: OperativasRecord[]): UnifiedOperation =>
   ({
     uid: 'test', ref: 'A7777', mode: 'fcl', source: 'db', readOnly: false,
     operatorId: null, cliente: 'PERETTI', shipper: '', agente: '', incoterm: '',
-    tlx: '', deposito: 'GODILCO', origin: '', etd: '', eta: '2026-06-01',
+    tlx: '', deposito: 'GODILCO', origin: '', paisOrigen: '', etd: '', eta: '2026-06-01',
     salida: '', etaFisc: '', libre: '', operativa: 'TRASIEGO', cntr,
     docNumber: '', buque: '', linea: '', camion: '', pkgs: 0, kg: 0, m3: 0,
     descripcion: '', fiscal: 'ZP RAFAELA', dischargePort: '', pais: 'AR',
