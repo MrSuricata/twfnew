@@ -125,6 +125,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return handleBilling(req, res, db, payload)
       case 'ref-checks':
         return handleRefChecks(req, res, db, payload)
+      case 'user-prefs':
+        return handleUserPrefs(req, res, db, payload)
       case 'operators':
         return handleOperators(req, res, db)
       case 'operator-assignments':
@@ -1585,6 +1587,37 @@ async function handleBilling(req: VercelRequest, res: VercelResponse, db: any, p
 // POST /api/data/ref-checks → upsert por ref con MERGE de steps parciales
 // La tabla guarda SOLO el estado de los pasos: el universo de refs se deriva
 // de las cargas en el cliente (derive-on-read), nunca se copia acá.
+
+// ── User prefs: preferencias de UI por CUENTA (columnas de la grilla, orden,
+// toggles) — viajan con el login a cualquier dispositivo (pedido Brian 14/07).
+// Cada admin lee y escribe SOLO su fila: la clave es el usuario del TOKEN,
+// nunca del body. POST = merge parcial (la clave que llega pisa solo esa).
+async function handleUserPrefs(req: VercelRequest, res: VercelResponse, db: any, payload: TokenPayload | null) {
+  const usuario = auditUser(payload as any)
+  if (!usuario) return res.status(401).json({ error: 'Unauthorized' })
+  if (req.method === 'GET') {
+    const { data, error } = await db.from('user_prefs').select('prefs').eq('usuario', usuario).maybeSingle()
+    if (error) throw error
+    return res.status(200).json({ prefs: data?.prefs || {} })
+  }
+  if (req.method === 'POST') {
+    const patch = (req.body as { prefs?: Record<string, unknown> } | undefined)?.prefs
+    if (!patch || typeof patch !== 'object' || Array.isArray(patch)) {
+      return res.status(400).json({ error: 'prefs inválidas' })
+    }
+    if (JSON.stringify(patch).length > 20_000) {
+      return res.status(400).json({ error: 'prefs demasiado grandes' })
+    }
+    const { data: cur } = await db.from('user_prefs').select('prefs').eq('usuario', usuario).maybeSingle()
+    const merged = { ...((cur?.prefs as Record<string, unknown>) || {}), ...patch }
+    const { error } = await db
+      .from('user_prefs')
+      .upsert({ usuario, prefs: merged, updated_at: new Date().toISOString() }, { onConflict: 'usuario' })
+    if (error) throw error
+    return res.status(200).json({ saved: true, prefs: merged })
+  }
+  return res.status(405).json({ error: 'Method not allowed' })
+}
 
 async function handleRefChecks(req: VercelRequest, res: VercelResponse, db: any, payload: TokenPayload | null) {
   if (req.method === 'GET') {
