@@ -88,7 +88,8 @@ const SECTIONS: { title: string; tone: SectionTone; fields: { key: keyof Unified
     title: 'Ruta',
     tone: 'emerald',
     fields: [
-      { key: 'origin', label: 'Origen' },
+      { key: 'origin', label: 'Origen (POL)' },
+      { key: 'paisOrigen', label: 'País origen' },
       { key: 'dischargePort', label: 'Pto. descarga' },
       { key: 'destPort', label: 'Destino' },
       { key: 'pais', label: 'País' },
