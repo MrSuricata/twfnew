@@ -50,6 +50,7 @@ import type { CatalogClient } from '@/lib/clientCatalog'
 import {
   buildOperations,
   deriveKnownTransportes,
+  deriveKnownValues,
   indexAssignments,
   isOperationActive,
   isSeguimientoVencido,
@@ -66,7 +67,7 @@ import { fmtDateDMY, fmtNum as fmtNumUY } from '@/lib/format'
 import { hasTelex, needsTelexAlert } from '@/lib/telexCheck'
 import { useBrand } from '@/lib/brand'
 import { fetchUserPrefs, saveUserPrefsDebounced } from '@/lib/dataClient'
-import { listPlanClientes, downloadPlanOperativoPdf } from '@/lib/planOperativoPdf'
+import { listPlanClientes, downloadPlanOperativoPdf, PLAN_ZONAS, type PlanZona } from '@/lib/planOperativoPdf'
 
 // Per-ref truck info for the Estado column (LCL/aéreo driven by their truck).
 interface TruckRefInfo { truckCode: string; status: string }
@@ -178,6 +179,9 @@ export default function OperationsGrid({
   const [planSelected, setPlanSelected] = useState<Set<string>>(new Set())
   const [planSearch, setPlanSearch] = useState('')
   const [planBusy, setPlanBusy] = useState(false)
+  // Filtro por zona/puerto (14/07): a veces el plan es solo de las cargas por
+  // Uruguay, o solo Chile. Default = todas (comportamiento histórico).
+  const [planZonas, setPlanZonas] = useState<Set<PlanZona>>(new Set(PLAN_ZONAS.map(z => z.value)))
   const brand = useBrand()
   // Filtro "Seguimiento vencido" (7+ días sin actualizar, solo cargas activas).
   const [segFilter, setSegFilter] = useState(false)
@@ -303,6 +307,11 @@ export default function OperationsGrid({
     () => deriveKnownTransportes(allOperations.map(o => o.transporte)),
     [allOperations]
   )
+  // Shippers/puertos/países ya usados → combos creables del alta guiada.
+  const knownShippers = useMemo(() => deriveKnownValues(allOperations.map(o => o.shipper)), [allOperations])
+  const knownOrigenes = useMemo(() => deriveKnownValues(allOperations.map(o => o.origin)), [allOperations])
+  const knownDescargas = useMemo(() => deriveKnownValues(allOperations.map(o => o.dischargePort)), [allOperations])
+  const knownPaisesOrigen = useMemo(() => deriveKnownValues(allOperations.map(o => o.paisOrigen)), [allOperations])
 
   // Panel de detalle: la op se busca fresca en cada render
   // (derive-on-read: un patch refresca el panel solo).
@@ -504,9 +513,17 @@ export default function OperationsGrid({
   // Clientes con contenedores activos sin llegar a fiscal — derive-on-read,
   // solo se calcula con el diálogo abierto.
   const planClientes = useMemo(
-    () => (planOpen ? listPlanClientes(shipments, dbShipments, hoy) : []),
-    [planOpen, shipments, dbShipments, hoy]
+    () => (planOpen ? listPlanClientes(shipments, dbShipments, hoy, [...planZonas]) : []),
+    [planOpen, shipments, dbShipments, hoy, planZonas]
   )
+  const togglePlanZona = (z: PlanZona) => {
+    setPlanZonas(prev => {
+      const next = new Set(prev)
+      if (next.has(z)) next.delete(z)
+      else next.add(z)
+      return next
+    })
+  }
   const planFiltered = planSearch.trim()
     ? planClientes.filter(c => c.name.toLowerCase().includes(planSearch.toLowerCase().trim()))
     : planClientes
@@ -520,10 +537,10 @@ export default function OperationsGrid({
   }
   const descargarPlanOperativo = async () => {
     const clientes = planClientes.filter(c => planSelected.has(c.name)).map(c => c.name)
-    if (!clientes.length) return
+    if (!clientes.length || planZonas.size === 0) return
     setPlanBusy(true)
     try {
-      const totals = await downloadPlanOperativoPdf(shipments, dbShipments, clientes, brand)
+      const totals = await downloadPlanOperativoPdf(shipments, dbShipments, clientes, brand, new Date(), [...planZonas])
       toast.success(`Plan operativo descargado — ${totals.contenedores} contenedor${totals.contenedores === 1 ? '' : 'es'} de ${clientes.length} cliente${clientes.length === 1 ? '' : 's'}`)
       setPlanOpen(false)
     } catch {
@@ -831,7 +848,12 @@ export default function OperationsGrid({
           fila se ve con el chevron de expansión (o abriendo el panel). */}
       <div className="hidden md:block border rounded-lg overflow-x-hidden overflow-y-auto max-h-[68vh] bg-card">
         <table className="w-full text-xs table-fixed">
-          <thead className="sticky top-0 z-10">
+          {/* z-30 > z-20 de las celdas congeladas del body: si el thead quedara
+              abajo (z-10), al scrollear las celdas sticky de Ref/Cliente de las
+              filas pintan ENCIMA del header y "desaparece" la esquina izquierda
+              (bug reportado 14/07). El z-30 del th congelado juega solo DENTRO
+              del thead (stacking context propio). */}
+          <thead className="sticky top-0 z-30">
             <tr className="bg-[#1e3a8a] text-white">
               {cols.map(c => {
                 const active = sort?.key === c.key
@@ -955,6 +977,10 @@ export default function OperationsGrid({
           }}
           suggestedRef={suggestedRef}
           clientes={clients}
+          knownShippers={knownShippers}
+          knownPaisesOrigen={knownPaisesOrigen}
+          knownOrigenes={knownOrigenes}
+          knownDescargas={knownDescargas}
         />
       )}
 
@@ -1001,11 +1027,35 @@ export default function OperationsGrid({
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2"><FilePdf size={18} /> Plan operativo (PDF)</DialogTitle>
             <DialogDescription>
-              Elegí uno o varios clientes: el PDF lista sus cargas activas que todavía no
-              llegaron a fiscal, con salida programada y pendientes de programar.
+              Elegí qué cargas entran (por puerto) y uno o varios clientes: el PDF lista sus
+              cargas activas que todavía no llegaron a fiscal.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
+            {/* Zonas/puertos: qué cargas entran al plan (default: todas) */}
+            <div className="space-y-1">
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Cargas / puertos</p>
+              <div className="flex flex-wrap gap-1.5">
+                {PLAN_ZONAS.map(z => (
+                  <button
+                    key={z.value}
+                    type="button"
+                    onClick={() => togglePlanZona(z.value)}
+                    title={z.label}
+                    className={`rounded-full px-2.5 py-1 border text-xs transition-all ${
+                      planZonas.has(z.value)
+                        ? 'bg-primary/10 border-primary/50 font-medium text-foreground'
+                        : 'bg-card border-border text-muted-foreground'
+                    }`}
+                  >
+                    {z.corto}
+                  </button>
+                ))}
+              </div>
+              {planZonas.size === 0 && (
+                <p className="text-xs text-red-600">Elegí al menos una zona</p>
+              )}
+            </div>
             <div className="relative">
               <MagnifyingGlass size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -1044,7 +1094,7 @@ export default function OperationsGrid({
                     Limpiar
                   </Button>
                 )}
-                <Button size="sm" className="h-8" disabled={planSelected.size === 0 || planBusy} onClick={descargarPlanOperativo}>
+                <Button size="sm" className="h-8" disabled={planSelected.size === 0 || planZonas.size === 0 || planBusy} onClick={descargarPlanOperativo}>
                   <FilePdf size={14} className="mr-1.5" /> {planBusy ? 'Generando…' : 'Descargar PDF'}
                 </Button>
               </div>
@@ -1291,6 +1341,7 @@ const SUMMARY_FIELDS: { key: keyof UnifiedOperation; label: string; kind?: 'date
   { key: 'cntr', label: 'Contenedores' },
   { key: 'tipo', label: 'Tipo' },
   { key: 'origin', label: 'Origen' },
+  { key: 'paisOrigen', label: 'País origen' },
   { key: 'dischargePort', label: 'Pto. descarga' },
   { key: 'destPort', label: 'Destino' },
   { key: 'terminal', label: 'Terminal' },

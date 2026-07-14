@@ -10,7 +10,7 @@ const o = (buque: string, eta: string, ref = 'X') => ({ buque, eta, ref })
 const mkOp = (over: Partial<UnifiedOperation> = {}): UnifiedOperation => ({
   uid: 'u1', ref: 'A7881', clientRef: '', mode: 'fcl', source: 'db', dbId: 'id1',
   readOnly: false, operatorId: null, cliente: 'AGROALDAO', shipper: '', agente: '',
-  incoterm: '', tlx: '', deposito: 'GODILCO', origin: '', etd: '', eta: '2026-07-10',
+  incoterm: '', tlx: '', deposito: 'GODILCO', origin: '', paisOrigen: '', etd: '', eta: '2026-07-10',
   salida: '', etaFisc: '', libre: '', operativa: 'TRASIEGO', cntr: '',
   docNumber: '', buque: 'EVER FAR', linea: '', camion: '', pkgs: 0, kg: 0, m3: 0,
   descripcion: '', fiscal: '', dischargePort: '', pais: 'UY', destPort: '',
