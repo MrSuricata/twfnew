@@ -1261,9 +1261,13 @@ const OperationRow = memo(function OperationRow({
   return (
     <>
     {/* Zebra EXPLÍCITA por índice de fila de datos (clase row-even): la fila de
-        expansión insertada rompería la paridad de CSS nth-child even:. */}
-    <tr onClick={() => onOpen(op.uid)} className={`${zebra ? 'row-even bg-muted/30' : 'bg-card'} hover:bg-primary/5 transition-colors cursor-pointer`}>
+        expansión insertada rompería la paridad de CSS nth-child even:.
+        El panel se abre SOLO desde Ref/Cliente (14/07): el resto de las celdas
+        queda libre para seleccionar y copiar (contenedor, MBL…) sin que se
+        dispare el panel. */}
+    <tr className={`${zebra ? 'row-even bg-muted/30' : 'bg-card'} hover:bg-primary/5 transition-colors`}>
       {cols.map((c) => {
+        const abrePanel = c.key === 'ref' || c.key === 'cliente'
         // Seguimiento 7+ días sin actualizar (carga activa) → celda en rojo.
         const segRojo = c.key === 'seguimiento' && segVencido
         // Columnas congeladas (Ref/Cliente): fondo SÓLIDO opaco (si no, el
@@ -1277,8 +1281,9 @@ const OperationRow = memo(function OperationRow({
           : ''
         // overflow-hidden text-ellipsis: con table-fixed (sin scroll lateral) las
         // celdas truncan en vez de desbordar; el resumen expandido muestra todo.
-        const tdClass = `px-2 py-1.5 align-top ${c.w || ''} ${c.numeric ? 'text-right tabular-nums' : ''} ${c.wrap ? 'whitespace-normal break-words' : 'whitespace-nowrap overflow-hidden text-ellipsis'} ${stickyCls} ${segRojo ? 'bg-red-50 text-red-700 font-semibold' : ''}`
+        const tdClass = `px-2 py-1.5 align-top ${c.w || ''} ${c.numeric ? 'text-right tabular-nums' : ''} ${c.wrap ? 'whitespace-normal break-words' : 'whitespace-nowrap overflow-hidden text-ellipsis'} ${stickyCls} ${segRojo ? 'bg-red-50 text-red-700 font-semibold' : ''} ${abrePanel ? 'cursor-pointer hover:underline decoration-primary/40 underline-offset-2' : 'select-text'}`
         const stickyStyle = c.sticky ? { left: c.stickyLeft ?? 0 } : undefined
+        const tdClick = abrePanel ? () => onOpen(op.uid) : undefined
 
         // Estado of a cargo loaded on a truck is driven by the truck (read-only).
         // FCL es la EXCEPCIÓN: su estado deriva SIEMPRE de la planilla (operativas),
@@ -1287,7 +1292,7 @@ const OperationRow = memo(function OperationRow({
         if (c.key === 'status' && truckStatus && op.mode !== 'fcl') {
           const truckLabel = STATUS_LABEL[truckStatus.status] || truckStatus.status
           return (
-            <td key={c.key} className={tdClass} style={stickyStyle}>
+            <td key={c.key} className={tdClass} style={stickyStyle} onClick={tdClick}>
               <Badge variant="outline" className={`h-5 text-[9px] whitespace-nowrap gap-1 ${statusBadgeClass(truckLabel)}`} title={`Estado controlado por el camión ${truckStatus.truckCode}`}>
                 <TruckIcon size={10} weight="fill" className="text-primary" />
                 {truckStatus.truckCode} · {truckLabel}
@@ -1298,7 +1303,7 @@ const OperationRow = memo(function OperationRow({
 
         const content = cell(c.key)
         return (
-          <td key={c.key} className={tdClass} style={stickyStyle}>
+          <td key={c.key} className={tdClass} style={stickyStyle} onClick={tdClick} title={abrePanel ? 'Abrir el panel de la carga' : undefined}>
             {c.wrap
               ? <div className="line-clamp-2 leading-snug" title={typeof content === 'string' ? content : undefined}>{content}</div>
               : content}

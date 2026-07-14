@@ -12,6 +12,7 @@ import type { DbShipment } from './operationsTypes'
 import { newDbShipment } from './operationsTypes'
 import type { OperativasRecord } from './shipmentTypes'
 import { parseCntr } from './cntrUtils'
+import { withRollupColumns } from './operativasRollup'
 
 const num = (v: unknown): number => {
   const n = typeof v === 'number' ? v : parseFloat(String(v ?? '').replace(',', '.'))
@@ -177,6 +178,15 @@ export function planSplit(input: SplitInput): SplitPlan {
     m3: m3B,
     ...(opsB && opsB.length > 0 ? { operativas: opsB } : {}),
   })
+  // Las fechas por contenedor VIAJAN con cada contenedor (salida, ETA fiscal,
+  // LIBRE, descarga, depósito, transporte van en su registro de operativas).
+  // Acá recomputamos además las columnas colapsadas de B (salida = más
+  // temprana, eta_fiscal = más tardía, etc.) — mismo rollup que usa el resto
+  // de la app — para que la grilla/agenda/tracking las lean coherentes desde
+  // el primer render.
+  if (opsB && opsB.length > 0) {
+    Object.assign(rowB, withRollupColumns({ operativas: opsB }))
+  }
 
   const patchA: Record<string, unknown> = {
     origin_ref: baseRef,
