@@ -40,6 +40,7 @@ import { toast } from 'sonner'
 import OperatorsManager from './OperatorsManager'
 import PasteImportDialog from './PasteImportDialog'
 import NewShipmentDialog from './NewShipmentDialog'
+import SplitShipmentDialog from './SplitShipmentDialog'
 import OperationDetailPanel from './OperationDetailPanel'
 import VesselEtaDialog from './VesselEtaDialog'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
@@ -174,6 +175,8 @@ export default function OperationsGrid({
   const [managerOpen, setManagerOpen] = useState(false)
   const [pasteOpen, setPasteOpen] = useState(false)
   const [newOpen, setNewOpen] = useState(false)
+  // Dividir carga en A/B (tijera del panel de detalle).
+  const [splitOp, setSplitOp] = useState<UnifiedOperation | null>(null)
   // Plan operativo (PDF por cliente): diálogo con multi-select de clientes.
   const [planOpen, setPlanOpen] = useState(false)
   const [planSelected, setPlanSelected] = useState<Set<string>>(new Set())
@@ -1120,7 +1123,21 @@ export default function OperationsGrid({
         onPatchFcl={onPatchFclField}
         onRenameRef={onRenameRef}
         onRequestDelete={onDeleteShipment ? requestDelete : undefined}
+        onSplit={
+          selectedOp && selectedOp.source === 'db' && selectedOp.dbId && onCreateShipment
+            ? () => setSplitOp(selectedOp)
+            : undefined
+        }
         onClose={() => setSelectedUid(null)}
+      />
+      {/* Dividir carga en A/B (vive acá porque necesita el alta + patch + rename) */}
+      <SplitShipmentDialog
+        op={splitOp}
+        dbShipment={splitOp?.dbId ? (dbShipments || []).find(s => s.id === splitOp.dbId) ?? null : null}
+        onClose={() => setSplitOp(null)}
+        onCreate={onCreateShipment}
+        onPatch={onPatchShipment}
+        onRenameRef={onRenameRef}
       />
       <VesselEtaDialog
         open={vesselOpen}

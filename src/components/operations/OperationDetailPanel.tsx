@@ -3,7 +3,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { LockSimple, Truck as TruckIcon, Archive, ArrowCounterClockwise, Trash, Plus, X, PencilSimple, Check, Camera } from '@phosphor-icons/react'
+import { LockSimple, Truck as TruckIcon, Archive, ArrowCounterClockwise, Trash, Plus, X, PencilSimple, Check, Camera, ArrowsSplit } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import type { Operator, UnifiedOperation } from '@/lib/operationsTypes'
 import {
@@ -166,6 +166,7 @@ export default function OperationDetailPanel({
   onPatchFcl,
   onRenameRef,
   onRequestDelete,
+  onSplit,
   onClose,
 }: {
   op: UnifiedOperation | null
@@ -188,6 +189,8 @@ export default function OperationDetailPanel({
   onPatchFcl?: (dbId: string, edits: Record<string, unknown>) => void
   onRenameRef?: (op: UnifiedOperation, newRef: string, pin: string) => Promise<void>
   onRequestDelete?: (op: UnifiedOperation) => void
+  /** Abre el diálogo "Dividir carga en A/B" (vive en la grilla, que tiene el alta). */
+  onSplit?: () => void
   onClose: () => void
 }) {
   const [newCntr, setNewCntr] = useState('')
@@ -318,6 +321,16 @@ export default function OperationDetailPanel({
                 className="text-muted-foreground hover:text-foreground"
               >
                 <PencilSimple size={13} />
+              </button>
+            )}
+            {onSplit && canRenameRef && !renaming && (
+              <button
+                type="button"
+                onClick={onSplit}
+                title="Dividir la carga en partes A/B (contenedores enteros o parte de uno)"
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <ArrowsSplit size={13} />
               </button>
             )}
             {/* Chip fotos e informes — junto a la REF; abre el Dialog de medios */}
