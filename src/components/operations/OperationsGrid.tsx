@@ -800,7 +800,12 @@ export default function OperationsGrid({
           fila se ve con el chevron de expansión (o abriendo el panel). */}
       <div className="hidden md:block border rounded-lg overflow-x-hidden overflow-y-auto max-h-[68vh] bg-card">
         <table className="w-full text-xs table-fixed">
-          <thead className="sticky top-0 z-10">
+          {/* z-30 > z-20 de las celdas congeladas del body: si el thead quedara
+              abajo (z-10), al scrollear las celdas sticky de Ref/Cliente de las
+              filas pintan ENCIMA del header y "desaparece" la esquina izquierda
+              (bug reportado 14/07). El z-30 del th congelado juega solo DENTRO
+              del thead (stacking context propio). */}
+          <thead className="sticky top-0 z-30">
             <tr className="bg-[#1e3a8a] text-white">
               {cols.map(c => {
                 const active = sort?.key === c.key
