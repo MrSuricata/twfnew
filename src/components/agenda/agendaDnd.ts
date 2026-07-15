@@ -7,6 +7,7 @@
 
 import type { CalendarEvent } from '@/lib/agendaTypes'
 import type { ParsedShipment, OperativasRecord } from '@/lib/shipmentTypes'
+import type { Truck } from '@/lib/truckTypes'
 
 // ─── Types ────────────────────────────────────────────────────────────────
 
@@ -60,4 +61,55 @@ export function dropPatch(
   const operativas = buildPatchedOperativas(event.shipment, event.cntr, { [field]: newDate })
 
   return { dbId, fields: { operativas } }
+}
+
+// ─── Camiones: mover carga/salida a otro día (pedido Brian 15/07) ────────
+
+export interface TruckDropResult {
+  truckId: string
+  /** Campos CRUDOS del camión (la agenda NO lee pendingEdits — escribir el
+   *  campo real para que el chip se mueva al soltar). */
+  fields: Partial<Pick<Truck, 'loadDate' | 'departureDate'>>
+}
+
+/**
+ * Drop de un evento de CAMIÓN (id `truck-${t.id}-${type}`) sobre otro día:
+ *   carga (🟡) → loadDate · salida (🔵) → departureDate.
+ * Coherencia de fechas:
+ *   - si carga y salida eran el MISMO día (la agenda muestra un solo chip
+ *     'salida'), se mueven las dos juntas;
+ *   - mover la carga después de la salida arrastra la salida, y mover la
+ *     salida antes de la carga arrastra la carga (nunca quedan cruzadas);
+ *   - la salida NUNCA puede quedar después de la llegada → null (no-op,
+ *     el caller avisa).
+ * Devuelve null para todo lo que no aplica (no-camión, mismo día, draft…).
+ */
+export function dropPatchTruck(
+  event: CalendarEvent | undefined,
+  newDate: string | undefined,
+  trucks: Truck[],
+): TruckDropResult | null {
+  if (!event || !newDate) return null
+  if (!event.id.startsWith('truck-')) return null
+  if (event.type !== 'carga' && event.type !== 'salida') return null
+  if (newDate === event.date) return null
+  // id = `truck-${t.id}-${type}` y t.id puede tener guiones → recortar por
+  // los extremos, nunca split('-').
+  const truckId = event.id.slice('truck-'.length, event.id.length - (event.type.length + 1))
+  const truck = trucks.find(t => t.id === truckId)
+  if (!truck || truck.draft) return null
+
+  const fields: TruckDropResult['fields'] = {}
+  if (event.type === 'carga') {
+    fields.loadDate = newDate
+    if (truck.departureDate && truck.departureDate < newDate) fields.departureDate = newDate
+  } else {
+    fields.departureDate = newDate
+    if (truck.loadDate && (truck.loadDate === truck.departureDate || truck.loadDate > newDate)) {
+      fields.loadDate = newDate
+    }
+  }
+  const salidaFinal = fields.departureDate ?? truck.departureDate
+  if (truck.arrivalDate && salidaFinal && salidaFinal > truck.arrivalDate) return null
+  return { truckId, fields }
 }

@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react'
+import { useState, useMemo, useCallback, useRef } from 'react'
 import {
   DndContext,
   DragOverlay,
@@ -29,7 +29,8 @@ import PendingSalidaSection from './PendingSalidaSection'
 import ShipmentDetailsDialog from '../ShipmentDetailsDialog'
 import ContainerQuickEdit, { buildPatchedOperativas } from '../operations/ContainerQuickEdit'
 import { deriveKnownTransportes } from '@/lib/operationsTypes'
-import { dropPatch } from './agendaDnd'
+import { dropPatch, dropPatchTruck } from './agendaDnd'
+import { fmtDateDMY } from '@/lib/format'
 import { isSalidaBeforeArrival } from '@/lib/salidaCheck'
 import { isSinTelex, SIN_TELEX_MSG } from '@/lib/telexCheck'
 import { toast } from 'sonner'
@@ -50,6 +51,10 @@ interface AgendaCalendarProps {
   editable?: boolean
   /** PATCH callback threaded from DashboardEnhanced — writes to /api/data/shipments. */
   onPatchShipment?: (id: string, fields: Record<string, unknown>) => void
+  /** Persistir cambios de camiones (drag de sus hitos en la vista semanal) —
+   *  el handleUpdateTrucks de App (optimista + POST). Sin esto, soltar un
+   *  chip de camión es no-op. */
+  onUpdateTrucks?: (trucks: Truck[], changedIds?: string[]) => void
   /** Opens the OperationDetailPanel for the given FCL ref (navigates to operaciones tab). */
   onOpenDetail?: (ref: string) => void
   /** Refs (UPPER/trim) de cargas SIN telex — alerta 🚨 en los hitos de camiones. */
@@ -67,6 +72,7 @@ export default function AgendaCalendar({
   defaultView = 'week',
   editable = false,
   onPatchShipment,
+  onUpdateTrucks,
   onOpenDetail,
   sinTelexRefs,
 }: AgendaCalendarProps) {
@@ -336,10 +342,36 @@ export default function AgendaCalendar({
     setDragActiveEvent(ev ?? null)
   }, [])
 
+  // Ref siempre-fresca de los camiones para el Deshacer del drag (el toast
+  // captura el closure del render del drop; con la ref restauramos sobre el
+  // estado ACTUAL sin pisar otros cambios).
+  const trucksRef = useRef<Truck[]>(trucks || [])
+  trucksRef.current = trucks || []
+  const applyTruckFields = useCallback((truckId: string, fields: Partial<Truck>) => {
+    const next = trucksRef.current.map(t => (t.id === truckId ? { ...t, ...fields, updatedAt: Date.now() } : t))
+    onUpdateTrucks?.(next, [truckId])
+  }, [onUpdateTrucks])
+
   const handleDragEnd = useCallback((e: DragEndEvent) => {
     setDragActiveEvent(null)
     const event = e.active.data.current?.event as CalendarEvent | undefined
     const newDate = e.over?.id as string | undefined
+    // ── Camiones: mover carga (🟡) / salida (🔵) a otro día ──
+    if (event?.id.startsWith('truck-') && onUpdateTrucks) {
+      const truckRes = dropPatchTruck(event, newDate, trucksRef.current)
+      if (truckRes) {
+        const prev = trucksRef.current.find(t => t.id === truckRes.truckId)
+        const prevFields: Partial<Truck> = {}
+        for (const k of Object.keys(truckRes.fields) as ('loadDate' | 'departureDate')[]) prevFields[k] = prev?.[k]
+        applyTruckFields(truckRes.truckId, truckRes.fields)
+        toast.success(`${event.ref} movido al ${fmtDateDMY(newDate!)}`, {
+          action: { label: 'Deshacer', onClick: () => applyTruckFields(truckRes.truckId, prevFields) },
+        })
+      } else if (newDate && newDate !== event.date && (event.type === 'salida' || event.type === 'carga')) {
+        toast.warning('No se pudo mover: la salida del camión no puede quedar después de su llegada a fiscal.')
+      }
+      return
+    }
     const result = dropPatch(event, newDate, buildPatchedOperativas)
     if (!result) return
     // La salida no puede quedar ANTES de la llegada a MVD: confirmar antes de guardar
@@ -356,7 +388,7 @@ export default function AgendaCalendar({
       toast.warning(`🚨 ${event.ref} — ${SIN_TELEX_MSG}`)
     }
     onPatchShipment?.(result.dbId, result.fields)
-  }, [onPatchShipment])
+  }, [onPatchShipment, onUpdateTrucks, applyTruckFields])
 
   return (
     <div className="space-y-4">
