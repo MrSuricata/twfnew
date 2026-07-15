@@ -242,3 +242,53 @@ describe('dropPatch', () => {
     expect(result).toBeNull()
   })
 })
+
+// ── dropPatchTruck: mover hitos de camión (carga/salida) ─────────────────
+import { dropPatchTruck } from './agendaDnd'
+import type { Truck } from '@/lib/truckTypes'
+
+const mkTruck = (over: Partial<Truck> = {}): Truck => ({
+  id: 'truck-abc-123', code: 'C446', status: 'planning', isSider: false,
+  transport: 'CARRARA', driver: '', plate: '', loadDate: '2026-07-10',
+  departureDate: '2026-07-12', arrivalDate: '2026-07-20', notes: '',
+  draft: false, pendingEdits: null, updatedAt: 0, createdAt: 0,
+  costDespacho: 0, costFlete: 0, costCarga: 0,
+  ...over,
+} as unknown as Truck)
+
+const truckEvent = (type: 'carga' | 'salida' | 'eta_fisc', date: string, truckId = 'truck-abc-123') =>
+  ({ id: `truck-${truckId}-${type}`, type, date, ref: '🚛 C446' } as unknown as Parameters<typeof dropPatchTruck>[0])
+
+describe('dropPatchTruck', () => {
+  it('salida → departureDate; el id con guiones (uuid) se parsea bien', () => {
+    const r = dropPatchTruck(truckEvent('salida', '2026-07-12'), '2026-07-14', [mkTruck()])
+    expect(r).toEqual({ truckId: 'truck-abc-123', fields: { departureDate: '2026-07-14' } })
+  })
+
+  it('carga → loadDate; si queda después de la salida, arrastra la salida', () => {
+    const r = dropPatchTruck(truckEvent('carga', '2026-07-10'), '2026-07-13', [mkTruck()])
+    expect(r?.fields).toEqual({ loadDate: '2026-07-13', departureDate: '2026-07-13' })
+    const r2 = dropPatchTruck(truckEvent('carga', '2026-07-10'), '2026-07-11', [mkTruck()])
+    expect(r2?.fields).toEqual({ loadDate: '2026-07-11' })
+  })
+
+  it('salida antes de la carga arrastra la carga; mismo día (chip único) mueve las dos', () => {
+    const r = dropPatchTruck(truckEvent('salida', '2026-07-12'), '2026-07-09', [mkTruck()])
+    expect(r?.fields).toEqual({ departureDate: '2026-07-09', loadDate: '2026-07-09' })
+    const combinado = mkTruck({ loadDate: '2026-07-12', departureDate: '2026-07-12' })
+    const r2 = dropPatchTruck(truckEvent('salida', '2026-07-12'), '2026-07-15', [combinado])
+    expect(r2?.fields).toEqual({ departureDate: '2026-07-15', loadDate: '2026-07-15' })
+  })
+
+  it('la salida no puede quedar después de la llegada → null', () => {
+    expect(dropPatchTruck(truckEvent('salida', '2026-07-12'), '2026-07-25', [mkTruck()])).toBeNull()
+  })
+
+  it('no-ops: mismo día, no-camión, eta_fisc, draft, camión inexistente', () => {
+    expect(dropPatchTruck(truckEvent('salida', '2026-07-12'), '2026-07-12', [mkTruck()])).toBeNull()
+    expect(dropPatchTruck({ id: 'A7600-C1-salida', type: 'salida', date: '2026-07-12' } as unknown as Parameters<typeof dropPatchTruck>[0], '2026-07-14', [mkTruck()])).toBeNull()
+    expect(dropPatchTruck(truckEvent('eta_fisc', '2026-07-20'), '2026-07-22', [mkTruck()])).toBeNull()
+    expect(dropPatchTruck(truckEvent('salida', '2026-07-12'), '2026-07-14', [mkTruck({ draft: true })])).toBeNull()
+    expect(dropPatchTruck(truckEvent('salida', '2026-07-12', 'otro-id'), '2026-07-14', [mkTruck()])).toBeNull()
+  })
+})

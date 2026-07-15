@@ -475,6 +475,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
               truckLoads={truckLoads}
               editable
               onPatchShipment={onPatchShipment}
+              onUpdateTrucks={onUpdateTrucks}
               onOpenDetail={onOpenDetail}
               sinTelexRefs={sinTelexRefs}
             />
