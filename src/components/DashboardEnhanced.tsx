@@ -22,6 +22,7 @@ import {
   Bell,
   BellRinging,
   CurrencyDollar,
+  Question,
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import { authFetch, getAdminLevel } from '@/lib/authClient'
@@ -30,6 +31,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Switch } from '@/components/ui/switch'
 import { fetchShipmentsFromDB } from '@/lib/dataClient'
 import TeamManager from './TeamManager'
+import HelpGuide from './HelpGuide'
 
 import TodayDashboard from './TodayDashboard'
 import AgendaCalendar from './agenda/AgendaCalendar'
@@ -154,6 +156,8 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
   }, [])
   // Pestaña Equipo: solo el owner (Brian) — el backend re-valida igual.
   const isOwner = getAdminLevel() === 'owner'
+  // Ayuda en la app (botón "?" del header).
+  const [helpOpen, setHelpOpen] = useState(false)
   const [isRefreshing, setIsRefreshing] = useState(false)
   // Tick que sube con cada Refrescar global → recarga la Actividad del Equipo.
   const [refreshTick, setRefreshTick] = useState(0)
@@ -296,6 +300,16 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
                 <span className="hidden sm:inline">{isRefreshing ? 'Sincronizando…' : 'Refrescar'}</span>
               </button>
               )}
+              {/* Ayuda en la app: guía + FAQ para el equipo, con buscador */}
+              <button
+                type="button"
+                onClick={() => setHelpOpen(true)}
+                className="inline-flex items-center justify-center w-9 h-9 rounded-md text-sm bg-primary-foreground/10 hover:bg-primary-foreground/20 text-primary-foreground/85 hover:text-primary-foreground transition-colors border border-primary-foreground/10"
+                title="Ayuda: cómo se usa cada pantalla"
+                aria-label="Ayuda"
+              >
+                <Question size={18} weight="bold" />
+              </button>
               <button
                 type="button"
                 onClick={() => {
@@ -317,6 +331,8 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
           </div>
         </div>
       </nav>
+
+      <HelpGuide open={helpOpen} onOpenChange={setHelpOpen} />
 
       {dbSyncError && (
         <div className="bg-yellow-50 border-b border-yellow-200 px-4 py-2 text-sm text-yellow-900 flex items-center gap-2">
