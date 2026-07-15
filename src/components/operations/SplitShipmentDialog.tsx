@@ -44,10 +44,8 @@ export default function SplitShipmentDialog({ op, dbShipment, onClose, onCreate,
   const [refB, setRefB] = useState('')
   const [pin, setPin] = useState('')
   const [lado, setLado] = useState<Record<string, 'A' | 'B'>>({})
-  const [sharedCntr, setSharedCntr] = useState('')
-  const [shPkgs, setShPkgs] = useState('')
-  const [shKg, setShKg] = useState('')
-  const [shM3, setShM3] = useState('')
+  // Contenedores COMPARTIDOS (pueden ser varios): cntr → cuánto se lleva B.
+  const [shareds, setShareds] = useState<Record<string, { pkgs: string; kg: string; m3: string }>>({})
   const [tPkgs, setTPkgs] = useState('')
   const [tKg, setTKg] = useState('')
   const [tM3, setTM3] = useState('')
@@ -60,26 +58,26 @@ export default function SplitShipmentDialog({ op, dbShipment, onClose, onCreate,
     setRefB(`${op.ref} B`)
     setPin('')
     setLado({})
-    setSharedCntr('')
-    setShPkgs(''); setShKg(''); setShM3('')
+    setShareds({})
     setTPkgs(''); setTKg(''); setTM3('')
   }, [op])
 
   const input: SplitInput | null = useMemo(() => {
     if (!dbShipment) return null
-    const cntrsB = cntrs.filter(c => lado[c] === 'B')
+    const cntrsB = cntrs.filter(c => lado[c] === 'B' && !shareds[c])
+    const parciales = Object.entries(shareds).map(([cntr, v]) => ({
+      cntr, pkgsB: parseMonto(v.pkgs), kgB: parseMonto(v.kg), m3B: parseMonto(v.m3),
+    }))
     return {
       original: dbShipment,
       refB: refB.trim(),
       cntrsB,
-      parcial: sharedCntr
-        ? { cntr: sharedCntr, pkgsB: parseMonto(shPkgs), kgB: parseMonto(shKg), m3B: parseMonto(shM3) }
-        : null,
+      parciales: parciales.length > 0 ? parciales : null,
       totalesB: cntrs.length === 0
         ? { pkgs: parseMonto(tPkgs), kg: parseMonto(tKg), m3: parseMonto(tM3) }
         : null,
     }
-  }, [dbShipment, cntrs, lado, refB, sharedCntr, shPkgs, shKg, shM3, tPkgs, tKg, tM3])
+  }, [dbShipment, cntrs, lado, refB, shareds, tPkgs, tKg, tM3])
 
   const problema = input ? validateSplit(input) : 'Sin carga'
   const preview = useMemo(() => {
@@ -149,7 +147,8 @@ export default function SplitShipmentDialog({ op, dbShipment, onClose, onCreate,
                 <Label className="text-xs text-muted-foreground">¿Qué contenedor va a cada parte?</Label>
                 <div className="rounded-md border divide-y">
                   {cntrs.map(c => {
-                    const side = sharedCntr === c ? 'COMP' : (lado[c] ?? 'A')
+                    const compartido = !!shareds[c]
+                    const side = compartido ? 'COMP' : (lado[c] ?? 'A')
                     return (
                       <div key={c} className="flex items-center gap-2 px-2.5 py-1.5">
                         <span className="font-mono text-xs flex-1">{c}</span>
@@ -157,24 +156,29 @@ export default function SplitShipmentDialog({ op, dbShipment, onClose, onCreate,
                           <button
                             key={s}
                             type="button"
-                            disabled={sharedCntr === c}
+                            disabled={compartido}
                             onClick={() => setLado(prev => ({ ...prev, [c]: s }))}
                             className={`rounded px-2.5 py-0.5 text-xs border ${
                               side === s ? 'bg-primary text-primary-foreground border-primary' : 'bg-card border-border'
-                            } ${sharedCntr === c ? 'opacity-40' : ''}`}
+                            } ${compartido ? 'opacity-40' : ''}`}
                           >
                             {s}
                           </button>
                         ))}
                         <button
                           type="button"
-                          title="Compartir: parte del contenido de este contenedor se va a B"
+                          title="Compartir: parte del contenido de este contenedor se va a B (podés compartir varios)"
                           onClick={() => {
-                            setSharedCntr(cur => (cur === c ? '' : c))
+                            setShareds(prev => {
+                              const next = { ...prev }
+                              if (next[c]) delete next[c]
+                              else next[c] = { pkgs: '', kg: '', m3: '' }
+                              return next
+                            })
                             setLado(prev => ({ ...prev, [c]: 'A' }))
                           }}
                           className={`rounded px-2 py-0.5 text-xs border ${
-                            sharedCntr === c ? 'bg-amber-100 border-amber-400 text-amber-900 font-medium' : 'bg-card border-dashed border-border text-muted-foreground'
+                            compartido ? 'bg-amber-100 border-amber-400 text-amber-900 font-medium' : 'bg-card border-dashed border-border text-muted-foreground'
                           }`}
                         >
                           compartir
@@ -183,18 +187,18 @@ export default function SplitShipmentDialog({ op, dbShipment, onClose, onCreate,
                     )
                   })}
                 </div>
-                {sharedCntr && (
-                  <div className="rounded-md border border-amber-200 bg-amber-50/60 p-2.5 space-y-1.5">
+                {Object.keys(shareds).map(c => (
+                  <div key={c} className="rounded-md border border-amber-200 bg-amber-50/60 p-2.5 space-y-1.5">
                     <p className="text-xs text-amber-800">
-                      Del <span className="font-mono">{sharedCntr}</span>, ¿cuánto se lleva la parte B? (el resto queda en A)
+                      Del <span className="font-mono">{c}</span>, ¿cuánto se lleva la parte B? (el resto queda en A)
                     </p>
                     <div className="grid grid-cols-3 gap-2">
-                      <Input inputMode="decimal" placeholder="Bultos" value={shPkgs} onChange={e => setShPkgs(e.target.value)} className="h-8 text-sm" />
-                      <Input inputMode="decimal" placeholder="Kg" value={shKg} onChange={e => setShKg(e.target.value)} className="h-8 text-sm" />
-                      <Input inputMode="decimal" placeholder="M³" value={shM3} onChange={e => setShM3(e.target.value)} className="h-8 text-sm" />
+                      <Input inputMode="decimal" placeholder="Bultos" value={shareds[c].pkgs} onChange={e => setShareds(prev => ({ ...prev, [c]: { ...prev[c], pkgs: e.target.value } }))} className="h-8 text-sm" />
+                      <Input inputMode="decimal" placeholder="Kg" value={shareds[c].kg} onChange={e => setShareds(prev => ({ ...prev, [c]: { ...prev[c], kg: e.target.value } }))} className="h-8 text-sm" />
+                      <Input inputMode="decimal" placeholder="M³" value={shareds[c].m3} onChange={e => setShareds(prev => ({ ...prev, [c]: { ...prev[c], m3: e.target.value } }))} className="h-8 text-sm" />
                     </div>
                   </div>
-                )}
+                ))}
               </div>
             ) : (
               <div className="space-y-1.5">

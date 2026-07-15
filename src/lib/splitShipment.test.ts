@@ -35,11 +35,11 @@ describe('validateSplit', () => {
     const o = base({ contenedor: CUATRO })
     expect(validateSplit({
       original: o, refB: 'A9000 B', cntrsB: ['MSKU1111111'],
-      parcial: { cntr: 'MSKU1111111', pkgsB: 1, kgB: 0, m3B: 0 },
+      parciales: [{ cntr: 'MSKU1111111', pkgsB: 1, kgB: 0, m3B: 0 }],
     })).toMatch(/compartido/i)
     expect(validateSplit({
       original: o, refB: 'A9000 B', cntrsB: [],
-      parcial: { cntr: 'MSKU2222222', pkgsB: 0, kgB: 0, m3B: 0 },
+      parciales: [{ cntr: 'MSKU2222222', pkgsB: 0, kgB: 0, m3B: 0 }],
     })).toMatch(/bultos/i)
   })
 
@@ -126,7 +126,7 @@ describe('planSplit — contenedor compartido (uno entero + parte de otro)', () 
   const plan = planSplit({
     original, refB: 'A9000 B',
     cntrsB: ['MSKU1111111'],
-    parcial: { cntr: 'MSKU2222222', pkgsB: 5, kgB: 600, m3B: 3 },
+    parciales: [{ cntr: 'MSKU2222222', pkgsB: 5, kgB: 600, m3B: 3 }],
   })
 
   it('el compartido queda en A con lo que resta y viaja en B con lo que se lleva', () => {
@@ -144,7 +144,7 @@ describe('planSplit — contenedor compartido (uno entero + parte de otro)', () 
   it('clampa a 0 si la parte pedida supera el contenido', () => {
     const p2 = planSplit({
       original, refB: 'A9000 B', cntrsB: [],
-      parcial: { cntr: 'MSKU2222222', pkgsB: 99, kgB: 9999, m3B: 99 },
+      parciales: [{ cntr: 'MSKU2222222', pkgsB: 99, kgB: 9999, m3B: 99 }],
     })
     const a = (p2.patchA.operativas as OperativasRecord[]).find(o => o.CNTR_OP === 'MSKU2222222')!
     expect([a.PKGS, a.KG, a.M3]).toEqual([0, 0, 0])
@@ -166,5 +166,47 @@ describe('planSplit — sin detalle por contenedor (LCL / FCL sin operativas)', 
     const plan = planSplit({ original, refB: 'A9000 C', cntrsB: [], totalesB: { pkgs: 1, kg: 10, m3: 0.1 } })
     expect(plan.rowB.origin_ref).toBe('A9000')
     expect(plan.patchA.origin_ref).toBe('A9000')
+  })
+})
+
+describe('planSplit — VARIOS contenedores compartidos a la vez (15/07)', () => {
+  const original = base({
+    contenedor: 'MSKU1111111, MSKU2222222, MSKU3333333',
+    n_cntr: 3,
+    operativas: [
+      op({ CNTR_OP: 'MSKU1111111', PKGS: 10, KG: 1000, M3: 5 }),
+      op({ CNTR_OP: 'MSKU2222222', PKGS: 20, KG: 2000, M3: 10 }),
+      op({ CNTR_OP: 'MSKU3333333', PKGS: 30, KG: 3000, M3: 15 }),
+    ],
+  })
+
+  it('parte de DOS contenedores va a B; ambos quedan en las dos partes con sus montos', () => {
+    const plan = planSplit({
+      original, refB: 'A9000 B', cntrsB: ['MSKU3333333'],
+      parciales: [
+        { cntr: 'MSKU1111111', pkgsB: 4, kgB: 400, m3B: 2 },
+        { cntr: 'MSKU2222222', pkgsB: 5, kgB: 500, m3B: 3 },
+      ],
+    })
+    // A conserva los dos compartidos con lo que resta
+    const aByC = Object.fromEntries((plan.patchA.operativas as OperativasRecord[]).map(o => [o.CNTR_OP, o]))
+    expect([aByC['MSKU1111111'].PKGS, aByC['MSKU1111111'].KG, aByC['MSKU1111111'].M3]).toEqual([6, 600, 3])
+    expect([aByC['MSKU2222222'].PKGS, aByC['MSKU2222222'].KG, aByC['MSKU2222222'].M3]).toEqual([15, 1500, 7])
+    // B lleva el entero + los dos parciales (orden del rollup = orden de operativas)
+    expect(plan.rowB.contenedor).toBe('MSKU1111111, MSKU2222222, MSKU3333333')
+    expect(plan.rowB.n_cntr).toBe(3)
+    expect(plan.resumen.b.kg).toBe(3000 + 400 + 500)
+    expect(plan.resumen.a.kg).toBe(600 + 1500)
+    expect(plan.patchA.contenedor).toBe('MSKU1111111, MSKU2222222')
+  })
+
+  it('valida: el mismo contenedor no puede compartirse dos veces', () => {
+    expect(validateSplit({
+      original, refB: 'A9000 B', cntrsB: [],
+      parciales: [
+        { cntr: 'MSKU1111111', pkgsB: 1, kgB: 0, m3B: 0 },
+        { cntr: 'MSKU1111111', pkgsB: 2, kgB: 0, m3B: 0 },
+      ],
+    })).toMatch(/dos veces/i)
   })
 })

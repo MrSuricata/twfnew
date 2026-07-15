@@ -34,8 +34,9 @@ export interface SplitInput {
   refB: string
   /** Contenedores que se van ENTEROS a B (normalizados o no). */
   cntrsB: string[]
-  /** Contenedor compartido (opcional). No puede estar en cntrsB. */
-  parcial?: SplitParcial | null
+  /** Contenedores COMPARTIDOS (0, 1 o varios): cada uno queda en A y parte
+   *  de su contenido pasa a B. Ninguno puede estar en cntrsB. */
+  parciales?: SplitParcial[] | null
   /** Totales para B cuando la carga NO tiene detalle por contenedor
    *  (LCL / FCL sin operativas): kilos/bultos/m³ que se lleva B. */
   totalesB?: { pkgs: number; kg: number; m3: number } | null
@@ -54,18 +55,22 @@ export interface SplitPlan {
 
 /** Valida la entrada; devuelve el problema o null si está OK. */
 export function validateSplit(input: SplitInput): string | null {
-  const { original, refB, cntrsB, parcial, totalesB } = input
+  const { original, refB, cntrsB, totalesB } = input
+  const parciales = input.parciales || []
   if (!refB.trim()) return 'Poné la ref de la parte B'
   if (refB.trim().toUpperCase() === original.ref.trim().toUpperCase()) return 'La ref de B no puede ser igual a la original'
   const all = new Set(parseCntr(original.contenedor).map(normCntr))
   const setB = cntrsB.map(normCntr)
   for (const c of setB) if (!all.has(c)) return `El contenedor ${c} no es de esta carga`
-  if (parcial) {
+  const vistos = new Set<string>()
+  for (const parcial of parciales) {
     const pc = normCntr(parcial.cntr)
     if (!all.has(pc)) return `El contenedor compartido ${pc} no es de esta carga`
-    if (setB.includes(pc)) return 'El contenedor compartido no puede irse entero a B a la vez'
+    if (setB.includes(pc)) return `El contenedor compartido ${pc} no puede irse entero a B a la vez`
+    if (vistos.has(pc)) return `El ${pc} está compartido dos veces`
+    vistos.add(pc)
     if (num(parcial.pkgsB) <= 0 && num(parcial.kgB) <= 0 && num(parcial.m3B) <= 0) {
-      return 'Poné cuántos bultos/kilos/m³ del contenedor compartido van a B'
+      return `Poné cuántos bultos/kilos/m³ del ${pc} van a B`
     }
   }
   const sinCntrs = all.size === 0
@@ -74,20 +79,25 @@ export function validateSplit(input: SplitInput): string | null {
     if (!t || (num(t.pkgs) <= 0 && num(t.kg) <= 0 && num(t.m3) <= 0)) {
       return 'Poné qué se lleva la parte B (bultos, kilos o m³)'
     }
-  } else if (setB.length === 0 && !parcial) {
-    return 'Elegí al menos un contenedor para B (o compartí uno)'
+  } else if (setB.length === 0 && parciales.length === 0) {
+    return 'Elegí al menos un contenedor para B (o compartí alguno)'
   }
   return null
 }
 
 export function planSplit(input: SplitInput): SplitPlan {
-  const { original, refB, parcial, totalesB } = input
+  const { original, refB, totalesB } = input
+  const parciales = input.parciales || []
   const cntrsAll = parseCntr(original.contenedor).map(normCntr)
   const setB = new Set(input.cntrsB.map(normCntr))
-  const shared = parcial ? normCntr(parcial.cntr) : null
+  // Mapa cntr compartido → cuánto se lleva B de ese contenedor.
+  const parcialByCntr = new Map(parciales.map(p => [normCntr(p.cntr), p]))
 
-  const cntrsA = cntrsAll.filter(c => !setB.has(c))              // el compartido queda en A…
-  const cntrsB = [...cntrsAll.filter(c => setB.has(c)), ...(shared ? [shared] : [])]  // …y también viaja en B
+  const cntrsA = cntrsAll.filter(c => !setB.has(c))              // los compartidos quedan en A…
+  const cntrsB = [
+    ...cntrsAll.filter(c => setB.has(c)),
+    ...cntrsAll.filter(c => parcialByCntr.has(c)),               // …y también viajan en B
+  ]
 
   const ops = (original.operativas || []) as OperativasRecord[]
   let opsA: OperativasRecord[] | null = null
@@ -95,15 +105,15 @@ export function planSplit(input: SplitInput): SplitPlan {
   let pkgsA: number, kgA: number, m3A: number, pkgsB: number, kgB: number, m3B: number
 
   if (ops.length > 0) {
-    // Con detalle por contenedor: repartir registros y ajustar el compartido.
+    // Con detalle por contenedor: repartir registros y ajustar los compartidos.
     opsA = []
     opsB = []
     for (const o of ops) {
       const c = normCntr(o.CNTR_OP || '')
+      const p = parcialByCntr.get(c)
       if (setB.has(c)) {
         opsB.push({ ...o, REF: refB })
-      } else if (shared && c === shared) {
-        const p = parcial as SplitParcial
+      } else if (p) {
         opsA.push({
           ...o,
           PKGS: Math.max(0, num(o.PKGS) - num(p.pkgsB)),
@@ -121,8 +131,11 @@ export function planSplit(input: SplitInput): SplitPlan {
   } else {
     // Sin detalle por contenedor: B se lleva lo tipeado y A el resto (nunca <0).
     const t = totalesB || { pkgs: 0, kg: 0, m3: 0 }
-    // Si hay parcial pero no operativas, el parcial también es "lo tipeado".
-    const extra = parcial ? { pkgs: num(parcial.pkgsB), kg: num(parcial.kgB), m3: num(parcial.m3B) } : { pkgs: 0, kg: 0, m3: 0 }
+    // Si hay parciales pero no operativas, los parciales también son "lo tipeado".
+    const extra = parciales.reduce(
+      (a, p) => ({ pkgs: a.pkgs + num(p.pkgsB), kg: a.kg + num(p.kgB), m3: a.m3 + num(p.m3B) }),
+      { pkgs: 0, kg: 0, m3: 0 },
+    )
     pkgsB = num(t.pkgs) + extra.pkgs
     kgB = num(t.kg) + extra.kg
     m3B = num(t.m3) + extra.m3
