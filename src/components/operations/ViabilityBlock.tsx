@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input'
 import { LockSimple, CheckCircle, ArrowCounterClockwise } from '@phosphor-icons/react'
 import type { UnifiedOperation } from '@/lib/operationsTypes'
 import { DEPOSITOS_UY } from '@/lib/operationsTypes'
+import { matchCanonico, upperCat, DEV_ALIASES, canonicalizarLista } from '@/lib/fuzzyCatalog'
 import { fmtDateDMY } from '@/lib/format'
 import { isLibreDevuelto, libreDevueltoToggle, LIBRE_DEVUELTO } from '@/lib/libreDevuelto'
 import { hasTelex } from '@/lib/telexCheck'
@@ -24,15 +25,22 @@ export default function ViabilityBlock({
   editable,
   knownDepositos,
   knownTransportes = [],
+  knownFiscales = [],
+  knownDevs = [],
   onCommit,
 }: {
   op: UnifiedOperation
   editable: boolean
   knownDepositos: string[]
   knownTransportes?: string[]
+  /** Fiscales de destino ya usados en las cargas → combo (antes texto libre). */
+  knownFiscales?: string[]
+  /** Terminales de devolución ya usadas → se suman a DEV_OPTIONS (alias APM=MPS unificado). */
+  knownDevs?: string[]
   onCommit: (key: keyof UnifiedOperation, v: unknown) => void
 }) {
-  const depositoOptions = Array.from(new Set([...DEPOSITOS_UY, ...knownDepositos])).filter(Boolean)
+  const depositoOptions = canonicalizarLista([...DEPOSITOS_UY, ...knownDepositos])
+  const devOptions = canonicalizarLista([...DEV_OPTIONS, ...knownDevs], DEV_ALIASES)
 
   // Botón rápido "Devuelto" (regla del repo: 'DEVUELTO' vive en LIBRE y
   // reemplaza la fecha — así la carga sale de las alertas de LIBRE). Va por el
@@ -77,17 +85,19 @@ export default function ViabilityBlock({
         <StatBox label="Peso" value={op.kg} unit="kg" kind="number" editable={editable && op.mode !== 'fcl'} sumHint={op.mode === 'fcl'} onCommit={v => onCommit('kg', v)} />
         <StatBox label="Volumen" value={op.m3} unit="m³" kind="number" editable={editable && op.mode !== 'fcl'} sumHint={op.mode === 'fcl'} onCommit={v => onCommit('m3', v)} />
         <StatBox label="Bultos" value={op.pkgs} kind="number" editable={editable && op.mode !== 'fcl'} sumHint={op.mode === 'fcl'} onCommit={v => onCommit('pkgs', v)} />
-        <StatBox label="Fiscal (destino)" value={op.fiscal} kind="text" editable={editable} onCommit={v => onCommit('fiscal', v)} />
-        <StatBox label="Depósito UY" value={op.deposito} kind="combo" options={depositoOptions} editable={editable} onCommit={v => onCommit('deposito', v)} />
+        {/* Fiscal ahora es combo con catálogo (pedido 16/07): sugiere los ya
+            usados y corrige typos al guardar — "para no escribir cualquier cosa". */}
+        <StatBox label="Fiscal (destino)" value={op.fiscal} kind="combo" options={knownFiscales} catalogo editable={editable} onCommit={v => onCommit('fiscal', v)} />
+        <StatBox label="Depósito UY" value={op.deposito} kind="combo" options={depositoOptions} catalogo editable={editable} onCommit={v => onCommit('deposito', v)} />
         {/* Transporte es dato de la CARGA (nivel-carga, como Depósito): editarlo
             propaga a TODOS los contenedores + la columna (buildPerContainerPatch
             en el commit del panel). Sugiere los ya usados; display en MAYÚSCULAS. */}
-        <StatBox label="Transporte" value={op.transporte} kind="combo" options={knownTransportes} upper editable={editable} onCommit={v => onCommit('transporte', v)} />
+        <StatBox label="Transporte" value={op.transporte} kind="combo" options={knownTransportes} upper catalogo editable={editable} onCommit={v => onCommit('transporte', v)} />
         {/* Operativa y LIBRE son datos de la CARGA (no de un contenedor suelto):
             editarlos acá propaga a TODOS los contenedores + la columna (vía
             buildPerContainerPatch en el commit del panel). Antes LIBRE se editaba
             por contenedor y "no persistía" al abrir otro. */}
-        <StatBox label="Operativa" value={op.operativa} kind="combo" options={OPERATIVA_OPTIONS} editable={editable} onCommit={v => onCommit('operativa', v)} />
+        <StatBox label="Operativa" value={op.operativa} kind="combo" options={OPERATIVA_OPTIONS} catalogo editable={editable} onCommit={v => onCommit('operativa', v)} />
         <StatBox label="Desconsolidación" value={op.desconsol} kind="date" editable={editable} onCommit={v => onCommit('desconsol', v)} />
         <StatBox
           label="Libre (máx. devolución)"
@@ -116,8 +126,10 @@ export default function ViabilityBlock({
           label="Devuelve en"
           value={op.dev}
           kind="combo"
-          options={DEV_OPTIONS}
+          options={devOptions}
+          aliases={DEV_ALIASES}
           upper
+          catalogo
           editable={editable}
           footer={devVaria ? (
             <p className="mt-1 text-[10px] leading-tight text-amber-600" title={`Devoluciones por contenedor: ${devsDistintos.join(', ')}`}>
@@ -153,7 +165,7 @@ export default function ViabilityBlock({
 // footer: contenido extra abajo del valor (ej: botón "Devuelto") — se oculta
 // mientras se edita para no disparar acciones con un draft a medio guardar.
 function StatBox({
-  label, value, unit, kind, options, editable, sumHint, upper, valueClass, footer, onCommit,
+  label, value, unit, kind, options, editable, sumHint, upper, catalogo, aliases, valueClass, footer, onCommit,
 }: {
   label: string
   value: string | number
@@ -163,6 +175,12 @@ function StatBox({
   editable: boolean
   sumHint?: boolean
   upper?: boolean
+  /** Combo con catálogo: al guardar corrige typos contra las opciones
+   *  ("sna antonio" → SAN ANTONIO, con aviso y "Era otro") y normaliza a
+   *  MAYÚSCULAS los valores genuinamente nuevos. */
+  catalogo?: boolean
+  /** Alias del catálogo (normalizado → canónico), ej: APM → MPS. */
+  aliases?: Record<string, string>
   valueClass?: string
   footer?: ReactNode
   onCommit: (v: unknown) => void
@@ -195,6 +213,26 @@ function StatBox({
       const n = parseFloat(draft.replace(',', '.'))
       if (!isFinite(n)) return
       if (String(value ?? '') !== String(n)) onCommit(n)
+      return
+    }
+    // Combo con catálogo: corregir typos contra las opciones conocidas antes
+    // de guardar (mismo criterio que el alta de carga — fuzzyCatalog).
+    if (kind === 'combo' && catalogo) {
+      const typed = draft.trim()
+      if (typed === '') { if (String(value ?? '') !== '') onCommit(''); return }
+      const m = matchCanonico(typed, options || [], aliases)
+      const final = m ? m.canon : upperCat(typed)
+      if (String(value ?? '') === final) return
+      onCommit(final)
+      if (m && !m.exacto) {
+        toast.info(`«${typed}» → ${m.canon}`, {
+          description: `${label}: corregido al valor ya conocido.`,
+          action: { label: 'Era otro', onClick: () => onCommit(upperCat(typed)) },
+        })
+      } else if (!m && (options || []).length > 0) {
+        // Con catálogo vacío no se avisa "es nuevo" por cada valor inicial.
+        toast.info(`«${final}» es nuevo — queda en las opciones de ${label}`)
+      }
       return
     }
     const v = upper ? draft.trim().toUpperCase() : draft.trim()

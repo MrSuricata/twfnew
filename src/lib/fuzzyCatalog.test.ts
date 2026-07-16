@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { normalizeCat, levenshtein, matchCanonico } from './fuzzyCatalog'
+import { normalizeCat, levenshtein, matchCanonico, upperCat, canonicalizarLista, DEV_ALIASES } from './fuzzyCatalog'
 
 const PUERTOS = ['SAN ANTONIO', 'MONTEVIDEO', 'VALPARAISO', 'BUENOS AIRES', 'SHANGHAI', 'NINGBO']
 
@@ -37,5 +37,28 @@ describe('matchCanonico', () => {
     expect(matchCanonico('FOB', ['FCA', 'FOB', 'CIF'])).toEqual({ canon: 'FOB', exacto: true })
     expect(matchCanonico('FOX', ['FCA', 'FOB', 'CIF'])).toEqual({ canon: 'FOB', exacto: false })
     expect(matchCanonico('DAP', ['FOB', 'CIF'])).toBeNull()
+  })
+})
+
+describe('alias APM = MPS (DEV_ALIASES)', () => {
+  const DEVS = ['STL', 'MPS', 'TCP', 'MURCHISON']
+  it('«apm» se corrige a MPS (aviso, exacto=false)', () => {
+    expect(matchCanonico('apm', DEVS, DEV_ALIASES)).toEqual({ canon: 'MPS', exacto: false })
+  })
+  it('«mps» sigue siendo exacto', () => {
+    expect(matchCanonico('mps', DEVS, DEV_ALIASES)).toEqual({ canon: 'MPS', exacto: true })
+  })
+  it('alias sin canónico en el catálogo → igual corrige', () => {
+    expect(matchCanonico('APM', ['STL'], DEV_ALIASES)).toEqual({ canon: 'MPS', exacto: false })
+  })
+})
+
+describe('canonicalizarLista + acentos conservados', () => {
+  it('unifica alias, dedup y ordena', () => {
+    expect(canonicalizarLista(['APM', 'mps', 'STL', '', null, 'stl'], DEV_ALIASES)).toEqual(['MPS', 'STL'])
+  })
+  it('el canónico conserva sus acentos', () => {
+    expect(matchCanonico('cordoba', ['CÓRDOBA', 'RAFAELA'])).toEqual({ canon: 'CÓRDOBA', exacto: true })
+    expect(upperCat('  córdoba  nueva ')).toBe('CÓRDOBA NUEVA')
   })
 })

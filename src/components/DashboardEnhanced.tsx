@@ -573,6 +573,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
               shipments={shipments || []}
               dbShipments={dbShipments}
               onPatchShipment={onPatchShipment}
+              onOpenDetail={onOpenDetail}
             />
           </TabsContent>
 

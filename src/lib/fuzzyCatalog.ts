@@ -35,6 +35,17 @@ export function levenshtein(a: string, b: string): number {
   return prev[b.length]
 }
 
+/** MAYÚSCULAS conservando acentos (para guardar valores nuevos sin
+ *  desfigurarlos: "córdoba nueva" → "CÓRDOBA NUEVA"). */
+export function upperCat(s: string): string {
+  return String(s || '').replace(/\s+/g, ' ').trim().toUpperCase()
+}
+
+/** Nombres distintos del MISMO lugar — el match y las sugerencias los unifican
+ *  al canónico. Brian 16/07: APM y MPS son la misma terminal de devolución
+ *  (canónico MPS, el mayoritario en los datos: 50 vs 13). */
+export const DEV_ALIASES: Record<string, string> = { APM: 'MPS' }
+
 export interface MatchCanonico {
   canon: string
   /** true = era el mismo valor (solo cambió mayúsculas/acentos/espacios). */
@@ -46,20 +57,41 @@ export interface MatchCanonico {
  *  1. igual normalizado → exacto (corrige mayúsculas/acentos);
  *  2. a distancia de tipeo ≤ 1 (cortos) / ≤ 2 (5+ letras) → typo detectado;
  *  3. nada cerca → null (valor genuinamente nuevo).
+ * Devuelve el valor conocido TAL CUAL está en el catálogo (conserva acentos).
+ * `aliases` (normalizado → canónico) se aplica antes del match: "APM" con
+ * DEV_ALIASES matchea como MPS y cuenta como corrección (exacto=false).
  */
-export function matchCanonico(valor: string, conocidos: string[]): MatchCanonico | null {
-  const v = normalizeCat(valor)
+export function matchCanonico(valor: string, conocidos: string[], aliases?: Record<string, string>): MatchCanonico | null {
+  let v = normalizeCat(valor)
   if (!v) return null
+  const aliased = aliases?.[v]
+  if (aliased) v = normalizeCat(aliased)
   let mejor: { canon: string; dist: number } | null = null
   for (const c of conocidos) {
     const n = normalizeCat(c)
     if (!n) continue
-    if (n === v) return { canon: n, exacto: true }
+    if (n === v) return { canon: c.trim(), exacto: !aliased }
     const maxDist = v.length <= 4 ? 1 : 2
     // Poda barata: si el largo difiere más que la tolerancia, ni calcular.
     if (Math.abs(n.length - v.length) > maxDist) continue
     const d = levenshtein(v, n)
-    if (d <= maxDist && (!mejor || d < mejor.dist)) mejor = { canon: n, dist: d }
+    if (d <= maxDist && (!mejor || d < mejor.dist)) mejor = { canon: c.trim(), dist: d }
   }
-  return mejor ? { canon: mejor.canon, exacto: false } : null
+  if (mejor) return { canon: mejor.canon, exacto: false }
+  // Alias sin entrada en el catálogo (aún sin cargas con el canónico): igual
+  // se corrige al canónico del alias.
+  if (aliased) return { canon: upperCat(aliased), exacto: false }
+  return null
+}
+
+/** Lista de sugerencias canonicalizada: MAYÚSCULAS, sin vacíos, alias
+ *  unificados al canónico, únicos y ordenados. */
+export function canonicalizarLista(vals: Iterable<string | null | undefined>, aliases?: Record<string, string>): string[] {
+  const set = new Set<string>()
+  for (const v of vals) {
+    const u = upperCat(String(v ?? ''))
+    if (!u) continue
+    set.add(aliases?.[normalizeCat(u)] ?? u)
+  }
+  return Array.from(set).sort()
 }

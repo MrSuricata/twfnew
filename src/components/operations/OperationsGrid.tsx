@@ -48,6 +48,7 @@ import type { Operator, OperatorAssignment, Modality, UnifiedOperation, DbShipme
 import type { Truck, TruckLoad } from '@/lib/truckTypes'
 import type { OriginPhoto, OperativeReport } from '@/lib/quotationTypes'
 import type { CatalogClient } from '@/lib/clientCatalog'
+import { canonicalizarLista, DEV_ALIASES } from '@/lib/fuzzyCatalog'
 import {
   buildOperations,
   deriveKnownTransportes,
@@ -310,6 +311,10 @@ export default function OperationsGrid({
     () => deriveKnownTransportes(allOperations.map(o => o.transporte)),
     [allOperations]
   )
+  // Fiscales de destino y terminales de devolución ya usados → combos con
+  // catálogo del panel (16/07). DEV unifica alias (APM=MPS).
+  const knownFiscales = useMemo(() => deriveKnownValues(allOperations.map(o => o.fiscal)), [allOperations])
+  const knownDevs = useMemo(() => canonicalizarLista(allOperations.map(o => o.dev), DEV_ALIASES), [allOperations])
   // Shippers/puertos/países ya usados → combos creables del alta guiada.
   const knownShippers = useMemo(() => deriveKnownValues(allOperations.map(o => o.shipper)), [allOperations])
   const knownOrigenes = useMemo(() => deriveKnownValues(allOperations.map(o => o.origin)), [allOperations])
@@ -1113,6 +1118,8 @@ export default function OperationsGrid({
         hoy={hoy}
         knownDepositos={knownDepositos}
         knownTransportes={knownTransportes}
+        knownFiscales={knownFiscales}
+        knownDevs={knownDevs}
         knownClientes={clients}
         originPhotos={originPhotos}
         reports={reports}

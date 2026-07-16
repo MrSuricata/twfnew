@@ -156,6 +156,8 @@ export default function OperationDetailPanel({
   hoy,
   knownDepositos = [],
   knownTransportes = [],
+  knownFiscales = [],
+  knownDevs = [],
   knownClientes = [],
   originPhotos,
   reports,
@@ -178,6 +180,9 @@ export default function OperationDetailPanel({
   /** Catálogo de clientes → datalist + canonicalización del campo Cliente. */
   knownClientes?: CatalogClient[]
   knownTransportes?: string[]
+  /** Fiscales de destino y devoluciones ya usados → combos con catálogo. */
+  knownFiscales?: string[]
+  knownDevs?: string[]
   /** Fotos e informes de todas las operaciones (sección "Fotos e informes");
    *  el panel filtra por op.ref. Si no se threadean, la sección no se muestra. */
   originPhotos?: OriginPhoto[]
@@ -404,6 +409,8 @@ export default function OperationDetailPanel({
             editable={op.source === 'db' && !!op.dbId && !op.readOnly}
             knownDepositos={knownDepositos}
             knownTransportes={knownTransportes}
+            knownFiscales={knownFiscales}
+            knownDevs={knownDevs}
             onCommit={commit}
           />
 
