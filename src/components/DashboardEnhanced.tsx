@@ -534,6 +534,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
             <PagosManagement
               dbShipments={dbShipments}
               onPatchShipment={(id, fields) => { if (onPatchShipment) onPatchShipment(id, fields) }}
+              onOpenDetail={onOpenDetail}
             />
           </TabsContent>
 

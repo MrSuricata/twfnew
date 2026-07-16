@@ -107,9 +107,13 @@ export function venceRubro(rubro: PagoRubro, eta: string | null | undefined, for
 }
 
 export interface PagoItem {
+  /** id de la fila shipments (dbId) — sirve para abrir el panel de la carga. */
   id: string
   ref: string
   cliente: string
+  /** BL/MAWB y contenedores de la carga — para buscar por documento (16/07). */
+  docNumber: string
+  contenedor: string
   linea: string
   terminal: string
   /** A quién se le paga este rubro: flete/locales → naviera · terminal → terminal · devolución → DEV. */
@@ -131,6 +135,19 @@ const montoNum = (v: unknown): number | null => {
   const n = Number(v)
   return isFinite(n) ? n : null
 }
+
+// ── Helpers de formato de montos (compartidos: pestaña Pagos + sección Pagos
+// del panel de detalle) ──
+/** "1.234,56" / "1234.56" → número. Coma = decimal (es-UY); sin coma, el punto decide. */
+export function parseMontoUY(s: string): number {
+  const t = (s || '').trim().replace(/\s/g, '')
+  if (!t) return 0
+  const norm = t.includes(',') ? t.replace(/\./g, '').replace(',', '.') : t
+  const n = parseFloat(norm)
+  return Number.isFinite(n) ? n : 0
+}
+/** Número → valor de input (coma decimal); null = campo vacío (sin datos). */
+export const montoToInput = (n: number | null): string => (n === null ? '' : String(n).replace('.', ','))
 
 /** Cargas por Chile (POD San Antonio/Valparaíso → dest_country CL): las maneja
  *  el equipo de Chile, sus pagos no entran acá (pedido Brian 10/07, caso A7793). */
@@ -165,7 +182,9 @@ export function buildPagoItems(dbShipments: DbShipment[], hoyISO: string): { ite
       const pagadoAt = s[PAGO_AT_KEYS[rubro]] || null
       const vence = venceRubro(rubro, s.eta, fp.value, s.terminal)
       items.push({
-        id: s.id, ref: s.ref, cliente: s.cliente || '', linea: s.linea || '', terminal: s.terminal || '',
+        id: s.id, ref: s.ref, cliente: s.cliente || '',
+        docNumber: s.doc_number || '', contenedor: s.contenedor || '',
+        linea: s.linea || '', terminal: s.terminal || '',
         empresa: empresaRubro(rubro, s),
         rubro, monto, vence,
         dias: vence ? diffDaysISO(hoyISO, vence) : null,

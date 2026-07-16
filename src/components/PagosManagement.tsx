@@ -32,6 +32,8 @@ import {
   PAGO_RUBROS,
   MONTO_KEYS,
   PAGO_AT_KEYS,
+  parseMontoUY,
+  montoToInput,
   type PagoItem,
   type PagoRubro,
   type FormaPago,
@@ -50,20 +52,12 @@ import { getBrand } from '@/lib/brand'
 interface PagosManagementProps {
   dbShipments?: DbShipment[]
   onPatchShipment?: (id: string, fields: Record<string, unknown>) => void
+  /** Abre la ficha completa de la carga (overlay del panel) — la REF de cada
+   *  fila pasa a ser clickeable (pedido Brian 16/07). */
+  onOpenDetail?: (key: string) => void
 }
 
 type SubTab = 'pendientes' | 'pagados' | 'sin_datos'
-
-/** "1.234,56" / "1234.56" → número. Coma = decimal (es-UY); sin coma, el punto decide. */
-function parseMontoUY(s: string): number {
-  const t = (s || '').trim().replace(/\s/g, '')
-  if (!t) return 0
-  const norm = t.includes(',') ? t.replace(/\./g, '').replace(',', '.') : t
-  const n = parseFloat(norm)
-  return Number.isFinite(n) ? n : 0
-}
-
-const montoToInput = (n: number | null): string => (n === null ? '' : String(n).replace('.', ','))
 
 /** Fecha de HOY en hora local (toISOString es UTC y a la noche ya es "mañana" en UY). */
 function todayISO(): string {
@@ -80,7 +74,7 @@ interface MontosDraft {
   formaPago: '' | FormaPago
 }
 
-export default function PagosManagement({ dbShipments = [], onPatchShipment }: PagosManagementProps) {
+export default function PagosManagement({ dbShipments = [], onPatchShipment, onOpenDetail }: PagosManagementProps) {
   const hoy = useMemo(() => todayISO(), [])
   const [subTab, setSubTab] = useState<SubTab>('pendientes')
   const [search, setSearch] = useState('')
@@ -116,7 +110,8 @@ export default function PagosManagement({ dbShipments = [], onPatchShipment }: P
       if (lineaFilter !== 'all' && i.linea.trim().toUpperCase() !== lineaFilter) return false
       if (terminalFilter !== 'all' && i.terminal.trim().toUpperCase() !== terminalFilter) return false
       if (soloCorte && !(i.vence !== null && i.vence <= fechaCorte)) return false
-      if (q && !i.ref.toUpperCase().includes(q) && !i.cliente.toUpperCase().includes(q)) return false
+      // Búsqueda también por BL y contenedor (pedido 16/07) — misma caja.
+      if (q && ![i.ref, i.cliente, i.docNumber, i.contenedor].some(s => s.toUpperCase().includes(q))) return false
       return true
     })
   }, [pendientes, rubroFilter, lineaFilter, terminalFilter, soloCorte, fechaCorte, search])
@@ -296,7 +291,7 @@ export default function PagosManagement({ dbShipments = [], onPatchShipment }: P
               <Input
                 value={search}
                 onChange={e => setSearch(e.target.value)}
-                placeholder="Buscar REF o cliente…"
+                placeholder="Buscar REF, cliente, BL o contenedor…"
                 className="pl-9 h-9"
               />
             </div>
@@ -325,7 +320,7 @@ export default function PagosManagement({ dbShipments = [], onPatchShipment }: P
                   <tbody className="divide-y">
                     {filtered.map(it => (
                       <tr key={`${it.id}-${it.rubro}`} className="hover:bg-muted/40 transition-colors">
-                        <td className="px-3 py-2 font-medium whitespace-nowrap">{it.ref}</td>
+                        <td className="px-3 py-2 font-medium whitespace-nowrap"><RefCell it={it} onOpenDetail={onOpenDetail} /></td>
                         <td className="px-3 py-2 max-w-[220px] truncate" title={it.cliente}>{it.cliente || '—'}</td>
                         <td className="px-3 py-2 whitespace-nowrap">
                           {it.empresa || '—'}
@@ -381,7 +376,7 @@ export default function PagosManagement({ dbShipments = [], onPatchShipment }: P
                 <tbody className="divide-y">
                   {pagados.map(it => (
                     <tr key={`${it.id}-${it.rubro}`} className="hover:bg-muted/40 transition-colors">
-                      <td className="px-3 py-2 font-medium whitespace-nowrap">{it.ref}</td>
+                      <td className="px-3 py-2 font-medium whitespace-nowrap"><RefCell it={it} onOpenDetail={onOpenDetail} /></td>
                       <td className="px-3 py-2 max-w-[220px] truncate" title={it.cliente}>{it.cliente || '—'}</td>
                       <td className="px-3 py-2 whitespace-nowrap">{RUBRO_LABELS[it.rubro]}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{fmtMoneyUY(it.monto)}</td>
@@ -423,7 +418,7 @@ export default function PagosManagement({ dbShipments = [], onPatchShipment }: P
                 <tbody className="divide-y">
                   {sinDatos.map(s => (
                     <tr key={s.id} className="hover:bg-muted/40 transition-colors">
-                      <td className="px-3 py-2 font-medium whitespace-nowrap">{s.ref}</td>
+                      <td className="px-3 py-2 font-medium whitespace-nowrap"><RefCell it={{ id: s.id, ref: s.ref }} onOpenDetail={onOpenDetail} /></td>
                       <td className="px-3 py-2 max-w-[240px] truncate" title={s.cliente}>{s.cliente || '—'}</td>
                       <td className="px-3 py-2 whitespace-nowrap">{s.linea || '—'}</td>
                       <td className="px-3 py-2 whitespace-nowrap">{fmtDateDMY(s.eta)}</td>
@@ -510,6 +505,22 @@ function KpiCard({ label, bucket, tone }: { label: string; bucket: KpiBucket; to
       <div className="text-xl font-bold tabular-nums text-foreground">USD {fmtMoneyUY(bucket.total)}</div>
       <div className="text-xs text-muted-foreground tabular-nums">{bucket.count} pago{bucket.count === 1 ? '' : 's'}</div>
     </div>
+  )
+}
+
+// REF clickeable → abre la ficha completa de la carga (overlay del panel).
+// Sin onOpenDetail (caso raro) queda el texto plano de siempre.
+function RefCell({ it, onOpenDetail }: { it: { id: string; ref: string }; onOpenDetail?: (key: string) => void }) {
+  if (!onOpenDetail) return <>{it.ref}</>
+  return (
+    <button
+      type="button"
+      onClick={() => onOpenDetail(it.id)}
+      title="Abrir la ficha de la carga"
+      className="font-medium text-primary hover:underline underline-offset-2"
+    >
+      {it.ref}
+    </button>
   )
 }
 
