@@ -27,6 +27,7 @@ import AgendaPendingSidebar from './AgendaPendingSidebar'
 import AgendaEventCard from './AgendaEventCard'
 import PendingSalidaSection from './PendingSalidaSection'
 import ShipmentDetailsDialog from '../ShipmentDetailsDialog'
+import TruckAgendaDialog from './TruckAgendaDialog'
 import ContainerQuickEdit, { buildPatchedOperativas } from '../operations/ContainerQuickEdit'
 import { deriveKnownTransportes } from '@/lib/operationsTypes'
 import { dropPatch, dropPatchTruck } from './agendaDnd'
@@ -81,6 +82,8 @@ export default function AgendaCalendar({
   const [selectedShipment, setSelectedShipment] = useState<ParsedShipment | null>(null)
   const [selectedCntr, setSelectedCntr] = useState<string | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
+  // Camión consolidado seleccionado (hito 🚛 clickeado) → TruckAgendaDialog.
+  const [selectedTruck, setSelectedTruck] = useState<Truck | null>(null)
 
   // Quick-edit popover state (admin only, editable=true)
   const [quickEditEvent, setQuickEditEvent] = useState<CalendarEvent | null>(null)
@@ -264,9 +267,19 @@ export default function AgendaCalendar({
 
   // Event selection → admin: open ContainerQuickEdit for editable DB rows (have
   // __dbId) AUNQUE la carga no tenga contenedor asignado todavía (cntr '') — si
-  // no, una carga recién creada caía a la vista VIEJA de solo lectura. Los hitos
-  // de camión 🚛 (shipment sintético SIN __dbId) siguen en ShipmentDetailsDialog.
+  // no, una carga recién creada caía a la vista VIEJA de solo lectura.
   const handleSelectShipment = useCallback((event: CalendarEvent) => {
+    // Hitos de camión 🚛 → modal propio con sus cargas relacionadas (antes
+    // caían al dialog viejo de solo lectura con un shipment sintético).
+    // id = `truck-${t.id}-${type}` y t.id puede contener guiones → slice, no split.
+    if (event.id.startsWith('truck-')) {
+      const truckId = event.id.slice('truck-'.length, event.id.length - (event.type.length + 1))
+      const t = (trucks || []).find(x => x.id === truckId)
+      if (t) {
+        setSelectedTruck(t)
+        return
+      }
+    }
     if (editable && event.shipment?.__dbId) {
       setQuickEditEvent(event)
       setQuickEditOpen(true)
@@ -275,7 +288,7 @@ export default function AgendaCalendar({
       setSelectedCntr(event.cntr || null)
       setDialogOpen(true)
     }
-  }, [editable])
+  }, [editable, trucks])
 
   const handleSelectShipmentDirect = useCallback((shipment: ParsedShipment) => {
     setSelectedShipment(shipment)
@@ -602,6 +615,15 @@ export default function AgendaCalendar({
         clientView
         partnerView={partnerView}
         highlightCntr={selectedCntr}
+      />
+
+      {/* Modal moderno de camión consolidado — cabecera + cargas clickeables. */}
+      <TruckAgendaDialog
+        truck={selectedTruck}
+        loads={truckLoads || []}
+        onClose={() => setSelectedTruck(null)}
+        onOpenDetail={onOpenDetail}
+        sinTelexRefs={sinTelexRefs}
       />
     </div>
   )
