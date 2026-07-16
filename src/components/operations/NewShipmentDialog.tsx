@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -18,6 +18,7 @@ import {
 } from '@/lib/operationsTypes'
 import { parseCntr } from '@/lib/cntrUtils'
 import { canonicalizeCliente, type CatalogClient } from '@/lib/clientCatalog'
+import { matchCanonico, normalizeCat } from '@/lib/fuzzyCatalog'
 
 // ── Alta de carga GUIADA ─────────────────────────────────────────────────
 // Obligatorios: Ref + Cliente + Modalidad (decisión tomada — no cambiar).
@@ -407,11 +408,11 @@ export default function NewShipmentDialog({
             {/* ── Datos principales (pedido 14/07): siempre visibles, combos
                 creables — el datalist sugiere lo ya usado y acepta un valor
                 nuevo (así se "agrega" un shipper/puerto que no existe). ── */}
-            <ComboField label="Shipper" value={f.shipper} options={knownShippers} onChange={v => set('shipper', v)} placeholder="Elegí o escribí uno nuevo…" />
-            <ComboField label="Incoterm" value={f.incoterm} options={INCOTERMS} onChange={v => set('incoterm', v.toUpperCase())} placeholder="FOB, EXW…" />
-            <ComboField label="País de origen" value={f.paisOrigen} options={paisesOrigenOptions} onChange={v => set('paisOrigen', v)} placeholder="CHINA…" />
-            <ComboField label="Puerto de origen (POL)" value={f.origin} options={knownOrigenes} onChange={v => set('origin', v)} placeholder="SHANGHAI, NINGBO…" />
-            <ComboField label="Puerto de destino (POD)" value={f.dischargePort} options={knownDescargas} onChange={v => set('dischargePort', v)} placeholder="MONTEVIDEO…" />
+            <ComboField label="Shipper" value={f.shipper} options={knownShippers} onChange={v => set('shipper', v)} placeholder="Elegí o escribí uno nuevo…" catalogo />
+            <ComboField label="Incoterm" value={f.incoterm} options={INCOTERMS} onChange={v => set('incoterm', v.toUpperCase())} placeholder="FOB, EXW…" catalogo />
+            <ComboField label="País de origen" value={f.paisOrigen} options={paisesOrigenOptions} onChange={v => set('paisOrigen', v)} placeholder="CHINA…" catalogo />
+            <ComboField label="Puerto de origen (POL)" value={f.origin} options={knownOrigenes} onChange={v => set('origin', v)} placeholder="SHANGHAI, NINGBO…" catalogo />
+            <ComboField label="Puerto de destino (POD)" value={f.dischargePort} options={knownDescargas} onChange={v => set('dischargePort', v)} placeholder="MONTEVIDEO…" catalogo />
             <div className="space-y-1 min-w-0">
               <SelectField label="País / zona de destino" value={f.pais} options={PAIS_OPTIONS} onChange={v => set('pais', v)} />
               <p className="text-[10px] text-muted-foreground leading-snug">
@@ -454,8 +455,8 @@ export default function NewShipmentDialog({
             <div className="space-y-4">
               {/* Datos clave */}
               <Section title="Datos clave">
-                <ComboField label="Depósito UY" value={f.deposito} options={DEPOSITOS_UY} onChange={v => set('deposito', v)} placeholder="GODILCO, PLANIR…" />
-                <ComboField label="Operativa" value={f.operativa} options={OPERATIVA_OPTIONS} onChange={v => set('operativa', v)} placeholder="TRASIEGO…" />
+                <ComboField label="Depósito UY" value={f.deposito} options={DEPOSITOS_UY} onChange={v => set('deposito', v)} placeholder="GODILCO, PLANIR…" catalogo />
+                <ComboField label="Operativa" value={f.operativa} options={OPERATIVA_OPTIONS} onChange={v => set('operativa', v)} placeholder="TRASIEGO…" catalogo />
                 <Field label="Libre (máx. devolución)" type="date" value={f.libre} onChange={v => set('libre', v)} />
                 <Field label="Fiscal (destino)" value={f.fiscal} onChange={v => set('fiscal', v)} placeholder="LOGIFRONT, FISCALIA…" />
                 <Field label="Desconsolidación" type="date" value={f.desconsol} onChange={v => set('desconsol', v)} />
@@ -588,20 +589,50 @@ function Field({
 }
 
 // Input con datalist (acepta valores nuevos, sugiere los conocidos).
+// Con `catalogo`: al salir del campo corrige typos contra los conocidos
+// ("SNA ANTONIO" → SAN ANTONIO, con aviso y "Era otro" para deshacer) y si
+// el valor es genuinamente nuevo lo normaliza a MAYÚSCULAS y avisa que se
+// agrega al catálogo. Los datos fijos (puertos, países, shippers) no
+// deberían nacer dos veces con dos grafías.
 function ComboField({
-  label, value, options, onChange, placeholder,
+  label, value, options, onChange, placeholder, catalogo,
 }: {
   label: string
   value: string
   options: string[]
   onChange: (v: string) => void
   placeholder?: string
+  catalogo?: boolean
 }) {
   const listId = `ns-list-${label.replace(/\W+/g, '-')}`
+  const avisado = useRef('')
+  const handleBlur = () => {
+    if (!catalogo) return
+    const v = value.trim()
+    if (!v) return
+    const m = matchCanonico(v, options)
+    if (m) {
+      if (m.canon !== v) onChange(m.canon)
+      if (!m.exacto && avisado.current !== m.canon) {
+        avisado.current = m.canon
+        toast.info(`«${v}» → ${m.canon}`, {
+          description: 'Corregido al valor ya conocido del catálogo.',
+          action: { label: 'Era otro', onClick: () => onChange(normalizeCat(v)) },
+        })
+      }
+    } else {
+      const canon = normalizeCat(v)
+      if (canon !== v) onChange(canon)
+      if (avisado.current !== canon) {
+        avisado.current = canon
+        toast.info(`«${canon}» es nuevo — queda agregado al catálogo`)
+      }
+    }
+  }
   return (
     <div className="space-y-1 min-w-0">
       <Label className="text-xs text-muted-foreground">{label}</Label>
-      <Input list={listId} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} className="h-9 text-sm" />
+      <Input list={listId} value={value} onChange={e => onChange(e.target.value)} onBlur={handleBlur} placeholder={placeholder} className="h-9 text-sm" />
       <datalist id={listId}>
         {options.map(o => <option key={o} value={o} />)}
       </datalist>
