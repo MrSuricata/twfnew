@@ -694,6 +694,9 @@ export const OPERATION_COLUMNS: ColumnDef[] = [
   { key: 'docNumber', label: 'BL / MAWB / CRT', defaultOn: true, wrap: true, w: 'max-w-[110px]' },
   { key: 'tlx', label: 'TLX', defaultOn: false, w: 'max-w-[60px]' },
   { key: 'deposito', label: 'Depósito', defaultOn: true, w: 'max-w-[90px]' },
+  // Terminal (TCP/MONTECON): existía en el modelo y el resumen expandido pero
+  // faltaba como columna de la grilla (reclamo Brian 16/07).
+  { key: 'terminal', label: 'Terminal', defaultOn: false, w: 'max-w-[90px]' },
   { key: 'etd', label: 'ETD', defaultOn: false, w: 'max-w-[84px]' },
   { key: 'eta', label: 'ETA', defaultOn: true, w: 'max-w-[84px]' },
   { key: 'salida', label: 'Salida', defaultOn: false, w: 'max-w-[84px]' },
