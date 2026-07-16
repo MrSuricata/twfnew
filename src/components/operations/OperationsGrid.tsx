@@ -387,6 +387,12 @@ export default function OperationsGrid({
     () => (selectedUid ? operations.find(o => o.uid === selectedUid) ?? null : null),
     [operations, selectedUid]
   )
+  // Fila cruda de shipments de la op seleccionada → sección Pagos del panel
+  // (los montos/pago_*_at viven en la fila, no en UnifiedOperation).
+  const selectedDbRow = useMemo(
+    () => (selectedOp?.dbId ? dbShipments.find(s => s.id === selectedOp.dbId) ?? null : null),
+    [dbShipments, selectedOp]
+  )
   // Ghost reopen: si la op seleccionada desaparece de `operations` (archivada
   // con "Ver archivadas" OFF, o eliminada), limpiar selectedUid para que el
   // panel no reaparezca más adelante si se vuelve a cargar esa op.
@@ -1251,6 +1257,7 @@ export default function OperationsGrid({
         knownDevs={knownDevs}
         knownLugaresDescarga={knownLugaresDescarga}
         knownClientes={clients}
+        dbRow={selectedDbRow}
         originPhotos={originPhotos}
         reports={reports}
         onUpdateOriginPhotos={onUpdateOriginPhotos}

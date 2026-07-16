@@ -87,6 +87,13 @@ export default function OperationDetailOverlay({
     )
   }, [operations, detailKey])
 
+  // Fila cruda de shipments de la op → sección Pagos del panel (los montos
+  // y pago_*_at viven en la fila, no en UnifiedOperation).
+  const dbRow = useMemo(
+    () => (op?.dbId ? dbShipments.find(s => s.id === op.dbId) ?? null : null),
+    [dbShipments, op],
+  )
+
   const operatorById = useMemo(() => {
     const m = new Map<string, Operator>()
     for (const o of operators) m.set(o.id, o)
@@ -137,6 +144,7 @@ export default function OperationDetailOverlay({
       knownFiscales={knownFiscales}
       knownDevs={knownDevs}
       knownLugaresDescarga={knownLugaresDescarga}
+      dbRow={dbRow}
       originPhotos={originPhotos}
       reports={reports}
       onUpdateOriginPhotos={onUpdateOriginPhotos}

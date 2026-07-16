@@ -28,6 +28,7 @@ export default function ViabilityBlock({
   knownFiscales = [],
   knownDevs = [],
   knownLugaresDescarga = [],
+  checksSlot,
   onCommit,
 }: {
   op: UnifiedOperation
@@ -40,6 +41,9 @@ export default function ViabilityBlock({
   knownDevs?: string[]
   /** Lugares de descarga del camión (post-fiscal) ya usados → combo Descarga. */
   knownLugaresDescarga?: string[]
+  /** Checks documentarios inline (RefChecksInline) — se renderiza abajo de
+   *  LIBRE/"Devuelve en", antes de los toggles (pedido Brian 16/07). */
+  checksSlot?: ReactNode
   onCommit: (key: keyof UnifiedOperation, v: unknown) => void
 }) {
   const depositoOptions = canonicalizarLista([...DEPOSITOS_UY, ...knownDepositos])
@@ -149,6 +153,9 @@ export default function ViabilityBlock({
           onCommit={v => onCommit('dev', v)}
         />
       </div>
+
+      {/* Checks documentarios — abajo de LIBRE/"Devuelve en" (pedido 16/07). */}
+      {checksSlot}
 
       <div className="grid grid-cols-3 gap-2">
         {/* Semáforo del dueño (03/07): rojo = respuesta que exige atención

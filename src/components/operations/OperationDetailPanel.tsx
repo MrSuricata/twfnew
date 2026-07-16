@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { LockSimple, Truck as TruckIcon, Archive, ArrowCounterClockwise, Trash, Plus, X, PencilSimple, Check, Camera, ArrowsSplit } from '@phosphor-icons/react'
 import { toast } from 'sonner'
-import type { Operator, UnifiedOperation } from '@/lib/operationsTypes'
+import type { DbShipment, Operator, UnifiedOperation } from '@/lib/operationsTypes'
 import {
   EDITABLE_FIELDS, EDITABLE_FCL_FIELDS, MODALITY_COLORS, MODALITY_LABELS,
   STATUS_LABEL, STATUS_OPTIONS, operatorsForMode, isSeguimientoVencido,
@@ -18,6 +18,9 @@ import type { OriginPhoto, OperativeReport } from '@/lib/quotationTypes'
 import ViabilityBlock from './ViabilityBlock'
 import ContainerDatesSection, { reconcileOperativasToCntrs, type ContainerDatesHandle } from './ContainerDatesSection'
 import OperationMediaSection from './OperationMediaSection'
+import PagosSection from './PagosSection'
+import RefChecksInline from './RefChecksInline'
+import { isPorUruguay } from '@/lib/checksTypes'
 
 interface TruckRefInfo { truckCode: string; status: string }
 
@@ -160,6 +163,7 @@ export default function OperationDetailPanel({
   knownDevs = [],
   knownLugaresDescarga = [],
   knownClientes = [],
+  dbRow = null,
   originPhotos,
   reports,
   onUpdateOriginPhotos,
@@ -186,6 +190,9 @@ export default function OperationDetailPanel({
   knownDevs?: string[]
   /** Lugares de descarga del camión (post-fiscal) ya usados → combo Descarga. */
   knownLugaresDescarga?: string[]
+  /** Fila cruda de shipments de esta op (por dbId) — los montos/pagos viven
+   *  ahí, no en UnifiedOperation. Habilita la sección Pagos del panel. */
+  dbRow?: DbShipment | null
   /** Fotos e informes de todas las operaciones (sección "Fotos e informes");
    *  el panel filtra por op.ref. Si no se threadean, la sección no se muestra. */
   originPhotos?: OriginPhoto[]
@@ -415,6 +422,12 @@ export default function OperationDetailPanel({
             knownFiscales={knownFiscales}
             knownDevs={knownDevs}
             knownLugaresDescarga={knownLugaresDescarga}
+            checksSlot={
+              // Mismo universo que la pestaña Checks: FCL activas por Uruguay.
+              op.mode === 'fcl' && isPorUruguay(op.pais)
+                ? <RefChecksInline refKey={op.ref} operativa={op.operativa} />
+                : undefined
+            }
             onCommit={commit}
           />
 
@@ -427,6 +440,18 @@ export default function OperationDetailPanel({
               if (op.dbId) onPatch(op.dbId, { operativas: next })
             }}
           />
+
+          {/* Pagos de la carga — mismos datos/reglas que la pestaña Pagos
+              (pedido 16/07: cargar montos sin salir de la ficha). Mismo
+              universo: FCL con fila DB, fuera de Chile. */}
+          {op.mode === 'fcl' && dbRow && dbRow.source !== 'sheet' &&
+            (dbRow.dest_country || '').trim().toUpperCase() !== 'CL' && (
+            <PagosSection
+              dbRow={dbRow}
+              editable={op.source === 'db' && !!op.dbId && !op.readOnly}
+              onPatch={onPatch}
+            />
+          )}
 
           {/* Contenedores — card slate suave (identidad de color por sección) */}
           <section className="rounded-lg border border-slate-200 bg-slate-50/70 p-3">
