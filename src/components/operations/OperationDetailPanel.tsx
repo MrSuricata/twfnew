@@ -588,6 +588,7 @@ export default function OperationDetailPanel({
               </DialogHeader>
               <OperationMediaSection
                 shipmentRef={op.ref}
+                containers={cntrs}
                 originPhotos={originPhotos || []}
                 reports={reports || []}
                 onUpdateOriginPhotos={onUpdateOriginPhotos}

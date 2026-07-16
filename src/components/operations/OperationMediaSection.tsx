@@ -44,6 +44,27 @@ export function mergePhotoSubset(all: OriginPhoto[], shownSubset: OriginPhoto[],
   return [...updatedSubset, ...all.filter(p => !shownIds.has(p.id))]
 }
 
+/** Fotos de una etapa agrupadas por contenedor (pedido Brian 16/07: con varios
+ *  contenedores, saber de cuál es cada foto). Orden: "toda la carga" (sin
+ *  contenedor) primero, después los contenedores en el orden de la carga, y al
+ *  final los que ya no figuran en ella (renombrados/divididos — no se pierden). */
+export function groupPhotosByCntr(photos: OriginPhoto[], containers: string[]): { cntr: string; photos: OriginPhoto[] }[] {
+  const by = new Map<string, OriginPhoto[]>()
+  for (const p of photos) {
+    const key = (p.containerNumber || '').trim().toUpperCase()
+    const list = by.get(key)
+    if (list) list.push(p)
+    else by.set(key, [p])
+  }
+  const out: { cntr: string; photos: OriginPhoto[] }[] = []
+  for (const key of ['', ...containers.map(c => c.trim().toUpperCase())]) {
+    const list = by.get(key)
+    if (list) { out.push({ cntr: key, photos: list }); by.delete(key) }
+  }
+  for (const [cntr, list] of by) out.push({ cntr, photos: list })
+  return out
+}
+
 /** Informes de una operación, más recientes primero (criterio del dialog viejo). */
 export function reportsForRef(reports: OperativeReport[], ref: string): OperativeReport[] {
   return reports.filter(r => r.shipmentRef === ref).sort((a, b) => b.createdAt - a.createdAt)
@@ -61,6 +82,7 @@ const STAGES: { stage: PhotoLocation; label: string }[] = [
 
 export default function OperationMediaSection({
   shipmentRef,
+  containers = [],
   originPhotos,
   reports,
   onUpdateOriginPhotos,
@@ -68,6 +90,10 @@ export default function OperationMediaSection({
   hideHeader,
 }: {
   shipmentRef: string
+  /** Contenedores de la carga (parseCntr del panel). Con 2+ aparece el selector
+   *  "de qué contenedor son" al subir y la galería se agrupa por contenedor;
+   *  con exactamente 1, las fotos nuevas se etiquetan solas con ese cntr. */
+  containers?: string[]
   originPhotos: OriginPhoto[]
   reports: OperativeReport[]
   onUpdateOriginPhotos?: (photos: OriginPhoto[]) => void
@@ -83,6 +109,9 @@ export default function OperationMediaSection({
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 })
   const [uploadingReport, setUploadingReport] = useState(false)
   const [busyReportId, setBusyReportId] = useState<string | null>(null)
+  // Contenedor destino de la PRÓXIMA subida, por etapa ('' = toda la carga).
+  const [uploadCntr, setUploadCntr] = useState<Record<PhotoLocation, string>>({ origen: '', uruguay: '' })
+  const multiCntr = containers.length > 1
 
   const opReports = reportsForRef(reports, shipmentRef)
   const canEditPhotos = !!onUpdateOriginPhotos
@@ -111,9 +140,13 @@ export default function OperationMediaSection({
         setUploadProgress({ current: i + 1, total: files.length })
         const file = files[i]
         const { full, thumbnail } = await processPhoto(file)
+        // Contenedor de la foto: el elegido en el selector; con UN solo
+        // contenedor en la carga se etiqueta solo (queda el badge en la galería).
+        const cntr = uploadCntr[stage] || (containers.length === 1 ? containers[0] : '')
         const photo: OriginPhoto = {
           id: `photo-${Date.now()}-${i}`,
           shipmentRef,
+          containerNumber: cntr || undefined,
           photoType: stage,
           fileName: file.name,
           fileType: file.type,
@@ -231,12 +264,27 @@ export default function OperationMediaSection({
           const uploading = uploadingStage === stage
           return (
             <div key={stage}>
-              <div className="flex items-center justify-between mb-1.5">
+              <div className="flex items-center justify-between gap-2 mb-1.5">
                 <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
                   {label} ({stagePhotos.length})
                 </p>
                 {canEditPhotos && (
-                  <>
+                  <span className="inline-flex items-center gap-1.5">
+                    {/* Con varios contenedores: elegir de CUÁL son las fotos que
+                        se van a subir ('' = de toda la carga / sin distinguir). */}
+                    {multiCntr && (
+                      <select
+                        value={uploadCntr[stage]}
+                        onChange={e => setUploadCntr(prev => ({ ...prev, [stage]: e.target.value }))}
+                        disabled={uploadingStage !== null}
+                        title="¿De qué contenedor son las fotos que vas a subir?"
+                        aria-label={`Contenedor de las fotos (${label})`}
+                        className="h-6 max-w-[150px] rounded-full border border-input bg-background px-2 text-[11px] font-mono text-muted-foreground focus:border-primary disabled:opacity-50"
+                      >
+                        <option value="">Toda la carga</option>
+                        {containers.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    )}
                     {/* accept="image/*" sin capture: en el celu ofrece cámara o galería */}
                     <input
                       ref={inputRef}
@@ -258,10 +306,31 @@ export default function OperationMediaSection({
                         <><Camera size={11} /> Subir fotos</>
                       )}
                     </button>
-                  </>
+                  </span>
                 )}
               </div>
-              {stagePhotos.length > 0 ? (
+              {stagePhotos.length === 0 ? (
+                <p className="text-xs text-muted-foreground">Sin fotos</p>
+              ) : multiCntr ? (
+                // Varios contenedores → galería agrupada: primero las fotos de
+                // toda la carga, después cada contenedor con las suyas.
+                <div className="space-y-2.5">
+                  {groupPhotosByCntr(stagePhotos, containers).map(({ cntr, photos: groupPhotos }) => (
+                    <div key={cntr || '(general)'}>
+                      <p className="mb-1 text-[10px] font-mono text-muted-foreground">
+                        {cntr || 'Toda la carga'} ({groupPhotos.length})
+                      </p>
+                      <OriginPhotoGallery
+                        photos={groupPhotos}
+                        isAdmin={canEditPhotos}
+                        onDeletePhoto={updated => {
+                          onUpdateOriginPhotos?.(mergePhotoSubset(originPhotos, groupPhotos, updated))
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              ) : (
                 <OriginPhotoGallery
                   photos={stagePhotos}
                   isAdmin={canEditPhotos}
@@ -269,8 +338,6 @@ export default function OperationMediaSection({
                     onUpdateOriginPhotos?.(mergePhotoSubset(originPhotos, stagePhotos, updated))
                   }}
                 />
-              ) : (
-                <p className="text-xs text-muted-foreground">Sin fotos</p>
               )}
             </div>
           )

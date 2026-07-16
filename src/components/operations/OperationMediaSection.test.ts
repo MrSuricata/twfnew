@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { photosForStage, mergePhotoSubset, reportsForRef } from './OperationMediaSection'
+import { photosForStage, mergePhotoSubset, reportsForRef, groupPhotosByCntr } from './OperationMediaSection'
 import type { OriginPhoto, OperativeReport } from '@/lib/quotationTypes'
 
 const photo = (over: Partial<OriginPhoto>): OriginPhoto => ({
@@ -60,5 +60,34 @@ describe('reportsForRef', () => {
       report({ id: 'r3', createdAt: 20, shipmentRef: 'A7595' }),
     ]
     expect(reportsForRef(reports, 'A7581').map(r => r.id)).toEqual(['r2', 'r1'])
+  })
+})
+
+describe('groupPhotosByCntr', () => {
+  const mk = (id: string, cntr?: string): OriginPhoto => ({
+    id, shipmentRef: 'A7796', containerNumber: cntr,
+    fileName: `${id}.jpg`, fileType: 'image/jpeg',
+    createdAt: 1, createdBy: 'admin',
+  })
+  const CNTRS = ['MSCU1111111', 'MSCU2222222']
+
+  it('agrupa por contenedor: toda-la-carga primero, después en orden de la carga', () => {
+    const photos = [mk('a', 'MSCU2222222'), mk('b'), mk('c', 'MSCU1111111'), mk('d', 'MSCU1111111')]
+    const groups = groupPhotosByCntr(photos, CNTRS)
+    expect(groups.map(g => g.cntr)).toEqual(['', 'MSCU1111111', 'MSCU2222222'])
+    expect(groups[1].photos.map(p => p.id)).toEqual(['c', 'd'])
+  })
+
+  it('contenedor que ya no está en la carga (dividida/renombrada) va al final, no se pierde', () => {
+    const photos = [mk('a', 'VIEJO9999999'), mk('b', 'MSCU1111111')]
+    const groups = groupPhotosByCntr(photos, CNTRS)
+    expect(groups.map(g => g.cntr)).toEqual(['MSCU1111111', 'VIEJO9999999'])
+  })
+
+  it('sin grupos vacíos y matchea case-insensitive/trim', () => {
+    const photos = [mk('a', ' mscu1111111 ')]
+    const groups = groupPhotosByCntr(photos, CNTRS)
+    expect(groups).toHaveLength(1)
+    expect(groups[0].cntr).toBe('MSCU1111111')
   })
 })
