@@ -62,6 +62,9 @@ interface ChecksBoardProps {
   /** Patch de una fila DB — el handlePatchShipment de App (optimista + revert).
    *  Habilita el toggle de telex desde la fila; sin él, chip estático. */
   onPatchShipment?: (id: string, fields: Record<string, unknown>) => void
+  /** Abre la ficha completa de la carga (overlay del panel de detalle) — la ref
+   *  de cada fila pasa a ser clickeable (pedido Brian 16/07). */
+  onOpenDetail?: (key: string) => void
 }
 
 const EMPTY_ASSIGNMENTS = new Map<string, string | null>()
@@ -78,7 +81,7 @@ function shortWho(by: string | undefined): string {
   return String(by || '').split('@')[0]
 }
 
-export default function ChecksBoard({ shipments = [], dbShipments = [], onPatchShipment }: ChecksBoardProps) {
+export default function ChecksBoard({ shipments = [], dbShipments = [], onPatchShipment, onOpenDetail }: ChecksBoardProps) {
   // Hoy a medianoche local — para isOperationActive (vía buildChecksUniverse).
   const today = useMemo(() => {
     const d = new Date()
@@ -313,6 +316,7 @@ export default function ChecksBoard({ shipments = [], dbShipments = [], onPatchS
                 onToggleStep={(key, label) => handleToggleStep(op, key, label)}
                 onDateChange={(key, date) => handleDateChange(op, key, date)}
                 onToggleTelex={telexEditable ? () => handleToggleTelex(op) : undefined}
+                onOpenRef={onOpenDetail ? () => onOpenDetail(op.dbId || op.ref) : undefined}
               />
             )
           })}
@@ -338,9 +342,11 @@ interface ChecksRowProps {
   /** Marcar/quitar telex desde la fila (mismo camino que el panel). Sin esto
    *  (carga no editable) el chip queda estático como siempre. */
   onToggleTelex?: () => void
+  /** Abrir la ficha completa de la carga (click en la ref). */
+  onOpenRef?: () => void
 }
 
-function ChecksRow({ op, steps, expanded, onToggleExpand, onToggleStep, onDateChange, onToggleTelex }: ChecksRowProps) {
+function ChecksRow({ op, steps, expanded, onToggleExpand, onToggleStep, onDateChange, onToggleTelex, onOpenRef }: ChecksRowProps) {
   const operativa = (op.operativa || '').trim()
   const opColor = operativa ? getOperativaColor(operativa) : null
   // Operativa desconocida (mapa devuelve "Otro") → mostrar el valor real.
@@ -383,7 +389,25 @@ function ChecksRow({ op, steps, expanded, onToggleExpand, onToggleStep, onDateCh
         {expanded
           ? <CaretDown size={14} className="text-muted-foreground shrink-0" />
           : <CaretRight size={14} className="text-muted-foreground shrink-0" />}
-        <span className="font-mono text-sm font-semibold shrink-0 min-w-[64px]">{op.ref}</span>
+        {/* Ref clickeable → abre la ficha completa (overlay). Span role=button
+            porque vive DENTRO del botón de la fila (mismo patrón que TelexChip);
+            stopPropagation para no expandir/cerrar la fila al abrirla. */}
+        {onOpenRef ? (
+          <span
+            role="button"
+            tabIndex={0}
+            title="Abrir la ficha de la carga"
+            onClick={e => { e.stopPropagation(); onOpenRef() }}
+            onKeyDown={e => {
+              if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onOpenRef() }
+            }}
+            className="font-mono text-sm font-semibold shrink-0 min-w-[64px] text-primary cursor-pointer hover:underline underline-offset-2"
+          >
+            {op.ref}
+          </span>
+        ) : (
+          <span className="font-mono text-sm font-semibold shrink-0 min-w-[64px]">{op.ref}</span>
+        )}
         <span className="text-sm text-foreground/85 truncate flex-1 min-w-0">{op.cliente || '—'}</span>
         {/* Mini-línea: un punto por check (los 4 documentarios). Relleno
             emerald = hecho · hueco gris = pendiente · anillo índigo = el

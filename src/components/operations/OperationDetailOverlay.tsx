@@ -17,6 +17,7 @@ import OperationDetailPanel from './OperationDetailPanel'
 import {
   buildOperations,
   deriveKnownTransportes,
+  deriveKnownValues,
   indexAssignments,
   buildTruckByRef,
   type Operator,
@@ -24,6 +25,7 @@ import {
   type DbShipment,
   type UnifiedOperation,
 } from '@/lib/operationsTypes'
+import { canonicalizarLista, DEV_ALIASES } from '@/lib/fuzzyCatalog'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
 import type { Truck, TruckLoad } from '@/lib/truckTypes'
 import type { OriginPhoto, OperativeReport } from '@/lib/quotationTypes'
@@ -109,6 +111,10 @@ export default function OperationDetailOverlay({
     [operations],
   )
 
+  // Fiscales y devoluciones ya usados → combos con catálogo (DEV unifica APM=MPS).
+  const knownFiscales = useMemo(() => deriveKnownValues(operations.map(o => o.fiscal)), [operations])
+  const knownDevs = useMemo(() => canonicalizarLista(operations.map(o => o.dev), DEV_ALIASES), [operations])
+
   // Asignación de operativo: igual que la grilla — filas DB patchean operator_id;
   // FCL espejo / no-DB usan el overlay por ref.
   const assignOp = (o: UnifiedOperation, operatorId: string | null) => {
@@ -127,6 +133,8 @@ export default function OperationDetailOverlay({
       hoy={hoy}
       knownDepositos={knownDepositos}
       knownTransportes={knownTransportes}
+      knownFiscales={knownFiscales}
+      knownDevs={knownDevs}
       originPhotos={originPhotos}
       reports={reports}
       onUpdateOriginPhotos={onUpdateOriginPhotos}

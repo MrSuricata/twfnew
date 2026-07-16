@@ -18,7 +18,7 @@ import {
 } from '@/lib/operationsTypes'
 import { parseCntr } from '@/lib/cntrUtils'
 import { canonicalizeCliente, type CatalogClient } from '@/lib/clientCatalog'
-import { matchCanonico, normalizeCat } from '@/lib/fuzzyCatalog'
+import { matchCanonico, upperCat } from '@/lib/fuzzyCatalog'
 
 // ── Alta de carga GUIADA ─────────────────────────────────────────────────
 // Obligatorios: Ref + Cliente + Modalidad (decisión tomada — no cambiar).
@@ -617,11 +617,11 @@ function ComboField({
         avisado.current = m.canon
         toast.info(`«${v}» → ${m.canon}`, {
           description: 'Corregido al valor ya conocido del catálogo.',
-          action: { label: 'Era otro', onClick: () => onChange(normalizeCat(v)) },
+          action: { label: 'Era otro', onClick: () => onChange(upperCat(v)) },
         })
       }
     } else {
-      const canon = normalizeCat(v)
+      const canon = upperCat(v)
       if (canon !== v) onChange(canon)
       if (avisado.current !== canon) {
         avisado.current = canon
