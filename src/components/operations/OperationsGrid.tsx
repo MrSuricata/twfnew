@@ -108,6 +108,14 @@ type ZonaFilter = 'all' | 'UY' | 'AR' | 'CL' | 'OTRO'
 const COLS_STORAGE_KEY = 'twf-ops-columns-v2'  // v2: default angosto 12 cols (12/06/2026)
 const COL_ORDER_KEY = 'twf-ops-col-order'      // per-user column order (drag & drop)
 const ACTIVE_ONLY_KEY = 'twf-ops-active-only'  // toggle "Solo activas"
+const COL_WIDTHS_KEY = 'twf-ops-col-widths'    // anchos personalizados por columna (px)
+
+// Límites del ancho ajustable (arrastrando el borde del encabezado).
+const MIN_COL_W = 56
+const MAX_COL_W = 600
+// Anchos default de las congeladas (deben calzar con su `w` en OPERATION_COLUMNS)
+// — base de los offsets sticky cuando el usuario no las redimensionó.
+const STICKY_DEFAULT_W: Record<string, number> = { ref: 134, cliente: 150 }
 
 const PAIS_LABEL: Record<string, string> = { UY: 'UY', AR: 'AR', CL: 'CL', OTRO: '—' }
 
@@ -228,6 +236,50 @@ export default function OperationsGrid({
     if (prefsReady.current) saveUserPrefsDebounced({ opsColOrder: colOrder })
   }, [colOrder])
 
+  // Anchos personalizados por columna (px) — se ajustan arrastrando el borde
+  // derecho del encabezado. Solo guardamos las columnas que el usuario tocó;
+  // el resto sigue con el reparto automático de table-fixed.
+  const [colWidths, setColWidths] = useState<Record<string, number>>(() => {
+    try {
+      const stored = localStorage.getItem(COL_WIDTHS_KEY)
+      if (stored) return JSON.parse(stored)
+    } catch { /* ignore */ }
+    return {}
+  })
+  useEffect(() => {
+    try { localStorage.setItem(COL_WIDTHS_KEY, JSON.stringify(colWidths)) } catch { /* ignore */ }
+    if (prefsReady.current) saveUserPrefsDebounced({ opsColWidths: colWidths })
+  }, [colWidths])
+
+  // Redimensionado en curso: listeners de window para seguir el puntero fuera
+  // del th. suppressSortRef evita que el click que cierra el arrastre dispare
+  // el ordenamiento del encabezado.
+  const resizingRef = useRef<{ key: string; startX: number; startW: number } | null>(null)
+  const suppressSortRef = useRef(false)
+  const startResize = useCallback((key: string, e: React.PointerEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const th = (e.currentTarget as HTMLElement).closest('th')
+    const startW = Math.round(th?.getBoundingClientRect().width ?? 100)
+    resizingRef.current = { key, startX: e.clientX, startW }
+    const onMove = (ev: PointerEvent) => {
+      const r = resizingRef.current
+      if (!r) return
+      suppressSortRef.current = true
+      const w = Math.max(MIN_COL_W, Math.min(MAX_COL_W, Math.round(r.startW + (ev.clientX - r.startX))))
+      setColWidths(prev => (prev[r.key] === w ? prev : { ...prev, [r.key]: w }))
+    }
+    const onUp = () => {
+      resizingRef.current = null
+      window.removeEventListener('pointermove', onMove)
+      window.removeEventListener('pointerup', onUp)
+      // El click sintético llega DESPUÉS del pointerup — recién ahí se libera.
+      setTimeout(() => { suppressSortRef.current = false }, 0)
+    }
+    window.addEventListener('pointermove', onMove)
+    window.addEventListener('pointerup', onUp)
+  }, [])
+
   // ── Preferencias por CUENTA (14/07): columnas visibles, orden y "Solo
   // activas" viajan con el login (tabla user_prefs). Al montar, lo del server
   // PISA el estado local (localStorage queda de caché/fallback offline).
@@ -248,6 +300,13 @@ export default function OperationsGrid({
           setColOrder(p.opsColOrder.filter(validKey))
         }
         if (typeof p.opsActiveOnly === 'boolean') setActiveOnly(p.opsActiveOnly)
+        if (p.opsColWidths && typeof p.opsColWidths === 'object' && !Array.isArray(p.opsColWidths)) {
+          const clean: Record<string, number> = {}
+          for (const [k, v] of Object.entries(p.opsColWidths as Record<string, unknown>)) {
+            if (validKey(k) && typeof v === 'number' && v >= MIN_COL_W && v <= MAX_COL_W) clean[k] = v
+          }
+          setColWidths(clean)
+        }
       })
       .catch(() => { /* sin sesión o sin red: quedan localStorage/defaults */ })
       .finally(() => { prefsReady.current = true })
@@ -445,6 +504,10 @@ export default function OperationsGrid({
   // forzadas primeras y en orden fijo por stickyLeft (Ref → Cliente), sin
   // importar el colOrder guardado (Ref/Cliente no se arrastran). El resto
   // respeta el drag & drop del usuario a continuación.
+  // Ancho efectivo de Ref (única congelada cuyo ancho corre el offset de la
+  // siguiente). Derivado suelto A PROPÓSITO: así redimensionar columnas no
+  // congeladas no recrea `cols` y las filas memo no se re-renderizan por drag.
+  const refW = colWidths['ref'] ?? STICKY_DEFAULT_W.ref
   const cols = useMemo(() => {
     const byKey = new Map(OPERATION_COLUMNS.map(c => [c.key as string, c]))
     const seen = new Set<string>()
@@ -454,14 +517,23 @@ export default function OperationsGrid({
     // Las congeladas van SIEMPRE visibles (aunque un usuario viejo las tenga
     // apagadas en su localStorage), si no la referencia fija se rompe.
     const visible = ordered.filter(c => c.sticky || visibleCols.has(c.key))
-    return [...visible].sort((a, b) => {
+    const sortedCols = [...visible].sort((a, b) => {
       // Congeladas primero; entre ellas, por offset izquierdo (0 antes que 76).
       const sa = a.sticky ? 1 : 0, sb = b.sticky ? 1 : 0
       if (sa !== sb) return sb - sa
       if (a.sticky && b.sticky) return (a.stickyLeft ?? 0) - (b.stickyLeft ?? 0)
       return 0
     })
-  }, [colOrder, visibleCols])
+    // Offsets sticky DINÁMICOS: cada congelada arranca donde termina la
+    // anterior, respetando el ancho personalizado de Ref si lo hay.
+    let acc = 0
+    return sortedCols.map(c => {
+      if (!c.sticky) return c
+      const out = (c.stickyLeft ?? 0) === acc ? c : { ...c, stickyLeft: acc }
+      acc += c.key === 'ref' ? refW : (STICKY_DEFAULT_W[c.key as string] ?? 100)
+      return out
+    })
+  }, [colOrder, visibleCols, refW])
 
   // Última columna congelada VISIBLE → lleva la sombra que marca el borde del
   // área fija (las demás sticky no, para que la sombra sea una sola línea).
@@ -469,6 +541,24 @@ export default function OperationsGrid({
     const sticky = cols.filter(c => c.sticky)
     return sticky.length ? sticky[sticky.length - 1].key : null
   }, [cols])
+
+  // Con table-fixed + w-full la tabla NUNCA crece: ensanchar una columna
+  // aplastaría a las automáticas hasta 0. Cuando hay anchos personalizados,
+  // min-width = suma de anchos (personalizado, o el tope de su clase, o un
+  // piso) → si el total supera la pantalla aparece scroll lateral en vez de
+  // desaparecer columnas. Sin anchos personalizados no se aplica (misma
+  // grilla sin scroll de siempre).
+  const hasCustomWidths = Object.keys(colWidths).length > 0
+  const tableMinWidth = useMemo(() => {
+    let sum = 64 // columna de acciones
+    for (const c of cols) {
+      const w = colWidths[c.key as string]
+      if (w) { sum += w; continue }
+      const m = /(?:^|\s)(?:max-)?w-\[(\d+)px\]/.exec(c.w || '')
+      sum += m ? Number(m[1]) : 90
+    }
+    return sum
+  }, [cols, colWidths])
 
   const operatorById = useMemo(() => {
     const m = new Map<string, Operator>()
@@ -842,15 +932,28 @@ export default function OperationsGrid({
                 </label>
               ))}
             </div>
+            {Object.keys(colWidths).length > 0 && (
+              <button
+                type="button"
+                onClick={() => setColWidths({})}
+                title="Vuelve todas las columnas al ancho automático"
+                className="mt-1.5 w-full rounded border px-2 py-1 text-xs text-muted-foreground hover:bg-muted"
+              >
+                Restablecer anchos de columna
+              </button>
+            )}
           </PopoverContent>
         </Popover>
       </div>
 
-      {/* Grid — desktop table. SIN scroll lateral (pedido 07/07): table-fixed +
-          overflow-x-hidden reparte el ancho y trunca; el detalle completo de cada
-          fila se ve con el chevron de expansión (o abriendo el panel). */}
-      <div className="hidden md:block border rounded-lg overflow-x-hidden overflow-y-auto max-h-[68vh] bg-card">
-        <table className="w-full text-xs table-fixed">
+      {/* Grid — desktop table. table-fixed reparte el ancho y trunca (pedido
+          07/07: sin scroll lateral por defecto); el detalle completo de cada
+          fila se ve con el chevron de expansión (o abriendo el panel).
+          overflow-x-AUTO (16/07, anchos ajustables): si el usuario ensancha
+          columnas más allá de la pantalla aparece scroll en vez de recortar
+          columnas — con anchos automáticos no hay scrollbar, igual que antes. */}
+      <div className="hidden md:block border rounded-lg overflow-x-auto overflow-y-auto max-h-[68vh] bg-card">
+        <table className="w-full text-xs table-fixed" style={hasCustomWidths ? { minWidth: tableMinWidth } : undefined}>
           {/* z-30 > z-20 de las celdas congeladas del body: si el thead quedara
               abajo (z-10), al scrollear las celdas sticky de Ref/Cliente de las
               filas pintan ENCIMA del header y "desaparece" la esquina izquierda
@@ -862,6 +965,9 @@ export default function OperationsGrid({
                 const active = sort?.key === c.key
                 const arrow = active ? (sort!.dir === 'asc' ? '▲' : '▼') : ''
                 const draggable = !c.sticky
+                // Ancho personalizado: con table-fixed, el width del th manda
+                // sobre toda la columna (los td la siguen solos).
+                const wOverride = colWidths[c.key as string]
                 return (
                   <th
                     key={c.key}
@@ -871,15 +977,37 @@ export default function OperationsGrid({
                     onDragLeave={draggable ? () => setOverKey(k => (k === c.key ? null : k)) : undefined}
                     onDrop={draggable ? () => dropReorder(c.key) : undefined}
                     onDragEnd={() => { setDragKey(null); setOverKey(null) }}
-                    onClick={() => toggleSort(c.key)}
-                    style={c.sticky ? { left: c.stickyLeft ?? 0 } : undefined}
-                    title="Hacé clic para ordenar · arrastrá para reordenar"
-                    className={`px-2 py-2 text-left font-semibold uppercase tracking-wide text-[10px] align-bottom cursor-pointer select-none overflow-hidden hover:bg-[#274aa3] ${c.w || ''} ${c.numeric ? 'text-right' : ''} ${c.sticky ? 'sticky bg-[#1e3a8a] z-30' : ''} ${c.key === lastStickyKey ? 'shadow-[6px_0_6px_-4px_rgba(0,0,0,0.45)]' : ''} ${overKey === c.key && dragKey ? 'border-l-2 border-[#9bd1e5]' : ''} ${dragKey === c.key ? 'opacity-50' : ''}`}
+                    onClick={() => { if (suppressSortRef.current) return; toggleSort(c.key) }}
+                    style={{
+                      ...(c.sticky ? { left: c.stickyLeft ?? 0 } : {}),
+                      ...(wOverride ? { width: wOverride, minWidth: wOverride, maxWidth: wOverride } : {}),
+                    }}
+                    title="Hacé clic para ordenar · arrastrá para reordenar · borde derecho: ajustar ancho"
+                    className={`relative px-2 py-2 text-left font-semibold uppercase tracking-wide text-[10px] align-bottom cursor-pointer select-none overflow-hidden hover:bg-[#274aa3] ${c.w || ''} ${c.numeric ? 'text-right' : ''} ${c.sticky ? 'sticky bg-[#1e3a8a] z-30' : ''} ${c.key === lastStickyKey ? 'shadow-[6px_0_6px_-4px_rgba(0,0,0,0.45)]' : ''} ${overKey === c.key && dragKey ? 'border-l-2 border-[#9bd1e5]' : ''} ${dragKey === c.key ? 'opacity-50' : ''}`}
                   >
                     <span className={`inline-flex items-center gap-1 ${c.numeric ? 'flex-row-reverse' : ''}`}>
                       {c.label}
                       {arrow && <span className="text-[#9bd1e5] text-[8px]">{arrow}</span>}
                     </span>
+                    {/* Manija de resize: arrastrar cambia el ancho; doble clic
+                        vuelve al automático. No dispara sort ni reordenamiento. */}
+                    <span
+                      onPointerDown={e => startResize(c.key as string, e)}
+                      onClick={e => e.stopPropagation()}
+                      onDoubleClick={e => {
+                        e.stopPropagation()
+                        setColWidths(prev => {
+                          if (!(c.key in prev)) return prev
+                          const next = { ...prev }
+                          delete next[c.key as string]
+                          return next
+                        })
+                      }}
+                      draggable={false}
+                      onDragStart={e => { e.preventDefault(); e.stopPropagation() }}
+                      title="Arrastrá para ajustar el ancho · doble clic = ancho automático"
+                      className="absolute right-0 top-0 h-full w-2 cursor-col-resize touch-none hover:bg-white/30"
+                    />
                   </th>
                 )
               })}
