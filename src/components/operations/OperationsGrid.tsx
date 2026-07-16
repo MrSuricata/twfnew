@@ -315,6 +315,7 @@ export default function OperationsGrid({
   // catálogo del panel (16/07). DEV unifica alias (APM=MPS).
   const knownFiscales = useMemo(() => deriveKnownValues(allOperations.map(o => o.fiscal)), [allOperations])
   const knownDevs = useMemo(() => canonicalizarLista(allOperations.map(o => o.dev), DEV_ALIASES), [allOperations])
+  const knownLugaresDescarga = useMemo(() => deriveKnownValues(allOperations.map(o => o.descarga)), [allOperations])
   // Shippers/puertos/países ya usados → combos creables del alta guiada.
   const knownShippers = useMemo(() => deriveKnownValues(allOperations.map(o => o.shipper)), [allOperations])
   const knownOrigenes = useMemo(() => deriveKnownValues(allOperations.map(o => o.origin)), [allOperations])
@@ -1120,6 +1121,7 @@ export default function OperationsGrid({
         knownTransportes={knownTransportes}
         knownFiscales={knownFiscales}
         knownDevs={knownDevs}
+        knownLugaresDescarga={knownLugaresDescarga}
         knownClientes={clients}
         originPhotos={originPhotos}
         reports={reports}

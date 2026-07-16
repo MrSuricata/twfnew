@@ -27,6 +27,7 @@ export default function ViabilityBlock({
   knownTransportes = [],
   knownFiscales = [],
   knownDevs = [],
+  knownLugaresDescarga = [],
   onCommit,
 }: {
   op: UnifiedOperation
@@ -37,6 +38,8 @@ export default function ViabilityBlock({
   knownFiscales?: string[]
   /** Terminales de devolución ya usadas → se suman a DEV_OPTIONS (alias APM=MPS unificado). */
   knownDevs?: string[]
+  /** Lugares de descarga del camión (post-fiscal) ya usados → combo Descarga. */
+  knownLugaresDescarga?: string[]
   onCommit: (key: keyof UnifiedOperation, v: unknown) => void
 }) {
   const depositoOptions = canonicalizarLista([...DEPOSITOS_UY, ...knownDepositos])
@@ -78,16 +81,23 @@ export default function ViabilityBlock({
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-2 mb-3">
-        {/* FCL: Peso/Volumen/Bultos = SUMA de los contenedores (read-only). Se
-            editan por contenedor en "Salidas y arribos por contenedor". LCL/aéreo
-            (sin desglose por contenedor) siguen editables directo. */}
+      {/* Bultos/Peso/Volumen en UNA fila (pedido 16/07) — FCL: son la SUMA de
+          los contenedores (read-only; se editan por contenedor abajo). LCL/aéreo
+          (sin desglose) siguen editables directo. */}
+      <div className="grid grid-cols-3 gap-2 mb-2">
+        <StatBox label="Bultos" value={op.pkgs} kind="number" editable={editable && op.mode !== 'fcl'} sumHint={op.mode === 'fcl'} onCommit={v => onCommit('pkgs', v)} />
         <StatBox label="Peso" value={op.kg} unit="kg" kind="number" editable={editable && op.mode !== 'fcl'} sumHint={op.mode === 'fcl'} onCommit={v => onCommit('kg', v)} />
         <StatBox label="Volumen" value={op.m3} unit="m³" kind="number" editable={editable && op.mode !== 'fcl'} sumHint={op.mode === 'fcl'} onCommit={v => onCommit('m3', v)} />
-        <StatBox label="Bultos" value={op.pkgs} kind="number" editable={editable && op.mode !== 'fcl'} sumHint={op.mode === 'fcl'} onCommit={v => onCommit('pkgs', v)} />
+      </div>
+      <div className="grid grid-cols-2 gap-2 mb-3">
         {/* Fiscal ahora es combo con catálogo (pedido 16/07): sugiere los ya
             usados y corrige typos al guardar — "para no escribir cualquier cosa". */}
         <StatBox label="Fiscal (destino)" value={op.fiscal} kind="combo" options={knownFiscales} catalogo editable={editable} onCommit={v => onCommit('fiscal', v)} />
+        {/* Descarga: dónde descarga el CAMIÓN después del fiscal (ej: fiscal en
+            CACEC, descarga en RÍO SEGUNDO) — lo leen los mails de Previsión de
+            n8n. Nivel-carga: propaga a todos los contenedores (descarga está en
+            OP_ARRAY_FIELD_BY_COL). */}
+        <StatBox label="Descarga (post-fiscal)" value={op.descarga} kind="combo" options={knownLugaresDescarga} upper catalogo editable={editable} onCommit={v => onCommit('descarga', v)} />
         <StatBox label="Depósito UY" value={op.deposito} kind="combo" options={depositoOptions} catalogo editable={editable} onCommit={v => onCommit('deposito', v)} />
         {/* Transporte es dato de la CARGA (nivel-carga, como Depósito): editarlo
             propaga a TODOS los contenedores + la columna (buildPerContainerPatch

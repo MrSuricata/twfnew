@@ -158,6 +158,7 @@ export default function OperationDetailPanel({
   knownTransportes = [],
   knownFiscales = [],
   knownDevs = [],
+  knownLugaresDescarga = [],
   knownClientes = [],
   originPhotos,
   reports,
@@ -183,6 +184,8 @@ export default function OperationDetailPanel({
   /** Fiscales de destino y devoluciones ya usados → combos con catálogo. */
   knownFiscales?: string[]
   knownDevs?: string[]
+  /** Lugares de descarga del camión (post-fiscal) ya usados → combo Descarga. */
+  knownLugaresDescarga?: string[]
   /** Fotos e informes de todas las operaciones (sección "Fotos e informes");
    *  el panel filtra por op.ref. Si no se threadean, la sección no se muestra. */
   originPhotos?: OriginPhoto[]
@@ -411,6 +414,7 @@ export default function OperationDetailPanel({
             knownTransportes={knownTransportes}
             knownFiscales={knownFiscales}
             knownDevs={knownDevs}
+            knownLugaresDescarga={knownLugaresDescarga}
             onCommit={commit}
           />
 
