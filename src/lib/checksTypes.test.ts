@@ -11,6 +11,7 @@ import {
   avisoAggregate,
   buildAvisoCntrsMap,
   isAvisoStep,
+  esReclamadoHoy,
   type RefCheckStep,
   type RefCheckSteps,
 } from './checksTypes'
@@ -219,5 +220,45 @@ describe('avisos por contenedor', () => {
     const map = buildAvisoCntrsMap(undefined, CNTRS, null, true, { date: '2026-07-06', by: 'brian' })
     expect(map['ABCU1111111'].done).toBe(true)
     expect(map['ABCU2222222'].done).toBe(true)
+  })
+})
+
+describe('reclamo del día (esReclamadoHoy + merge)', () => {
+  it('reclamado hoy = activo; ayer = vencido (vuelve el botón); hecho = nunca', () => {
+    expect(esReclamadoHoy({ done: false, reclamado: '2026-07-17' }, '2026-07-17')).toBe(true)
+    expect(esReclamadoHoy({ done: false, reclamado: '2026-07-16' }, '2026-07-17')).toBe(false)
+    expect(esReclamadoHoy({ done: true, reclamado: '2026-07-17' }, '2026-07-17')).toBe(false)
+    expect(esReclamadoHoy(undefined, '2026-07-17')).toBe(false)
+  })
+
+  it('mergeChecksSteps conserva un paso pendiente con reclamo (no lo borra)', () => {
+    const merged = mergeChecksSteps(
+      { bl_entregado: { done: true, date: '2026-07-15' } },
+      { docs_transporte: { done: false, reclamado: '2026-07-17', reclamadoBy: 'brian' } },
+    )
+    expect(merged.docs_transporte).toEqual({ done: false, reclamado: '2026-07-17', reclamadoBy: 'brian' })
+    expect(merged.bl_entregado?.done).toBe(true)
+  })
+
+  it('done=false pelado sigue borrando el paso (quitar reclamo / desmarcar)', () => {
+    const merged = mergeChecksSteps(
+      { docs_transporte: { done: false, reclamado: '2026-07-17' } },
+      { docs_transporte: { done: false } },
+    )
+    expect(merged.docs_transporte).toBeUndefined()
+  })
+
+  it('marcar hecho pisa el reclamo previo', () => {
+    const merged = mergeChecksSteps(
+      { docs_transporte: { done: false, reclamado: '2026-07-16' } },
+      { docs_transporte: { done: true, date: '2026-07-17', by: 'brian' } },
+    )
+    expect(merged.docs_transporte).toEqual({ done: true, date: '2026-07-17', by: 'brian' })
+  })
+
+  it('un paso solo-reclamado NO cuenta como completo (progreso y digest)', () => {
+    const { done, total } = checksProgress({ docs_transporte: { done: false, reclamado: '2026-07-17' } }, 'TRASIEGO')
+    expect(done).toBe(0)
+    expect(total).toBe(4)
   })
 })

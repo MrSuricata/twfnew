@@ -336,6 +336,9 @@ export const RefCheckStepSchema = z.object({
   done: z.boolean(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'fecha YYYY-MM-DD').optional().or(z.literal('')),
   by: z.string().max(200).optional(),
+  // Reclamo del día (paso pendiente reclamado hoy — vence solo al día
+  // siguiente). reclamadoBy NO se acepta del body: lo estampa el server.
+  reclamado: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'fecha YYYY-MM-DD').optional().or(z.literal('')),
   // Solo pasos-aviso (salida/frontera/fiscal): estado POR CONTENEDOR. `by` de
   // cada contenedor lo pisa el server con el usuario del token. Cap 40 cntr.
   cntrs: z.record(

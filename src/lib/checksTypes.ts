@@ -57,6 +57,13 @@ export interface RefCheckStep {
   done: boolean
   date?: string   // YYYY-MM-DD (default: el día en que se marcó)
   by?: string     // quién lo marcó (email/usuario del token)
+  /** Reclamo del DÍA (Brian 17/07): "hoy reclamé la factura/datos para poder
+   *  completar este paso" (ej: instrucción de CRT). Vence solo al día
+   *  siguiente — derive-on-read: activo ⇔ reclamado === hoy, sin cron — para
+   *  volver a reclamar cada día hasta tenerlo. Marcar el paso hecho (o quitar
+   *  el reclamo) lo borra. reclamadoBy lo estampa el server desde el token. */
+  reclamado?: string      // YYYY-MM-DD del último reclamo
+  reclamadoBy?: string
   /** SOLO pasos-aviso (salida/frontera/fiscal): estado POR CONTENEDOR. Cuando
    *  existe, manda `cntrs` (no el `done` de arriba, que queda como "algún
    *  contenedor avisado"). Ausente = paso nivel-ref (resto de los pasos, y las
@@ -180,15 +187,22 @@ export function nextPendingStep(steps: RefCheckSteps, operativa: string | null |
 
 /** Merge de un patch PARCIAL de pasos sobre los existentes (misma semántica
  *  que el server): la clave que llega reemplaza solo ESE paso, done=false lo
- *  elimina (vuelve a pendiente) y el resto se conserva intacto. */
+ *  elimina (vuelve a pendiente) — SALVO que traiga `reclamado` (paso pendiente
+ *  pero reclamado hoy: se guarda) — y el resto se conserva intacto. */
 export function mergeChecksSteps(base: RefCheckSteps, patch: RefCheckSteps): RefCheckSteps {
   const out: RefCheckSteps = { ...base }
   for (const [key, step] of Object.entries(patch) as [CheckStepKey, RefCheckStep | undefined][]) {
     if (step === undefined) continue
-    if (!step.done) delete out[key]
+    if (!step.done && !step.reclamado) delete out[key]
     else out[key] = step
   }
   return out
+}
+
+/** ¿El paso pendiente está reclamado HOY? Ayer reclamado → hoy ya no (vuelve
+ *  el botón para re-reclamar), hasta que el paso se marque hecho. */
+export function esReclamadoHoy(step: RefCheckStep | undefined, hoyIso: string): boolean {
+  return !!step && !step.done && !!step.reclamado && step.reclamado === hoyIso
 }
 
 /** Criterio "opera por Uruguay" = PAIS/dest_country 'UY', que en la planilla se

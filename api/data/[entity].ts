@@ -1682,7 +1682,16 @@ async function handleRefChecks(req: VercelRequest, res: VercelResponse, db: any,
         merged[key] = { done: true, cntrs: outC }
         continue
       }
-      if (!step.done) { delete merged[key]; continue }
+      if (!step.done) {
+        // Reclamo del día (done=false + reclamado): paso pendiente que HOY se
+        // reclamó (factura/datos para completarlo). Se guarda con `by` del
+        // token; vence solo por fecha (derive-on-read). Sin reclamado,
+        // done=false sigue borrando el paso (vuelve a pendiente limpio).
+        const reclamado = (step as { reclamado?: string }).reclamado
+        if (reclamado) { merged[key] = { done: false, reclamado, reclamadoBy: who }; continue }
+        delete merged[key]
+        continue
+      }
       const prevStep = prevSteps[key]
       merged[key] = {
         done: true,
