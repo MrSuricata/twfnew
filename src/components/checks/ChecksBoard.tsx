@@ -49,6 +49,7 @@ import {
   isAvisoStep,
   avisoAggregate,
   buildAvisoCntrsMap,
+  esReclamadoHoy,
   type CheckStepKey,
   type RefCheckStep,
   type RefCheckSteps,
@@ -232,6 +233,22 @@ export default function ChecksBoard({ shipments = [], dbShipments = [], onPatchS
     applyStep(op.ref, key, { ...cur, date })
   }, [checksByRef, applyStep])
 
+  // Reclamo del DÍA (Brian 17/07): "hoy reclamé la factura/datos para poder
+  // completar este paso". Amarillo hoy; mañana vence solo (derive-on-read) y
+  // vuelve el botón para re-reclamar, hasta que el paso se marque hecho.
+  // Mismo camino optimista que los pasos (applyStep → saveRefCheckSteps).
+  const handleReclamo = useCallback((op: UnifiedOperation, key: CheckStepKey, label: string) => {
+    const step = (checksByRef.get(normalizeRef(op.ref)) || {})[key]
+    if (step?.done) return
+    const hoy = todayIso()
+    const yaReclamadoHoy = step?.reclamado === hoy
+    // Quitar (mismo día) = done:false pelado → el paso vuelve a pendiente limpio.
+    applyStep(op.ref, key, yaReclamadoHoy ? null : { done: false, reclamado: hoy, reclamadoBy: getAdminName() })
+    toast.success(yaReclamadoHoy ? `${label} — reclamo quitado` : `${label} — reclamado hoy 📣`, {
+      description: op.ref,
+    })
+  }, [checksByRef, applyStep])
+
   // ── Telex desde la fila — MISMO camino que el toggle Telex del panel ──
   // ViabilityBlock hace onCommit('tlx', !hasTelex(op.tlx)) y el commit del panel
   // lo traduce a onPatch(op.dbId, buildPerContainerPatch(op, 'telex', boolean)).
@@ -315,6 +332,7 @@ export default function ChecksBoard({ shipments = [], dbShipments = [], onPatchS
                 onToggleExpand={() => setExpandedRef(cur => (cur === norm ? null : norm))}
                 onToggleStep={(key, label) => handleToggleStep(op, key, label)}
                 onDateChange={(key, date) => handleDateChange(op, key, date)}
+                onReclamo={(key, label) => handleReclamo(op, key, label)}
                 onToggleTelex={telexEditable ? () => handleToggleTelex(op) : undefined}
                 onOpenRef={onOpenDetail ? () => onOpenDetail(op.dbId || op.ref) : undefined}
               />
@@ -339,6 +357,8 @@ interface ChecksRowProps {
   onToggleExpand: () => void
   onToggleStep: (key: CheckStepKey, label: string) => void
   onDateChange: (key: CheckStepKey, date: string) => void
+  /** Reclamo del día sobre un paso PENDIENTE (marcar/quitar — solo el mismo día). */
+  onReclamo: (key: CheckStepKey, label: string) => void
   /** Marcar/quitar telex desde la fila (mismo camino que el panel). Sin esto
    *  (carga no editable) el chip queda estático como siempre. */
   onToggleTelex?: () => void
@@ -346,7 +366,8 @@ interface ChecksRowProps {
   onOpenRef?: () => void
 }
 
-function ChecksRow({ op, steps, expanded, onToggleExpand, onToggleStep, onDateChange, onToggleTelex, onOpenRef }: ChecksRowProps) {
+function ChecksRow({ op, steps, expanded, onToggleExpand, onToggleStep, onDateChange, onReclamo, onToggleTelex, onOpenRef }: ChecksRowProps) {
+  const hoyIso = todayIso()
   const operativa = (op.operativa || '').trim()
   const opColor = operativa ? getOperativaColor(operativa) : null
   // Operativa desconocida (mapa devuelve "Otro") → mostrar el valor real.
@@ -419,11 +440,15 @@ function ChecksRow({ op, steps, expanded, onToggleExpand, onToggleStep, onDateCh
             const stepDone = isStepDone(def.key)
             const agg = isAvisoStep(def.key) ? avisoAggregate(st, cntrList) : null
             const isNext = !stepDone && def.key === next
+            // Reclamado HOY (solo pasos documentarios): punto amarillo lleno.
+            const reclamadoHoy = !stepDone && !agg && esReclamadoHoy(st, hoyIso)
             const detalle = stepDone
               ? `hecho${!agg && st?.date ? ` ${fmtDateDMY(st.date)}` : ''}${!agg && st?.by ? ` por ${shortWho(st.by)}` : ''}`
-              : agg && agg.done > 0
-                ? `${agg.done}/${agg.total} avisados`
-                : 'pendiente'
+              : reclamadoHoy
+                ? `reclamado hoy${st?.reclamadoBy ? ` por ${shortWho(st.reclamadoBy)}` : ''}`
+                : agg && agg.done > 0
+                  ? `${agg.done}/${agg.total} avisados`
+                  : 'pendiente'
             return (
               <span
                 key={def.key}
@@ -431,11 +456,13 @@ function ChecksRow({ op, steps, expanded, onToggleExpand, onToggleStep, onDateCh
                 className={`h-2 w-2 rounded-full ${
                   stepDone
                     ? 'bg-emerald-500'
-                    : isNext
-                      ? 'bg-background ring-2 ring-indigo-500'
-                      : agg && agg.done > 0
-                        ? 'bg-amber-400'
-                        : 'bg-background border border-muted-foreground/35'
+                    : reclamadoHoy
+                      ? 'bg-amber-400'
+                      : isNext
+                        ? 'bg-background ring-2 ring-indigo-500'
+                        : agg && agg.done > 0
+                          ? 'bg-amber-400'
+                          : 'bg-background border border-muted-foreground/35'
                 }`}
               />
             )
@@ -546,7 +573,34 @@ function ChecksRow({ op, steps, expanded, onToggleExpand, onToggleStep, onDateCh
                         </span>
                       )}
                     </div>
-                  ) : null}
+                  ) : (
+                    // Paso documentario PENDIENTE → reclamo del día: amarillo
+                    // hoy, mañana vence solo y vuelve el botón (hasta tenerlo).
+                    <div className="flex items-center gap-2 shrink-0">
+                      {st?.reclamado && !esReclamadoHoy(st, hoyIso) && (
+                        <span
+                          className="hidden sm:inline text-[10px] text-muted-foreground whitespace-nowrap"
+                          title={`Último reclamo: ${fmtDateDMY(st.reclamado)}${st.reclamadoBy ? ` por ${shortWho(st.reclamadoBy)}` : ''} — sigue sin llegar, reclamalo de nuevo`}
+                        >
+                          reclamado {fmtDateDMY(st.reclamado)}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => onReclamo(def.key, def.label)}
+                        title={esReclamadoHoy(st, hoyIso)
+                          ? `Reclamado HOY${st?.reclamadoBy ? ` por ${shortWho(st.reclamadoBy)}` : ''} — clic para quitar el reclamo`
+                          : 'Marcar que HOY reclamaste la factura/datos para este paso (mañana vence solo, para volver a reclamar)'}
+                        className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
+                          esReclamadoHoy(st, hoyIso)
+                            ? 'border-amber-400 bg-amber-100 text-amber-800'
+                            : 'border-dashed border-amber-300 bg-background text-amber-700 hover:bg-amber-50'
+                        }`}
+                      >
+                        {esReclamadoHoy(st, hoyIso) ? '📣 Reclamado hoy' : 'Reclamar'}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )
             })}
