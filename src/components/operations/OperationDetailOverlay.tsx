@@ -122,6 +122,7 @@ export default function OperationDetailOverlay({
   const knownFiscales = useMemo(() => deriveKnownValues(operations.map(o => o.fiscal)), [operations])
   const knownDevs = useMemo(() => canonicalizarLista(operations.map(o => o.dev), DEV_ALIASES), [operations])
   const knownLugaresDescarga = useMemo(() => deriveKnownValues(operations.map(o => o.descarga)), [operations])
+  const knownTerminales = useMemo(() => deriveKnownValues(operations.map(o => o.terminal)), [operations])
 
   // Asignación de operativo: igual que la grilla — filas DB patchean operator_id;
   // FCL espejo / no-DB usan el overlay por ref.
@@ -144,6 +145,7 @@ export default function OperationDetailOverlay({
       knownFiscales={knownFiscales}
       knownDevs={knownDevs}
       knownLugaresDescarga={knownLugaresDescarga}
+      knownTerminales={knownTerminales}
       dbRow={dbRow}
       originPhotos={originPhotos}
       reports={reports}

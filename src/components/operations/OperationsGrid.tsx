@@ -375,6 +375,7 @@ export default function OperationsGrid({
   const knownFiscales = useMemo(() => deriveKnownValues(allOperations.map(o => o.fiscal)), [allOperations])
   const knownDevs = useMemo(() => canonicalizarLista(allOperations.map(o => o.dev), DEV_ALIASES), [allOperations])
   const knownLugaresDescarga = useMemo(() => deriveKnownValues(allOperations.map(o => o.descarga)), [allOperations])
+  const knownTerminales = useMemo(() => deriveKnownValues(allOperations.map(o => o.terminal)), [allOperations])
   // Shippers/puertos/países ya usados → combos creables del alta guiada.
   const knownShippers = useMemo(() => deriveKnownValues(allOperations.map(o => o.shipper)), [allOperations])
   const knownOrigenes = useMemo(() => deriveKnownValues(allOperations.map(o => o.origin)), [allOperations])
@@ -1256,6 +1257,7 @@ export default function OperationsGrid({
         knownFiscales={knownFiscales}
         knownDevs={knownDevs}
         knownLugaresDescarga={knownLugaresDescarga}
+        knownTerminales={knownTerminales}
         knownClientes={clients}
         dbRow={selectedDbRow}
         originPhotos={originPhotos}
