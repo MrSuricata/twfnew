@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   addDaysISO, diffDaysISO, esLineaOne, esLineaRepremar, deriveFormaPago,
   normalizeFormaPago, formaPagoEfectiva, venceRubro, buildPagoItems, corteHasta, kpisPagos,
+  costoTerminalDefault, costoDevDefault,
 } from './pagosVencimientos'
 import type { DbShipment } from './operationsTypes'
 
@@ -209,5 +210,20 @@ describe('kpisPagos', () => {
     expect(k.semana).toEqual({ count: 1, total: 400 })
     expect(k.pendiente).toEqual({ count: 5, total: 3100 })
     expect(k.sinFecha).toEqual({ count: 1, total: 1600 })
+  })
+})
+
+describe('costos default por terminal/devolución (17/07)', () => {
+  it('terminal: MONTECON 618 · TCP 507,16 · case/espacios insensible · sin regla → null', () => {
+    expect(costoTerminalDefault('MONTECON')).toBe(618)
+    expect(costoTerminalDefault(' tcp ')).toBe(507.16)
+    expect(costoTerminalDefault('OTRA')).toBeNull()
+    expect(costoTerminalDefault('')).toBeNull()
+    expect(costoTerminalDefault(null)).toBeNull()
+  })
+  it('devolución: STL 205 · MPS 189 · sin regla → null', () => {
+    expect(costoDevDefault('stl')).toBe(205)
+    expect(costoDevDefault('MPS')).toBe(189)
+    expect(costoDevDefault('MURCHISON')).toBeNull()
   })
 })
