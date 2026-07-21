@@ -153,6 +153,23 @@ export const montoToInput = (n: number | null): string => (n === null ? '' : Str
  *  el equipo de Chile, sus pagos no entran acá (pedido Brian 10/07, caso A7793). */
 const esCargaChile = (s: DbShipment): boolean => up(s.dest_country) === 'CL'
 
+// ── Costos DEFAULT por terminal / devolución (Brian 17/07/2026) ──
+// Se MATERIALIZAN al setear Terminal o "Devuelve en" en la ficha, SOLO si el
+// monto está sin datos (null). Un 0 ya cargado se respeta (= pagado, convención
+// SG) y cualquier valor queda siempre editable. Si el default cambia de precio,
+// actualizar acá (las cargas ya materializadas conservan su valor).
+export const COSTO_TERMINAL_DEFAULT: Record<string, number> = { MONTECON: 618, TCP: 507.16 }
+export const COSTO_DEV_DEFAULT: Record<string, number> = { STL: 205, MPS: 189 }
+
+/** Costo default de terminal para el valor tipeado (MONTECON/TCP) — null si no hay regla. */
+export function costoTerminalDefault(terminal: string | null | undefined): number | null {
+  return COSTO_TERMINAL_DEFAULT[up(terminal)] ?? null
+}
+/** Costo default de devolución para la terminal de devolución (STL/MPS) — null si no hay regla. */
+export function costoDevDefault(dev: string | null | undefined): number | null {
+  return COSTO_DEV_DEFAULT[up(dev)] ?? null
+}
+
 /** A quién se le paga cada rubro. */
 export function empresaRubro(rubro: PagoRubro, s: Pick<DbShipment, 'linea' | 'terminal' | 'dev'>): string {
   if (rubro === 'devolucion') return (s.dev || '').trim()

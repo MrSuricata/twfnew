@@ -21,6 +21,8 @@ import OperationMediaSection from './OperationMediaSection'
 import PagosSection from './PagosSection'
 import RefChecksInline from './RefChecksInline'
 import { isPorUruguay } from '@/lib/checksTypes'
+import { costoTerminalDefault, costoDevDefault } from '@/lib/pagosVencimientos'
+import { fmtMoneyUY } from '@/lib/fichaFacturacionPdf'
 
 interface TruckRefInfo { truckCode: string; status: string }
 
@@ -242,7 +244,32 @@ export default function OperationDetailPanel({
       // descarga…) se propagan al array operativas: la Agenda/HOY/chips leen el
       // valor POR CONTENEDOR, no la columna. El helper solo agrega `operativas`
       // para esos campos; el resto setea solo la columna.
-      onPatch(op.dbId, buildPerContainerPatch(op, mode.col, v))
+      const patch = buildPerContainerPatch(op, mode.col, v)
+      // Costos DEFAULT (Brian 17/07): al setear Terminal (MONTECON 618 / TCP
+      // 507,16) o Devuelve en (STL 205 / MPS 189) se completa el monto del
+      // rubro EN EL MISMO PATCH — solo si estaba sin datos (null): un 0 (=
+      // pagado) o un monto ya cargado nunca se pisan. Siempre editable después.
+      if (dbRow && typeof v === 'string') {
+        if (key === 'terminal' && (dbRow.monto_terminal ?? null) === null) {
+          const def = costoTerminalDefault(v)
+          if (def !== null) {
+            patch.monto_terminal = def
+            toast.info(`Costo de terminal: USD ${fmtMoneyUY(def)} (default ${v.trim().toUpperCase()})`, {
+              description: 'Editable en la sección Pagos si difiere.',
+            })
+          }
+        }
+        if (key === 'dev' && (dbRow.monto_devolucion ?? null) === null) {
+          const def = costoDevDefault(v)
+          if (def !== null) {
+            patch.monto_devolucion = def
+            toast.info(`Costo de devolución: USD ${fmtMoneyUY(def)} (default ${v.trim().toUpperCase()})`, {
+              description: 'Editable en la sección Pagos si difiere.',
+            })
+          }
+        }
+      }
+      onPatch(op.dbId, patch)
     } else {
       onPatchFcl?.(op.dbId, { [EDITABLE_FCL_FIELDS[key]!]: v })
     }
