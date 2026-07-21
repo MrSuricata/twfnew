@@ -162,6 +162,7 @@ export default function OperationDetailPanel({
   knownFiscales = [],
   knownDevs = [],
   knownLugaresDescarga = [],
+  knownTerminales = [],
   knownClientes = [],
   dbRow = null,
   originPhotos,
@@ -190,6 +191,8 @@ export default function OperationDetailPanel({
   knownDevs?: string[]
   /** Lugares de descarga del camión (post-fiscal) ya usados → combo Descarga. */
   knownLugaresDescarga?: string[]
+  /** Terminales de arribo (TCP/MONTECON + usadas) → combo Terminal. */
+  knownTerminales?: string[]
   /** Fila cruda de shipments de esta op (por dbId) — los montos/pagos viven
    *  ahí, no en UnifiedOperation. Habilita la sección Pagos del panel. */
   dbRow?: DbShipment | null
@@ -422,6 +425,7 @@ export default function OperationDetailPanel({
             knownFiscales={knownFiscales}
             knownDevs={knownDevs}
             knownLugaresDescarga={knownLugaresDescarga}
+            knownTerminales={knownTerminales}
             checksSlot={
               // Mismo universo que la pestaña Checks: FCL activas por Uruguay.
               op.mode === 'fcl' && isPorUruguay(op.pais)

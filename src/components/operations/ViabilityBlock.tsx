@@ -17,6 +17,10 @@ const OPERATIVA_OPTIONS = ['TRASIEGO', 'CONTENEDOR', 'CARGA A PISO']
 // Terminales habituales de devolución del vacío (combo sugerido, no restrictivo).
 const DEV_OPTIONS = ['TCP', 'MONTECON', 'STL', 'PLP']
 
+// Terminales de ARRIBO del buque en MVD (adónde llega el contenedor — define
+// además el vencimiento del pago de terminal: MONTECON = ETA − 5 días).
+const TERMINAL_OPTIONS = ['TCP', 'MONTECON']
+
 // Bloque destacado arriba del panel: los datos que se miran para decidir si una
 // carga es viable, en cuadros grandes + toggles. Editable solo para filas DB
 // (LCL/aéreo/terrestre); FCL muestra los valores con candadito (hasta el flip).
@@ -28,6 +32,7 @@ export default function ViabilityBlock({
   knownFiscales = [],
   knownDevs = [],
   knownLugaresDescarga = [],
+  knownTerminales = [],
   checksSlot,
   onCommit,
 }: {
@@ -41,6 +46,8 @@ export default function ViabilityBlock({
   knownDevs?: string[]
   /** Lugares de descarga del camión (post-fiscal) ya usados → combo Descarga. */
   knownLugaresDescarga?: string[]
+  /** Terminales de arribo ya usadas → se suman a TCP/MONTECON en el combo. */
+  knownTerminales?: string[]
   /** Checks documentarios inline (RefChecksInline) — se renderiza abajo de
    *  LIBRE/"Devuelve en", antes de los toggles (pedido Brian 16/07). */
   checksSlot?: ReactNode
@@ -48,6 +55,7 @@ export default function ViabilityBlock({
 }) {
   const depositoOptions = canonicalizarLista([...DEPOSITOS_UY, ...knownDepositos])
   const devOptions = canonicalizarLista([...DEV_OPTIONS, ...knownDevs], DEV_ALIASES)
+  const terminalOptions = canonicalizarLista([...TERMINAL_OPTIONS, ...knownTerminales])
 
   // Botón rápido "Devuelto" (regla del repo: 'DEVUELTO' vive en LIBRE y
   // reemplaza la fecha — así la carga sale de las alertas de LIBRE). Va por el
@@ -152,6 +160,11 @@ export default function ViabilityBlock({
           ) : undefined}
           onCommit={v => onCommit('dev', v)}
         />
+        {/* Terminal de ARRIBO en MVD (TCP/MONTECON) — adónde llega el buque.
+            Faltaba en la ficha (reclamo Brian 17/07, caso A7971): existía en el
+            modelo y la grilla pero no había dónde cargarla. Define también el
+            vencimiento del pago de terminal (MONTECON = ETA − 5). */}
+        <StatBox label="Terminal (llegada)" value={op.terminal} kind="combo" options={terminalOptions} upper catalogo editable={editable} onCommit={v => onCommit('terminal', v)} />
       </div>
 
       {/* Checks documentarios — abajo de LIBRE/"Devuelve en" (pedido 16/07). */}
