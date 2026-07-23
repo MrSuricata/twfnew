@@ -87,8 +87,12 @@ export function prefillFclFromShipment(shipment: ParsedShipment): FclPrefill {
     description: firstWith('DESCRIPCION'),
     // ETA Mvd = ETA of the shipment (port arrival). SALIDA op = departure from MVD.
     mvdArrival: shipment.ETA || '',
-    // For TRASIEGO/DESCONS, DESCARGA is the depot processing date.
-    desconsolDate: firstWith('DESCARGA') || firstWith('SALIDA'),
+    // DESCARGA en la planilla histórica era la FECHA de procesamiento en
+    // depósito, pero desde el 16/07 el campo guarda el LUGAR de descarga
+    // post-fiscal ("RAFAELA"). Solo tomarlo como fecha si PARECE fecha ISO —
+    // si no, Postgres rechazaba el batch entero ('invalid input syntax for
+    // type date: "RAFAELA"') y la carga "no persistía" (bug A7827 B, 23/07).
+    desconsolDate: [firstWith('DESCARGA'), firstWith('SALIDA')].find(v => /^\d{4}-\d{2}-\d{2}/.test(v)) || '',
     // BL del HBL/MBL de la carga (el modelo trae MBL). Stock queda manual.
     bl: shipment.MBL || '',
     // Madera: SI si alguna operativa marca WOOD.

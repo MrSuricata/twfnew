@@ -1277,8 +1277,11 @@ async function handleTruckLoads(req: VercelRequest, res: VercelResponse, db: any
       m3: l.m3 ?? 0,
       pkgs: l.pkgs ?? 0,
       description: l.description || '',
-      mvd_arrival: l.mvdArrival || l.mvd_arrival || null,
-      desconsol_date: l.desconsolDate || l.desconsol_date || null,
+      // isoDateOrNull: columnas DATE — un texto que no es fecha ("RAFAELA" en
+      // el DESCARGA-lugar legacy) hacía caer el batch ENTERO con error 22007
+      // de Postgres y la carga "no persistía" (bug A7827 B, 23/07).
+      mvd_arrival: isoDateOrNull(l.mvdArrival ?? l.mvd_arrival),
+      desconsol_date: isoDateOrNull(l.desconsolDate ?? l.desconsol_date),
       bl: l.bl || '',
       stock: l.stock || '',
       wood: l.wood ?? false,
@@ -1444,8 +1447,8 @@ async function handleLclAir(req: VercelRequest, res: VercelResponse, db: any) {
       client: s.client || '',
       origin: s.origin || '',
       mbl_hbl: s.mblHbl || s.mbl_hbl || '',
-      eta_mvd: s.etaMvd || s.eta_mvd || null,
-      desconsol_date: s.desconsolDate || s.desconsol_date || null,
+      eta_mvd: isoDateOrNull(s.etaMvd ?? s.eta_mvd),
+      desconsol_date: isoDateOrNull(s.desconsolDate ?? s.desconsol_date),
       pkgs: s.pkgs ?? 0,
       kg: s.kg ?? 0,
       m3: s.m3 ?? 0,
@@ -1812,6 +1815,14 @@ async function allowedRefsForPayload(db: any, payload: TokenPayload | null): Pro
 }
 
 const refOf = (r: string | null | undefined) => String(r || '').trim().toUpperCase()
+
+/** Valor para una columna DATE: solo fechas ISO (yyyy-MM-dd); cualquier otro
+ *  texto → null. Sin esto, un lugar tipeado en un campo-fecha legacy tiraba el
+ *  batch entero con error 22007 de Postgres (bug A7827 B, 23/07). */
+const isoDateOrNull = (v: unknown): string | null => {
+  const s = String(v ?? '').slice(0, 10)
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null
+}
 
 // Filtra una lista por su ref contra el set permitido (o pasa todo si es null).
 function filterByAllowedRef<T>(items: T[], allowed: Set<string> | null, getRef: (i: any) => string | null | undefined): T[] {

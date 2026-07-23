@@ -45,3 +45,18 @@ describe('makeEmptyTruckLoad — defaults de los campos nuevos', () => {
     expect(l.wood).toBe(false)
   })
 })
+
+describe('prefillFclFromShipment — desconsolDate solo con fechas reales (bug A7827 B)', () => {
+  it('DESCARGA con un LUGAR ("RAFAELA") NO va como fecha; cae a SALIDA si es ISO', () => {
+    const s = ship({ operativas: [op({ DESCARGA: 'RAFAELA', SALIDA: '2026-07-24' })] })
+    expect(prefillFclFromShipment(s).desconsolDate).toBe('2026-07-24')
+  })
+  it('DESCARGA lugar y SALIDA vacía → desconsolDate vacío (nunca texto)', () => {
+    const s = ship({ operativas: [op({ DESCARGA: 'RAFAELA', SALIDA: '' })] })
+    expect(prefillFclFromShipment(s).desconsolDate).toBe('')
+  })
+  it('DESCARGA fecha ISO se usa como siempre', () => {
+    const s = ship({ operativas: [op({ DESCARGA: '2026-07-20', SALIDA: '2026-07-24' })] })
+    expect(prefillFclFromShipment(s).desconsolDate).toBe('2026-07-20')
+  })
+})
