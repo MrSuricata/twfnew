@@ -698,9 +698,16 @@ function FieldRow({
   const mode = editModeFor(op, fieldKey)
   const raw = (op as unknown as Record<string, unknown>)[fieldKey]
 
+  // Campos con opciones FIJAS (ej. País/zona destino): editor <select> que
+  // guarda el CÓDIGO ('UY'/'AR'/'CL'/'OTRO') — texto libre acá rompería el
+  // universo de Checks/Pagos/Previsión que filtra por esos códigos.
+  const selectOptions = (mode?.kind === 'db' && mode.type === 'select' && mode.options) ? mode.options : null
+
   const display = kind === 'number'
     ? (Number(raw) ? NUM_FMT.format(Number(raw)) : '—')
-    : ((dateDisplay ? fmtDateDMY(String(raw ?? '')) : String(raw ?? '')) || '—')
+    : selectOptions
+      ? (selectOptions.find(o => o.value === String(raw ?? ''))?.label || String(raw ?? '') || '—')
+      : ((dateDisplay ? fmtDateDMY(String(raw ?? '')) : String(raw ?? '')) || '—')
 
   const isEmpty = display === '—'
 
@@ -742,6 +749,22 @@ function FieldRow({
     >
       <div className="text-[10px] uppercase tracking-wide text-muted-foreground leading-none mb-1">{label}</div>
       {editing ? (
+        selectOptions ? (
+          <select
+            autoFocus
+            value={draft}
+            onChange={e => {
+              setEditing(false)
+              if (String(raw ?? '') !== e.target.value) onCommit(fieldKey, e.target.value)
+              refocus()
+            }}
+            onBlur={() => setEditing(false)}
+            onKeyDown={e => { if (e.key === 'Escape') { setEditing(false); refocus() } }}
+            className="h-8 w-full rounded-md border border-input bg-background px-1 text-sm"
+          >
+            {selectOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+        ) : (
         <>
           <Input
             autoFocus
@@ -768,6 +791,7 @@ function FieldRow({
             </datalist>
           )}
         </>
+        )
       ) : (
         <button
           type="button"
