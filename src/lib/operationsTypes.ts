@@ -761,6 +761,19 @@ export const EDITABLE_FIELDS: Partial<Record<keyof UnifiedOperation, EditableFie
   descripcion: { col: 'observacion', type: 'text' },
   fiscal: { col: 'fiscal', type: 'text' },
   destPort: { col: 'dest_port', type: 'text' },
+  // País/zona de destino (dest_country) — define el universo de Checks (UY),
+  // Pagos (CL afuera) y la Previsión. Editable como select (pedido Brian
+  // 23/07, caso A7966: cargas creadas por sync sin POD quedaban OTRO y no
+  // había forma de corregirlas → sin checks). Mismas opciones que el alta.
+  pais: {
+    col: 'dest_country', type: 'select', options: [
+      { value: '', label: '—' },
+      { value: 'UY', label: 'Uruguay (descarga en MVD)' },
+      { value: 'AR', label: 'Argentina (Buenos Aires directo)' },
+      { value: 'CL', label: 'Chile (San Antonio/Valparaíso)' },
+      { value: 'OTRO', label: 'Otro' },
+    ],
+  },
   // 'camion' NO es editable: setear este texto NO sube la carga al camión (eso se
   // hace en el armador → truck_loads). El camión real se deriva de las cargas.
   despacho: { col: 'despacho', type: 'text' },
