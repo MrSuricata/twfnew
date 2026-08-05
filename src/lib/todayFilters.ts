@@ -18,12 +18,22 @@ import {
   type ParsedShipment,
   type OperativasRecord,
 } from './shipmentTypes'
-import type { CheckStepKey } from './checksTypes'
+import { type CheckStepKey, normalizeRef } from './checksTypes'
+import type { Truck, TruckLoad } from './truckTypes'
 
 /** A single operativa matched along with its parent shipment for context. */
 export interface OpMatch {
   shipment: ParsedShipment
   op: OperativasRecord
+}
+
+/** Un camión consolidado con el resumen de lo que lleva, para mostrarlo como
+ *  una tarjeta más dentro de las columnas de HOY. */
+export interface TruckMatch {
+  truck: Truck
+  refs: string[]
+  kg: number
+  m3: number
 }
 
 /** Las 3 columnas de HOY. Cada una corresponde a un aviso del procedimiento
@@ -75,12 +85,14 @@ function daysSince(dateStr: string): number | null {
  * es independiente. El "ya terminó" lo maneja la lógica de ETA_FISC (si el
  * arribo fiscal ya pasó, no aparece).
  */
-export function salientesHoy(shipments: ParsedShipment[]): OpMatch[] {
-  return shipments.flatMap(s =>
-    (s.operativas ?? [])
-      .filter(op => isDateToday(op.SALIDA))
-      .map(op => ({ shipment: s, op }))
-  )
+export function salientesHoy(shipments: ParsedShipment[], excluirRefs?: Set<string>): OpMatch[] {
+  return shipments
+    .filter(s => !enConsolidado(s, excluirRefs))
+    .flatMap(s =>
+      (s.operativas ?? [])
+        .filter(op => isDateToday(op.SALIDA))
+        .map(op => ({ shipment: s, op }))
+    )
 }
 
 /**
@@ -89,8 +101,10 @@ export function salientesHoy(shipments: ParsedShipment[]): OpMatch[] {
  * There's no CRUCE_FRONTERA field in the data, so we derive: SALIDA was 1–2 days ago
  * AND cargo hasn't arrived at fiscal yet (ETA_FISC is today or in the future or empty).
  */
-export function enFronteraHoy(shipments: ParsedShipment[]): OpMatch[] {
-  return shipments.flatMap(s =>
+export function enFronteraHoy(shipments: ParsedShipment[], excluirRefs?: Set<string>): OpMatch[] {
+  return shipments
+    .filter(s => !enConsolidado(s, excluirRefs))
+    .flatMap(s =>
     (s.operativas ?? [])
       .filter(op => {
         // NO filtrar por DEVUELTO: es estado del contenedor, no de la carga
@@ -114,12 +128,14 @@ export function enFronteraHoy(shipments: ParsedShipment[]): OpMatch[] {
  *
  * "Carga llega al depósito fiscal de destino hoy."
  */
-export function llegandoFiscalHoy(shipments: ParsedShipment[]): OpMatch[] {
-  return shipments.flatMap(s =>
-    (s.operativas ?? [])
-      .filter(op => isDateToday(op.ETA_FISC))
-      .map(op => ({ shipment: s, op }))
-  )
+export function llegandoFiscalHoy(shipments: ParsedShipment[], excluirRefs?: Set<string>): OpMatch[] {
+  return shipments
+    .filter(s => !enConsolidado(s, excluirRefs))
+    .flatMap(s =>
+      (s.operativas ?? [])
+        .filter(op => isDateToday(op.ETA_FISC))
+        .map(op => ({ shipment: s, op }))
+    )
 }
 
 /**
@@ -154,6 +170,76 @@ export function libreAlerts(shipments: ParsedShipment[]): LibreAlert[] {
   return out.sort((a, b) => b.daysOverdue - a.daysOverdue)
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// Consolidados
+//
+// Un camión consolidado se mueve como una unidad: sale, cruza y llega con
+// TODAS sus cargas adentro. Por eso entra a las columnas de HOY como UNA
+// tarjeta (la del camión) y sus cargas NO se listan por separado — verlas
+// sueltas hacía parecer que había que coordinar cada una (Brian, 05/08).
+//
+// Las fechas del camión son DATOS, no estimaciones: a diferencia de las
+// cargas sueltas (donde "en frontera" se estima con salió-hace-1-o-2-días),
+// acá sabemos la salida y el arribo reales, así que la frontera es
+// simplemente "ya salió y todavía no llegó".
+// ─────────────────────────────────────────────────────────────────────────
+
+/** Refs (normalizadas) que ya viajan en un camión publicado. Los borradores no
+ *  cuentan: son reservas, la carga sigue necesitando coordinación. */
+export function refsEnConsolidado(trucks: Truck[], loads: TruckLoad[]): Set<string> {
+  const publicados = new Set(trucks.filter(t => t && !t.draft).map(t => t.id))
+  const out = new Set<string>()
+  for (const l of loads) {
+    if (!l || !publicados.has(l.truckId) || l.pending === 'add') continue
+    const ref = normalizeRef(l.sourceRef)
+    if (ref) out.add(ref)
+  }
+  return out
+}
+
+/** ¿Esta carga viaja dentro de un consolidado? (entonces no va suelta en HOY) */
+function enConsolidado(s: ParsedShipment, excluirRefs?: Set<string>): boolean {
+  if (!excluirRefs || excluirRefs.size === 0) return false
+  return excluirRefs.has(normalizeRef(s.REF))
+}
+
+function truckMatch(t: Truck, loads: TruckLoad[]): TruckMatch {
+  const mias = loads.filter(l => l && l.truckId === t.id && l.pending !== 'add')
+  return {
+    truck: t,
+    refs: mias.map(l => l.sourceRef).filter(Boolean),
+    kg: mias.reduce((a, l) => a + (Number(l.kg) || 0), 0),
+    m3: mias.reduce((a, l) => a + (Number(l.m3) || 0), 0),
+  }
+}
+
+/** Camiones que salen HOY de Uruguay. Si no hay fecha de salida cargada se usa
+ *  la de carga, que es cuando el camión efectivamente arranca. */
+export function trucksSalientesHoy(trucks: Truck[], loads: TruckLoad[]): TruckMatch[] {
+  return trucks
+    .filter(t => t && !t.draft)
+    .filter(t => !isDateToday(t.arrivalDate))   // si llega hoy, va en la otra columna
+    .filter(t => isDateToday(t.departureDate) || (!isValidDate(t.departureDate) && isDateToday(t.loadDate)))
+    .map(t => truckMatch(t, loads))
+}
+
+/** Camiones en frontera: ya salieron y todavía no llegaron a fiscal. */
+export function trucksEnFronteraHoy(trucks: Truck[], loads: TruckLoad[]): TruckMatch[] {
+  return trucks
+    .filter(t => t && !t.draft)
+    .filter(t => isValidDate(t.departureDate) && isDatePast(t.departureDate))
+    .filter(t => !isValidDate(t.arrivalDate) || (!isDatePast(t.arrivalDate) && !isDateToday(t.arrivalDate)))
+    .map(t => truckMatch(t, loads))
+}
+
+/** Camiones que llegan HOY al depósito fiscal de destino. */
+export function trucksLlegandoFiscalHoy(trucks: Truck[], loads: TruckLoad[]): TruckMatch[] {
+  return trucks
+    .filter(t => t && !t.draft)
+    .filter(t => isDateToday(t.arrivalDate))
+    .map(t => truckMatch(t, loads))
+}
+
 /**
  * Aggregated today-view payload used by both the web dashboard and the Telegram summary.
  */
@@ -161,21 +247,40 @@ export interface TodaySnapshot {
   salientes: OpMatch[]
   frontera: OpMatch[]
   llegandoFiscal: OpMatch[]
+  /** Consolidados que se mueven hoy, ya repartidos en las mismas 3 columnas. */
+  trucksSalientes: TruckMatch[]
+  trucksFrontera: TruckMatch[]
+  trucksLlegandoFiscal: TruckMatch[]
   libreAlerts: LibreAlert[]
   totalCount: number
   hasMovement: boolean
 }
 
-export function buildTodaySnapshot(shipments: ParsedShipment[]): TodaySnapshot {
-  const salientes = salientesHoy(shipments)
-  const frontera = enFronteraHoy(shipments)
-  const llegandoFiscal = llegandoFiscalHoy(shipments)
+export function buildTodaySnapshot(
+  shipments: ParsedShipment[],
+  trucks: Truck[] = [],
+  truckLoads: TruckLoad[] = [],
+): TodaySnapshot {
+  // Las cargas que viajan en un consolidado se muestran una sola vez: dentro
+  // de la tarjeta del camión.
+  const enCamion = refsEnConsolidado(trucks, truckLoads)
+  const salientes = salientesHoy(shipments, enCamion)
+  const frontera = enFronteraHoy(shipments, enCamion)
+  const llegandoFiscal = llegandoFiscalHoy(shipments, enCamion)
+  const trucksSalientes = trucksSalientesHoy(trucks, truckLoads)
+  const trucksFrontera = trucksEnFronteraHoy(trucks, truckLoads)
+  const trucksLlegandoFiscal = trucksLlegandoFiscalHoy(trucks, truckLoads)
   const alerts = libreAlerts(shipments)
-  const totalCount = salientes.length + frontera.length + llegandoFiscal.length
+  const totalCount =
+    salientes.length + frontera.length + llegandoFiscal.length +
+    trucksSalientes.length + trucksFrontera.length + trucksLlegandoFiscal.length
   return {
     salientes,
     frontera,
     llegandoFiscal,
+    trucksSalientes,
+    trucksFrontera,
+    trucksLlegandoFiscal,
     libreAlerts: alerts,
     totalCount,
     hasMovement: totalCount > 0 || alerts.length > 0,

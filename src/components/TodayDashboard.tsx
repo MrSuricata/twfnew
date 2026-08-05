@@ -22,13 +22,13 @@ import {
   type OpMatch,
   type LibreAlert,
   type TodayColumn,
+  type TruckMatch,
 } from '@/lib/todayFilters'
 import ShipmentDetailsDialog from './ShipmentDetailsDialog'
 import ContainerQuickEdit from './operations/ContainerQuickEdit'
 import { deriveKnownTransportes } from '@/lib/operationsTypes'
 import type { ShipmentDocument, OperativeReport, OriginPhoto } from '@/lib/quotationTypes'
 import type { Truck as TruckType, TruckLoad } from '@/lib/truckTypes'
-import { deriveTruckDisplayInfo, deriveTruckDisplayStatus } from '@/lib/truckTypes'
 import { Badge } from '@/components/ui/badge'
 import { fetchRefChecks, saveRefCheckSteps, saveRefCheckCntrs } from '@/lib/dataClient'
 import {
@@ -113,7 +113,12 @@ export default function TodayDashboard({
   const [quickEditMatch, setQuickEditMatch] = useState<OpMatch | null>(null)
   const [quickEditOpen, setQuickEditOpen] = useState(false)
 
-  const snapshot = useMemo(() => buildTodaySnapshot(shipments), [shipments])
+  // Los consolidados entran en las MISMAS 3 columnas que las cargas sueltas, y
+  // sus cargas no se listan aparte (van dentro de la tarjeta del camión).
+  const snapshot = useMemo(
+    () => buildTodaySnapshot(shipments, trucks, truckLoads),
+    [shipments, trucks, truckLoads],
+  )
 
   // ── Estado de los avisos (ref_checks) — fetch + refetch on focus + Realtime ──
   // Fuente de verdad = ref_checks. Los 3 pasos-aviso son POR CONTENEDOR: cada
@@ -213,30 +218,12 @@ export default function TodayDashboard({
     [shipments]
   )
 
-  // 🚛 Consolidados en movimiento: carga/sale/llega HOY o en frontera ahora.
-  // Estados derivados de las fechas del camión (misma lógica que sus cargas).
-  const trucksHoy = useMemo(() => {
-    const today = new Date(); today.setHours(0, 0, 0, 0)
-    return trucks
-      .filter(t => !t.draft)                    // camiones borrador: invisibles en HOY
-      .map(t => {
-        const info = deriveTruckDisplayInfo(t, today)
-        const status = deriveTruckDisplayStatus(t, today)
-        const loads = truckLoads.filter(l => l.truckId === t.id && l.pending !== 'add')
-        const refs = loads.map(l => l.sourceRef).filter(Boolean)
-        const kg = loads.reduce((a, l) => a + (Number(l.kg) || 0), 0)
-        const m3 = loads.reduce((a, l) => a + (Number(l.m3) || 0), 0)
-        return { t, info, status, refs, kg, m3 }
-      })
-      // En el HOY entran: hitos de hoy (carga/sale/llega) + los que están en frontera
-      .filter(x => x.info.hoy || (x.status === 'in_transit'))
-  }, [trucks, truckLoads])
-
   // Carga inicial en curso y todavía sin nada que mostrar → estado "Cargando"
   // en vez del empty state ("Día tranquilo"), para no dar un falso "no hay nada
   // hoy" mientras el banner de sincronizando sigue activo. Con datos ya
-  // cargados, isDataLoading no cambia nada.
-  const initialLoading = isDataLoading && !snapshot.hasMovement && trucksHoy.length === 0
+  // cargados, isDataLoading no cambia nada. Los consolidados ya están contados
+  // dentro de snapshot.hasMovement.
+  const initialLoading = isDataLoading && !snapshot.hasMovement
 
   // For LIBRE alert rows (only have a ParsedShipment, no op)
   const openShipment = (s: ParsedShipment) => {
@@ -302,8 +289,8 @@ export default function TodayDashboard({
         </Card>
       )}
 
-      {/* ── Empty state (tampoco hay consolidados en movimiento) ── */}
-      {!initialLoading && !snapshot.hasMovement && trucksHoy.length === 0 && (
+      {/* ── Empty state (los consolidados ya cuentan en hasMovement) ── */}
+      {!initialLoading && !snapshot.hasMovement && (
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center justify-center py-20 text-muted-foreground">
             <div className="p-4 bg-muted rounded-full mb-4">
@@ -311,39 +298,6 @@ export default function TodayDashboard({
             </div>
             <p className="text-lg font-semibold text-foreground">Nada programado hoy</p>
             <p className="text-sm mt-1">Tomá un café ☕</p>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* ── 🚛 Consolidados en movimiento (carga/sale/llega HOY + en frontera) ── */}
-      {trucksHoy.length > 0 && (
-        <Card className="accent-top overflow-hidden" style={{ ['--bar-color' as any]: '#f59e0b' }}>
-          <CardContent className="pt-5 pb-4">
-            <div className="flex items-center gap-2.5 mb-3">
-              <div className="p-1.5 bg-amber-100 rounded-md">
-                <Truck size={18} weight="fill" className="text-amber-600" />
-              </div>
-              <h2 className="text-sm font-semibold uppercase tracking-wide">Consolidados en movimiento</h2>
-              <span className="text-xs text-muted-foreground">{trucksHoy.length}</span>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-2">
-              {trucksHoy.map(({ t, info, refs, kg, m3 }) => (
-                <div key={t.id} className="rounded-lg border bg-card px-3 py-2.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-semibold">🚛 {t.code}</span>
-                    <Badge variant="outline" className={`text-[10px] whitespace-nowrap ${info.hoy ? 'animate-pulse font-semibold border-amber-400 text-amber-700' : ''}`}>
-                      {info.label}
-                    </Badge>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1 truncate" title={refs.join(', ')}>
-                    {t.transport || 'Sin transporte'}{refs.length > 0 ? ` · Lleva: ${refs.join(', ')}` : ' · Sin cargas'}
-                  </p>
-                  {(kg > 0 || m3 > 0) && (
-                    <p className="text-[11px] text-muted-foreground mt-0.5">{Math.round(kg).toLocaleString('es-UY')} kg · {m3.toLocaleString('es-UY', { maximumFractionDigits: 1 })} m³</p>
-                  )}
-                </div>
-              ))}
-            </div>
           </CardContent>
         </Card>
       )}
@@ -395,6 +349,7 @@ export default function TodayDashboard({
           iconBg="bg-blue-100 dark:bg-blue-500/10"
           barColor="var(--chart-2)"
           matches={snapshot.salientes}
+          trucks={snapshot.trucksSalientes}
           emptyLabel="Sin salidas hoy"
           onRowClick={openOpMatch}
           column="salientes"
@@ -408,6 +363,7 @@ export default function TodayDashboard({
           iconBg="bg-amber-100 dark:bg-amber-500/10"
           barColor="oklch(0.75 0.15 70)"
           matches={snapshot.frontera}
+          trucks={snapshot.trucksFrontera}
           emptyLabel="Sin cargas en frontera"
           onRowClick={openOpMatch}
           column="frontera"
@@ -421,6 +377,7 @@ export default function TodayDashboard({
           iconBg="bg-emerald-100 dark:bg-emerald-500/10"
           barColor="var(--chart-3)"
           matches={snapshot.llegandoFiscal}
+          trucks={snapshot.trucksLlegandoFiscal}
           emptyLabel="Sin arribos fiscales hoy"
           onRowClick={openOpMatch}
           column="llegandoFiscal"
@@ -505,6 +462,9 @@ interface TodayCardProps {
   iconBg: string
   barColor: string
   matches: OpMatch[]
+  /** Consolidados de esta columna. Van arriba de las cargas sueltas: el camión
+   *  se mueve como una unidad y sus cargas no se repiten abajo. */
+  trucks?: TruckMatch[]
   emptyLabel: string
   onRowClick: (match: OpMatch) => void
   /** Columna de HOY → determina qué paso de aviso marca el chip de la fila. */
@@ -515,9 +475,10 @@ interface TodayCardProps {
   onToggleAviso: (shipment: ParsedShipment, cntr: string, key: CheckStepKey, label: string) => void
 }
 
-function TodayCard({ title, subtitle, icon, iconBg, barColor, matches, emptyLabel, onRowClick, column, checksByRef, onToggleAviso }: TodayCardProps) {
+function TodayCard({ title, subtitle, icon, iconBg, barColor, matches, trucks = [], emptyLabel, onRowClick, column, checksByRef, onToggleAviso }: TodayCardProps) {
   const stepKey = AVISO_STEP_BY_COLUMN[column]
   const avisoLabel = AVISO_LABEL_BY_COLUMN[column]
+  const total = matches.length + trucks.length
   return (
     <Card
       className="accent-top overflow-hidden shadow-sm hover:shadow-md transition-shadow card-lift"
@@ -531,10 +492,37 @@ function TodayCard({ title, subtitle, icon, iconBg, barColor, matches, emptyLabe
             <p className="text-[11px] text-muted-foreground truncate">{subtitle}</p>
           </div>
           <span className="inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-full bg-muted text-foreground text-xs font-bold tabular-nums">
-            {matches.length}
+            {total}
           </span>
         </div>
-        {matches.length === 0 ? (
+        {/* Consolidados primero: son un camión entero, no una carga suelta. */}
+        {trucks.length > 0 && (
+          <div className="mb-3 space-y-2">
+            {trucks.map(({ truck, refs, kg, m3 }) => (
+              <div
+                key={truck.id}
+                className="rounded-lg border border-amber-300/70 bg-amber-50/60 dark:bg-amber-500/5 px-3 py-2.5"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold text-sm">🚛 {truck.code}</span>
+                  <Badge variant="outline" className="text-[10px] whitespace-nowrap border-amber-400 text-amber-700 dark:text-amber-400">
+                    Consolidado
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1 truncate" title={refs.join(', ')}>
+                  {truck.transport || 'Sin transporte'}
+                  {refs.length > 0 ? ` · Lleva: ${refs.join(', ')}` : ' · Sin cargas'}
+                </p>
+                {(kg > 0 || m3 > 0) && (
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    {Math.round(kg).toLocaleString('es-UY')} kg · {m3.toLocaleString('es-UY', { maximumFractionDigits: 1 })} m³
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        {total === 0 ? (
           <div className="py-8 text-center text-xs text-muted-foreground italic">{emptyLabel}</div>
         ) : (
           <div className="divide-y divide-border/60">

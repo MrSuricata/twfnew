@@ -6,11 +6,16 @@ import {
   llegandoFiscalHoy,
   libreAlerts,
   buildTodaySnapshot,
+  refsEnConsolidado,
+  trucksSalientesHoy,
+  trucksEnFronteraHoy,
+  trucksLlegandoFiscalHoy,
   AVISO_STEP_BY_COLUMN,
   AVISO_LABEL_BY_COLUMN,
   type TodayColumn,
 } from './todayFilters'
 import { CHECK_STEPS, type CheckStepKey } from './checksTypes'
+import type { Truck, TruckLoad } from './truckTypes'
 
 // Mock today = 2026-04-20 (local)
 beforeAll(() => {
@@ -266,5 +271,107 @@ describe('AVISO_STEP_BY_COLUMN', () => {
     for (const col of Object.keys(AVISO_STEP_BY_COLUMN) as TodayColumn[]) {
       expect(AVISO_LABEL_BY_COLUMN[col]).toBeTruthy()
     }
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────
+// Consolidados en HOY (05/08/2026)
+// Un camión se mueve como una unidad: entra a las columnas como UNA tarjeta
+// y sus cargas no se listan sueltas.
+// ─────────────────────────────────────────────────────────────────────────
+
+function mkTruck(partial: Partial<Truck>): Truck {
+  return {
+    id: partial.id ?? 't1',
+    code: partial.code ?? 'C500',
+    status: partial.status ?? 'planning',
+    isSider: false,
+    transport: partial.transport ?? 'TRANSCAL',
+    driver: '', plate: '',
+    loadDate: partial.loadDate ?? '',
+    departureDate: partial.departureDate ?? '',
+    arrivalDate: partial.arrivalDate ?? '',
+    notes: '',
+    draft: partial.draft ?? false,
+    pendingEdits: null,
+    costDespacho: 0, costFlete: 0, costCarga: 0,
+    createdAt: 0, updatedAt: 0,
+  } as Truck
+}
+
+function mkLoad(truckId: string, sourceRef: string, extra: Partial<TruckLoad> = {}): TruckLoad {
+  return {
+    id: `l-${sourceRef}`, truckId, sourceType: 'fcl', sourceRef,
+    client: '', fiscal: '', kg: 1000, m3: 10, pkgs: 5, description: '',
+    mvdArrival: '', desconsolDate: '', bl: '', stock: '', wood: '',
+    overrides: null, position: 0, pending: null,
+    ...extra,
+  } as TruckLoad
+}
+
+describe('consolidados en las columnas de HOY', () => {
+  it('un camión que sale hoy va a salientes, no a frontera ni a fiscal', () => {
+    const trucks = [mkTruck({ id: 't1', code: 'C500', departureDate: TODAY, arrivalDate: TOMORROW })]
+    const loads = [mkLoad('t1', 'A7758 B')]
+    expect(trucksSalientesHoy(trucks, loads).map(x => x.truck.code)).toEqual(['C500'])
+    expect(trucksEnFronteraHoy(trucks, loads)).toHaveLength(0)
+    expect(trucksLlegandoFiscalHoy(trucks, loads)).toHaveLength(0)
+  })
+
+  it('un camión que salió y todavía no llegó está en frontera', () => {
+    const trucks = [mkTruck({ id: 't1', departureDate: TWO_DAYS_AGO, arrivalDate: TOMORROW })]
+    expect(trucksEnFronteraHoy(trucks, [])).toHaveLength(1)
+    // y sigue en frontera aunque haya salido hace más de 2 días: la fecha del
+    // camión es dato real, no la estimación que se usa para cargas sueltas
+    const viejo = [mkTruck({ id: 't2', departureDate: THREE_DAYS_AGO, arrivalDate: '' })]
+    expect(trucksEnFronteraHoy(viejo, [])).toHaveLength(1)
+  })
+
+  it('un camión que llega hoy va a fiscal y sale de frontera', () => {
+    const trucks = [mkTruck({ id: 't1', departureDate: TWO_DAYS_AGO, arrivalDate: TODAY })]
+    expect(trucksLlegandoFiscalHoy(trucks, [])).toHaveLength(1)
+    expect(trucksEnFronteraHoy(trucks, [])).toHaveLength(0)
+  })
+
+  it('los camiones borrador no aparecen', () => {
+    const trucks = [mkTruck({ id: 't1', departureDate: TODAY, draft: true })]
+    expect(trucksSalientesHoy(trucks, [])).toHaveLength(0)
+    expect(refsEnConsolidado(trucks, [mkLoad('t1', 'A7758 B')]).size).toBe(0)
+  })
+
+  it('la tarjeta del camión resume refs, kg y m3 de sus cargas', () => {
+    const trucks = [mkTruck({ id: 't1', departureDate: TODAY })]
+    const loads = [
+      mkLoad('t1', 'A7758 B', { kg: 7270, m3: 13.5 }),
+      mkLoad('t1', 'A7827 B', { kg: 7270, m3: 13.08 }),
+      mkLoad('t1', 'A9999', { pending: 'add' }),      // sin confirmar: no cuenta
+      mkLoad('otro', 'A8888'),                         // de otro camión
+    ]
+    const [m] = trucksSalientesHoy(trucks, loads)
+    expect(m.refs).toEqual(['A7758 B', 'A7827 B'])
+    expect(m.kg).toBe(14540)
+    expect(m.m3).toBeCloseTo(26.58, 2)
+  })
+
+  it('las cargas que viajan en un consolidado no se listan sueltas', () => {
+    const enCamion = mkShip('A7758 B', [mkOp({ SALIDA: TODAY, ETA_FISC: TOMORROW })])
+    const suelta = mkShip('A7500', [mkOp({ SALIDA: TODAY })])
+    const trucks = [mkTruck({ id: 't1', departureDate: TODAY })]
+    const loads = [mkLoad('t1', 'A7758 B')]
+
+    const snap = buildTodaySnapshot([enCamion, suelta], trucks, loads)
+    expect(snap.salientes.map(m => m.shipment.REF)).toEqual(['A7500'])
+    expect(snap.trucksSalientes).toHaveLength(1)
+    // el consolidado cuenta como movimiento del día
+    expect(snap.totalCount).toBe(2)
+    expect(snap.hasMovement).toBe(true)
+  })
+
+  it('sin camiones, el snapshot se comporta igual que antes', () => {
+    const s = mkShip('A7500', [mkOp({ SALIDA: TODAY })])
+    const snap = buildTodaySnapshot([s])
+    expect(snap.salientes).toHaveLength(1)
+    expect(snap.trucksSalientes).toHaveLength(0)
+    expect(snap.totalCount).toBe(1)
   })
 })
