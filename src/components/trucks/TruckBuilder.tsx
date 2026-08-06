@@ -49,6 +49,12 @@ import AvailableLoadsPanel from './AvailableLoadsPanel'
 import NewShipmentDialog from '@/components/operations/NewShipmentDialog'
 import { isSinTelex, SIN_TELEX_MSG } from '@/lib/telexCheck'
 import { exportTruckPdf } from '@/lib/truckExport'
+import { conflictoFechasConsolidado, type ConflictoFechas } from '@/lib/truckUtils'
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import { fmtDateDMY } from '@/lib/format'
 
 interface TruckBuilderProps {
   truck: Truck
@@ -66,10 +72,12 @@ interface TruckBuilderProps {
   onDeleteTruck: (id: string) => void
   /** Alta real de una carga (App.handleCreateShipment). false = abortada. */
   onCreateShipment?: (row: DbShipment) => boolean | void
+  /** PATCH de una carga — para alinear sus fechas con las del consolidado. */
+  onPatchShipment?: (id: string, fields: Record<string, unknown>) => void
 }
 
 export default function TruckBuilder(props: TruckBuilderProps) {
-  const { truck, trucks, truckLoads, lclAir, dbShipments, shipments, operators, onBack, onUpdateTrucks, onUpdateTruckLoads, onDeleteTruckLoad, onDeleteTruck, onCreateShipment } = props
+  const { truck, trucks, truckLoads, lclAir, dbShipments, shipments, operators, onBack, onUpdateTrucks, onUpdateTruckLoads, onDeleteTruckLoad, onDeleteTruck, onCreateShipment, onPatchShipment } = props
 
   const isDraft = truck.draft
   // Lo que se VE y EDITA: el camión con el overlay aplicado.
@@ -150,9 +158,24 @@ export default function TruckBuilder(props: TruckBuilderProps) {
   }
 
   // ── Add from panel ──
+  // Choque de fechas al subir una carga ya coordinada a un consolidado: se
+  // pregunta cuál manda en vez de pisar en silencio (Brian 06/08/2026).
+  const [conflicto, setConflicto] = useState<
+    { shipment: ParsedShipment; cntr: string; datos: ConflictoFechas } | null
+  >(null)
+
   // cntr = contenedor elegido de esa carga. Un camión lleva UNO: si la carga
   // tiene varios, se agrega una línea por contenedor (Brian 06/08/2026).
   const addFcl = (s: ParsedShipment, cntr = '') => {
+    const choque = conflictoFechasConsolidado(s, cntr, merged)
+    if (choque) {
+      setConflicto({ shipment: s, cntr, datos: choque })
+      return                       // se agrega al resolver el diálogo
+    }
+    agregarFcl(s, cntr)
+  }
+
+  const agregarFcl = (s: ParsedShipment, cntr = '') => {
     const prefill = prefillFclFromShipment(s, cntr)
     const load: TruckLoad = {
       id: newId('load'),
@@ -645,6 +668,80 @@ export default function TruckBuilder(props: TruckBuilderProps) {
           />
         </Card>
       </div>
+
+      {/* Choque de fechas: la carga ya tenía salida coordinada y el consolidado
+          sale otro día. Se pregunta cuál manda — pisar en silencio dejaba la
+          misma carga en dos días distintos de la agenda. */}
+      <AlertDialog open={!!conflicto} onOpenChange={(o) => { if (!o) setConflicto(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {conflicto?.shipment.REF} ya tenía salida coordinada
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm">
+                <p>Esta carga sale en una fecha y el consolidado en otra. Si las dejás
+                  distintas, la vas a ver dos veces en la agenda.</p>
+                <div className="rounded-md border divide-y text-[13px]">
+                  <div className="flex justify-between px-3 py-2">
+                    <span className="text-muted-foreground">Coordinada en la carga</span>
+                    <span className="font-medium">
+                      sale {fmtDateDMY(conflicto?.datos.salidaCarga || '')}
+                      {conflicto?.datos.fiscalCarga ? ` · fiscal ${fmtDateDMY(conflicto.datos.fiscalCarga)}` : ''}
+                    </span>
+                  </div>
+                  <div className="flex justify-between px-3 py-2 bg-muted/40">
+                    <span className="text-muted-foreground">Camión {merged.code}</span>
+                    <span className="font-medium">
+                      sale {fmtDateDMY(conflicto?.datos.salidaCamion || '')}
+                      {conflicto?.datos.fiscalCamion ? ` · fiscal ${fmtDateDMY(conflicto.datos.fiscalCamion)}` : ''}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2">
+            <AlertDialogCancel onClick={() => setConflicto(null)}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-secondary text-secondary-foreground hover:bg-secondary/80"
+              onClick={() => {
+                if (!conflicto) return
+                agregarFcl(conflicto.shipment, conflicto.cntr)
+                toast.info(`${conflicto.shipment.REF} sube al camión con su fecha original`)
+                setConflicto(null)
+              }}
+            >
+              Dejar la carga como estaba
+            </AlertDialogAction>
+            <AlertDialogAction
+              onClick={() => {
+                if (!conflicto) return
+                const { shipment, cntr, datos } = conflicto
+                const id = (shipment as unknown as { id?: string }).id
+                if (id && onPatchShipment) {
+                  // La fecha del camión pasa a ser la real: se escribe en el
+                  // array por contenedor (el server recalcula las columnas).
+                  const buscado = cntr.trim().toUpperCase()
+                  const ops = (shipment.operativas || []).map(o =>
+                    (!buscado || String(o.CNTR_OP || '').trim().toUpperCase() === buscado)
+                      ? { ...o, SALIDA: datos.salidaCamion, ETA_FISC: datos.fiscalCamion || o.ETA_FISC }
+                      : o
+                  )
+                  onPatchShipment(id, { operativas: ops })
+                  toast.success(`${shipment.REF} tomó las fechas del camión ${merged.code}`)
+                } else {
+                  toast.warning(`${shipment.REF} se agregó, pero no se pudieron actualizar sus fechas`)
+                }
+                agregarFcl(shipment, cntr)
+                setConflicto(null)
+              }}
+            >
+              Usar la fecha del consolidado
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Alta de carga sin salir del armador (mismo diálogo que Operaciones) */}
       {onCreateShipment && (

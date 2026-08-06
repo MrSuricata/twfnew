@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { prefillFclFromShipment, makeEmptyTruckLoad, getAssignedCntrs, contenedoresLibres, isFclAvailable } from './truckUtils'
+import { prefillFclFromShipment, makeEmptyTruckLoad, getAssignedCntrs, contenedoresLibres, isFclAvailable, conflictoFechasConsolidado } from './truckUtils'
 import type { Truck, TruckLoad } from './truckTypes'
 import type { ParsedShipment, OperativasRecord } from './shipmentTypes'
 
@@ -120,5 +120,57 @@ describe('contenedores libres para consolidar', () => {
   it('carga sin contenedores cargados: una sola opción, la ref entera', () => {
     const s = ship({ REF: 'A9000', operativas: [op({ CNTR_OP: '' })] })
     expect(contenedoresLibres(s, new Set())).toEqual([''])
+  })
+})
+
+// ── Choque de fechas carga vs consolidado (Brian 06/08/2026) ───────────
+describe('conflictoFechasConsolidado', () => {
+  const camion = (over: Partial<Truck> = {}): Truck =>
+    ({ id: 't1', code: 'A7806A + A7806B', departureDate: '2026-08-07',
+       arrivalDate: '2026-08-10', loadDate: '2026-08-07', ...over }) as Truck
+
+  it('detecta el caso real: carga sale el 6 y el camión el 7', () => {
+    const s = ship({ REF: 'A7806 A', operativas: [op({ CNTR_OP: 'KOCU4509137', SALIDA: '2026-08-06' })] })
+    const c = conflictoFechasConsolidado(s, 'KOCU4509137', camion())
+    expect(c).not.toBeNull()
+    expect(c!.salidaCarga).toBe('2026-08-06')
+    expect(c!.salidaCamion).toBe('2026-08-07')
+  })
+
+  it('sin salida propia no hay conflicto (toma la del camión)', () => {
+    const s = ship({ operativas: [op({ SALIDA: '' })] })
+    expect(conflictoFechasConsolidado(s, 'C1', camion())).toBeNull()
+  })
+
+  it('"CONFIRMAR" no es una fecha coordinada → sin conflicto', () => {
+    const s = ship({ operativas: [op({ SALIDA: 'CONFIRMAR' })] })
+    expect(conflictoFechasConsolidado(s, 'C1', camion())).toBeNull()
+  })
+
+  it('mismas fechas → sin conflicto', () => {
+    const s = ship({ operativas: [op({ SALIDA: '2026-08-07', ETA_FISC: '2026-08-10' })] })
+    expect(conflictoFechasConsolidado(s, 'C1', camion())).toBeNull()
+  })
+
+  it('misma salida pero distinta llegada a fiscal → sí avisa', () => {
+    const s = ship({ operativas: [op({ SALIDA: '2026-08-07', ETA_FISC: '2026-08-12' })] })
+    expect(conflictoFechasConsolidado(s, 'C1', camion())).not.toBeNull()
+  })
+
+  it('sólo mira el contenedor que se está subiendo', () => {
+    const s = ship({
+      REF: 'A7806 A',
+      operativas: [
+        op({ CNTR_OP: 'HMMU4917976', SALIDA: '2026-08-07' }),   // coincide
+        op({ CNTR_OP: 'KOCU4509137', SALIDA: '2026-08-06' }),   // choca
+      ],
+    })
+    expect(conflictoFechasConsolidado(s, 'HMMU4917976', camion())).toBeNull()
+    expect(conflictoFechasConsolidado(s, 'KOCU4509137', camion())).not.toBeNull()
+  })
+
+  it('camión sin fecha de salida → no se compara nada', () => {
+    const s = ship({ operativas: [op({ SALIDA: '2026-08-06' })] })
+    expect(conflictoFechasConsolidado(s, 'C1', camion({ departureDate: '', loadDate: '' }))).toBeNull()
   })
 })

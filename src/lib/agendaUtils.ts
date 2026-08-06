@@ -313,7 +313,12 @@ export function trucksToEvents(
   truckLoads: TruckLoad[],
   /** Refs (normalizadas UPPER/trim) de cargas SIN telex — para alertar 🚨 en
    *  los hitos del camión que las lleva. El caller la arma desde dbShipments. */
-  sinTelexRefs?: Set<string>
+  sinTelexRefs?: Set<string>,
+  /** REF (UPPER/trim) → depósito de esa carga. El camión no tiene depósito
+   *  propio: carga donde están sus cargas, así que lo hereda de ellas. Sin
+   *  esto el consolidado se caía del filtro por depósito (Brian 06/08/2026:
+   *  "cuando filtro PLANIR me debe mostrar el consolidado"). */
+  depoByRef?: Map<string, string>
 ): CalendarEvent[] {
   const events: CalendarEvent[] = []
   const today = new Date()
@@ -328,13 +333,18 @@ export function trucksToEvents(
     const m3 = loads.reduce((a, l) => a + (Number(l.m3) || 0), 0)
     const pkgs = loads.reduce((a, l) => a + (Number(l.pkgs) || 0), 0)
     const fiscal = loads.find(l => l.fiscal)?.fiscal || ''
+    // Depósito(s) donde carga el camión = los de sus cargas.
+    const depositos = depoByRef
+      ? [...new Set(refs.map(r => depoByRef.get(r.trim().toUpperCase())).filter(Boolean) as string[])]
+      : []
+    const depositoCamion = depositos.join(' / ')
     const cliente = `Camión consolidado${t.transport ? ' · ' + t.transport : ''}`
     const descripcion = refs.length ? `Lleva: ${refs.join(', ')}` : 'Sin cargas asignadas'
     const statusLabel = deriveTruckDisplayInfo(t, today).label
 
     const shipment = processShipmentRecord({ REF: t.code, CLIENTE: cliente })
     const op: OperativasRecord = {
-      REF: t.code, TLX: '', DEPOSITO: '', ETA_OP: '', SALIDA: t.departureDate || '',
+      REF: t.code, TLX: '', DEPOSITO: depositoCamion, ETA_OP: '', SALIDA: t.departureDate || '',
       ETA_FISC: t.arrivalDate || '', LIBRE: '', OPERATIVA: 'CAMIÓN', CNTR_OP: t.plate || '',
       PKGS: pkgs, KG: kg, M3: m3, DESCRIPCION: descripcion, FISCAL: fiscal, DESCARGA: '',
       DEV: '', CLIENTE_OP: cliente, TIPO: t.isSider ? 'SIDER' : 'CAMIÓN', WOOD: '',
@@ -367,7 +377,7 @@ export function trucksToEvents(
         tipo: t.isSider ? 'SIDER' : 'CAMIÓN',
         cliente,
         fiscal,
-        deposito: '',
+        deposito: depositoCamion,
         libre: '',
         descripcion,
         kg, pkgs, m3,
