@@ -70,6 +70,10 @@ export interface TruckLoad {
   truckId: string
   sourceType: LoadSource
   sourceRef: string                 // A7611, LCL-0042, AIR-0001
+  /** Contenedor de esa carga que viaja en ESTE camión. Vacío = la referencia
+   *  entera (LCL/aéreo, o línea anterior a 08/2026). Una carga FCL con varios
+   *  contenedores entra como una línea por contenedor: el camión lleva uno. */
+  cntr: string
   client: string
   fiscal: string
   kg: number

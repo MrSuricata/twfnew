@@ -55,9 +55,10 @@ export function toIsoDate(d: Date): string {
 }
 
 // ── Pre-fill an FCL load from the planilla data ──
-// Returns null if the ref is not found. Operativas can have multiple rows
-// (split containers) — we collapse them: sum kg/m3/pkgs, take fiscal/desc
-// from the first non-empty.
+// Con `cntr`: los datos son los de ESE contenedor (un camión lleva uno).
+// Sin `cntr`: se colapsan todos — suma de kg/m3/pkgs y el primer valor no vacío
+// del resto. Ese era el único modo hasta 08/2026 y arrastraba el total de una
+// carga multi-contenedor a un solo camión (A7806 A: 2 contenedores, 21.984 kg).
 export interface FclPrefill {
   client: string
   fiscal: string
@@ -71,8 +72,13 @@ export interface FclPrefill {
   wood: boolean
 }
 
-export function prefillFclFromShipment(shipment: ParsedShipment): FclPrefill {
-  const ops = shipment.operativas || []
+export function prefillFclFromShipment(shipment: ParsedShipment, cntr?: string): FclPrefill {
+  const todas = shipment.operativas || []
+  const buscado = String(cntr || '').trim().toUpperCase()
+  // Si se pidió un contenedor, sólo cuentan sus operativas.
+  const ops = buscado
+    ? todas.filter(o => String(o.CNTR_OP || '').trim().toUpperCase() === buscado)
+    : todas
   const kg = ops.reduce((s, o) => s + (Number(o.KG) || 0), 0) || 0
   const m3 = ops.reduce((s, o) => s + (Number(o.M3) || 0), 0) || 0
   const pkgs = ops.reduce((s, o) => s + (Number(o.PKGS) || 0), 0) || 0
@@ -112,6 +118,50 @@ export function getAssignedRefs(loads: TruckLoad[], trucks: Truck[]): Set<string
   return out
 }
 
+/** Clave de un contenedor dentro de una carga: 'REF::CNTR' (o 'REF::' entero). */
+export function cntrKey(ref: string, cntr: string): string {
+  return `${String(ref || '').trim().toUpperCase()}::${String(cntr || '').trim().toUpperCase()}`
+}
+
+/**
+ * Contenedores ya asignados a un camión activo, como claves 'REF::CNTR'.
+ *
+ * Una línea vieja sin contenedor ('') vale por la carga ENTERA: se marca con
+ * la clave 'REF::' y `contenedoresLibres` la interpreta como "no queda nada".
+ */
+export function getAssignedCntrs(loads: TruckLoad[], trucks: Truck[]): Set<string> {
+  const activeTruckIds = new Set(
+    trucks.filter(t => t.status !== 'delivered').map(t => t.id)
+  )
+  const out = new Set<string>()
+  for (const l of loads) {
+    if (activeTruckIds.has(l.truckId)) out.add(cntrKey(l.sourceRef, l.cntr || ''))
+  }
+  return out
+}
+
+/**
+ * Contenedores de una carga que TODAVÍA no están en ningún camión.
+ *
+ * Es lo que hace que A7806 A siga disponible cuando cargaste sólo uno de sus
+ * dos contenedores: el otro se puede seguir consolidando (Brian 06/08/2026).
+ */
+export function contenedoresLibres(
+  shipment: ParsedShipment,
+  asignados: Set<string>
+): string[] {
+  const ref = String(shipment.REF || '').trim()
+  // Línea vieja "carga entera" → nada libre.
+  if (asignados.has(cntrKey(ref, ''))) return []
+  const ops = shipment.operativas || []
+  const cntrs = [...new Set(
+    ops.map(o => String(o.CNTR_OP || '').trim()).filter(Boolean)
+  )]
+  // Sin contenedores cargados: se comporta como antes (la ref entera).
+  if (cntrs.length === 0) return asignados.has(cntrKey(ref, '')) ? [] : ['']
+  return cntrs.filter(c => !asignados.has(cntrKey(ref, c)))
+}
+
 /** Filter: a shipment is "available for truck assignment" when:
  *   - it has at least one operativa (real cargo, not just a placeholder)
  *   - it is not already in an active truck
@@ -133,7 +183,15 @@ export function isFclAvailable(
 ): boolean {
   const { showArchived = false, maxDaysAheadEta = 30, maxDaysAgoEta = 120 } = opts
   if (!shipment.REF) return false
-  if (assignedRefs.has(shipment.REF)) return false
+  // `assignedRefs` puede venir como claves 'REF::CNTR' (getAssignedCntrs): en
+  // ese caso la carga sigue disponible mientras le quede algún contenedor sin
+  // consolidar. Con el set viejo de refs planas, se comporta como antes.
+  const porContenedor = [...assignedRefs].some(k => k.includes('::'))
+  if (porContenedor) {
+    if (contenedoresLibres(shipment, assignedRefs).length === 0) return false
+  } else if (assignedRefs.has(shipment.REF)) {
+    return false
+  }
   const ops = shipment.operativas || []
   if (ops.length === 0) return false
 
@@ -262,13 +320,15 @@ export function makeEmptyTruckLoad(
   truckId: string,
   sourceType: LoadSource,
   sourceRef: string,
-  position: number
+  position: number,
+  cntr = ''
 ): TruckLoad {
   return {
     id: newId('load'),
     truckId,
     sourceType,
     sourceRef,
+    cntr,
     client: '',
     fiscal: '',
     kg: 0,

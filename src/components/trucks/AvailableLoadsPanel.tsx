@@ -15,7 +15,7 @@ import { Plus, MagnifyingGlass, Package, Boat, Airplane, Truck as TruckIcon } fr
 import type { ParsedShipment } from '@/lib/shipmentTypes'
 import type { LclAirShipment, Truck, TruckLoad, LoadSource } from '@/lib/truckTypes'
 import type { DbShipment } from '@/lib/operationsTypes'
-import { formatKg, formatM3, getAssignedRefs, isFclAvailable, isLclAirAvailable } from '@/lib/truckUtils'
+import { formatKg, formatM3, getAssignedCntrs, cntrKey, contenedoresLibres, isFclAvailable, isLclAirAvailable } from '@/lib/truckUtils'
 
 interface AvailableLoadsPanelProps {
   shipments: ParsedShipment[]
@@ -24,7 +24,7 @@ interface AvailableLoadsPanelProps {
   trucks: Truck[]
   truckLoads: TruckLoad[]
   currentTruckId: string
-  onAddFcl: (shipment: ParsedShipment) => void
+  onAddFcl: (shipment: ParsedShipment, cntr?: string) => void
   onAddLclAir: (shipment: LclAirShipment) => void
   onAddDb?: (shipment: DbShipment) => void
   /** Abre el alta de carga desde el armador (cuando la carga aún no existe). */
@@ -35,6 +35,9 @@ type ModeFilter = 'all' | 'fcl' | 'lcl' | 'air'
 
 interface AvailableRow {
   ref: string
+  /** Contenedor concreto de la carga. Una FCL con varios contenedores aparece
+   *  como una fila POR CONTENEDOR: el camión lleva uno (Brian 06/08/2026). */
+  cntr?: string
   type: LoadSource
   client: string
   fiscal: string
@@ -79,14 +82,15 @@ export default function AvailableLoadsPanel({
   const assignedElsewhere = useMemo(() => {
     const otherTrucks = trucks.filter(t => t.id !== currentTruckId)
     const otherLoads = truckLoads.filter(l => l.truckId !== currentTruckId)
-    return getAssignedRefs(otherLoads, otherTrucks)
+    return getAssignedCntrs(otherLoads, otherTrucks)
   }, [trucks, truckLoads, currentTruckId])
 
   // Refs already in this truck
+  // Lo que ya está en ESTE camión, por contenedor ('REF::CNTR').
   const inThisTruck = useMemo(() => {
     const out = new Set<string>()
     for (const l of truckLoads) {
-      if (l.truckId === currentTruckId) out.add(l.sourceRef)
+      if (l.truckId === currentTruckId) out.add(cntrKey(l.sourceRef, l.cntr || ''))
     }
     return out
   }, [truckLoads, currentTruckId])
@@ -99,29 +103,37 @@ export default function AvailableLoadsPanel({
     // FCL from planilla
     if (modeFilter === 'all' || modeFilter === 'fcl') {
       for (const s of shipments) {
-        if (inThisTruck.has(s.REF)) continue
         if (!isFclAvailable(s, assignedElsewhere, { showArchived })) continue
-        const ops = s.operativas || []
-        const kg = ops.reduce((sum, o) => sum + (Number(o.KG) || 0), 0)
-        const m3 = ops.reduce((sum, o) => sum + (Number(o.M3) || 0), 0)
-        const pkgs = ops.reduce((sum, o) => sum + (Number(o.PKGS) || 0), 0)
-        const fiscal = ops.find(o => o.FISCAL)?.FISCAL || ''
         if (onlyArrived && s.ETA) {
           const eta = new Date(s.ETA)
           if (eta.getTime() > today.getTime()) continue
         }
-        out.push({
-          ref: s.REF,
-          type: 'fcl',
-          client: s.CLIENTE,
-          fiscal,
-          kg,
-          m3,
-          pkgs,
-          description: ops.find(o => o.DESCRIPCION)?.DESCRIPCION || '',
-          mvdArrival: s.ETA || '',
-          fcl: s,
-        })
+        const ops = s.operativas || []
+        // Una fila por contenedor todavía libre: el camión lleva uno. Sin
+        // contenedores cargados, una sola fila por la referencia entera.
+        for (const cntr of contenedoresLibres(s, assignedElsewhere)) {
+          if (inThisTruck.has(cntrKey(s.REF, cntr))) continue
+          const delCntr = cntr
+            ? ops.filter(o => String(o.CNTR_OP || '').trim().toUpperCase() === cntr.trim().toUpperCase())
+            : ops
+          const kg = delCntr.reduce((sum, o) => sum + (Number(o.KG) || 0), 0)
+          const m3 = delCntr.reduce((sum, o) => sum + (Number(o.M3) || 0), 0)
+          const pkgs = delCntr.reduce((sum, o) => sum + (Number(o.PKGS) || 0), 0)
+          out.push({
+            ref: s.REF,
+            cntr,
+            type: 'fcl',
+            client: s.CLIENTE,
+            fiscal: delCntr.find(o => o.FISCAL)?.FISCAL || ops.find(o => o.FISCAL)?.FISCAL || '',
+            kg,
+            m3,
+            pkgs,
+            description: delCntr.find(o => o.DESCRIPCION)?.DESCRIPCION
+              || ops.find(o => o.DESCRIPCION)?.DESCRIPCION || '',
+            mvdArrival: s.ETA || '',
+            fcl: s,
+          })
+        }
       }
     }
 
@@ -201,7 +213,7 @@ export default function AvailableLoadsPanel({
       if (vMin !== null && r.m3 < vMin) return false
       if (vMax !== null && r.m3 > vMax) return false
       if (q) {
-        const blob = `${r.ref} ${r.client} ${r.fiscal} ${r.description}`.toLowerCase()
+        const blob = `${r.ref} ${r.cntr || ''} ${r.client} ${r.fiscal} ${r.description}`.toLowerCase()
         if (!blob.includes(q)) return false
       }
       return true
@@ -316,10 +328,10 @@ export default function AvailableLoadsPanel({
           <>
             {filtered.map(r => (
               <AvailableRowCard
-                key={`${r.type}-${r.ref}`}
+                key={`${r.type}-${r.ref}-${r.cntr || ''}`}
                 row={r}
                 onAdd={() => {
-                  if (r.fcl) onAddFcl(r.fcl)
+                  if (r.fcl) onAddFcl(r.fcl, r.cntr || '')
                   else if (r.db) onAddDb?.(r.db)
                   else if (r.lclAir) onAddLclAir(r.lclAir)
                 }}
@@ -364,6 +376,11 @@ function AvailableRowCard({ row, onAdd }: { row: AvailableRow; onAdd: () => void
             {row.noApilable && <Badge variant="outline" className="h-4 text-[9px] text-amber-700 border-amber-400" title="Carga NO apilable — va arriba de todo">📦 NO APILABLE</Badge>}
             {row.imo && <Badge variant="outline" className="h-4 text-[9px] text-red-700 border-red-400" title="Mercancía peligrosa IMO">☢️ IMO</Badge>}
           </div>
+          {row.cntr && (
+            <p className="text-[11px] font-mono text-foreground/70 truncate mt-0.5" title="Contenedor que se sube a este camión">
+              {row.cntr}
+            </p>
+          )}
           {row.client && (
             <p className="text-xs text-muted-foreground truncate mt-0.5">{row.client}</p>
           )}

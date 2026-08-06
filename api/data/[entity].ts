@@ -1232,6 +1232,9 @@ function mapTruckLoadRowToApi(l: any) {
     truckId: l.truck_id,
     sourceType: l.source_type,
     sourceRef: l.source_ref,
+    // Contenedor concreto de la carga que viaja en este camión ('' = la ref
+    // entera, para LCL/aéreo o líneas previas a 08/2026).
+    cntr: l.cntr || '',
     client: l.client || '',
     fiscal: l.fiscal || '',
     kg: Number(l.kg) || 0,
@@ -1271,6 +1274,7 @@ async function handleTruckLoads(req: VercelRequest, res: VercelResponse, db: any
       truck_id: l.truckId || l.truck_id,
       source_type: l.sourceType || l.source_type || 'fcl',
       source_ref: l.sourceRef || l.source_ref,
+      cntr: l.cntr ?? '',
       client: l.client || '',
       fiscal: l.fiscal || '',
       kg: l.kg ?? 0,
