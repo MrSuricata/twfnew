@@ -34,6 +34,9 @@ interface TruckAgendaDialogProps {
   onOpenDetail?: (ref: string) => void
   /** Refs (UPPER/trim) de cargas SIN telex — alerta 🚨 en la fila. */
   sinTelexRefs?: Set<string>
+  /** REF (UPPER/trim) → contenedor(es) de esa carga. Se usa como respaldo para
+   *  las líneas viejas, anteriores a que el camión guardara el contenedor. */
+  cntrsByRef?: Map<string, string[]>
 }
 
 function FechaBox({ label, value, hoy }: { label: string; value: string; hoy?: boolean }) {
@@ -47,7 +50,7 @@ function FechaBox({ label, value, hoy }: { label: string; value: string; hoy?: b
   )
 }
 
-export default function TruckAgendaDialog({ truck, loads, onClose, onOpenDetail, sinTelexRefs }: TruckAgendaDialogProps) {
+export default function TruckAgendaDialog({ truck, loads, onClose, onOpenDetail, sinTelexRefs, cntrsByRef }: TruckAgendaDialogProps) {
   // Cargas confirmadas del camión (mismo criterio que agenda/estados: las
   // 'add' de un borrador de edición NO existen todavía).
   const mine = useMemo(
@@ -141,6 +144,21 @@ export default function TruckAgendaDialog({ truck, loads, onClose, onOpenDetail,
                     <div className="flex flex-wrap gap-x-3 text-xs text-muted-foreground">
                       <span>{fmtNum(l.pkgs)} bultos · {fmtNum(Math.round(l.kg))} kg · {l.m3} m³</span>
                       {l.bl && <span className="font-mono select-text">BL {l.bl}</span>}
+                      {(() => {
+                        // Contenedor que va en este camión. Si la línea no lo
+                        // tiene guardado (anterior a 08/2026) y la carga tiene
+                        // uno solo, se muestra ese; con varios se avisa que
+                        // falta elegir cuál sube.
+                        const propios = cntrsByRef?.get((l.sourceRef || '').trim().toUpperCase()) || []
+                        const cntr = l.cntr || (propios.length === 1 ? propios[0] : '')
+                        if (cntr) return <span className="font-mono select-text text-foreground/80">CNTR {cntr}</span>
+                        if (propios.length > 1) return (
+                          <span className="text-amber-700" title={`La carga tiene ${propios.length} contenedores: ${propios.join(', ')}. Elegí cuál sube a este camión desde el armador.`}>
+                            ⚠️ sin contenedor elegido ({propios.length})
+                          </span>
+                        )
+                        return null
+                      })()}
                       {l.stock && <span>Stock {l.stock}</span>}
                       {l.description && <span className="truncate max-w-[16rem]">{l.description}</span>}
                     </div>

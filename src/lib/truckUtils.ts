@@ -398,3 +398,46 @@ export function commitPendingArrays(
 
 /** Cycle through possible next statuses for the lifecycle stepper. */
 export const TRUCK_STATUS_ORDER: TruckStatus[] = ['planning', 'loaded', 'in_transit', 'delivered']
+
+/**
+ * Choque de fechas entre una carga y el consolidado que la lleva.
+ *
+ * Caso real (Brian 06/08/2026): el camión A7806A+A7806B sale el 07/08 pero
+ * A7806 A y A7806 B seguían con SALIDA propia el 06/08 — en la agenda la misma
+ * carga aparecía dos días distintos. Un consolidado manda sobre las fechas de
+ * lo que lleva, pero la coordinación previa puede ser la buena: por eso se
+ * pregunta en vez de pisar.
+ *
+ * Devuelve null cuando no hay con qué comparar o las fechas ya coinciden.
+ */
+export interface ConflictoFechas {
+  salidaCarga: string
+  salidaCamion: string
+  fiscalCarga: string
+  fiscalCamion: string
+}
+
+export function conflictoFechasConsolidado(
+  shipment: ParsedShipment,
+  cntr: string,
+  truck: Truck
+): ConflictoFechas | null {
+  const salidaCamion = (truck.departureDate || truck.loadDate || '').trim()
+  if (!salidaCamion) return null
+  const buscado = String(cntr || '').trim().toUpperCase()
+  const ops = (shipment.operativas || []).filter(o =>
+    !buscado || String(o.CNTR_OP || '').trim().toUpperCase() === buscado
+  )
+  // Primera fecha REAL coordinada (ignora 'CONFIRMAR' / '#N/A' / vacío).
+  const real = (v: unknown): string => {
+    const s = String(v ?? '').trim()
+    return /^\d{4}-\d{2}-\d{2}/.test(s) ? s : ''
+  }
+  const salidaCarga = ops.map(o => real(o.SALIDA)).find(Boolean) || ''
+  const fiscalCarga = ops.map(o => real(o.ETA_FISC)).find(Boolean) || ''
+  const fiscalCamion = (truck.arrivalDate || '').trim()
+  // Sin salida propia no hay conflicto: la carga toma la del camión y listo.
+  if (!salidaCarga) return null
+  if (salidaCarga === salidaCamion && (!fiscalCarga || fiscalCarga === fiscalCamion)) return null
+  return { salidaCarga, salidaCamion, fiscalCarga, fiscalCamion }
+}

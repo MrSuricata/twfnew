@@ -103,19 +103,46 @@ export default function AgendaCalendar({
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
   )
 
+  // REF → depósito: el camión consolidado no tiene depósito propio, carga
+  // donde están sus cargas. Sin esto se caía del filtro por depósito.
+  const depoByRef = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const s of shipments) {
+      const dep = (s.operativas ?? []).find(o => o.DEPOSITO)?.DEPOSITO
+      if (dep && s.REF) m.set(s.REF.trim().toUpperCase(), dep.trim().toUpperCase())
+    }
+    return m
+  }, [shipments])
+
+  // REF → contenedores de esa carga: respaldo para mostrar el contenedor en el
+  // modal del camión cuando la línea es anterior a que se guardara.
+  const cntrsByRef = useMemo(() => {
+    const m = new Map<string, string[]>()
+    for (const s of shipments) {
+      if (!s.REF) continue
+      const cs = [...new Set((s.operativas ?? [])
+        .map(o => String(o.CNTR_OP || '').trim()).filter(Boolean))]
+      if (cs.length) m.set(s.REF.trim().toUpperCase(), cs)
+    }
+    return m
+  }, [shipments])
+
   // Transform all shipments into calendar events (+ hitos de camiones)
   const allEvents = useMemo(() => {
     const list = shipmentsToEvents(shipments, depotFilter, transportFilter)
-    if (trucks?.length) list.push(...trucksToEvents(trucks, truckLoads || [], sinTelexRefs))
+    if (trucks?.length) list.push(...trucksToEvents(trucks, truckLoads || [], sinTelexRefs, depoByRef))
     list.sort((a, b) => a.date.localeCompare(b.date))
     return list
-  }, [shipments, trucks, truckLoads, depotFilter, transportFilter, sinTelexRefs])
+  }, [shipments, trucks, truckLoads, depotFilter, transportFilter, sinTelexRefs, depoByRef])
 
   // Extract unique depots from events
   const availableDepots = useMemo(() => {
     const depots = new Set<string>()
     for (const e of allEvents) {
-      if (e.deposito) depots.add(e.deposito.toUpperCase())
+      if (!e.deposito) continue
+      for (const p of e.deposito.split(/[/,+]/).map(x => x.trim().toUpperCase()).filter(Boolean)) {
+        depots.add(p)
+      }
     }
     return Array.from(depots).sort()
   }, [allEvents])
@@ -147,7 +174,13 @@ export default function AgendaCalendar({
       list = list.filter(e => e.id.startsWith('truck-'))
     }
     if (activeDepots.size > 0) {
-      list = list.filter(e => e.deposito && activeDepots.has(e.deposito.toUpperCase()))
+      // El depósito puede venir múltiple en un consolidado ("PLANIR / GODILCO"):
+      // entra si CUALQUIERA de los suyos está filtrado.
+      list = list.filter(e => {
+        if (!e.deposito) return false
+        const parts = e.deposito.split(/[/,+]/).map(x => x.trim().toUpperCase()).filter(Boolean)
+        return parts.some(p => activeDepots.has(p))
+      })
     }
     if (activeTransports.size > 0) {
       list = list.filter(e => {
@@ -626,6 +659,7 @@ export default function AgendaCalendar({
         onClose={() => setSelectedTruck(null)}
         onOpenDetail={onOpenDetail}
         sinTelexRefs={sinTelexRefs}
+        cntrsByRef={cntrsByRef}
       />
     </div>
   )

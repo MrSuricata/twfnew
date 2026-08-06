@@ -25,6 +25,8 @@ interface TrucksManagementProps {
   onRefreshTrucks?: () => Promise<boolean>
   /** Alta real de una carga (App.handleCreateShipment). false = abortada. */
   onCreateShipment?: (row: DbShipment) => boolean | void
+  /** PATCH de una carga — para alinear sus fechas con las del consolidado. */
+  onPatchShipment?: (id: string, fields: Record<string, unknown>) => void
 }
 
 export default function TrucksManagement(props: TrucksManagementProps) {
@@ -68,6 +70,7 @@ export default function TrucksManagement(props: TrucksManagementProps) {
         onDeleteTruckLoad={props.onDeleteTruckLoad}
         onDeleteTruck={props.onDeleteTruck}
         onCreateShipment={props.onCreateShipment}
+        onPatchShipment={props.onPatchShipment}
       />
     )
   }

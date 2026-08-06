@@ -506,6 +506,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
               onDeleteLclAir={(id) => { if (onDeleteLclAir) onDeleteLclAir(id) }}
               onRefreshTrucks={onRefreshTrucks}
               onCreateShipment={onCreateShipment}
+              onPatchShipment={onPatchShipment}
             />
           </TabsContent>
 
