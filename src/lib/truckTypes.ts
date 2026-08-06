@@ -270,3 +270,26 @@ export const COST_STYLES: Record<'green' | 'yellow' | 'red', string> = {
   yellow: 'bg-amber-50 border-amber-300 text-amber-700',
   red: 'bg-red-50 border-red-300 text-red-700',
 }
+
+/**
+ * REFs (normalizadas) que ya viajan en un camión consolidado PUBLICADO.
+ *
+ * Una carga subida a un consolidado ya está coordinada: se mueve con el camión,
+ * no necesita salida propia. Sirve para sacarla de las listas de "pendiente de
+ * coordinar" (agenda, HOY, mail de previsión) — antes seguía apareciendo ahí
+ * porque la fecha la tiene el camión y no la carga (Brian 06/08: A7887, A7849,
+ * A7758 B).
+ *
+ * Los camiones BORRADOR no cuentan: son una reserva, la carga sigue necesitando
+ * coordinación real.
+ */
+export function refsEnConsolidado(trucks: Truck[], loads: TruckLoad[]): Set<string> {
+  const publicados = new Set(trucks.filter(t => t && !t.draft).map(t => t.id))
+  const out = new Set<string>()
+  for (const l of loads) {
+    if (!l || !publicados.has(l.truckId) || l.pending === 'add') continue
+    const ref = String(l.sourceRef || '').trim().toUpperCase()
+    if (ref) out.add(ref)
+  }
+  return out
+}

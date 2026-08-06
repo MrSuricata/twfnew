@@ -19,7 +19,7 @@ import {
   type OperativasRecord,
 } from './shipmentTypes'
 import { type CheckStepKey, normalizeRef } from './checksTypes'
-import type { Truck, TruckLoad } from './truckTypes'
+import { refsEnConsolidado, type Truck, type TruckLoad } from './truckTypes'
 
 /** A single operativa matched along with its parent shipment for context. */
 export interface OpMatch {
@@ -184,18 +184,9 @@ export function libreAlerts(shipments: ParsedShipment[]): LibreAlert[] {
 // simplemente "ya salió y todavía no llegó".
 // ─────────────────────────────────────────────────────────────────────────
 
-/** Refs (normalizadas) que ya viajan en un camión publicado. Los borradores no
- *  cuentan: son reservas, la carga sigue necesitando coordinación. */
-export function refsEnConsolidado(trucks: Truck[], loads: TruckLoad[]): Set<string> {
-  const publicados = new Set(trucks.filter(t => t && !t.draft).map(t => t.id))
-  const out = new Set<string>()
-  for (const l of loads) {
-    if (!l || !publicados.has(l.truckId) || l.pending === 'add') continue
-    const ref = normalizeRef(l.sourceRef)
-    if (ref) out.add(ref)
-  }
-  return out
-}
+// refsEnConsolidado vive en truckTypes (es lógica de camiones) y se re-exporta
+// acá porque el snapshot de HOY la usa.
+export { refsEnConsolidado }
 
 /** ¿Esta carga viaja dentro de un consolidado? (entonces no va suelta en HOY) */
 function enConsolidado(s: ParsedShipment, excluirRefs?: Set<string>): boolean {

@@ -394,6 +394,30 @@ describe('pendingSalida', () => {
     expect(result[0].arrival.tier).toBe(0)
     expect(result[0].arrival.label).toBe('Arribó hace 5d')
   })
+  // Consolidados (Brian 06/08/2026): A7887, A7849 y A7758 B seguían acá aunque
+  // ya estaban subidas a un camión publicado. La salida la tiene el camión.
+  it('ya subida a un consolidado → excluida aunque no tenga SALIDA propia', () => {
+    const s = mkShipPS({ REF: 'A7849', operativas: [mkOp()] })
+    expect(pendingSalida([s], TODAY_PS)).toHaveLength(1)                      // sin el set: sigue
+    expect(pendingSalida([s], TODAY_PS, new Set(['A7849']))).toHaveLength(0)  // con el set: sale
+  })
+
+  it('SALIDA "CONFIRMAR" + consolidado → también sale (caso A7887)', () => {
+    const s = mkShipPS({ REF: 'A7887', operativas: [mkOp({ SALIDA: 'CONFIRMAR' })] })
+    expect(pendingSalida([s], TODAY_PS)).toHaveLength(1)
+    expect(pendingSalida([s], TODAY_PS, new Set(['A7887']))).toHaveLength(0)
+  })
+
+  it('el match de REF ignora mayúsculas y espacios de más', () => {
+    const s = mkShipPS({ REF: ' a7758 b ', operativas: [mkOp()] })
+    expect(pendingSalida([s], TODAY_PS, new Set(['A7758 B']))).toHaveLength(0)
+  })
+
+  it('una carga que NO está en ningún consolidado no se ve afectada', () => {
+    const s = mkShipPS({ REF: 'A9999', operativas: [mkOp()] })
+    expect(pendingSalida([s], TODAY_PS, new Set(['A7849']))).toHaveLength(1)
+  })
+
 })
 
 // ── arrivalInfo / compareByArrival ──────────────────────────────────────────

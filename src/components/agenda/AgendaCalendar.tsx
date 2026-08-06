@@ -572,6 +572,8 @@ export default function AgendaCalendar({
           shipments={shipments}
           editable={editable}
           onCoordinar={openQuickEditFor}
+          trucks={trucks}
+          truckLoads={truckLoads}
         />
       )}
 
