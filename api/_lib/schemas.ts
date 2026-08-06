@@ -240,6 +240,8 @@ export const TruckLoadRowSchema = z.object({
   source_type: z.enum(['fcl', 'lcl', 'air']).optional(),
   sourceRef: z.string().min(1).max(100).optional(),
   source_ref: z.string().min(1).max(100).optional(),
+  // Contenedor elegido de esa carga ('' = la referencia entera)
+  cntr: z.string().max(100).optional().default(''),
   client: z.string().max(200).optional().default(''),
   fiscal: z.string().max(200).optional().default(''),
   kg: z.number().nonnegative().optional().default(0),

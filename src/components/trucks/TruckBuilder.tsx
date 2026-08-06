@@ -150,13 +150,16 @@ export default function TruckBuilder(props: TruckBuilderProps) {
   }
 
   // ── Add from panel ──
-  const addFcl = (s: ParsedShipment) => {
-    const prefill = prefillFclFromShipment(s)
+  // cntr = contenedor elegido de esa carga. Un camión lleva UNO: si la carga
+  // tiene varios, se agrega una línea por contenedor (Brian 06/08/2026).
+  const addFcl = (s: ParsedShipment, cntr = '') => {
+    const prefill = prefillFclFromShipment(s, cntr)
     const load: TruckLoad = {
       id: newId('load'),
       truckId: truck.id,
       sourceType: 'fcl',
       sourceRef: s.REF,
+      cntr,
       client: prefill.client,
       fiscal: prefill.fiscal,
       kg: prefill.kg,
@@ -184,6 +187,7 @@ export default function TruckBuilder(props: TruckBuilderProps) {
       truckId: truck.id,
       sourceType: s.modality,
       sourceRef: s.ref,
+      cntr: '',
       client: s.client,
       fiscal: s.fiscal,
       kg: s.kg,
@@ -210,6 +214,7 @@ export default function TruckBuilder(props: TruckBuilderProps) {
       truckId: truck.id,
       sourceType: (s.mode === 'air' ? 'air' : 'lcl'),
       sourceRef: s.ref,
+      cntr: '',
       client: s.cliente || '',
       fiscal: s.fiscal || '',
       kg: Number(s.kg) || 0,
@@ -261,6 +266,7 @@ export default function TruckBuilder(props: TruckBuilderProps) {
       truckId: truck.id,
       sourceType: row.mode === 'fcl' ? 'fcl' : row.mode === 'air' ? 'air' : 'lcl',
       sourceRef: row.ref,
+      cntr: '',
       client: row.cliente || '',
       fiscal: row.fiscal || '',
       kg: Number(row.kg) || 0,
@@ -289,7 +295,9 @@ export default function TruckBuilder(props: TruckBuilderProps) {
       toast.error(`${load.sourceRef} ya no está en la planilla`)
       return
     }
-    const prefill = prefillFclFromShipment(s)
+    // Re-sincronizar respeta el contenedor elegido: si la línea es de un
+    // contenedor, trae SUS datos y no el total de la carga.
+    const prefill = prefillFclFromShipment(s, load.cntr || '')
     updateLoad(load.id, {
       client: prefill.client,
       fiscal: prefill.fiscal,
@@ -721,7 +729,10 @@ function LoadRow({
             <span className="text-[9px] font-bold bg-blue-100 text-blue-700 rounded px-1 py-0.5 uppercase tracking-wide">NUEVA</span>
           )}
         </div>
-        <div className="text-[10px] text-muted-foreground uppercase">{load.sourceType}</div>
+        <div className="text-[10px] text-muted-foreground uppercase">
+          {load.sourceType}
+          {load.cntr && <span className="ml-1 font-mono normal-case text-foreground/70">{load.cntr}</span>}
+        </div>
       </td>
       <td className={`px-3 py-2 ${isRemoved ? 'line-through' : ''}`}>
         <InlineInput

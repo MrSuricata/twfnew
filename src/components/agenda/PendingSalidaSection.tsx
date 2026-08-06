@@ -2,6 +2,7 @@ import type { ParsedShipment } from '@/lib/shipmentTypes'
 import type { PendingSalidaItem, DestZone } from '@/lib/agendaUtils'
 import { pendingSalida, formatDateShort, daysUntil } from '@/lib/agendaUtils'
 import { getOperativaColor } from '@/lib/agendaTypes'
+import { refsEnConsolidado, type Truck, type TruckLoad } from '@/lib/truckTypes'
 import { useMemo, useState } from 'react'
 import { Package } from '@phosphor-icons/react'
 
@@ -9,6 +10,10 @@ interface PendingSalidaSectionProps {
   shipments: ParsedShipment[]
   editable: boolean
   onCoordinar: (shipment: ParsedShipment, cntr: string) => void
+  /** Camiones + sus cargas: lo que ya está subido a un consolidado publicado
+   *  deja de ser "pendiente de coordinar" (viaja con el camión). */
+  trucks?: Truck[]
+  truckLoads?: TruckLoad[]
 }
 
 /** Friendly label for each destination zone. */
@@ -60,11 +65,15 @@ function deriveZones(items: PendingSalidaItem[]): DestZone[] {
   return order.filter(z => counts.has(z))
 }
 
-export default function PendingSalidaSection({ shipments, editable, onCoordinar }: PendingSalidaSectionProps) {
+export default function PendingSalidaSection({ shipments, editable, onCoordinar, trucks = [], truckLoads = [] }: PendingSalidaSectionProps) {
   const today = useMemo(() => new Date(), [])
+  const enConsolidado = useMemo(
+    () => refsEnConsolidado(trucks, truckLoads),
+    [trucks, truckLoads]
+  )
   const items: PendingSalidaItem[] = useMemo(
-    () => pendingSalida(shipments, today),
-    [shipments, today]
+    () => pendingSalida(shipments, today, enConsolidado),
+    [shipments, today, enConsolidado]
   )
 
   // Derive the zones that are present, then default to UY (or first available).

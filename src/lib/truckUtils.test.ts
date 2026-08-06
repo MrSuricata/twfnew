@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { prefillFclFromShipment, makeEmptyTruckLoad } from './truckUtils'
+import { prefillFclFromShipment, makeEmptyTruckLoad, getAssignedCntrs, contenedoresLibres, isFclAvailable } from './truckUtils'
+import type { Truck, TruckLoad } from './truckTypes'
 import type { ParsedShipment, OperativasRecord } from './shipmentTypes'
 
 const op = (over: Partial<OperativasRecord> = {}): OperativasRecord =>
@@ -58,5 +59,66 @@ describe('prefillFclFromShipment — desconsolDate solo con fechas reales (bug A
   it('DESCARGA fecha ISO se usa como siempre', () => {
     const s = ship({ operativas: [op({ DESCARGA: '2026-07-20', SALIDA: '2026-07-24' })] })
     expect(prefillFclFromShipment(s).desconsolDate).toBe('2026-07-20')
+  })
+})
+
+// ── Elegir el contenedor al consolidar (Brian 06/08/2026) ──────────────
+// Caso A7806 A: 2 contenedores (8 bultos/10.254 kg y 3 bultos/11.730 kg).
+// Antes se cargaba la ref entera → 21.984 kg en un camión, imposible.
+const A7806 = ship({
+  REF: 'A7806 A',
+  operativas: [
+    op({ REF: 'A7806 A', CNTR_OP: 'HMMU4917976', PKGS: 8, KG: 10254, M3: 19.41 }),
+    op({ REF: 'A7806 A', CNTR_OP: 'KOCU4509137', PKGS: 3, KG: 11730, M3: 21.4 }),
+  ],
+})
+
+describe('prefillFclFromShipment — por contenedor', () => {
+  it('sin contenedor: suma todo (comportamiento previo)', () => {
+    const p = prefillFclFromShipment(A7806)
+    expect(p.pkgs).toBe(11)
+    expect(p.kg).toBe(21984)
+  })
+
+  it('con contenedor: sólo los datos de ESE contenedor', () => {
+    const p = prefillFclFromShipment(A7806, 'HMMU4917976')
+    expect(p.pkgs).toBe(8)
+    expect(p.kg).toBe(10254)
+    expect(p.m3).toBeCloseTo(19.41, 2)
+  })
+
+  it('el contenedor matchea sin importar mayúsculas ni espacios', () => {
+    expect(prefillFclFromShipment(A7806, '  kocu4509137 ').kg).toBe(11730)
+  })
+})
+
+describe('contenedores libres para consolidar', () => {
+  const truck = (id: string): Truck => ({ id, status: 'planning' } as Truck)
+  const load = (truckId: string, sourceRef: string, cntr: string): TruckLoad =>
+    ({ id: `l-${cntr}`, truckId, sourceRef, cntr, sourceType: 'fcl' } as TruckLoad)
+
+  it('con un contenedor cargado, el otro sigue disponible', () => {
+    const asignados = getAssignedCntrs([load('t1', 'A7806 A', 'HMMU4917976')], [truck('t1')])
+    expect(contenedoresLibres(A7806, asignados)).toEqual(['KOCU4509137'])
+    expect(isFclAvailable(A7806, asignados, { showArchived: true })).toBe(true)
+  })
+
+  it('con los dos cargados ya no queda nada', () => {
+    const asignados = getAssignedCntrs(
+      [load('t1', 'A7806 A', 'HMMU4917976'), load('t2', 'A7806 A', 'KOCU4509137')],
+      [truck('t1'), truck('t2')],
+    )
+    expect(contenedoresLibres(A7806, asignados)).toEqual([])
+    expect(isFclAvailable(A7806, asignados, { showArchived: true })).toBe(false)
+  })
+
+  it('una línea vieja sin contenedor vale por la carga entera', () => {
+    const asignados = getAssignedCntrs([load('t1', 'A7806 A', '')], [truck('t1')])
+    expect(contenedoresLibres(A7806, asignados)).toEqual([])
+  })
+
+  it('carga sin contenedores cargados: una sola opción, la ref entera', () => {
+    const s = ship({ REF: 'A9000', operativas: [op({ CNTR_OP: '' })] })
+    expect(contenedoresLibres(s, new Set())).toEqual([''])
   })
 })

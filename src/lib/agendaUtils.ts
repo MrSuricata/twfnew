@@ -531,7 +531,10 @@ export const PENDING_UPCOMING_HORIZON_DAYS = 14
 
 export function pendingSalida(
   shipments: ParsedShipment[],
-  today: Date
+  today: Date,
+  /** REFs que ya viajan en un consolidado publicado (refsEnConsolidado): salen
+   *  de la lista aunque no tengan SALIDA propia — la fecha la tiene el camión. */
+  enConsolidado?: Set<string>
 ): PendingSalidaItem[] {
   const todayNorm = new Date(today)
   todayNorm.setHours(0, 0, 0, 0)
@@ -543,6 +546,10 @@ export function pendingSalida(
 
   for (const s of shipments) {
     if (!s.operativas || s.operativas.length === 0) continue
+
+    // Ya subida a un consolidado publicado → deja de ser pendiente: viaja con
+    // el camión y su salida es la del camión, no una propia.
+    if (enConsolidado?.has(String(s.REF || '').trim().toUpperCase())) continue
 
     for (const op of s.operativas) {
       // Must have a container number
