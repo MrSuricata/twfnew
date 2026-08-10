@@ -12,7 +12,7 @@ import {
 import type { ParsedShipment, OperativasRecord } from '@/lib/shipmentTypes'
 import { getShipmentStatus } from '@/lib/shipmentTypes'
 import { buildPerContainerPatch, applyLugarSalida, lugarOrDeposito } from '@/lib/operationsTypes'
-import { isSalidaBeforeArrival, fmtDMY } from '@/lib/salidaCheck'
+import { isSalidaBeforeArrival, avisoSalida, fmtDMY } from '@/lib/salidaCheck'
 import { isSinTelex, SIN_TELEX_MSG } from '@/lib/telexCheck'
 import { fmtDateDMY } from '@/lib/format'
 import { isLibreDevuelto, libreDevueltoToggle, LIBRE_DEVUELTO } from '@/lib/libreDevuelto'
@@ -393,11 +393,16 @@ export default function ContainerQuickEdit({
                 {drafts.salida || '—'}
               </span>
             )}
-            {isSalidaBeforeArrival(drafts.salida, etaArrival) && (
-              <span className="text-[11px] font-medium text-red-600">
-                ⏰ Anterior a la llegada a MVD ({fmtDMY(etaArrival)})
-              </span>
-            )}
+            {(() => {
+              const aviso = avisoSalida(drafts.salida, etaArrival)
+              if (!aviso) return null
+              const grave = isSalidaBeforeArrival(drafts.salida, etaArrival)
+              return (
+                <span className={`text-[11px] font-medium ${grave ? 'text-red-600' : 'text-amber-600'}`}>
+                  ⏰ {aviso} (llega {fmtDMY(etaArrival)})
+                </span>
+              )
+            })()}
           </div>
 
           {/* Arribo fiscal */}
