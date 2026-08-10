@@ -173,6 +173,35 @@ export default function TruckBuilder(props: TruckBuilderProps) {
       return                       // se agrega al resolver el diálogo
     }
     agregarFcl(s, cntr)
+    heredarFechasDelCamion(s, cntr)
+  }
+
+  /**
+   * La carga que sube a un consolidado SIN fecha propia toma la del camión.
+   *
+   * Antes no bajaba sola y el contenedor quedaba con "Salida MVD" y "Arribo
+   * fiscal" vacíos aunque el camión ya hubiera salido — pasó con A7849, que
+   * viajó en el mismo camión que A7887 y quedó en blanco (Brian 10/08/2026).
+   * Si la carga YA tenía fecha, no se toca acá: eso lo resuelve el diálogo de
+   * conflicto, que pregunta cuál manda.
+   */
+  const heredarFechasDelCamion = (s: ParsedShipment, cntr = '') => {
+    const salida = (merged.departureDate || merged.loadDate || '').trim()
+    if (!salida) return
+    const id = (s as unknown as { id?: string }).id
+    if (!id || !onPatchShipment) return
+    const buscado = cntr.trim().toUpperCase()
+    const esDelCntr = (o: { CNTR_OP?: string }) =>
+      !buscado || String(o.CNTR_OP || '').trim().toUpperCase() === buscado
+    const real = (v: unknown) => /^\d{4}-\d{2}-\d{2}/.test(String(v ?? '').trim())
+    const ops = s.operativas || []
+    // Sólo las del contenedor que se sube y que no tengan fecha propia.
+    if (!ops.some(o => esDelCntr(o) && !real(o.SALIDA))) return
+    const nuevas = ops.map(o => (esDelCntr(o) && !real(o.SALIDA))
+      ? { ...o, SALIDA: salida, ETA_FISC: real(o.ETA_FISC) ? o.ETA_FISC : (merged.arrivalDate || o.ETA_FISC) }
+      : o)
+    onPatchShipment(id, { operativas: nuevas })
+    toast.info(`${s.REF} tomó las fechas del camión ${merged.code}`)
   }
 
   const agregarFcl = (s: ParsedShipment, cntr = '') => {
