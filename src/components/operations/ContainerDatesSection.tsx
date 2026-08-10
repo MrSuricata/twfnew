@@ -8,7 +8,7 @@ import { applyLugarSalida, lugarOrDeposito } from '@/lib/operationsTypes'
 import type { ParsedShipment, OperativasRecord } from '@/lib/shipmentTypes'
 import { getShipmentStatus } from '@/lib/shipmentTypes'
 import { parseCntr } from '@/lib/cntrUtils'
-import { isSalidaBeforeArrival, fmtDMY } from '@/lib/salidaCheck'
+import { isSalidaBeforeArrival, avisoSalida, fmtDMY } from '@/lib/salidaCheck'
 import { isSinTelex, SIN_TELEX_MSG } from '@/lib/telexCheck'
 import { toast } from 'sonner'
 
@@ -232,7 +232,7 @@ export function computeFlush(
       if (skipSalidaIdx.has(idx)) continue // el usuario eligió no guardar esta salida
       const rec = resolveRecord(cntrs, existing, idx, op)
       const eta = rec.ETA_OP || op.eta || ''
-      if (isSalidaBeforeArrival(rawValue, eta)) {
+      if (avisoSalida(rawValue, eta)) {
         salidaWarnings.push({ idx, cntr: cntrs[idx], salida: rawValue, eta })
       }
       const acc = patchByIdx.get(idx) || {}
@@ -452,9 +452,16 @@ const ContainerDatesSection = forwardRef<ContainerDatesHandle, {
                       {rec.SALIDA || '—'}
                     </span>
                   )}
-                  {isSalidaBeforeArrival(getDraft(i, 'SALIDA', rec.SALIDA || ''), rec.ETA_OP || op.eta || '') && (
-                    <span className="text-[10px] font-medium text-red-600 leading-tight">⏰ salida antes de la llegada a MVD</span>
-                  )}
+                  {(() => {
+                    const aviso = avisoSalida(getDraft(i, 'SALIDA', rec.SALIDA || ''), rec.ETA_OP || op.eta || '')
+                    if (!aviso) return null
+                    const grave = isSalidaBeforeArrival(getDraft(i, 'SALIDA', rec.SALIDA || ''), rec.ETA_OP || op.eta || '')
+                    return (
+                      <span className={`text-[10px] font-medium leading-tight ${grave ? 'text-red-600' : 'text-amber-600'}`}>
+                        ⏰ {aviso}
+                      </span>
+                    )
+                  })()}
                 </div>
 
                 {/* Arribo fiscal */}

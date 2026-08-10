@@ -25,3 +25,52 @@ export function fmtDMY(iso: string | undefined | null): string {
   const p = (iso || '').split('-')
   return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : (iso || '')
 }
+
+/**
+ * Días mínimos entre la llegada del buque a MVD y la salida del camión.
+ *
+ * Regla de Brian (10/08/2026): "lo normal es que sea dos días después de que
+ * llegue el buque por lo menos". Entre que el buque atraca, descarga, se
+ * liberan los documentos y el depósito coordina el retiro, salir el mismo día
+ * o al siguiente casi nunca se sostiene. Menos margen que esto se avisa.
+ */
+export const MARGEN_SALIDA_DIAS = 2
+
+/**
+ * Días entre la llegada a MVD y la salida coordinada.
+ * Negativo = la salida quedó ANTES de que llegue el buque (imposible).
+ * null cuando falta alguna de las dos fechas: no se inventa.
+ */
+export function margenSalida(
+  salida: string | undefined | null,
+  eta: string | undefined | null,
+): number | null {
+  const s = parseLocalDate((salida || '').trim())
+  const e = parseLocalDate((eta || '').trim())
+  if (!s || !e) return null
+  s.setHours(0, 0, 0, 0)
+  e.setHours(0, 0, 0, 0)
+  return Math.round((s.getTime() - e.getTime()) / 86_400_000)
+}
+
+/** ¿La salida está apretada contra la llegada (menos del margen mínimo)? */
+export function isSalidaAjustada(
+  salida: string | undefined | null,
+  eta: string | undefined | null,
+): boolean {
+  const d = margenSalida(salida, eta)
+  return d !== null && d >= 0 && d < MARGEN_SALIDA_DIAS
+}
+
+/** Texto del aviso, o '' si la salida tiene margen suficiente. */
+export function avisoSalida(
+  salida: string | undefined | null,
+  eta: string | undefined | null,
+): string {
+  const d = margenSalida(salida, eta)
+  if (d === null) return ''
+  if (d < 0) return 'Salida ANTES de la llegada a MVD — revisar fecha'
+  if (d === 0) return 'Sale el MISMO día que llega el buque — sin margen para retirar'
+  if (d < MARGEN_SALIDA_DIAS) return `Sale a ${d} día de la llegada — lo normal son ${MARGEN_SALIDA_DIAS}`
+  return ''
+}

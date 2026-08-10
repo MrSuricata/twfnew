@@ -1,7 +1,7 @@
 import type { ParsedShipment, OperativasRecord } from './shipmentTypes'
 import { parseLocalDate } from './shipmentTypes'
 import { fmtDateDMY } from './format'
-import { isSalidaBeforeArrival } from './salidaCheck'
+import { isSalidaBeforeArrival, avisoSalida } from './salidaCheck'
 import { needsTelexAlert, SIN_TELEX_MSG } from './telexCheck'
 import type { CalendarEvent, AlertEmoji, EventType } from './agendaTypes'
 import { getShipmentStatus, processShipmentRecord } from './shipmentTypes'
@@ -243,14 +243,12 @@ export function shipmentsToEvents(
       }
 
       const alerts = generateAlerts(op)
-      // Salida coordinada ANTES de la llegada a MVD: la ETA pudo correrse y dejar
-      // la salida "colgada" → alertar en el chip para revisar la fecha.
-      if (isSalidaBeforeArrival(op.SALIDA, op.ETA_OP || shipment.ETA)) {
-        alerts.push({
-          emoji: '⏰',
-          label: 'Salida ANTES de la llegada a MVD — revisar fecha',
-          type: 'salida_antes_llegada',
-        })
+      // Salida pegada a la llegada del buque: imposible (antes de que llegue) o
+      // sin el margen mínimo de 2 días que necesita descarga + retiro. La ETA
+      // se corre seguido y deja la salida colgada → alertar en el chip.
+      const avisoSal = avisoSalida(op.SALIDA, op.ETA_OP || shipment.ETA)
+      if (avisoSal) {
+        alerts.push({ emoji: '⏰', label: avisoSal, type: 'salida_antes_llegada' })
       }
       // Sin telex con salida agendada: sin la liberación de la naviera el
       // contenedor no se puede retirar — la fecha está comprometida al pedo.

@@ -32,7 +32,7 @@ import ContainerQuickEdit, { buildPatchedOperativas } from '../operations/Contai
 import { deriveKnownTransportes } from '@/lib/operationsTypes'
 import { dropPatch, dropPatchTruck } from './agendaDnd'
 import { fmtDateDMY } from '@/lib/format'
-import { isSalidaBeforeArrival } from '@/lib/salidaCheck'
+import { avisoSalida } from '@/lib/salidaCheck'
 import { isSinTelex, SIN_TELEX_MSG } from '@/lib/telexCheck'
 import { toast } from 'sonner'
 
@@ -420,12 +420,15 @@ export default function AgendaCalendar({
     }
     const result = dropPatch(event, newDate, buildPatchedOperativas)
     if (!result) return
-    // La salida no puede quedar ANTES de la llegada a MVD: confirmar antes de guardar
-    // (misma protección que ContainerDatesSection/QuickEdit; era la única ruta sin el check).
-    if (event?.type === 'salida' && newDate && isSalidaBeforeArrival(newDate, event.shipment?.ETA || '')) {
+    // La salida necesita margen contra la llegada a MVD (mínimo 2 días): confirmar
+    // antes de guardar. Misma protección que ContainerDatesSection/QuickEdit.
+    const avisoDrop = event?.type === 'salida' && newDate
+      ? avisoSalida(newDate, event.shipment?.ETA || '')
+      : ''
+    if (avisoDrop) {
       const ok = window.confirm(
-        `⏰ La salida quedaría el ${newDate}, ANTES de la llegada a MVD (${event.shipment?.ETA || '—'})` +
-        ` del contenedor ${event.cntr || ''}.\n\n¿Guardar igual?`
+        `⏰ ${avisoDrop}.\n\nContenedor ${event?.cntr || ''}` +
+        `\nLlega a MVD: ${event?.shipment?.ETA || '—'}\nSalida: ${newDate}\n\n¿Guardar igual?`
       )
       if (!ok) return
     }
