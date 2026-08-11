@@ -28,6 +28,7 @@ import {
   PushSubscriptionSchema,
   PushPrefsPatchSchema,
   RefChecksUpsertSchema,
+  TransporteCuotasSchema,
 } from '../_lib/schemas.js'
 import { rollupFromOperativasApi } from '../_lib/operativasRollup.js'
 import { broadcastTrucksLive, clientIdFromRequest } from '../_lib/realtimeBroadcast.js'
@@ -127,6 +128,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return handleRefChecks(req, res, db, payload)
       case 'user-prefs':
         return handleUserPrefs(req, res, db, payload)
+      case 'transporte-cuotas':
+        return handleTransporteCuotas(req, res, db, payload)
       case 'operators':
         return handleOperators(req, res, db)
       case 'operator-assignments':
@@ -615,6 +618,78 @@ async function handleSettings(req: VercelRequest, res: VercelResponse, db: any) 
     }, { onConflict: 'key' })
     if (error) throw error
     return res.status(200).json({ saved: true })
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' })
+}
+
+// ── Cuotas de transporte ───────────────────────────────────────────
+// GET /api/data/transporte-cuotas        → { cuotas: [...] }
+// PUT /api/data/transporte-cuotas        → reemplaza el set completo
+//
+// El PUT no borra: a los transportes que dejan de venir en el body los marca
+// inactivos, así el historial de cuotas de un transporte no se pierde si se lo
+// saca del reparto por un tiempo.
+
+async function handleTransporteCuotas(req: VercelRequest, res: VercelResponse, db: any, payload: TokenPayload | null = null) {
+  if (req.method === 'GET') {
+    const { data, error } = await db
+      .from('transporte_cuotas')
+      .select('transporte, porcentaje, activo, orden, updated_at, updated_by')
+      .order('orden')
+    if (error) throw error
+    return res.status(200).json({
+      cuotas: (data || []).map((r: any) => ({
+        transporte: r.transporte,
+        porcentaje: Number(r.porcentaje) || 0,
+        activo: r.activo !== false,
+        orden: Number(r.orden) || 0,
+        updated_at: r.updated_at,
+        updated_by: r.updated_by,
+      })),
+    })
+  }
+
+  if (req.method === 'PUT') {
+    const v = validate(TransporteCuotasSchema, req.body)
+    if (!v.ok) return res.status(400).json({ error: v.error })
+
+    const usuario = auditUser(payload as any)
+    const now = new Date().toISOString()
+    const filas = v.data.cuotas.map((c, i) => ({
+      transporte: c.transporte.trim().toUpperCase(),
+      porcentaje: c.porcentaje,
+      activo: c.activo !== false,
+      orden: c.orden ?? i + 1,
+      updated_at: now,
+      updated_by: usuario,
+    }))
+
+    if (filas.length) {
+      const { error } = await db.from('transporte_cuotas').upsert(filas, { onConflict: 'transporte' })
+      if (error) throw error
+    }
+
+    // Los que no vinieron salen del reparto, pero se conservan (activo = false).
+    // La lista de sobrantes se calcula acá y se apaga con un .in() explícito:
+    // un filtro negado mal escrito apagaría TODAS las cuotas de una.
+    const vigentes = new Set(filas.map(f => f.transporte))
+    const { data: existentes, error: e1 } = await db
+      .from('transporte_cuotas').select('transporte').eq('activo', true)
+    if (e1) throw e1
+    const sobrantes = (existentes || [])
+      .map((r: any) => r.transporte)
+      .filter((t: string) => !vigentes.has(t))
+    if (sobrantes.length) {
+      const { error: e2 } = await db.from('transporte_cuotas')
+        .update({ activo: false, updated_at: now, updated_by: usuario })
+        .in('transporte', sobrantes)
+      if (e2) throw e2
+    }
+
+    logAudit(db, payload, 'update', 'transporte_cuotas', '',
+      { cuotas: filas.map(f => `${f.transporte}:${f.porcentaje}%`).join(' · ') })
+    return res.status(200).json({ saved: true, cuotas: filas.length })
   }
 
   return res.status(405).json({ error: 'Method not allowed' })

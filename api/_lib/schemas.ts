@@ -414,6 +414,16 @@ export const PushPrefsPatchSchema = z.object({
   alert_frontera: z.boolean().optional(),
 })
 
+/** Cuotas objetivo de reparto por transporte (PUT reemplaza el set completo). */
+export const TransporteCuotasSchema = z.object({
+  cuotas: z.array(z.object({
+    transporte: z.string().trim().min(1).max(60),
+    porcentaje: z.number().min(0).max(100),
+    activo: z.boolean().optional(),
+    orden: z.number().int().min(0).max(999).optional(),
+  })).max(30),
+})
+
 // ─── validate() helper ──────────────────────────────────────────────
 
 export type ValidationResult<T> =
