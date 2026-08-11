@@ -27,6 +27,8 @@ import {
 } from '@/lib/operationsTypes'
 import { canonicalizarLista, DEV_ALIASES } from '@/lib/fuzzyCatalog'
 import { fiscalSugerido, fiscalesRecientes } from '@/lib/sugerenciaHistorica'
+import { recomendarTransporte } from '@/lib/distribucionTransportes'
+import { useTransporteCuotas } from '@/hooks/useTransporteCuotas'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
 import type { Truck, TruckLoad } from '@/lib/truckTypes'
 import type { OriginPhoto, OperativeReport } from '@/lib/quotationTypes'
@@ -136,6 +138,16 @@ export default function OperationDetailOverlay({
     [op, operations, sugerenciaFiscal],
   )
 
+  // Transporte sugerido por cuota de reparto: el que más atrás viene respecto
+  // de su objetivo, salteando Vairolatti en VMG/Chiapero y mandando RDM a
+  // Olaverry/Siroco. Necesita el shipment crudo, que es lo que mide el reparto.
+  const cuotas = useTransporteCuotas()
+  const sugerenciaTransporte = useMemo(() => {
+    if (!op || !cuotas.length) return null
+    const s = shipments.find(x => x.REF === op.ref)
+    return s ? recomendarTransporte(s, shipments, cuotas, hoy) : null
+  }, [op, shipments, cuotas, hoy])
+
   // Asignación de operativo: igual que la grilla — filas DB patchean operator_id;
   // FCL espejo / no-DB usan el overlay por ref.
   const assignOp = (o: UnifiedOperation, operatorId: string | null) => {
@@ -160,6 +172,7 @@ export default function OperationDetailOverlay({
       knownTerminales={knownTerminales}
       fiscalSugerido={sugerenciaFiscal}
       fiscalesRecientes={recientesFiscal}
+      transporteSugerido={sugerenciaTransporte}
       dbRow={dbRow}
       originPhotos={originPhotos}
       reports={reports}

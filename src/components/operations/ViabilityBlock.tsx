@@ -1,7 +1,7 @@
 import { useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
-import { LockSimple, CheckCircle, ArrowCounterClockwise, ClockCounterClockwise } from '@phosphor-icons/react'
+import { LockSimple, CheckCircle, ArrowCounterClockwise, ClockCounterClockwise, Scales } from '@phosphor-icons/react'
 import type { UnifiedOperation } from '@/lib/operationsTypes'
 import { DEPOSITOS_UY } from '@/lib/operationsTypes'
 import { matchCanonico, upperCat, DEV_ALIASES, canonicalizarLista } from '@/lib/fuzzyCatalog'
@@ -9,6 +9,7 @@ import { fmtDateDMY } from '@/lib/format'
 import { isLibreDevuelto, libreDevueltoToggle, LIBRE_DEVUELTO } from '@/lib/libreDevuelto'
 import { hasTelex } from '@/lib/telexCheck'
 import type { Sugerencia } from '@/lib/sugerenciaHistorica'
+import type { Recomendacion } from '@/lib/distribucionTransportes'
 
 const NUM_FMT = new Intl.NumberFormat('es-UY', { maximumFractionDigits: 2 })
 
@@ -36,6 +37,7 @@ export default function ViabilityBlock({
   knownTerminales = [],
   fiscalSugerido,
   fiscalesRecientes = [],
+  transporteSugerido,
   checksSlot,
   onCommit,
 }: {
@@ -57,6 +59,8 @@ export default function ViabilityBlock({
   /** Últimos fiscales del cliente, del más reciente al más viejo. Se muestran
    *  cuando NO hay uno dominante: informan sin decidir por el operador. */
   fiscalesRecientes?: string[]
+  /** Transporte sugerido por cuota de reparto. Atajo con el campo vacío. */
+  transporteSugerido?: Recomendacion | null
   /** Checks documentarios inline (RefChecksInline) — se renderiza abajo de
    *  LIBRE/"Devuelve en", antes de los toggles (pedido Brian 16/07). */
   checksSlot?: ReactNode
@@ -70,6 +74,9 @@ export default function ViabilityBlock({
 
   const mostrarRecientesFiscal = editable && !fiscalSugerido &&
     !String(op.fiscal ?? '').trim() && fiscalesRecientes.length > 0
+
+  const mostrarSugerenciaTransporte = editable && !!transporteSugerido?.transporte &&
+    !String(op.transporte ?? '').trim()
 
   const depositoOptions = canonicalizarLista([...DEPOSITOS_UY, ...knownDepositos])
   const devOptions = canonicalizarLista([...DEV_OPTIONS, ...knownDevs], DEV_ALIASES)
@@ -171,7 +178,41 @@ export default function ViabilityBlock({
         {/* Transporte es dato de la CARGA (nivel-carga, como Depósito): editarlo
             propaga a TODOS los contenedores + la columna (buildPerContainerPatch
             en el commit del panel). Sugiere los ya usados; display en MAYÚSCULAS. */}
-        <StatBox label="Transporte" value={op.transporte} kind="combo" options={knownTransportes} upper catalogo editable={editable} onCommit={v => onCommit('transporte', v)} />
+        <StatBox
+          label="Transporte"
+          value={op.transporte}
+          kind="combo"
+          options={knownTransportes}
+          upper
+          catalogo
+          editable={editable}
+          /* Atajo por cuota: sugiere el transporte que más atrás viene respecto
+             de su objetivo. Solo con el campo vacío; la elección es del operador. */
+          footer={mostrarSugerenciaTransporte ? (
+            <div className="mt-1.5 flex flex-wrap items-center gap-1" title={transporteSugerido!.motivo}>
+              <button
+                type="button"
+                onClick={() => onCommit('transporte', transporteSugerido!.transporte)}
+                className="inline-flex items-center gap-1 h-7 px-2 rounded-md border border-input bg-background text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <Scales size={12} />
+                Usar {transporteSugerido!.transporte}
+              </button>
+              {transporteSugerido!.opciones.slice(1, 3).map(t => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => onCommit('transporte', t)}
+                  title={`Usar ${t}`}
+                  className="inline-flex items-center h-6 px-1.5 rounded border border-input bg-background text-[10px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+          ) : undefined}
+          onCommit={v => onCommit('transporte', v)}
+        />
         {/* Operativa y LIBRE son datos de la CARGA (no de un contenedor suelto):
             editarlos acá propaga a TODOS los contenedores + la columna (vía
             buildPerContainerPatch en el commit del panel). Antes LIBRE se editaba

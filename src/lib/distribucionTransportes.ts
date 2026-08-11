@@ -55,6 +55,10 @@ export interface Distribucion {
   hasta: Date
   /** Contenedores del período que todavía no tienen transporte: los repartibles. */
   sinAsignar: number
+  /** Con fecha de salida puesta. */
+  agendados: number
+  /** Sin fecha de salida todavía — hay que coordinarlos (solo en previsión). */
+  pendientes: number
   rdm: { transporte: string; contenedores: number }[]
 }
 
@@ -125,27 +129,59 @@ function entraAlUniverso(s: ParsedShipment): boolean {
   return isPorUruguay(s.PAIS)
 }
 
-/** Contenedores despachados por transporte dentro de la ventana. */
+/** Valores de SALIDA que significan "todavía sin coordinar". */
+const SALIDA_VACIA = new Set(['', 'CONFIRMAR', '#N/A'])
+
+/**
+ * Contenedores del período por transporte.
+ *
+ * En `despachado` entran solo los que ya salieron. En `prevision` entran además
+ * los PENDIENTES DE COORDINAR: sin fecha de salida pero con la carga llegando
+ * dentro del período (o ya arribada y esperando). Son la mayor parte del
+ * trabajo por repartir — sin ellos el panel muestra apenas lo que ya se decidió
+ * y no sirve para decidir.
+ */
 function contar(
   shipments: ParsedShipment[],
   desde: Date,
   hasta: Date,
-): { cuenta: Map<string, number>; rdm: Map<string, number> } {
+  modo: Modo,
+): { cuenta: Map<string, number>; rdm: Map<string, number>; agendados: number; pendientes: number } {
   const cuenta = new Map<string, number>()
   const rdm = new Map<string, number>()
+  let agendados = 0
+  let pendientes = 0
+
   for (const s of shipments) {
     if (!entraAlUniverso(s)) continue
-    const destino = esRdm(s) ? rdm : cuenta
+    const esDeRdm = esRdm(s)
+    const destino = esDeRdm ? rdm : cuenta
     for (const op of s.operativas || []) {
       const salida = parseLocalDate(op.SALIDA || '')
-      if (!salida) continue
-      const d = medianoche(salida)
-      if (d < desde || d > hasta) continue
+      let entra = false
+      let esPendiente = false
+
+      if (salida) {
+        const d = medianoche(salida)
+        entra = d >= desde && d <= hasta
+      } else if (modo === 'prevision' && SALIDA_VACIA.has(norm(op.SALIDA))) {
+        // Sin salida: se ubica por cuándo llega la carga. Si llega dentro del
+        // período (o ya llegó), es trabajo a repartir en esa ventana.
+        const eta = parseLocalDate(op.ETA_OP || '') || parseLocalDate(s.ETA || '')
+        entra = !!eta && medianoche(eta) <= hasta
+        esPendiente = entra
+      }
+
+      if (!entra) continue
+      if (!esDeRdm) {
+        if (esPendiente) pendientes++
+        else agendados++
+      }
       const t = norm(op.TRANSPORTE) || SIN_ASIGNAR
       destino.set(t, (destino.get(t) || 0) + 1)
     }
   }
-  return { cuenta, rdm }
+  return { cuenta, rdm, agendados, pendientes }
 }
 
 export function calcularDistribucion(
@@ -158,7 +194,7 @@ export function calcularDistribucion(
   const { desde, hasta } = typeof ventanaORango === 'string'
     ? rangoVentana(ventanaORango, hoy, modo)
     : { desde: medianoche(ventanaORango.desde), hasta: medianoche(ventanaORango.hasta) }
-  const { cuenta, rdm } = contar(shipments, desde, hasta)
+  const { cuenta, rdm, agendados, pendientes } = contar(shipments, desde, hasta, modo)
 
   const activas = cuotas.filter(c => c.activo)
   const objetivos = new Map(activas.map(c => [norm(c.transporte), c.porcentaje]))
@@ -197,6 +233,8 @@ export function calcularDistribucion(
     desde,
     hasta,
     sinAsignar: cuenta.get(SIN_ASIGNAR) || 0,
+    agendados,
+    pendientes,
     rdm: [...rdm.entries()]
       .map(([transporte, contenedores]) => ({ transporte, contenedores }))
       .sort((a, b) => b.contenedores - a.contenedores),
