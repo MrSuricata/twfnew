@@ -164,6 +164,7 @@ export default function OperationDetailPanel({
   knownTransportes = [],
   knownFiscales = [],
   fiscalSugerido,
+  fiscalesRecientes,
   knownDevs = [],
   knownLugaresDescarga = [],
   knownTerminales = [],
@@ -194,6 +195,8 @@ export default function OperationDetailPanel({
   knownFiscales?: string[]
   /** Fiscal habitual del cliente (atajo en el bloque de datos clave). */
   fiscalSugerido?: Sugerencia | null
+  /** Últimos fiscales del cliente (se muestran si no hay uno dominante). */
+  fiscalesRecientes?: string[]
   knownDevs?: string[]
   /** Lugares de descarga del camión (post-fiscal) ya usados → combo Descarga. */
   knownLugaresDescarga?: string[]
@@ -455,6 +458,7 @@ export default function OperationDetailPanel({
             knownTransportes={knownTransportes}
             knownFiscales={knownFiscales}
             fiscalSugerido={fiscalSugerido}
+            fiscalesRecientes={fiscalesRecientes}
             knownDevs={knownDevs}
             knownLugaresDescarga={knownLugaresDescarga}
             knownTerminales={knownTerminales}

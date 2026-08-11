@@ -35,6 +35,7 @@ export default function ViabilityBlock({
   knownLugaresDescarga = [],
   knownTerminales = [],
   fiscalSugerido,
+  fiscalesRecientes = [],
   checksSlot,
   onCommit,
 }: {
@@ -53,6 +54,9 @@ export default function ViabilityBlock({
   /** Fiscal habitual de este cliente según el historial. Solo se ofrece como
    *  atajo si el campo está vacío — nunca pisa un valor ya cargado. */
   fiscalSugerido?: Sugerencia | null
+  /** Últimos fiscales del cliente, del más reciente al más viejo. Se muestran
+   *  cuando NO hay uno dominante: informan sin decidir por el operador. */
+  fiscalesRecientes?: string[]
   /** Checks documentarios inline (RefChecksInline) — se renderiza abajo de
    *  LIBRE/"Devuelve en", antes de los toggles (pedido Brian 16/07). */
   checksSlot?: ReactNode
@@ -63,6 +67,9 @@ export default function ViabilityBlock({
   const mostrarSugerenciaFiscal = editable && !!fiscalSugerido &&
     !String(op.fiscal ?? '').trim() &&
     fiscalSugerido.valor.toUpperCase() !== String(op.fiscal ?? '').trim().toUpperCase()
+
+  const mostrarRecientesFiscal = editable && !fiscalSugerido &&
+    !String(op.fiscal ?? '').trim() && fiscalesRecientes.length > 0
 
   const depositoOptions = canonicalizarLista([...DEPOSITOS_UY, ...knownDepositos])
   const devOptions = canonicalizarLista([...DEV_OPTIONS, ...knownDevs], DEV_ALIASES)
@@ -134,6 +141,24 @@ export default function ViabilityBlock({
               <ClockCounterClockwise size={12} />
               Usar {fiscalSugerido!.valor}
             </button>
+          ) : mostrarRecientesFiscal ? (
+            /* El cliente usa varios fiscales: no se sugiere ninguno, pero se
+               muestran los últimos para no tener que ir a buscarlos. */
+            <div className="mt-1.5 flex flex-wrap items-center gap-1"
+              title="Este cliente no usa siempre el mismo destino — estos son los últimos, del más reciente al más viejo">
+              <ClockCounterClockwise size={12} className="text-muted-foreground shrink-0" />
+              {fiscalesRecientes.slice(0, 4).map(v => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => onCommit('fiscal', v)}
+                  title={`Usar ${v}`}
+                  className="inline-flex items-center h-6 px-1.5 rounded border border-input bg-background text-[10px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
           ) : undefined}
           onCommit={v => onCommit('fiscal', v)}
         />
