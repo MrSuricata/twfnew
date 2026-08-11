@@ -26,6 +26,7 @@ import {
   type UnifiedOperation,
 } from '@/lib/operationsTypes'
 import { canonicalizarLista, DEV_ALIASES } from '@/lib/fuzzyCatalog'
+import { fiscalSugerido, fiscalesRecientes } from '@/lib/sugerenciaHistorica'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
 import type { Truck, TruckLoad } from '@/lib/truckTypes'
 import type { OriginPhoto, OperativeReport } from '@/lib/quotationTypes'
@@ -124,6 +125,17 @@ export default function OperationDetailOverlay({
   const knownLugaresDescarga = useMemo(() => deriveKnownValues(operations.map(o => o.descarga)), [operations])
   const knownTerminales = useMemo(() => deriveKnownValues(operations.map(o => o.terminal)), [operations])
 
+  // Fiscal habitual de ESTE cliente (atajo para completar, ver sugerenciaHistorica).
+  const sugerenciaFiscal = useMemo(
+    () => op ? fiscalSugerido(op.cliente || '', operations) : null,
+    [op, operations],
+  )
+  // Solo se calculan si no hay un fiscal dominante: son el plan B.
+  const recientesFiscal = useMemo(
+    () => op && !sugerenciaFiscal ? fiscalesRecientes(op.cliente || '', operations) : [],
+    [op, operations, sugerenciaFiscal],
+  )
+
   // Asignación de operativo: igual que la grilla — filas DB patchean operator_id;
   // FCL espejo / no-DB usan el overlay por ref.
   const assignOp = (o: UnifiedOperation, operatorId: string | null) => {
@@ -146,6 +158,8 @@ export default function OperationDetailOverlay({
       knownDevs={knownDevs}
       knownLugaresDescarga={knownLugaresDescarga}
       knownTerminales={knownTerminales}
+      fiscalSugerido={sugerenciaFiscal}
+      fiscalesRecientes={recientesFiscal}
       dbRow={dbRow}
       originPhotos={originPhotos}
       reports={reports}

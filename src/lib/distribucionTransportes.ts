@@ -25,6 +25,17 @@ export interface CuotaTransporte {
 
 export type Ventana = '90d' | 'mes' | 'semana'
 
+/**
+ * `despachado` mira lo que ya salió (para medir cumplimiento).
+ * `prevision` mira lo agendado hacia adelante (para repartir lo que viene).
+ */
+export type Modo = 'despachado' | 'prevision'
+
+export interface Rango {
+  desde: Date
+  hasta: Date
+}
+
 export interface FilaDistribucion {
   transporte: string
   contenedores: number
@@ -42,6 +53,8 @@ export interface Distribucion {
   total: number
   desde: Date
   hasta: Date
+  /** Contenedores del período que todavía no tienen transporte: los repartibles. */
+  sinAsignar: number
   rdm: { transporte: string; contenedores: number }[]
 }
 
@@ -71,7 +84,7 @@ export function esRdm(s: ParsedShipment): boolean {
 
 const medianoche = (d: Date): Date => new Date(d.getFullYear(), d.getMonth(), d.getDate())
 
-/** Inicio de la ventana. La semana arranca el lunes (criterio ISO). */
+/** Inicio de la ventana hacia atrás. La semana arranca el lunes (criterio ISO). */
 export function ventanaDesde(v: Ventana, hoy: Date): Date {
   const h = medianoche(hoy)
   if (v === 'mes') return new Date(h.getFullYear(), h.getMonth(), 1)
@@ -80,6 +93,30 @@ export function ventanaDesde(v: Ventana, hoy: Date): Date {
     return new Date(h.getFullYear(), h.getMonth(), h.getDate() - dow)
   }
   return new Date(h.getFullYear(), h.getMonth(), h.getDate() - 90)
+}
+
+const masDias = (d: Date, n: number): Date =>
+  new Date(d.getFullYear(), d.getMonth(), d.getDate() + n)
+
+/**
+ * Rango de fechas de una ventana.
+ *
+ * Despachado corta en HOY: nunca incluye lo que todavía no pasó, así el
+ * cumplimiento no se ve cumplido antes de estarlo.
+ *
+ * En previsión, `semana` es la semana QUE VIENE completa (lunes a domingo) —
+ * es la unidad con la que se arma el trabajo. `mes` y `90d` son los próximos
+ * 30 y 90 días corridos desde hoy. Para cualquier otro corte está el rango
+ * propio, que `calcularDistribucion` acepta directamente.
+ */
+export function rangoVentana(v: Ventana, hoy: Date, modo: Modo = 'despachado'): Rango {
+  const h = medianoche(hoy)
+  if (modo === 'despachado') return { desde: ventanaDesde(v, h), hasta: h }
+  if (v === 'semana') {
+    const lunesQueViene = masDias(ventanaDesde('semana', h), 7)
+    return { desde: lunesQueViene, hasta: masDias(lunesQueViene, 6) }
+  }
+  return { desde: h, hasta: masDias(h, v === 'mes' ? 30 : 90) }
 }
 
 /** Una carga entra al universo del reparto. */
@@ -114,11 +151,13 @@ function contar(
 export function calcularDistribucion(
   shipments: ParsedShipment[],
   cuotas: CuotaTransporte[],
-  ventana: Ventana,
+  ventanaORango: Ventana | Rango,
   hoy: Date,
+  modo: Modo = 'despachado',
 ): Distribucion {
-  const desde = ventanaDesde(ventana, hoy)
-  const hasta = medianoche(hoy)
+  const { desde, hasta } = typeof ventanaORango === 'string'
+    ? rangoVentana(ventanaORango, hoy, modo)
+    : { desde: medianoche(ventanaORango.desde), hasta: medianoche(ventanaORango.hasta) }
   const { cuenta, rdm } = contar(shipments, desde, hasta)
 
   const activas = cuotas.filter(c => c.activo)
@@ -157,10 +196,63 @@ export function calcularDistribucion(
     total,
     desde,
     hasta,
+    sinAsignar: cuenta.get(SIN_ASIGNAR) || 0,
     rdm: [...rdm.entries()]
       .map(([transporte, contenedores]) => ({ transporte, contenedores }))
       .sort((a, b) => b.contenedores - a.contenedores),
   }
+}
+
+export interface RepartoSugerido {
+  transporte: string
+  cantidad: number
+}
+
+/**
+ * Reparte N contenedores todavía sin transporte para acercarse a los objetivos.
+ *
+ * Asigna de a uno al de mayor deuda y recalcula después de cada asignación: si
+ * se hiciera de una sola pasada, todo caería en el que más atrás viene y se
+ * pasaría de largo. `base` es la foto contra la que se mide — normalmente los
+ * 90 días despachados, que es donde la cuota tiene sentido.
+ *
+ * No mira las restricciones por cliente (Vairolatti y los furgones): es un
+ * reparto agregado, no una asignación carga por carga.
+ */
+export function sugerirReparto(
+  pendientes: number,
+  base: Distribucion,
+  cuotas: CuotaTransporte[],
+): RepartoSugerido[] {
+  const activas = cuotas.filter(c => c.activo)
+  if (pendientes <= 0 || !activas.length) return []
+
+  const yaTiene = new Map<string, number>()
+  const asignado = new Map<string, number>()
+  for (const c of activas) {
+    const t = norm(c.transporte)
+    yaTiene.set(t, base.filas.find(f => f.transporte === t)?.contenedores || 0)
+    asignado.set(t, 0)
+  }
+
+  let total = base.total
+  for (let i = 0; i < pendientes; i++) {
+    total++
+    const ranking = activas
+      .map(c => {
+        const t = norm(c.transporte)
+        const tiene = (yaTiene.get(t) || 0) + (asignado.get(t) || 0)
+        return { t, pct: c.porcentaje, deuda: Math.round((c.porcentaje / 100) * total) - tiene }
+      })
+      .sort((a, b) => b.deuda - a.deuda || b.pct - a.pct)
+    const gana = ranking[0].t
+    asignado.set(gana, (asignado.get(gana) || 0) + 1)
+  }
+
+  return activas.map(c => ({
+    transporte: norm(c.transporte),
+    cantidad: asignado.get(norm(c.transporte)) || 0,
+  }))
 }
 
 /**
