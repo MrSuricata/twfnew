@@ -142,11 +142,10 @@ export default function OperationDetailOverlay({
   // de su objetivo, salteando Vairolatti en VMG/Chiapero y mandando RDM a
   // Olaverry/Siroco. Necesita el shipment crudo, que es lo que mide el reparto.
   const cuotas = useTransporteCuotas()
-  const sugerenciaTransporte = useMemo(() => {
-    if (!op || !cuotas.length) return null
-    const s = shipments.find(x => x.REF === op.ref)
-    return s ? recomendarTransporte(s, shipments, cuotas, hoy) : null
-  }, [op, shipments, cuotas, hoy])
+  const sugerenciaTransporte = useMemo(
+    () => op && cuotas.length ? recomendarTransporte(op, operations, cuotas, hoy) : null,
+    [op, operations, cuotas, hoy],
+  )
 
   // Asignación de operativo: igual que la grilla — filas DB patchean operator_id;
   // FCL espejo / no-DB usan el overlay por ref.

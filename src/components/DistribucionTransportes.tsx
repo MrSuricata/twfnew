@@ -10,6 +10,7 @@ import {
   calcularDistribucion,
   rangoVentana,
   sugerirReparto,
+  SIN_ASIGNAR,
   type CuotaTransporte,
   type Modo,
   type Rango,
@@ -18,13 +19,10 @@ import {
 import { fetchTransporteCuotas, saveTransporteCuotas } from '@/lib/dataClient'
 import { invalidarCuotas } from '@/hooks/useTransporteCuotas'
 
-type Corte = Ventana | 'custom'
-
-const CORTES: { v: Corte; label: string }[] = [
+const CORTES: { v: Ventana; label: string }[] = [
   { v: 'semana', label: 'Semana' },
   { v: 'mes', label: 'Mes' },
   { v: '90d', label: '90 días' },
-  { v: 'custom', label: 'Fechas' },
 ]
 
 /** Desvío tolerado antes de marcar la barra en rojo. */
@@ -52,7 +50,7 @@ export default function DistribucionTransportes({ shipments }: Props) {
   const [cuotas, setCuotas] = useState<CuotaTransporte[]>([])
   const [guardadas, setGuardadas] = useState<CuotaTransporte[]>([])
   const [modo, setModo] = useState<Modo>('despachado')
-  const [corte, setCorte] = useState<Corte>('90d')
+  const [corte, setCorte] = useState<Ventana>('90d')
   const [cargando, setCargando] = useState(true)
   const [guardando, setGuardando] = useState(false)
 
@@ -71,29 +69,42 @@ export default function DistribucionTransportes({ shipments }: Props) {
   // arranca en la semana, que es la unidad con la que se arma el trabajo.
   function cambiarModo(m: Modo) {
     setModo(m)
-    if (m === 'prevision' && corte === '90d') setCorte('semana')
-    if (m === 'despachado' && corte === 'custom') setCorte('90d')
+    const v: Ventana = m === 'prevision' && corte === '90d' ? 'semana' : corte
+    setCorte(v)
+    aplicarVentana(v, m)
   }
 
-  const rangoCustom: Rango | null = useMemo(() => {
+  // En previsión el rango es SIEMPRE editable: los botones de ventana solo
+  // rellenan las fechas, que después se ajustan a mano. Antes la semana era fija
+  // (lunes a domingo) y no había forma de correrla.
+  function aplicarVentana(v: Ventana, m: Modo = modo) {
+    const r = rangoVentana(v, hoy, m)
+    setDesde(aInput(r.desde))
+    setHasta(aInput(r.hasta))
+  }
+
+  const rangoElegido: Rango | null = useMemo(() => {
     const d = deInput(desde), h = deInput(hasta)
     return d && h && d <= h ? { desde: d, hasta: h } : null
   }, [desde, hasta])
 
   const dist = useMemo(() => {
-    const sel = corte === 'custom' ? (rangoCustom ?? rangoVentana('semana', hoy, modo)) : corte
+    // Previsión trabaja siempre con el rango de los inputs; despachado con la ventana.
+    const sel = modo === 'prevision' ? (rangoElegido ?? rangoVentana(corte, hoy, modo)) : corte
     return calcularDistribucion(shipments, cuotas, sel, hoy, modo)
-  }, [shipments, cuotas, corte, rangoCustom, hoy, modo])
+  }, [shipments, cuotas, corte, rangoElegido, hoy, modo])
 
-  // La cuota se mide sobre lo despachado en 90 días: es la única ventana con
-  // volumen suficiente para que el porcentaje signifique algo.
-  const base90 = useMemo(
-    () => calcularDistribucion(shipments, cuotas, '90d', hoy, 'despachado'),
-    [shipments, cuotas, hoy],
-  )
-  const reparto = useMemo(
-    () => modo === 'prevision' ? sugerirReparto(dist.sinAsignar, base90, cuotas) : [],
-    [modo, dist.sinAsignar, base90, cuotas],
+  // Reparto sugerido de los que no tienen transporte, medido sobre ESTE período:
+  // la base son los ya asignados (total menos los sin asignar), así al sumarlos
+  // las barras llegan justo al total mostrado.
+  const reparto = useMemo(() => {
+    if (modo !== 'prevision' || !dist.sinAsignar) return []
+    return sugerirReparto(dist.sinAsignar, { ...dist, total: dist.total - dist.sinAsignar }, cuotas)
+  }, [modo, dist, cuotas])
+
+  const sugeridoPor = useMemo(
+    () => new Map(reparto.map(r => [r.transporte, r.cantidad])),
+    [reparto],
   )
 
   const suma = cuotas.filter(c => c.activo).reduce((a, c) => a + c.porcentaje, 0)
@@ -123,7 +134,6 @@ export default function DistribucionTransportes({ shipments }: Props) {
   }
 
   const esPrevision = modo === 'prevision'
-  const cortes = CORTES.filter(c => c.v !== 'custom' || esPrevision)
 
   return (
     <div className="space-y-4">
@@ -151,15 +161,18 @@ export default function DistribucionTransportes({ shipments }: Props) {
                   onClick={() => cambiarModo('prevision')}>Previsión</Button>
               </div>
               <div className="flex gap-1">
-                {cortes.map(({ v, label }) => (
+                {CORTES.map(({ v, label }) => (
                   <Button key={v} size="sm" variant={corte === v ? 'secondary' : 'ghost'}
-                    className="h-7 px-2 text-xs" onClick={() => setCorte(v)}>{label}</Button>
+                    className="h-7 px-2 text-xs"
+                    onClick={() => { setCorte(v); aplicarVentana(v) }}>{label}</Button>
                 ))}
               </div>
             </div>
           </div>
 
-          {corte === 'custom' && (
+          {/* En previsión las fechas están siempre a la vista y se editan: los
+              botones de arriba solo las rellenan. */}
+          {esPrevision && (
             <div className="flex flex-wrap items-center gap-2 mb-4 pb-3 border-b">
               <span className="text-xs text-muted-foreground">Del</span>
               <Input type="date" value={desde} onChange={e => setDesde(e.target.value)}
@@ -167,7 +180,7 @@ export default function DistribucionTransportes({ shipments }: Props) {
               <span className="text-xs text-muted-foreground">al</span>
               <Input type="date" value={hasta} onChange={e => setHasta(e.target.value)}
                 className="h-8 w-[150px] text-xs" aria-label="Fecha hasta" />
-              {!rangoCustom && (
+              {!rangoElegido && (
                 <span className="text-xs text-destructive">La fecha final tiene que ser posterior</span>
               )}
             </div>
@@ -192,15 +205,32 @@ export default function DistribucionTransportes({ shipments }: Props) {
             <div className="space-y-2">
               {dist.filas.map(f => {
                 const desviado = f.enCuota && Math.abs(f.porcentaje - (f.objetivo ?? 0)) > TOLERANCIA_PP
+                // Cuánto le tocaría de los que no tienen transporte, y cómo
+                // quedaría su barra si se repartieran así.
+                const sug = sugeridoPor.get(f.transporte) || 0
+                const esSinAsignar = f.transporte === SIN_ASIGNAR
+                const pctProyectado = dist.total
+                  ? ((f.contenedores + sug) / dist.total) * 100
+                  : 0
                 return (
-                  <div key={f.transporte} className="grid grid-cols-[100px_1fr_92px] items-center gap-3">
+                  <div key={f.transporte} className="grid grid-cols-[100px_1fr_104px] items-center gap-3">
                     <span className={`text-xs text-right truncate ${f.enCuota ? 'font-medium' : 'text-muted-foreground'}`}>
                       {f.transporte}
                     </span>
                     <div className="relative h-6 rounded bg-muted/40 border overflow-hidden">
+                      {/* Tramo tenue = lo que sumaría el reparto sugerido. */}
+                      {sug > 0 && (
+                        <div
+                          className="absolute inset-y-0 left-0 bg-primary/25"
+                          style={{ width: `${Math.min(100, (pctProyectado / maxPct) * 100)}%` }}
+                          title={`Quedaría en ${Math.round(pctProyectado)}% con ${sug} más`}
+                        />
+                      )}
                       <div
                         className={`absolute inset-y-0 left-0 ${
-                          !f.enCuota ? 'bg-muted-foreground/40' : desviado ? 'bg-destructive/70' : 'bg-primary/70'
+                          esSinAsignar ? 'bg-amber-500/60'
+                            : !f.enCuota ? 'bg-muted-foreground/40'
+                            : desviado ? 'bg-destructive/70' : 'bg-primary/70'
                         }`}
                         style={{ width: `${Math.min(100, (f.porcentaje / maxPct) * 100)}%` }}
                       />
@@ -213,9 +243,10 @@ export default function DistribucionTransportes({ shipments }: Props) {
                       )}
                     </div>
                     <div className="text-xs text-right tabular-nums leading-tight">
-                      <span className="font-semibold">{f.contenedores}</span>{' '}
+                      <span className="font-semibold">{f.contenedores}</span>
+                      {sug > 0 && <span className="text-primary font-medium"> +{sug}</span>}{' '}
                       <span className="text-muted-foreground">{Math.round(f.porcentaje)}%</span>
-                      {!esPrevision && f.diferencia !== null && (
+                      {f.diferencia !== null && (
                         <div className={f.diferencia > 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-400'}>
                           {f.diferencia > 0 ? `faltan ${f.diferencia}` : f.diferencia < 0 ? `sobran ${-f.diferencia}` : 'en meta'}
                         </div>
@@ -235,11 +266,12 @@ export default function DistribucionTransportes({ shipments }: Props) {
               </p>
               {reparto.some(r => r.cantidad > 0) && (
                 <p className="text-xs text-muted-foreground mt-1.5">
-                  Para emparejar las cuotas convendría repartirlos así:{' '}
+                  Repartidos según la cuota quedarían así:{' '}
                   <span className="text-foreground">
                     {reparto.filter(r => r.cantidad > 0)
                       .map(r => `${r.transporte} ${r.cantidad}`).join(' · ')}
                   </span>
+                  {' '}— es la parte tenue de cada barra.
                 </p>
               )}
             </div>
