@@ -16,6 +16,7 @@ import {
   type Ventana,
 } from '@/lib/distribucionTransportes'
 import { fetchTransporteCuotas, saveTransporteCuotas } from '@/lib/dataClient'
+import { invalidarCuotas } from '@/hooks/useTransporteCuotas'
 
 type Corte = Ventana | 'custom'
 
@@ -107,6 +108,8 @@ export default function DistribucionTransportes({ shipments }: Props) {
     try {
       await saveTransporteCuotas(cuotas)
       setGuardadas(cuotas)
+      // El chip de sugerencia en la ficha de la carga lee del caché.
+      invalidarCuotas()
       toast.success('Objetivos guardados')
     } catch (e) {
       toast.error(e instanceof Error ? e.message : 'No se pudo guardar')
@@ -133,8 +136,11 @@ export default function DistribucionTransportes({ shipments }: Props) {
                 {esPrevision ? 'Previsión de reparto' : 'Distribución de cargas'}
               </h3>
               <p className="text-xs text-muted-foreground mt-0.5">
-                {esPrevision ? 'Salidas agendadas' : 'Contenedores despachados'} por Montevideo,
+                {esPrevision ? 'Salidas y arribos' : 'Contenedores despachados'} por Montevideo,
                 sin RDM · {fmtCorto(dist.desde)} al {fmtCorto(dist.hasta)} · {dist.total} contenedores
+                {esPrevision && dist.total > 0 && (
+                  <> · {dist.agendados} con fecha, {dist.pendientes} por coordinar</>
+                )}
               </p>
             </div>
             <div className="flex flex-col items-end gap-1.5">
@@ -170,8 +176,9 @@ export default function DistribucionTransportes({ shipments }: Props) {
           {esPrevision && (
             <p className="flex items-start gap-1.5 text-xs text-muted-foreground mb-3">
               <Info size={14} className="mt-0.5 shrink-0" />
-              Los porcentajes son de este período, no del cumplimiento general — con pocas cargas
-              se mueven mucho. La cuota se mide sobre los 90 días despachados.
+              Incluye lo agendado y lo que llega sin salida coordinada todavía. Los porcentajes son
+              de este período, no del cumplimiento general — la cuota se mide sobre los 90 días
+              despachados.
             </p>
           )}
 

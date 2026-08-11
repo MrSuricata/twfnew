@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import type { Sugerencia } from '@/lib/sugerenciaHistorica'
+import type { Recomendacion } from '@/lib/distribucionTransportes'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -165,6 +166,7 @@ export default function OperationDetailPanel({
   knownFiscales = [],
   fiscalSugerido,
   fiscalesRecientes,
+  transporteSugerido,
   knownDevs = [],
   knownLugaresDescarga = [],
   knownTerminales = [],
@@ -197,6 +199,8 @@ export default function OperationDetailPanel({
   fiscalSugerido?: Sugerencia | null
   /** Últimos fiscales del cliente (se muestran si no hay uno dominante). */
   fiscalesRecientes?: string[]
+  /** Transporte sugerido por cuota (atajo en Datos clave). */
+  transporteSugerido?: Recomendacion | null
   knownDevs?: string[]
   /** Lugares de descarga del camión (post-fiscal) ya usados → combo Descarga. */
   knownLugaresDescarga?: string[]
@@ -459,6 +463,7 @@ export default function OperationDetailPanel({
             knownFiscales={knownFiscales}
             fiscalSugerido={fiscalSugerido}
             fiscalesRecientes={fiscalesRecientes}
+            transporteSugerido={transporteSugerido}
             knownDevs={knownDevs}
             knownLugaresDescarga={knownLugaresDescarga}
             knownTerminales={knownTerminales}

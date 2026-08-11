@@ -363,3 +363,89 @@ describe('sugerirReparto', () => {
     expect(r).toEqual([])
   })
 })
+
+describe('previsión: los pendientes de coordinar también hay que repartirlos', () => {
+  const sinSalida = (o: Partial<OperativasRecord> = {}) => op({ SALIDA: '', ...o })
+
+  it('cuenta los contenedores sin salida cuya carga llega dentro del período', () => {
+    const d = calcularDistribucion(
+      [ship({ ETA: '2026-08-19', operativas: [sinSalida({ TRANSPORTE: '' })] })],
+      CUOTAS, 'semana', HOY, 'prevision')
+    expect(d.total).toBe(1)
+    expect(d.pendientes).toBe(1)
+    expect(d.agendados).toBe(0)
+    expect(d.sinAsignar).toBe(1)
+  })
+
+  it('las ya arribadas sin salida siguen pendientes: están esperando', () => {
+    const d = calcularDistribucion(
+      [ship({ ETA: '2026-07-20', operativas: [sinSalida()] })],
+      CUOTAS, 'semana', HOY, 'prevision')
+    expect(d.pendientes).toBe(1)
+  })
+
+  it('no cuenta lo que llega DESPUÉS del período', () => {
+    const d = calcularDistribucion(
+      [ship({ ETA: '2026-10-01', operativas: [sinSalida()] })],
+      CUOTAS, 'semana', HOY, 'prevision')
+    expect(d.total).toBe(0)
+  })
+
+  it('un pendiente que ya tiene transporte cuenta para ese transporte', () => {
+    const d = calcularDistribucion(
+      [ship({ ETA: '2026-08-19', operativas: [sinSalida({ TRANSPORTE: 'TRANSCAL' })] })],
+      CUOTAS, 'semana', HOY, 'prevision')
+    expect(d.filas.find(f => f.transporte === 'TRANSCAL')!.contenedores).toBe(1)
+    expect(d.sinAsignar).toBe(0)
+    expect(d.pendientes).toBe(1)
+  })
+
+  it('agendados y pendientes se suman en el total', () => {
+    const d = calcularDistribucion([
+      ship({ REF: 'A1', ETA: '2026-08-15', operativas: [op({ SALIDA: '2026-08-19' })] }),
+      ship({ REF: 'A2', ETA: '2026-08-19', operativas: [sinSalida({ TRANSPORTE: '' })] }),
+    ], CUOTAS, 'semana', HOY, 'prevision')
+    expect(d.agendados).toBe(1)
+    expect(d.pendientes).toBe(1)
+    expect(d.total).toBe(2)
+  })
+
+  it("'CONFIRMAR' y '#N/A' en SALIDA son pendientes, no fechas", () => {
+    for (const s of ['CONFIRMAR', '#N/A']) {
+      const d = calcularDistribucion(
+        [ship({ ETA: '2026-08-19', operativas: [op({ SALIDA: s })] })],
+        CUOTAS, 'semana', HOY, 'prevision')
+      expect(d.pendientes).toBe(1)
+    }
+  })
+
+  it('un contenedor sin número igual cuenta: va a necesitar camión', () => {
+    const d = calcularDistribucion(
+      [ship({ ETA: '2026-08-19', operativas: [sinSalida({ CNTR_OP: '', TRANSPORTE: '' })] })],
+      CUOTAS, 'semana', HOY, 'prevision')
+    expect(d.pendientes).toBe(1)
+  })
+
+  it('en modo despachado los pendientes NO se cuentan', () => {
+    const d = calcularDistribucion(
+      [ship({ ETA: '2026-08-01', operativas: [sinSalida()] })],
+      CUOTAS, '90d', HOY, 'despachado')
+    expect(d.total).toBe(0)
+    expect(d.pendientes).toBe(0)
+  })
+
+  it('usa la ETA del contenedor si la tiene, y si no la de la carga', () => {
+    const d = calcularDistribucion(
+      [ship({ ETA: '2026-12-01', operativas: [sinSalida({ ETA_OP: '2026-08-19' })] })],
+      CUOTAS, 'semana', HOY, 'prevision')
+    expect(d.pendientes).toBe(1)
+  })
+
+  it('RDM pendiente va al bloque de RDM, no al reparto', () => {
+    const d = calcularDistribucion(
+      [ship({ CLIENTE: 'RDM - ABEA', ETA: '2026-08-19', operativas: [sinSalida({ TRANSPORTE: 'OLAVERRY' })] })],
+      CUOTAS, 'semana', HOY, 'prevision')
+    expect(d.total).toBe(0)
+    expect(d.rdm).toEqual([{ transporte: 'OLAVERRY', contenedores: 1 }])
+  })
+})
