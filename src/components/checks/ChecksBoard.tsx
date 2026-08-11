@@ -50,6 +50,8 @@ import {
   avisoAggregate,
   buildAvisoCntrsMap,
   esReclamadoHoy,
+  estaLiberada,
+  puedeLiberarse,
   type CheckStepKey,
   type RefCheckStep,
   type RefCheckSteps,
@@ -128,19 +130,23 @@ export default function ChecksBoard({ shipments = [], dbShipments = [], onPatchS
 
   const [search, setSearch] = useState('')
   const [soloPendientes, setSoloPendientes] = useState(false)
+  const [verLiberadas, setVerLiberadas] = useState(false)
   const [expandedRef, setExpandedRef] = useState<string | null>(null)
 
   const visible = useMemo(() => {
     const q = search.trim().toUpperCase()
     return universe.filter(op => {
       if (q && !`${op.ref} ${op.cliente} ${op.cntr}`.toUpperCase().includes(q)) return false
+      // Liberada por la naviera = circuito cerrado: sale del tablero salvo que
+      // se pidan expresamente (para revisar o deshacer).
+      if (estaLiberada(checksByRef.get(normalizeRef(op.ref)) || {}) !== verLiberadas) return false
       if (soloPendientes) {
         const { done, total } = checksProgress(checksByRef.get(normalizeRef(op.ref)) || {}, op.operativa, parseCntr(op.cntr))
         if (done >= total) return false
       }
       return true
     })
-  }, [universe, search, soloPendientes, checksByRef])
+  }, [universe, search, soloPendientes, verLiberadas, checksByRef])
 
   const alDia = useMemo(() => universe.filter(op => {
     const { done, total } = checksProgress(checksByRef.get(normalizeRef(op.ref)) || {}, op.operativa, parseCntr(op.cntr))
@@ -257,6 +263,24 @@ export default function ChecksBoard({ shipments = [], dbShipments = [], onPatchS
   // y el toggle "no agarraba", bug A7759). onPatchShipment es el
   // handlePatchShipment de App: optimista con revert en error. Deshacer del
   // toast = el mismo patch con el valor anterior.
+  // LIBERADO: cierre del circuito. Se guarda como un paso más del jsonb, pero
+  // no es un check nuestro — lo confirma la naviera y saca la carga del tablero.
+  const handleToggleLiberado = useCallback((op: UnifiedOperation) => {
+    const steps = checksByRef.get(normalizeRef(op.ref)) || {}
+    const ya = estaLiberada(steps)
+    if (!ya && !puedeLiberarse(steps, op.operativa, parseCntr(op.cntr))) {
+      toast.error('Faltan checks por completar', { description: op.ref })
+      return
+    }
+    applyStep(op.ref, 'liberado', ya ? null : { done: true, date: todayIso(), by: getAdminName() })
+    toast.success(ya ? `Liberación quitada — ${op.ref}` : `LIBERADO — ${op.ref} sale de Checks`, {
+      action: {
+        label: 'Deshacer',
+        onClick: () => applyStep(op.ref, 'liberado', ya ? { done: true, date: todayIso(), by: getAdminName() } : null),
+      },
+    })
+  }, [checksByRef, applyStep])
+
   const handleToggleTelex = useCallback((op: UnifiedOperation) => {
     if (!onPatchShipment || !op.dbId) return
     const next = !hasTelexValue(op.tlx)
@@ -277,7 +301,7 @@ export default function ChecksBoard({ shipments = [], dbShipments = [], onPatchS
             Checks documentarios
           </h2>
           <p className="text-xs text-muted-foreground mt-0.5">
-            BL · Carta · Docs transporte · Docs depósito — listos 2 semanas antes de la ETA · {universe.length} cargas · {alDia} al día
+            BL · Carta · Docs transporte · Docs depósito · Pagos — listos 2 semanas antes de la ETA · {visible.length} cargas · {alDia} al día
           </p>
         </div>
         <div className="sm:ml-auto flex flex-wrap items-center gap-3">
@@ -298,6 +322,14 @@ export default function ChecksBoard({ shipments = [], dbShipments = [], onPatchS
               aria-label="Solo con pendientes"
             />
             Solo con pendientes
+          </label>
+          <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+            <Switch
+              checked={verLiberadas}
+              onCheckedChange={setVerLiberadas}
+              aria-label="Ver liberadas"
+            />
+            Ver liberadas
           </label>
         </div>
       </div>
@@ -334,6 +366,7 @@ export default function ChecksBoard({ shipments = [], dbShipments = [], onPatchS
                 onDateChange={(key, date) => handleDateChange(op, key, date)}
                 onReclamo={(key, label) => handleReclamo(op, key, label)}
                 onToggleTelex={telexEditable ? () => handleToggleTelex(op) : undefined}
+                onToggleLiberado={() => handleToggleLiberado(op)}
                 onOpenRef={onOpenDetail ? () => onOpenDetail(op.dbId || op.ref) : undefined}
               />
             )
@@ -362,11 +395,14 @@ interface ChecksRowProps {
   /** Marcar/quitar telex desde la fila (mismo camino que el panel). Sin esto
    *  (carga no editable) el chip queda estático como siempre. */
   onToggleTelex?: () => void
+  /** Marca/quita la liberación de la naviera: cierra el circuito y saca la
+   *  carga del tablero. Se habilita con los 5 checks completos. */
+  onToggleLiberado: () => void
   /** Abrir la ficha completa de la carga (click en la ref). */
   onOpenRef?: () => void
 }
 
-function ChecksRow({ op, steps, expanded, onToggleExpand, onToggleStep, onDateChange, onReclamo, onToggleTelex, onOpenRef }: ChecksRowProps) {
+function ChecksRow({ op, steps, expanded, onToggleExpand, onToggleStep, onDateChange, onReclamo, onToggleTelex, onToggleLiberado, onOpenRef }: ChecksRowProps) {
   const hoyIso = todayIso()
   const operativa = (op.operativa || '').trim()
   const opColor = operativa ? getOperativaColor(operativa) : null
@@ -382,6 +418,8 @@ function ChecksRow({ op, steps, expanded, onToggleExpand, onToggleStep, onDateCh
   const complete = done >= total
   const next = nextPendingStep(steps, operativa, cntrList)
   const visibleSteps = stepsForOperativa(operativa)
+  const liberada = estaLiberada(steps)
+  const habilitarLiberar = puedeLiberarse(steps, operativa, cntrList)
   // ¿Paso completo? Los avisos (por contenedor) cuentan hechos solo si TODOS los
   // contenedores están avisados; el resto usa el done del paso.
   const isStepDone = (key: CheckStepKey): boolean => {
@@ -604,6 +642,38 @@ function ChecksRow({ op, steps, expanded, onToggleExpand, onToggleStep, onDateCh
                 </div>
               )
             })}
+          </div>
+
+          {/* Cierre del circuito: lo confirma la NAVIERA, no nosotros. Con los 5
+              checks se habilita; al marcarlo la carga sale del tablero. */}
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={onToggleLiberado}
+              disabled={!liberada && !habilitarLiberar}
+              title={
+                liberada ? 'Quitar la liberación (vuelve al tablero)'
+                  : habilitarLiberar ? 'La línea confirmó la liberación — la carga sale de Checks'
+                  : 'Faltan checks por completar'
+              }
+              className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-semibold transition-colors ${
+                liberada
+                  ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                  : habilitarLiberar
+                    ? 'border border-emerald-600 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950'
+                    : 'border border-input text-muted-foreground opacity-60 cursor-not-allowed'
+              }`}
+            >
+              <CheckCircle size={14} weight={liberada ? 'fill' : 'regular'} />
+              {liberada ? 'LIBERADO' : 'Marcar LIBERADO'}
+            </button>
+            <span className="text-[10px] text-muted-foreground">
+              {liberada
+                ? `Liberada${steps.liberado?.date ? ` el ${fmtDateDMY(steps.liberado.date)}` : ''}${steps.liberado?.by ? ` por ${shortWho(steps.liberado.by)}` : ''}`
+                : habilitarLiberar
+                  ? 'Apretalo cuando la línea confirme la liberación'
+                  : 'Se habilita con los 5 checks completos'}
+            </span>
           </div>
         </div>
       )}
