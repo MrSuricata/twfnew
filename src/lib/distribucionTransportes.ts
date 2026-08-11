@@ -1,4 +1,4 @@
-import { parseLocalDate, type ParsedShipment } from './shipmentTypes'
+import { parseLocalDate, type OperativasRecord } from './shipmentTypes'
 import { isPorUruguay } from './checksTypes'
 
 /**
@@ -79,11 +79,33 @@ export const VAIROLATTI_BLOQUEADOS = ['VMG', 'CHIAPERO'] as const
 
 export const SIN_ASIGNAR = 'SIN ASIGNAR'
 
+/**
+ * Forma mínima que necesita el reparto. La cumplen tanto ParsedShipment (campos
+ * en MAYÚSCULAS, la carga como viene de la planilla) como UnifiedOperation (en
+ * minúsculas, la fila unificada que usa la ficha). Se leen los dos casings a
+ * propósito: post-flip las FCL viven en `dbShipments` y NO en `shipments`, así
+ * que exigir ParsedShipment dejaba sin sugerencia justo a las cargas FCL.
+ */
+export interface CargaReparto {
+  CLIENTE?: string | null
+  cliente?: string | null
+  PAIS?: string | null
+  pais?: string | null
+  ETA?: string | null
+  eta?: string | null
+  operativas?: OperativasRecord[]
+  archived?: boolean
+}
+
 const norm = (s: string | null | undefined): string => String(s || '').trim().toUpperCase()
 
+const clienteDe = (s: CargaReparto): string => String(s.CLIENTE ?? s.cliente ?? '')
+const paisDe = (s: CargaReparto): string => String(s.PAIS ?? s.pais ?? '')
+const etaDe = (s: CargaReparto): string => String(s.ETA ?? s.eta ?? '')
+
 /** RDM como palabra entera: 'RDM - ABEA' sí, 'GUARDMEX' no. */
-export function esRdm(s: ParsedShipment): boolean {
-  return /\bRDM\b/.test(norm(s.CLIENTE))
+export function esRdm(s: CargaReparto): boolean {
+  return /\bRDM\b/.test(norm(clienteDe(s)))
 }
 
 const medianoche = (d: Date): Date => new Date(d.getFullYear(), d.getMonth(), d.getDate())
@@ -124,9 +146,9 @@ export function rangoVentana(v: Ventana, hoy: Date, modo: Modo = 'despachado'): 
 }
 
 /** Una carga entra al universo del reparto. */
-function entraAlUniverso(s: ParsedShipment): boolean {
-  if ((s as ParsedShipment & { archived?: boolean }).archived) return false
-  return isPorUruguay(s.PAIS)
+function entraAlUniverso(s: CargaReparto): boolean {
+  if (s.archived) return false
+  return isPorUruguay(paisDe(s))
 }
 
 /** Valores de SALIDA que significan "todavía sin coordinar". */
@@ -142,7 +164,7 @@ const SALIDA_VACIA = new Set(['', 'CONFIRMAR', '#N/A'])
  * y no sirve para decidir.
  */
 function contar(
-  shipments: ParsedShipment[],
+  shipments: CargaReparto[],
   desde: Date,
   hasta: Date,
   modo: Modo,
@@ -167,7 +189,7 @@ function contar(
       } else if (modo === 'prevision' && SALIDA_VACIA.has(norm(op.SALIDA))) {
         // Sin salida: se ubica por cuándo llega la carga. Si llega dentro del
         // período (o ya llegó), es trabajo a repartir en esa ventana.
-        const eta = parseLocalDate(op.ETA_OP || '') || parseLocalDate(s.ETA || '')
+        const eta = parseLocalDate(op.ETA_OP || '') || parseLocalDate(etaDe(s))
         entra = !!eta && medianoche(eta) <= hasta
         esPendiente = entra
       }
@@ -185,7 +207,7 @@ function contar(
 }
 
 export function calcularDistribucion(
-  shipments: ParsedShipment[],
+  shipments: CargaReparto[],
   cuotas: CuotaTransporte[],
   ventanaORango: Ventana | Rango,
   hoy: Date,
@@ -299,8 +321,8 @@ export function sugerirReparto(
  * el reparto se autocorrija y que la sugerencia sea explicable.
  */
 export function recomendarTransporte(
-  carga: ParsedShipment,
-  historial: ParsedShipment[],
+  carga: CargaReparto,
+  historial: CargaReparto[],
   cuotas: CuotaTransporte[],
   hoy: Date,
 ): Recomendacion {
@@ -312,7 +334,7 @@ export function recomendarTransporte(
     }
   }
 
-  const cliente = norm(carga.CLIENTE)
+  const cliente = norm(clienteDe(carga))
   const bloqueaVairolatti = VAIROLATTI_BLOQUEADOS.some(b => cliente.includes(b))
 
   const { filas } = calcularDistribucion(historial, cuotas, '90d', hoy)
