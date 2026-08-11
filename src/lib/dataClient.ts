@@ -13,6 +13,7 @@ import type { BillingRecord } from './billingTypes'
 import type { Operator, OperatorAssignment, DbShipment } from './operationsTypes'
 import { fclToColumns } from './operationsTypes'
 import type { RefCheckRecord, RefCheckSteps, CheckStepKey } from './checksTypes'
+import type { CuotaTransporte } from './distribucionTransportes'
 import { matchesPattern } from './clientMatching'
 
 // ── Shipments FCL (espejo en `shipments` → fallback cache JSON) ──
@@ -550,6 +551,27 @@ export async function fetchBilling(): Promise<BillingRecord[]> {
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const data = await res.json()
   return data.billing || []
+}
+
+// ── Cuotas de reparto por transporte ───────────────────────────────────
+
+export async function fetchTransporteCuotas(): Promise<CuotaTransporte[]> {
+  const res = await authFetch('/api/data/transporte-cuotas')
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const data = await res.json()
+  return data.cuotas || []
+}
+
+export async function saveTransporteCuotas(cuotas: CuotaTransporte[]): Promise<void> {
+  const res = await authFetch('/api/data/transporte-cuotas', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cuotas }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
 }
 
 // ── Preferencias de UI por cuenta (user_prefs) ─────────────────────────

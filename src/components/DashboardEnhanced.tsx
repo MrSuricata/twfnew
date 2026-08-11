@@ -7,6 +7,7 @@ import {
   Star,
   ChatCircleText,
   ChartBar,
+  Scales,
   UsersThree,
   CalendarBlank,
   Warning,
@@ -45,6 +46,7 @@ import PartnerManager from './PartnerManager'
 import QuotesManagement from './QuotesManagement'
 import CommandPalette from './CommandPalette'
 import TrucksManagement from './trucks/TrucksManagement'
+import DistribucionTransportes from './DistribucionTransportes'
 import BrandLogo from './BrandLogo'
 import { useBrand } from '@/lib/brand'
 import BillingManagement from './BillingManagement'
@@ -391,6 +393,10 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
                 </span>
               )}
             </TabsTrigger>
+            <TabsTrigger value="transportes" className="tab-underline" aria-label="Transportes">
+              <Scales size={16} className="mr-1.5" weight="fill" />
+              <span className="hidden sm:inline">Transportes</span>
+            </TabsTrigger>
             <TabsTrigger value="quotes" className="tab-underline" aria-label="Cotizaciones">
               <Envelope size={16} className="mr-1.5" />
               <span className="hidden sm:inline">Cotizaciones</span>
@@ -508,6 +514,10 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
               onCreateShipment={onCreateShipment}
               onPatchShipment={onPatchShipment}
             />
+          </TabsContent>
+
+          <TabsContent value="transportes">
+            <DistribucionTransportes shipments={fclShipments} />
           </TabsContent>
 
           <TabsContent value="quotes">
