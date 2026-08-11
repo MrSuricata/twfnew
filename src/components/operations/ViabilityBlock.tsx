@@ -1,13 +1,14 @@
 import { useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
-import { LockSimple, CheckCircle, ArrowCounterClockwise } from '@phosphor-icons/react'
+import { LockSimple, CheckCircle, ArrowCounterClockwise, ClockCounterClockwise } from '@phosphor-icons/react'
 import type { UnifiedOperation } from '@/lib/operationsTypes'
 import { DEPOSITOS_UY } from '@/lib/operationsTypes'
 import { matchCanonico, upperCat, DEV_ALIASES, canonicalizarLista } from '@/lib/fuzzyCatalog'
 import { fmtDateDMY } from '@/lib/format'
 import { isLibreDevuelto, libreDevueltoToggle, LIBRE_DEVUELTO } from '@/lib/libreDevuelto'
 import { hasTelex } from '@/lib/telexCheck'
+import type { Sugerencia } from '@/lib/sugerenciaHistorica'
 
 const NUM_FMT = new Intl.NumberFormat('es-UY', { maximumFractionDigits: 2 })
 
@@ -33,6 +34,7 @@ export default function ViabilityBlock({
   knownDevs = [],
   knownLugaresDescarga = [],
   knownTerminales = [],
+  fiscalSugerido,
   checksSlot,
   onCommit,
 }: {
@@ -48,11 +50,20 @@ export default function ViabilityBlock({
   knownLugaresDescarga?: string[]
   /** Terminales de arribo ya usadas → se suman a TCP/MONTECON en el combo. */
   knownTerminales?: string[]
+  /** Fiscal habitual de este cliente según el historial. Solo se ofrece como
+   *  atajo si el campo está vacío — nunca pisa un valor ya cargado. */
+  fiscalSugerido?: Sugerencia | null
   /** Checks documentarios inline (RefChecksInline) — se renderiza abajo de
    *  LIBRE/"Devuelve en", antes de los toggles (pedido Brian 16/07). */
   checksSlot?: ReactNode
   onCommit: (key: keyof UnifiedOperation, v: unknown) => void
 }) {
+  // La sugerencia es un atajo para completar, no una corrección: si el fiscal
+  // ya tiene valor no se muestra, para no invitar a pisar lo que alguien cargó.
+  const mostrarSugerenciaFiscal = editable && !!fiscalSugerido &&
+    !String(op.fiscal ?? '').trim() &&
+    fiscalSugerido.valor.toUpperCase() !== String(op.fiscal ?? '').trim().toUpperCase()
+
   const depositoOptions = canonicalizarLista([...DEPOSITOS_UY, ...knownDepositos])
   const devOptions = canonicalizarLista([...DEV_OPTIONS, ...knownDevs], DEV_ALIASES)
   const terminalOptions = canonicalizarLista([...TERMINAL_OPTIONS, ...knownTerminales])
@@ -104,7 +115,28 @@ export default function ViabilityBlock({
       <div className="grid grid-cols-2 gap-2 mb-3">
         {/* Fiscal ahora es combo con catálogo (pedido 16/07): sugiere los ya
             usados y corrige typos al guardar — "para no escribir cualquier cosa". */}
-        <StatBox label="Fiscal (destino)" value={op.fiscal} kind="combo" options={knownFiscales} catalogo editable={editable} onCommit={v => onCommit('fiscal', v)} />
+        <StatBox
+          label="Fiscal (destino)"
+          value={op.fiscal}
+          kind="combo"
+          options={knownFiscales}
+          catalogo
+          editable={editable}
+          /* Atajo, no invento: solo aparece si el cliente repite el mismo fiscal
+             (>=3 cargas y >=80%). Un click lo aplica; siempre se puede cambiar. */
+          footer={mostrarSugerenciaFiscal ? (
+            <button
+              type="button"
+              onClick={() => onCommit('fiscal', fiscalSugerido!.valor)}
+              title={`${fiscalSugerido!.dominancia}% de las ${fiscalSugerido!.muestras} cargas de este cliente fueron a ${fiscalSugerido!.valor}`}
+              className="mt-1.5 inline-flex items-center gap-1 h-7 px-2 rounded-md border border-input bg-background text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <ClockCounterClockwise size={12} />
+              Usar {fiscalSugerido!.valor}
+            </button>
+          ) : undefined}
+          onCommit={v => onCommit('fiscal', v)}
+        />
         {/* Descarga: dónde descarga el CAMIÓN después del fiscal (ej: fiscal en
             CACEC, descarga en RÍO SEGUNDO) — lo leen los mails de Previsión de
             n8n. Nivel-carga: propaga a todos los contenedores (descarga está en
