@@ -367,6 +367,9 @@ export const RefChecksUpsertSchema = z.object({
     carta_entregada: checkStep,
     docs_transporte: checkStep,
     docs_deposito: checkStep,
+    pagos_ok: checkStep,
+    // Cierre del circuito: lo confirma la naviera y saca la carga del tablero.
+    liberado: checkStep,
     aviso_salida: checkStep,
     cruce_frontera: checkStep,
     arribo_fiscal: checkStep,

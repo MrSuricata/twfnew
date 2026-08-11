@@ -14,6 +14,8 @@ import {
   esReclamadoHoy,
   type RefCheckStep,
   type RefCheckSteps,
+  estaLiberada,
+  puedeLiberarse,
 } from './checksTypes'
 import type { UnifiedOperation } from './operationsTypes'
 
@@ -35,10 +37,10 @@ const mkOp = (over: Partial<UnifiedOperation> = {}): UnifiedOperation => ({
 })
 
 // Los 4 checks documentarios de Brian (13/07/2026), en su orden.
-const DOC_KEYS = ['bl_entregado', 'carta_entregada', 'docs_transporte', 'docs_deposito']
+const DOC_KEYS = ['bl_entregado', 'carta_entregada', 'docs_transporte', 'docs_deposito', 'pagos_ok']
 
 describe('stepsForOperativa', () => {
-  it('siempre son los 4 checks documentarios, para cualquier operativa', () => {
+  it('siempre son los 5 checks documentarios, para cualquier operativa', () => {
     for (const operativa of ['TRASIEGO', 'CONTENEDOR', 'CARGA A PISO', '', undefined]) {
       expect(stepsForOperativa(operativa).map(s => s.key)).toEqual(DOC_KEYS)
     }
@@ -57,14 +59,14 @@ describe('stepsForOperativa', () => {
 })
 
 describe('checksProgress', () => {
-  it('cuenta hechos sobre los 4 checks (la operativa ya no cambia el total)', () => {
+  it('cuenta hechos sobre los 5 checks (la operativa ya no cambia el total)', () => {
     const steps: RefCheckSteps = {
       bl_entregado: { done: true, date: '2026-06-01' },
       docs_deposito: { done: true, date: '2026-06-20' },
     }
-    expect(checksProgress(steps, 'TRASIEGO')).toEqual({ done: 2, total: 4 })
-    expect(checksProgress(steps, 'CONTENEDOR')).toEqual({ done: 2, total: 4 })
-    expect(checksProgress({}, '')).toEqual({ done: 0, total: 4 })
+    expect(checksProgress(steps, 'TRASIEGO')).toEqual({ done: 2, total: 5 })
+    expect(checksProgress(steps, 'CONTENEDOR')).toEqual({ done: 2, total: 5 })
+    expect(checksProgress({}, '')).toEqual({ done: 0, total: 5 })
   })
 
   it('los avisos marcados NO suman al progreso de la pestaña', () => {
@@ -73,7 +75,7 @@ describe('checksProgress', () => {
       cruce_frontera: { done: true },
       carta_entregada: { done: true },
     }
-    expect(checksProgress(steps, '')).toEqual({ done: 1, total: 4 })
+    expect(checksProgress(steps, '')).toEqual({ done: 1, total: 5 })
   })
 
   it('las keys del checklist viejo que queden en el jsonb se ignoran', () => {
@@ -82,7 +84,7 @@ describe('checksProgress', () => {
       pagos_liberacion: { done: true },
       bl_entregado: { done: true },
     } as unknown as RefCheckSteps
-    expect(checksProgress(legacy, 'TRASIEGO')).toEqual({ done: 1, total: 4 })
+    expect(checksProgress(legacy, 'TRASIEGO')).toEqual({ done: 1, total: 5 })
   })
 })
 
@@ -259,6 +261,77 @@ describe('reclamo del día (esReclamadoHoy + merge)', () => {
   it('un paso solo-reclamado NO cuenta como completo (progreso y digest)', () => {
     const { done, total } = checksProgress({ docs_transporte: { done: false, reclamado: '2026-07-17' } }, 'TRASIEGO')
     expect(done).toBe(0)
-    expect(total).toBe(4)
+    expect(total).toBe(5)
+  })
+})
+
+describe('PAGOS OK y LIBERADO (Brian 11/08/2026)', () => {
+  it('Pagos OK es el quinto check documentario', () => {
+    const keys = stepsForOperativa('TRASIEGO').map(s => s.key)
+    expect(keys).toHaveLength(5)
+    expect(keys).toContain('pagos_ok')
+  })
+
+  it('Liberado NO es un check más: no aparece en la lista de pasos', () => {
+    expect(stepsForOperativa('TRASIEGO').map(s => s.key)).not.toContain('liberado')
+  })
+
+  it('el progreso ahora es sobre 5', () => {
+    expect(checksProgress({}, 'TRASIEGO').total).toBe(5)
+  })
+
+  it('con los 4 viejos marcados el progreso es 4/5, no completo', () => {
+    const steps: RefCheckSteps = {
+      bl_entregado: { done: true }, carta_entregada: { done: true },
+      docs_transporte: { done: true }, docs_deposito: { done: true },
+    }
+    expect(checksProgress(steps, 'TRASIEGO')).toEqual({ done: 4, total: 5 })
+  })
+
+  it('Pagos OK cuenta como cualquier otro paso', () => {
+    expect(checksProgress({ pagos_ok: { done: true } }, 'TRASIEGO').done).toBe(1)
+  })
+
+  it('nextPendingStep llega a pagos_ok cuando el resto está', () => {
+    const steps: RefCheckSteps = {
+      bl_entregado: { done: true }, carta_entregada: { done: true },
+      docs_transporte: { done: true }, docs_deposito: { done: true },
+    }
+    expect(nextPendingStep(steps, 'TRASIEGO')).toBe('pagos_ok')
+  })
+})
+
+describe('estaLiberada / puedeLiberarse', () => {
+  const completos: RefCheckSteps = {
+    bl_entregado: { done: true }, carta_entregada: { done: true },
+    docs_transporte: { done: true }, docs_deposito: { done: true },
+    pagos_ok: { done: true },
+  }
+
+  it('sin el botón apretado no está liberada, aunque estén los 5', () => {
+    expect(estaLiberada(completos)).toBe(false)
+  })
+
+  it('liberada cuando el paso de cierre está marcado', () => {
+    expect(estaLiberada({ ...completos, liberado: { done: true } })).toBe(true)
+  })
+
+  it('se puede liberar recién con los 5 checks', () => {
+    expect(puedeLiberarse(completos, 'TRASIEGO')).toBe(true)
+  })
+
+  it('no se puede liberar con un check pendiente', () => {
+    const { pagos_ok: _omitido, ...faltaUno } = completos
+    expect(puedeLiberarse(faltaUno, 'TRASIEGO')).toBe(false)
+  })
+
+  it('sin ningún check tampoco', () => {
+    expect(puedeLiberarse({}, 'TRASIEGO')).toBe(false)
+  })
+
+  it('liberado sin los 5 igual se reporta como liberada: el dato manda', () => {
+    // Si la línea confirmó, la carga está liberada aunque falte marcar un paso.
+    // puedeLiberarse gobierna el botón; estaLiberada refleja lo que pasó.
+    expect(estaLiberada({ liberado: { done: true } })).toBe(true)
   })
 })

@@ -1,7 +1,12 @@
 // ─── Checks documentarios por referencia (pestaña Checks) ───────────────
-// 4 checks por carga (Brian, 13/07/2026 — reemplazan el checklist largo del
-// procedimiento, que no se usaba):
-//   BL entregado · Carta entregada · Docs transporte · Docs depósito
+// 5 checks por carga (Brian, 13/07/2026 · Pagos OK sumado el 11/08/2026):
+//   BL entregado · Carta entregada · Docs transporte · Docs depósito · Pagos OK
+// Pagos OK se marca a mano y significa "los pagos que hacían falta (locales,
+// flete, o los dos) están hechos" — el operador decide cuáles aplicaban.
+//
+// Cerrando el circuito está LIBERADO, que NO es un check más: lo confirma la
+// naviera y es lo que saca la carga del tablero. Con los 5 checks se habilita
+// el botón; recién al apretarlo la carga desaparece de Checks.
 // Regla de negocio: los 4 tienen que estar listos 2 SEMANAS antes de la ETA
 // (un digest diario de n8n avisa los que faltan).
 // La tabla `ref_checks` guarda SOLO el estado: el universo de refs se deriva
@@ -27,6 +32,9 @@ export type CheckStepKey =
   | 'carta_entregada'
   | 'docs_transporte'
   | 'docs_deposito'
+  | 'pagos_ok'
+  // Cierre: lo confirma la naviera, no nosotros
+  | 'liberado'
   // Avisos por contenedor (se marcan desde HOY)
   | 'aviso_salida'
   | 'cruce_frontera'
@@ -38,6 +46,9 @@ export interface CheckStepDef {
   /** Aviso por contenedor: vive en la pestaña HOY (una tarjeta = un cntr) y
    *  NO se muestra en la pestaña Checks. */
   aviso?: boolean
+  /** Paso de CIERRE: no es un check de la lista sino el botón que saca la
+   *  carga del tablero. Se marca cuando la línea confirma la liberación. */
+  cierre?: boolean
 }
 
 /** Todos los pasos conocidos del jsonb `steps`: los 4 checks documentarios
@@ -47,6 +58,8 @@ export const CHECK_STEPS: CheckStepDef[] = [
   { key: 'carta_entregada', label: 'Carta entregada' },
   { key: 'docs_transporte', label: 'Docs transporte' },
   { key: 'docs_deposito', label: 'Docs depósito' },
+  { key: 'pagos_ok', label: 'Pagos OK' },
+  { key: 'liberado', label: 'Liberado', cierre: true },
   { key: 'aviso_salida', label: 'Avisar salida en el día de carga', aviso: true },
   { key: 'cruce_frontera', label: 'Avisar cruce de frontera', aviso: true },
   { key: 'arribo_fiscal', label: 'Avisar arribo a fiscal', aviso: true },
@@ -99,7 +112,29 @@ export function normalizeRef(ref: string | null | undefined): string {
  *  marcan desde HOY). La operativa ya no condiciona pasos — el parámetro se
  *  conserva por compatibilidad de firma con los callers. */
 export function stepsForOperativa(_operativa: string | null | undefined): CheckStepDef[] {
-  return CHECK_STEPS.filter(s => !s.aviso)
+  return CHECK_STEPS.filter(s => !s.aviso && !s.cierre)
+}
+
+/**
+ * La carga fue liberada por la naviera. Es el cierre del circuito: recién acá
+ * sale del tablero de Checks.
+ *
+ * Se lee del dato, no de los checks: si la línea confirmó, la carga está
+ * liberada aunque haya quedado un paso sin tildar. `puedeLiberarse` es lo que
+ * gobierna el botón.
+ */
+export function estaLiberada(steps: RefCheckSteps): boolean {
+  return !!steps.liberado?.done
+}
+
+/** El botón de liberar se habilita con los 5 checks documentarios completos. */
+export function puedeLiberarse(
+  steps: RefCheckSteps,
+  operativa: string | null | undefined,
+  cntrList?: string[],
+): boolean {
+  const { done, total } = checksProgress(steps, operativa, cntrList)
+  return total > 0 && done === total
 }
 
 // ── Avisos POR CONTENEDOR (salida/frontera/fiscal) ──────────────────────
