@@ -2,8 +2,10 @@ import { describe, it, expect } from 'vitest'
 import {
   esRdm,
   ventanaDesde,
+  rangoVentana,
   calcularDistribucion,
   recomendarTransporte,
+  sugerirReparto,
   VAIROLATTI_BLOQUEADOS,
   type CuotaTransporte,
 } from './distribucionTransportes'
@@ -243,5 +245,121 @@ describe('recomendarTransporte', () => {
   it('si no hay cuotas activas no recomienda nada', () => {
     const r = recomendarTransporte(ship(), [], CUOTAS.map(c => ({ ...c, activo: false })), HOY)
     expect(r.transporte).toBeNull()
+  })
+})
+
+describe('rangoVentana — despachado mira atrás, previsión mira adelante', () => {
+  it('despachado termina hoy: nunca incluye lo que todavía no pasó', () => {
+    const r = rangoVentana('90d', HOY, 'despachado')
+    expect(r.hasta).toEqual(new Date(2026, 7, 11))
+    expect(r.desde).toEqual(new Date(2026, 4, 13))
+  })
+
+  it('previsión de semana es la semana QUE VIENE, completa de lunes a domingo', () => {
+    // HOY es martes 11/08 → la semana que viene va del 17 al 23.
+    const r = rangoVentana('semana', HOY, 'prevision')
+    expect(r.desde).toEqual(new Date(2026, 7, 17))
+    expect(r.hasta).toEqual(new Date(2026, 7, 23))
+  })
+
+  it('previsión de mes son los próximos 30 días desde hoy', () => {
+    const r = rangoVentana('mes', HOY, 'prevision')
+    expect(r.desde).toEqual(new Date(2026, 7, 11))
+    expect(r.hasta).toEqual(new Date(2026, 8, 10))
+  })
+
+  it('previsión de 90 días arranca hoy', () => {
+    const r = rangoVentana('90d', HOY, 'prevision')
+    expect(r.desde).toEqual(new Date(2026, 7, 11))
+    expect(r.hasta).toEqual(new Date(2026, 10, 9))
+  })
+
+  it('el modo por defecto es despachado', () => {
+    expect(rangoVentana('90d', HOY)).toEqual(rangoVentana('90d', HOY, 'despachado'))
+  })
+})
+
+describe('calcularDistribucion con rango explícito', () => {
+  it('acepta un rango de fechas propio en lugar de una ventana', () => {
+    const d = calcularDistribucion([
+      ship({ REF: 'A1', operativas: [op({ SALIDA: '2026-08-18' })] }),  // dentro
+      ship({ REF: 'A2', operativas: [op({ SALIDA: '2026-08-25' })] }),  // fuera
+    ], CUOTAS, { desde: new Date(2026, 7, 17), hasta: new Date(2026, 7, 23) }, HOY)
+    expect(d.total).toBe(1)
+  })
+
+  it('en previsión sí cuenta las salidas futuras', () => {
+    const d = calcularDistribucion(
+      [ship({ operativas: [op({ SALIDA: '2026-08-20', TRANSPORTE: 'ENZO' })] })],
+      CUOTAS, 'semana', HOY, 'prevision')
+    expect(d.filas.find(f => f.transporte === 'ENZO')!.contenedores).toBe(1)
+  })
+
+  it('los bordes del rango entran (desde y hasta inclusive)', () => {
+    const rango = { desde: new Date(2026, 7, 17), hasta: new Date(2026, 7, 23) }
+    const d = calcularDistribucion([
+      ship({ REF: 'A1', operativas: [op({ SALIDA: '2026-08-17' })] }),
+      ship({ REF: 'A2', operativas: [op({ SALIDA: '2026-08-23' })] }),
+    ], CUOTAS, rango, HOY)
+    expect(d.total).toBe(2)
+  })
+
+  it('los contenedores agendados sin transporte quedan como SIN ASIGNAR', () => {
+    const d = calcularDistribucion(
+      [ship({ operativas: [op({ SALIDA: '2026-08-19', TRANSPORTE: '' })] })],
+      CUOTAS, 'semana', HOY, 'prevision')
+    expect(d.sinAsignar).toBe(1)
+  })
+
+  it('sinAsignar es 0 cuando todo tiene transporte', () => {
+    const d = calcularDistribucion(
+      [ship({ operativas: [op({ SALIDA: '2026-08-19', TRANSPORTE: 'TRANSCAL' })] })],
+      CUOTAS, 'semana', HOY, 'prevision')
+    expect(d.sinAsignar).toBe(0)
+  })
+})
+
+describe('sugerirReparto', () => {
+  const base = (reparto: Record<string, number>) => {
+    const ships: ParsedShipment[] = []
+    let i = 0
+    for (const [t, n] of Object.entries(reparto)) {
+      for (let k = 0; k < n; k++) {
+        ships.push(ship({ REF: `A${i}`, operativas: [op({ CNTR_OP: `C${i}`, TRANSPORTE: t })] }))
+        i++
+      }
+    }
+    return calcularDistribucion(ships, CUOTAS, '90d', HOY)
+  }
+
+  it('reparte las pendientes al que más atrás viene', () => {
+    const r = sugerirReparto(4, base({ TRANSCAL: 10, VAIROLATTI: 2, ENZO: 1, RIGATOSSO: 0 }), CUOTAS)
+    const rig = r.find(x => x.transporte === 'RIGATOSSO')
+    expect(rig!.cantidad).toBeGreaterThan(0)
+    expect(r.reduce((a, x) => a + x.cantidad, 0)).toBe(4)
+  })
+
+  it('el total repartido siempre coincide con las pendientes', () => {
+    for (const n of [1, 3, 7, 20]) {
+      const r = sugerirReparto(n, base({ TRANSCAL: 30, RIGATOSSO: 1, VAIROLATTI: 5, ENZO: 2 }), CUOTAS)
+      expect(r.reduce((a, x) => a + x.cantidad, 0)).toBe(n)
+    }
+  })
+
+  it('sin pendientes no sugiere nada', () => {
+    expect(sugerirReparto(0, base({ TRANSCAL: 10 }), CUOTAS)).toEqual([])
+  })
+
+  it('recalcula después de cada asignación: no vuelca todo en uno solo', () => {
+    // Partiendo de cero, 20 contenedores deberían repartirse entre los cuatro.
+    const r = sugerirReparto(20, base({}), CUOTAS)
+    expect(r.filter(x => x.cantidad > 0).length).toBe(4)
+    expect(r.find(x => x.transporte === 'TRANSCAL')!.cantidad).toBeGreaterThan(
+      r.find(x => x.transporte === 'ENZO')!.cantidad)
+  })
+
+  it('sin cuotas activas no sugiere nada', () => {
+    const r = sugerirReparto(5, base({ TRANSCAL: 3 }), CUOTAS.map(c => ({ ...c, activo: false })))
+    expect(r).toEqual([])
   })
 })
