@@ -142,10 +142,19 @@ export default function PagosManagement({ dbShipments = [], onPatchShipment, onO
     return m
   }, [dbShipments])
 
+  /** Un ítem que deja de estar pendiente no puede quedar seleccionado: su clave
+   *  colgada inflaría el contador del lote (hallazgo revisión 12/08). */
+  const sacarDeSel = (it: PagoItem) =>
+    setSel(cur => {
+      if (!cur.has(claveItem(it))) return cur
+      const n = new Set(cur); n.delete(claveItem(it)); return n
+    })
+
   const marcarPagado = (it: PagoItem) => {
     if (!onPatchShipment) return
     const key = PAGO_AT_KEYS[it.rubro]
     onPatchShipment(it.id, { [key]: new Date().toISOString() })
+    sacarDeSel(it)
     toast.success(`${RUBRO_LABELS[it.rubro]} de ${it.ref} marcado como pagado`, {
       action: { label: 'Deshacer', onClick: () => onPatchShipment(it.id, { [key]: null }) },
     })
@@ -155,6 +164,7 @@ export default function PagosManagement({ dbShipments = [], onPatchShipment, onO
   const marcarPagadoSilencioso = (it: PagoItem) => {
     if (!onPatchShipment) return
     onPatchShipment(it.id, { [PAGO_AT_KEYS[it.rubro]]: new Date().toISOString() })
+    sacarDeSel(it)
   }
 
   const deshacerPago = (it: PagoItem) => {
@@ -382,6 +392,20 @@ export default function PagosManagement({ dbShipments = [], onPatchShipment, onO
 
       {subTab === 'acreedor' && (
         <div className="space-y-2">
+          {/* Los filtros se setean en Pendientes pero acá no se ven: sin este
+              aviso, el total por acreedor salía recortado sin ninguna señal —
+              y con ese número se hacen transferencias (hallazgo 12/08). */}
+          {(search.trim() !== '' || rubroFilter !== 'all' || lineaFilter !== 'all' || terminalFilter !== 'all' || soloCorte) && (
+            <div className="flex items-center justify-between gap-3 rounded-md border border-amber-400/50 bg-amber-500/10 px-3 py-2 text-xs">
+              <span className="text-amber-700 dark:text-amber-400">
+                ⚠ Hay filtros activos: los totales por acreedor NO incluyen todo lo pendiente.
+              </span>
+              <Button size="sm" variant="ghost" className="h-7 shrink-0"
+                onClick={() => { setSearch(''); setRubroFilter('all'); setLineaFilter('all'); setTerminalFilter('all'); setSoloCorte(false) }}>
+                Limpiar filtros
+              </Button>
+            </div>
+          )}
           {grupos.length === 0 ? (
             <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">
               No hay pagos pendientes con los filtros actuales.
@@ -448,20 +472,21 @@ export default function PagosManagement({ dbShipments = [], onPatchShipment, onO
                                 checked={sel.has(k)}
                                 onChange={e => setSel(cur => {
                                   const n = new Set(cur)
-                                  e.target.checked ? n.add(k) : n.delete(k)
+                                  if (e.target.checked) n.add(k)
+                                  else n.delete(k)
                                   return n
                                 })}
                                 className="shrink-0"
                               />
                               <span className="font-mono font-semibold w-[72px] shrink-0">{it.ref}</span>
-                              <span className="w-[76px] shrink-0 text-muted-foreground">{RUBRO_LABELS[it.rubro]}</span>
+                              <span className="hidden sm:inline w-[76px] shrink-0 text-muted-foreground">{RUBRO_LABELS[it.rubro]}</span>
                               <span className="flex-1 min-w-0 truncate text-muted-foreground">{it.cliente}</span>
                               {/* BL/MAWB en la fila (pedido 12/08): es el dato con el que
                                   se concilia contra la factura del acreedor. */}
                               <span className="hidden md:inline font-mono text-[11px] text-muted-foreground w-[150px] truncate text-right shrink-0" title={it.docNumber}>
                                 {it.docNumber || '—'}
                               </span>
-                              <span className={`w-[86px] text-right shrink-0 tabular-nums ${
+                              <span className={`hidden sm:inline w-[86px] text-right shrink-0 tabular-nums ${
                                 it.dias !== null && it.dias < 0 ? 'text-destructive font-medium' : 'text-muted-foreground'
                               }`}>
                                 {it.vence ? fmtDateDMY(it.vence) : 'sin fecha'}
@@ -536,7 +561,10 @@ export default function PagosManagement({ dbShipments = [], onPatchShipment, onO
                       <td className="px-3 py-2 max-w-[220px] truncate" title={it.cliente}>{it.cliente || '—'}</td>
                       <td className="px-3 py-2 whitespace-nowrap">{RUBRO_LABELS[it.rubro]}</td>
                       <td className="px-3 py-2 text-right tabular-nums">{fmtMoneyUY(it.monto)}</td>
-                      <td className="px-3 py-2 whitespace-nowrap">{fmtDateDMY(String(it.pagadoAt).slice(0, 10))}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">{
+                        /* Fecha LOCAL: el ISO es UTC y de noche (UY) el slice daba el día siguiente. */
+                        new Date(String(it.pagadoAt)).toLocaleDateString('es-UY')
+                      }</td>
                       <td className="px-3 py-2 whitespace-nowrap text-muted-foreground">{it.pagadoBy || '—'}</td>
                       <td className="px-3 py-2 text-right whitespace-nowrap">
                         <Button variant="ghost" size="sm" className="h-7" onClick={() => deshacerPago(it)}>

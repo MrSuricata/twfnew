@@ -1,3 +1,4 @@
+/* eslint-env serviceworker */
 /* ─── Service worker MINIMALISTA — SOLO Web Push ─────────────────────────
    La PWA es instalable SIN service worker a propósito: este archivo existe
    únicamente porque el estándar Web Push exige un SW para recibir avisos.

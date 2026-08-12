@@ -526,7 +526,7 @@ export default function NewShipmentDialog({
                 <Field label="Despacho" value={f.despacho} onChange={v => set('despacho', v)} />
                 <Field label="DEV (terminal devolución)" value={f.dev} onChange={v => set('dev', v)} placeholder="STL, TCP…" />
                 <Field label="Terminal" value={f.terminal} onChange={v => set('terminal', v)} placeholder="TCP, MONTECON…" />
-                <Field label="Descarga" type="date" value={f.descarga} onChange={v => set('descarga', v)} />
+                <Field label="Descarga (lugar post-fiscal)" value={f.descarga} onChange={v => set('descarga', v)} placeholder="RÍO SEGUNDO, planta…" />
                 {mode !== 'fcl' && (
                   <SelectField label="Estado" value={f.status} options={STATUS_OPTIONS} onChange={v => set('status', v)} />
                 )}

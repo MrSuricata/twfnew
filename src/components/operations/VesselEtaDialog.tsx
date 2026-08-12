@@ -143,7 +143,7 @@ export default function VesselEtaDialog({ open, onOpenChange, ops, onPatch }: Ve
               ? 'No hay cargas activas con buque asignado.'
               : search.trim()
                 ? `Ningún buque coincide con «${search.trim()}».`
-                : 'No hay viajes vigentes — activá «Solo vigentes» en off para ver el histórico.'}
+                : 'No hay viajes vigentes — desactivá «Solo vigentes» para ver el histórico.'}
           </div>
         ) : (
           <div className="max-h-[46vh] overflow-y-auto rounded-lg border border-border divide-y divide-border">

@@ -49,6 +49,9 @@ import type { Truck, TruckLoad } from '@/lib/truckTypes'
 import type { OriginPhoto, OperativeReport } from '@/lib/quotationTypes'
 import type { CatalogClient } from '@/lib/clientCatalog'
 import { canonicalizarLista, DEV_ALIASES } from '@/lib/fuzzyCatalog'
+import { fiscalSugerido, fiscalesRecientes } from '@/lib/sugerenciaHistorica'
+import { recomendarTransporte } from '@/lib/distribucionTransportes'
+import { useTransporteCuotas } from '@/hooks/useTransporteCuotas'
 import {
   buildOperations,
   deriveKnownTransportes,
@@ -122,7 +125,9 @@ const PAIS_LABEL: Record<string, string> = { UY: 'UY', AR: 'AR', CL: 'CL', OTRO:
 
 // Column value typing for sorting.
 const NUMERIC_KEYS = new Set(['pkgs', 'kg', 'm3'])
-const DATE_KEYS = new Set(['etd', 'eta', 'salida', 'etaFisc', 'libre', 'descarga', 'dev'])
+// descarga y dev son LUGARES (RÍO SEGUNDO, STL): tratarlos como fecha hacía
+// que ordenar por esas columnas no hiciera nada (hallazgo 12/08).
+const DATE_KEYS = new Set(['etd', 'eta', 'salida', 'etaFisc', 'libre'])
 // Columnas que se MUESTRAN como dd/MM/yyyy (display only — el dato guardado
 // sigue en ISO; textos como "DEVUELTO" pasan tal cual por fmtDateDMY).
 const DATE_DISPLAY_KEYS = new Set([...DATE_KEYS, 'seguimiento'])
@@ -389,6 +394,23 @@ export default function OperationsGrid({
     () => (selectedUid ? operations.find(o => o.uid === selectedUid) ?? null : null),
     [operations, selectedUid]
   )
+  const hoy = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d }, [])
+  // Sugerencias de la ficha — MISMO cálculo que OperationDetailOverlay. Faltaban
+  // acá (hallazgo revisión 12/08): la grilla es justamente donde se carga el
+  // transporte, y el panel abierto desde ella no mostraba ningún atajo.
+  const cuotas = useTransporteCuotas()
+  const sugerenciaFiscal = useMemo(
+    () => selectedOp ? fiscalSugerido(selectedOp.cliente || '', allOperations) : null,
+    [selectedOp, allOperations],
+  )
+  const recientesFiscal = useMemo(
+    () => selectedOp && !sugerenciaFiscal ? fiscalesRecientes(selectedOp.cliente || '', allOperations) : [],
+    [selectedOp, allOperations, sugerenciaFiscal],
+  )
+  const sugerenciaTransporte = useMemo(
+    () => selectedOp && cuotas.length ? recomendarTransporte(selectedOp, allOperations, cuotas, hoy) : null,
+    [selectedOp, allOperations, cuotas, hoy],
+  )
   // Fila cruda de shipments de la op seleccionada → sección Pagos del panel
   // (los montos/pago_*_at viven en la fila, no en UnifiedOperation).
   const selectedDbRow = useMemo(
@@ -403,7 +425,6 @@ export default function OperationsGrid({
   }, [selectedUid, selectedOp])
 
   // "Hoy" una sola vez por montaje (antes se creaba un Date POR FILA por render).
-  const hoy = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d }, [])
 
   // Próxima ref FCL sugerida: máximo A#### entre TODAS las cargas + 1
   // (helper compartido con el armador de camiones; incluye archivadas para
@@ -1257,6 +1278,9 @@ export default function OperationsGrid({
         knownTransportes={knownTransportes}
         knownFiscales={knownFiscales}
         knownAgentes={knownAgentes}
+        fiscalSugerido={sugerenciaFiscal}
+        fiscalesRecientes={recientesFiscal}
+        transporteSugerido={sugerenciaTransporte}
         knownDevs={knownDevs}
         knownLugaresDescarga={knownLugaresDescarga}
         knownTerminales={knownTerminales}

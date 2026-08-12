@@ -345,7 +345,9 @@ export default function ChecksBoard({ shipments = [], dbShipments = [], onPatchS
             ? 'No hay FCL activas por Uruguay para mostrar.'
             : search.trim()
               ? `Sin resultados para «${search.trim()}».`
-              : 'Todo al día — ninguna carga con pasos pendientes.'}
+              : verLiberadas
+                ? 'Todavía no hay cargas liberadas.'
+                : 'Todo al día — ninguna carga con pasos pendientes.'}
         </div>
       ) : (
         <div className="rounded-lg border border-border bg-card divide-y divide-border overflow-hidden">

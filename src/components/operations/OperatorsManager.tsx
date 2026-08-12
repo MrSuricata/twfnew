@@ -113,7 +113,7 @@ export default function OperatorsManager({ open, onOpenChange, operators, onUpda
       <AlertDialog open={!!pendingDelete} onOpenChange={(o) => !o && setPendingDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Eliminar a {pendingDelete?.name}?</AlertDialogTitle>
+            <AlertDialogTitle>¿Eliminar a {pendingDelete?.name}?</AlertDialogTitle>
             <AlertDialogDescription>Las cargas que tenían a {pendingDelete?.name} asignado quedan sin operativo. No se borra ninguna carga.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
