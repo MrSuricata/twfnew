@@ -5,6 +5,7 @@ import {
   enFronteraHoy,
   llegandoFiscalHoy,
   libreAlerts,
+  sinLiberarAlerts,
   buildTodaySnapshot,
   refsEnConsolidado,
   trucksSalientesHoy,
@@ -373,5 +374,74 @@ describe('consolidados en las columnas de HOY', () => {
     expect(snap.salientes).toHaveLength(1)
     expect(snap.trucksSalientes).toHaveLength(0)
     expect(snap.totalCount).toBe(1)
+  })
+})
+
+describe('sinLiberarAlerts — llegan y no están liberadas', () => {
+  const uy = (ref: string, eta: string, extra: Partial<ParsedShipment> = {}) =>
+    mkShip(ref, [mkOp({ REF: ref, CNTR_OP: 'ABCD1234567' })], { ETA: eta, PAIS: 'UY', ...extra })
+  const liberada = { liberado: { done: true } }
+
+  it('avisa por una carga que llega dentro de los 7 días sin liberar', () => {
+    const a = sinLiberarAlerts([uy('A1', '2026-04-24')], new Map())
+    expect(a).toHaveLength(1)
+    expect(a[0].diasParaLlegar).toBe(4)
+  })
+
+  it('no avisa si ya está liberada', () => {
+    const checks = new Map([['A1', liberada]])
+    expect(sinLiberarAlerts([uy('A1', '2026-04-24')], checks)).toHaveLength(0)
+  })
+
+  it('no avisa por una carga que llega más allá de la ventana', () => {
+    expect(sinLiberarAlerts([uy('A1', '2026-05-10')], new Map())).toHaveLength(0)
+  })
+
+  it('la ventana es configurable', () => {
+    expect(sinLiberarAlerts([uy('A1', '2026-04-30')], new Map(), 14)).toHaveLength(1)
+  })
+
+  it('una carga que YA llegó y sigue sin liberar es lo más urgente', () => {
+    const a = sinLiberarAlerts([uy('A1', '2026-04-18')], new Map())
+    expect(a[0].severity).toBe('vencido')
+    expect(a[0].diasParaLlegar).toBe(-2)
+  })
+
+  it('llega hoy o mañana → urgente', () => {
+    expect(sinLiberarAlerts([uy('A1', '2026-04-20')], new Map())[0].severity).toBe('urgente')
+    expect(sinLiberarAlerts([uy('A1', '2026-04-22')], new Map())[0].severity).toBe('urgente')
+  })
+
+  it('llega en 5 días → aviso normal', () => {
+    expect(sinLiberarAlerts([uy('A1', '2026-04-25')], new Map())[0].severity).toBe('proxima')
+  })
+
+  it('solo mira las cargas que operan por Uruguay', () => {
+    const ar = mkShip('A2', [mkOp({ REF: 'A2' })], { ETA: '2026-04-24', PAIS: 'AR' })
+    expect(sinLiberarAlerts([ar], new Map())).toHaveLength(0)
+  })
+
+  it('una carga que ya salió del puerto no se avisa', () => {
+    const s = mkShip('A1', [mkOp({ REF: 'A1', SALIDA: '2026-04-19' })], { ETA: '2026-04-18', PAIS: 'UY' })
+    expect(sinLiberarAlerts([s], new Map())).toHaveLength(0)
+  })
+
+  it('sin ETA no se puede avisar nada', () => {
+    expect(sinLiberarAlerts([uy('A1', '')], new Map())).toHaveLength(0)
+  })
+
+  it('ordena por la que llega antes', () => {
+    const a = sinLiberarAlerts([uy('A1', '2026-04-25'), uy('A2', '2026-04-21'), uy('A3', '2026-04-23')], new Map())
+    expect(a.map(x => x.shipment.REF)).toEqual(['A2', 'A3', 'A1'])
+  })
+
+  it('el resto de los checks no importa: solo cuenta LIBERADO', () => {
+    const checks = new Map([['A1', { bl_entregado: { done: true }, pagos_ok: { done: true } }]])
+    expect(sinLiberarAlerts([uy('A1', '2026-04-24')], checks)).toHaveLength(1)
+  })
+
+  it('entra al snapshot de HOY', () => {
+    const snap = buildTodaySnapshot([uy('A1', '2026-04-24')], [], [], new Map())
+    expect(snap.sinLiberar).toHaveLength(1)
   })
 })

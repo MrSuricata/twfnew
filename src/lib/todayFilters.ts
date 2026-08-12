@@ -18,7 +18,13 @@ import {
   type ParsedShipment,
   type OperativasRecord,
 } from './shipmentTypes'
-import { type CheckStepKey, normalizeRef } from './checksTypes'
+import {
+  type CheckStepKey,
+  type RefCheckSteps,
+  normalizeRef,
+  isPorUruguay,
+  estaLiberada,
+} from './checksTypes'
 import { refsEnConsolidado, type Truck, type TruckLoad } from './truckTypes'
 
 /** A single operativa matched along with its parent shipment for context. */
@@ -234,6 +240,57 @@ export function trucksLlegandoFiscalHoy(trucks: Truck[], loads: TruckLoad[]): Tr
 /**
  * Aggregated today-view payload used by both the web dashboard and the Telegram summary.
  */
+// ── Llegan sin liberar ──────────────────────────────────────────────────
+// Una carga no se puede retirar hasta que la naviera confirma la liberación
+// (el botón LIBERADO de la pestaña Checks). Si el buque está por llegar y eso
+// todavía no pasó, el retiro se va a trabar — y cuanto más cerca del arribo,
+// menos margen queda para resolverlo.
+//
+// Ventana de 7 días antes del arribo (Brian 12/08/2026). Las YA ARRIBADAS sin
+// liberar entran siempre: son las que están costando plata en terminal.
+
+/** Días antes del arribo a partir de los cuales se avisa. */
+export const SIN_LIBERAR_DIAS = 7
+
+export interface SinLiberarAlert {
+  shipment: ParsedShipment
+  /** Negativo = ya llegó · 0 = llega hoy · positivo = días que faltan. */
+  diasParaLlegar: number
+  severity: 'vencido' | 'urgente' | 'proxima'
+}
+
+/**
+ * Cargas por Uruguay que llegan dentro de la ventana (o ya llegaron) y no
+ * tienen marcada la liberación. `checksByRef` son los steps de ref_checks
+ * indexados por ref normalizada.
+ */
+export function sinLiberarAlerts(
+  shipments: ParsedShipment[],
+  checksByRef: Map<string, RefCheckSteps>,
+  dias: number = SIN_LIBERAR_DIAS,
+): SinLiberarAlert[] {
+  const out: SinLiberarAlert[] = []
+  for (const s of shipments) {
+    if (!isPorUruguay(s.PAIS)) continue
+    const eta = parseLocalDate(s.ETA || '')
+    if (!eta) continue
+    // Ya salió del puerto: la liberación dejó de ser un problema.
+    const yaSalio = (s.operativas || []).some(op => {
+      const d = parseLocalDate(op.SALIDA || '')
+      return d !== null && daysSince(op.SALIDA) !== null && (daysSince(op.SALIDA) as number) >= 0
+    })
+    if (yaSalio) continue
+    if (estaLiberada(checksByRef.get(normalizeRef(s.REF)) || {})) continue
+
+    const faltan = -(daysSince(s.ETA) as number)     // daysSince: + = pasado
+    if (faltan > dias) continue
+    const severity: SinLiberarAlert['severity'] =
+      faltan < 0 ? 'vencido' : faltan <= 2 ? 'urgente' : 'proxima'
+    out.push({ shipment: s, diasParaLlegar: faltan, severity })
+  }
+  return out.sort((a, b) => a.diasParaLlegar - b.diasParaLlegar)
+}
+
 export interface TodaySnapshot {
   salientes: OpMatch[]
   frontera: OpMatch[]
@@ -243,6 +300,8 @@ export interface TodaySnapshot {
   trucksFrontera: TruckMatch[]
   trucksLlegandoFiscal: TruckMatch[]
   libreAlerts: LibreAlert[]
+  /** Llegan dentro de 7 días y todavía no las liberó la naviera. */
+  sinLiberar: SinLiberarAlert[]
   totalCount: number
   hasMovement: boolean
 }
@@ -251,6 +310,7 @@ export function buildTodaySnapshot(
   shipments: ParsedShipment[],
   trucks: Truck[] = [],
   truckLoads: TruckLoad[] = [],
+  checksByRef: Map<string, RefCheckSteps> = new Map(),
 ): TodaySnapshot {
   // Las cargas que viajan en un consolidado se muestran una sola vez: dentro
   // de la tarjeta del camión.
@@ -262,6 +322,7 @@ export function buildTodaySnapshot(
   const trucksFrontera = trucksEnFronteraHoy(trucks, truckLoads)
   const trucksLlegandoFiscal = trucksLlegandoFiscalHoy(trucks, truckLoads)
   const alerts = libreAlerts(shipments)
+  const sinLiberar = sinLiberarAlerts(shipments, checksByRef)
   const totalCount =
     salientes.length + frontera.length + llegandoFiscal.length +
     trucksSalientes.length + trucksFrontera.length + trucksLlegandoFiscal.length
@@ -273,7 +334,8 @@ export function buildTodaySnapshot(
     trucksFrontera,
     trucksLlegandoFiscal,
     libreAlerts: alerts,
+    sinLiberar,
     totalCount,
-    hasMovement: totalCount > 0 || alerts.length > 0,
+    hasMovement: totalCount > 0 || alerts.length > 0 || sinLiberar.length > 0,
   }
 }

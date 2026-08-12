@@ -170,11 +170,67 @@ export function costoDevDefault(dev: string | null | undefined): number | null {
   return COSTO_DEV_DEFAULT[up(dev)] ?? null
 }
 
-/** A quién se le paga cada rubro. */
-export function empresaRubro(rubro: PagoRubro, s: Pick<DbShipment, 'linea' | 'terminal' | 'dev'>): string {
+/**
+ * A quién se le paga cada rubro.
+ *
+ * Flete y locales van al AGENTE, no a la línea: el carrier puede ser Maersk y
+ * la factura venir de Repremar, Craft o Trans-China, que son los que venden el
+ * espacio (verificado contra el mail, 12/08/2026). Sin agente cargado se cae en
+ * la línea, que es lo que había antes.
+ */
+export function empresaRubro(rubro: PagoRubro, s: Pick<DbShipment, 'linea' | 'terminal' | 'dev' | 'agente'>): string {
   if (rubro === 'devolucion') return (s.dev || '').trim()
   if (rubro === 'terminal') return (s.terminal || '').trim()
-  return (s.linea || '').trim()
+  return ((s.agente || '').trim() || (s.linea || '').trim())
+}
+
+/** Etiqueta de los ítems cuyo acreedor todavía no se cargó. */
+export const SIN_ACREEDOR = 'SIN ACREEDOR'
+
+export interface GrupoAcreedor {
+  acreedor: string
+  items: PagoItem[]
+  total: number
+  /** Primer vencimiento del grupo (ISO) — null si ningún ítem tiene fecha. */
+  primerVto: string | null
+  /** Algo del grupo ya venció. */
+  vencido: boolean
+  /** Ítems y monto que vencen dentro de la ventana pedida. */
+  enVentana: number
+  totalVentana: number
+}
+
+/**
+ * Agrupa los pagos PENDIENTES por acreedor: es como se paga en la práctica —
+ * una transferencia a Repremar cubre varias cargas, no una por carga.
+ *
+ * `hoyISO` y `dias` solo definen el corte de "vence pronto"; sin ellos el grupo
+ * igual trae el total y el primer vencimiento.
+ */
+export function agruparPorAcreedor(
+  items: PagoItem[],
+  hoyISO?: string,
+  dias = 7,
+): GrupoAcreedor[] {
+  const hasta = hoyISO ? addDaysISO(hoyISO, dias) : null
+  const map = new Map<string, GrupoAcreedor>()
+  for (const it of items) {
+    if (it.estado === 'pagado') continue
+    const acreedor = (it.empresa || '').trim().toUpperCase() || SIN_ACREEDOR
+    const g = map.get(acreedor) || {
+      acreedor, items: [], total: 0, primerVto: null, vencido: false, enVentana: 0, totalVentana: 0,
+    }
+    g.items.push(it)
+    g.total += it.monto
+    if (it.vence) {
+      if (!g.primerVto || it.vence < g.primerVto) g.primerVto = it.vence
+      if (hoyISO && it.vence < hoyISO) g.vencido = true
+      if (hasta && it.vence <= hasta) { g.enVentana++; g.totalVentana += it.monto }
+    }
+    map.set(acreedor, g)
+  }
+  // Primero el que más plata debe: es el orden en que se resuelve.
+  return [...map.values()].sort((a, b) => b.total - a.total)
 }
 
 /** "Sin datos de pago": FCL viva y vigente (ETA ISO no más vieja de 60 días) sin ningún monto cargado. */
