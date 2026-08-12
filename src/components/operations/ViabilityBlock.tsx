@@ -286,7 +286,11 @@ export default function ViabilityBlock({
   )
 }
 
-// Cuadro grande editable: número / texto / fecha / combo (datalist).
+// Cuadro grande editable: número / texto / fecha / combo.
+// El combo abre una lista propia (antes era un <datalist>, que obliga a
+// tipear para que el navegador muestre algo): al entrar en edición se ven
+// TODAS las opciones, se filtran a medida que se escribe, se navegan con
+// flechas y lo que no está en el catálogo se da de alta con «+ Agregar».
 // upper: display en MAYÚSCULAS (patrón transportista de TrucksList) y el valor
 // se normaliza a mayúsculas al guardar.
 // valueClass: clases extra del valor (ej: LIBRE='DEVUELTO' teñido emerald).
@@ -319,6 +323,8 @@ function StatBox({
   // true cuando la edición arrancó tipeando una letra (type-to-edit): el foco
   // va al final del seed en vez de seleccionar todo (si no, la 2ª tecla lo pisa).
   const seededRef = useRef(false)
+  // Opción resaltada de la lista del combo (-1 = ninguna; se navega con flechas).
+  const [resaltada, setResaltada] = useState(-1)
 
   // Fechas: se muestran dd/MM/yyyy (display only); el editor type=date sigue
   // trabajando con el valor ISO crudo. Textos como "DEVUELTO" pasan tal cual.
@@ -371,35 +377,92 @@ function StatBox({
   // no hace falta: el blur guarda y el foco ya saltó solo al siguiente cuadro.)
   const refocus = () => requestAnimationFrame(() => boxRef.current?.querySelector('button')?.focus())
 
-  const listId = `dep-${label}`
+  // Opciones que quedan al filtrar por lo tipeado. Con el campo vacío se ven
+  // TODAS: el pedido era poder elegir sin tener que teclear (Brian 12/08).
+  const sugeridas = kind === 'combo'
+    ? (options || []).filter(o => !draft.trim() || o.toUpperCase().includes(draft.trim().toUpperCase()))
+    : []
+  // Lo tipeado no está en el catálogo → se puede dar de alta desde acá mismo.
+  const esNuevo = kind === 'combo' && !!draft.trim() &&
+    !(options || []).some(o => o.toUpperCase() === draft.trim().toUpperCase())
+
+  /** Elegir una opción de la lista: guarda directo, sin pasar por el fuzzy. */
+  const elegir = (v: string) => {
+    setEditing(false)
+    setResaltada(-1)
+    if (String(value ?? '') !== v) onCommit(v)
+    refocus()
+  }
+
   return (
-    <div ref={boxRef} className="rounded-lg border bg-background p-2.5 min-w-0">
+    <div ref={boxRef} className="rounded-lg border bg-background p-2.5 min-w-0 relative">
       <div className="text-[11px] text-muted-foreground leading-none mb-1">{label}</div>
       {editing ? (
         <>
           <Input
             autoFocus
-            list={kind === 'combo' ? listId : undefined}
             type={kind === 'date' ? 'date' : 'text'}
             value={draft}
-            onChange={e => setDraft(e.target.value)}
+            onChange={e => { setDraft(e.target.value); setResaltada(-1) }}
             onFocus={e => {
               const el = e.target as HTMLInputElement
               if (seededRef.current) { try { el.setSelectionRange(el.value.length, el.value.length) } catch { /* type=date no soporta selección */ } }
               else el.select()
             }}
+            /* El blur guarda, salvo que venga de clickear una opción: ahí el
+               onMouseDown ya lo evitó y manda `elegir`. */
             onBlur={save}
             onKeyDown={e => {
+              if (kind === 'combo' && sugeridas.length > 0) {
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault(); setResaltada(i => (i + 1) % sugeridas.length); return
+                }
+                if (e.key === 'ArrowUp') {
+                  e.preventDefault(); setResaltada(i => (i <= 0 ? sugeridas.length : i) - 1); return
+                }
+                if (e.key === 'Enter' && resaltada >= 0) {
+                  e.preventDefault(); elegir(sugeridas[resaltada]); return
+                }
+              }
               if (e.key === 'Enter') { save(); refocus() }
-              if (e.key === 'Escape') { setEditing(false); refocus() }
+              if (e.key === 'Escape') { setEditing(false); setResaltada(-1); refocus() }
             }}
             inputMode={kind === 'number' ? 'decimal' : undefined}
             className={`h-8 text-sm px-1.5 ${upper ? 'uppercase' : ''}`}
           />
-          {kind === 'combo' && (
-            <datalist id={listId}>
-              {(options || []).map(o => <option key={o} value={o} />)}
-            </datalist>
+          {kind === 'combo' && (sugeridas.length > 0 || esNuevo) && (
+            <div
+              role="listbox"
+              aria-label={`Opciones de ${label}`}
+              className="absolute left-2 right-2 top-full z-30 mt-1 max-h-56 overflow-auto rounded-md border bg-popover shadow-lg py-1"
+            >
+              {sugeridas.map((o, i) => (
+                <button
+                  key={o}
+                  type="button"
+                  role="option"
+                  aria-selected={i === resaltada}
+                  /* preventDefault: sin esto el blur del input dispara save()
+                     antes de que llegue el click y la opción no se aplica. */
+                  onMouseDown={e => { e.preventDefault(); elegir(o) }}
+                  onMouseEnter={() => setResaltada(i)}
+                  className={`w-full text-left px-2.5 py-1.5 text-xs transition-colors ${
+                    i === resaltada ? 'bg-accent text-accent-foreground' : 'hover:bg-muted'
+                  }`}
+                >
+                  {o}
+                </button>
+              ))}
+              {esNuevo && (
+                <button
+                  type="button"
+                  onMouseDown={e => { e.preventDefault(); elegir(upperCat(draft.trim())) }}
+                  className="w-full text-left px-2.5 py-1.5 text-xs border-t text-primary hover:bg-muted"
+                >
+                  + Agregar «{upper ? draft.trim().toUpperCase() : draft.trim()}»
+                </button>
+              )}
+            </div>
           )}
         </>
       ) : (
