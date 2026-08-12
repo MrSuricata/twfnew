@@ -445,3 +445,34 @@ describe('sinLiberarAlerts — llegan y no están liberadas', () => {
     expect(snap.sinLiberar).toHaveLength(1)
   })
 })
+
+describe('sinLiberarAlerts — solo lo que se puede resolver en Checks', () => {
+  const uy = (ref: string, eta: string, ops: Partial<OperativasRecord>[] = [{}]) =>
+    mkShip(ref, ops.map(o => mkOp({ REF: ref, CNTR_OP: 'ABCD1234567', ...o })), { ETA: eta, PAIS: 'UY' })
+
+  it('no avisa por una carga vieja sin datos de operativa: no está en Checks', () => {
+    // ETA hace 320 días y nunca se cargó LIBRE/SALIDA/ETA_FISC → Checks no la
+    // muestra, así que no hay dónde apretar LIBERADO.
+    expect(sinLiberarAlerts([uy('A6994', '2025-06-04')], new Map())).toHaveLength(0)
+  })
+
+  it('el corte es el mismo que el de Checks: 60 días sin datos de operativa', () => {
+    expect(sinLiberarAlerts([uy('A1', '2026-01-20')], new Map())).toHaveLength(0)   // 90d
+    expect(sinLiberarAlerts([uy('A2', '2026-03-05')], new Map())).toHaveLength(1)   // 46d
+  })
+
+  it('una carga vieja CON datos de operativa sigue avisando: está en Checks', () => {
+    const s = uy('A1', '2025-12-01', [{ ETA_FISC: '2026-06-01' }])
+    expect(sinLiberarAlerts([s], new Map())).toHaveLength(1)
+  })
+
+  it('no avisa por una carga ya devuelta y arribada a fiscal', () => {
+    const s = uy('A1', '2026-04-10', [{ LIBRE: 'DEVUELTO', ETA_FISC: '2026-04-15' }])
+    expect(sinLiberarAlerts([s], new Map())).toHaveLength(0)
+  })
+
+  it('devuelta pero todavía sin llegar a fiscal: sigue viva', () => {
+    const s = uy('A1', '2026-04-18', [{ LIBRE: 'DEVUELTO', ETA_FISC: '2026-04-30' }])
+    expect(sinLiberarAlerts([s], new Map())).toHaveLength(1)
+  })
+})

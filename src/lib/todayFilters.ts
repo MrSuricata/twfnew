@@ -26,6 +26,7 @@ import {
   estaLiberada,
 } from './checksTypes'
 import { refsEnConsolidado, type Truck, type TruckLoad } from './truckTypes'
+import { cargaFclActiva } from './operationsTypes'
 
 /** A single operativa matched along with its parent shipment for context. */
 export interface OpMatch {
@@ -249,6 +250,8 @@ export function trucksLlegandoFiscalHoy(trucks: Truck[], loads: TruckLoad[]): Tr
 // Ventana de 7 días antes del arribo (Brian 12/08/2026). Las YA ARRIBADAS sin
 // liberar entran siempre: son las que están costando plata en terminal.
 
+const hoyMidnight = (): Date => { const d = new Date(); d.setHours(0, 0, 0, 0); return d }
+
 /** Días antes del arribo a partir de los cuales se avisa. */
 export const SIN_LIBERAR_DIAS = 7
 
@@ -280,6 +283,17 @@ export function sinLiberarAlerts(
       return d !== null && daysSince(op.SALIDA) !== null && (daysSince(op.SALIDA) as number) >= 0
     })
     if (yaSalio) continue
+
+    // MISMO universo que la pestaña Checks: si la carga no está viva ahí, no hay
+    // dónde apretar LIBERADO y avisar sería mandar a una pantalla vacía. Sin esto
+    // aparecían cargas de hace 300+ días que nunca tuvieron operativa cargada.
+    const ops = s.operativas || []
+    if (!cargaFclActiva({
+      libre: ops.find(o => o.LIBRE)?.LIBRE || s.LIBRE_HASTA || s.calculatedLibreHasta,
+      salida: ops.find(o => o.SALIDA)?.SALIDA,
+      etaFisc: ops.map(o => o.ETA_FISC).filter(Boolean).sort().pop(),
+      eta: s.ETA,
+    }, hoyMidnight())) continue
     if (estaLiberada(checksByRef.get(normalizeRef(s.REF)) || {})) continue
 
     const faltan = -(daysSince(s.ETA) as number)     // daysSince: + = pasado

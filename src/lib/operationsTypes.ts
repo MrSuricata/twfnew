@@ -616,6 +616,32 @@ export function isSeguimientoVencido(op: UnifiedOperation, truckStatus: string |
  *  considera inactiva si la ETA pasó hace más de 60 días. DB (LCL/aéreo/
  *  terrestre): estado terminal — en fiscal o entregado — derivado del camión
  *  si está cargada en uno. */
+/**
+ * Regla de "carga viva" en su forma cruda, para poder aplicarla también sobre
+ * ParsedShipment (la pestaña HOY) y no solo sobre UnifiedOperation.
+ *
+ * Es la MISMA que decide el universo de la pestaña Checks: si acá da false, la
+ * carga no aparece en Checks y por lo tanto no hay dónde resolverla.
+ */
+export function cargaFclActiva(
+  f: { libre?: string | null; salida?: string | null; etaFisc?: string | null; eta?: string | null },
+  today: Date,
+): boolean {
+  // OJO (verificado en datos 2026-06): "DEVUELTO" vive en LIBRE (456 FCL), NUNCA en
+  // OPERATIVA (0). No cambiar a op.operativa — todas las devueltas quedarían "activas".
+  const devuelta = (f.libre || '').toUpperCase().includes('DEVUELTO')
+  const hasOperativaData = !!(f.libre || f.salida || f.etaFisc)
+  if (hasOperativaData) {
+    const fiscalDate = parseLocalDate(f.etaFisc || '')
+    const enFiscal = f.etaFisc ? (fiscalDate != null && fiscalDate.getTime() <= today.getTime()) : true
+    return !(devuelta && enFiscal)
+  }
+  // Sin NADA de operativa cargado: se la da por cerrada a los 60 días del arribo.
+  const eta = parseLocalDate(f.eta || '')
+  if (!eta) return true
+  return eta.getTime() >= today.getTime() - 60 * 86400000
+}
+
 export function isOperationActive(op: UnifiedOperation, truckStatus: string | undefined, today: Date): boolean {
   // No-FCL (LCL/aéreo/terrestre): estado terminal por código (derivado del camión
   // si va en uno). Se basa en `mode` (no en source) para que la FCL horneada (que
@@ -624,18 +650,7 @@ export function isOperationActive(op: UnifiedOperation, truckStatus: string | un
     const eff = truckStatus || op.status
     return eff !== 'en_fiscal' && eff !== 'devuelto'
   }
-  // OJO (verificado en datos 2026-06): "DEVUELTO" vive en LIBRE (456 FCL), NUNCA en
-  // OPERATIVA (0). No cambiar a op.operativa — todas las devueltas quedarían "activas".
-  const devuelta = (op.libre || '').toUpperCase().includes('DEVUELTO')
-  const hasOperativaData = !!(op.libre || op.salida || op.etaFisc)
-  if (hasOperativaData) {
-    const fiscalDate = parseLocalDate(op.etaFisc)
-    const enFiscal = op.etaFisc ? (fiscalDate != null && fiscalDate.getTime() <= today.getTime()) : true
-    return !(devuelta && enFiscal)
-  }
-  const eta = parseLocalDate(op.eta)
-  if (!eta) return true
-  return eta.getTime() >= today.getTime() - 60 * 86400000
+  return cargaFclActiva({ libre: op.libre, salida: op.salida, etaFisc: op.etaFisc, eta: op.eta }, today)
 }
 
 export function indexAssignments(rows: OperatorAssignment[]): Map<string, string | null> {

@@ -386,88 +386,97 @@ export default function PagosManagement({ dbShipments = [], onPatchShipment, onO
             <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">
               No hay pagos pendientes con los filtros actuales.
             </CardContent></Card>
-          ) : grupos.map(g => {
-            const claves = g.items.map(claveItem)
-            const todos = claves.every(k => sel.has(k))
-            const algunos = !todos && claves.some(k => sel.has(k))
-            const toggleGrupo = () => setSel(cur => {
-              const n = new Set(cur)
-              claves.forEach(k => todos ? n.delete(k) : n.add(k))
-              return n
-            })
-            return (
-              <Card key={g.acreedor} className="overflow-hidden">
-                <div className="flex items-center gap-3 px-4 py-3">
-                  <input
-                    type="checkbox"
-                    checked={todos}
-                    ref={el => { if (el) el.indeterminate = algunos }}
-                    onChange={toggleGrupo}
-                    aria-label={`Seleccionar todo lo de ${g.acreedor}`}
-                    className="shrink-0"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setAbierto(a => a === g.acreedor ? null : g.acreedor)}
-                    className="flex-1 min-w-0 flex items-center gap-2.5 text-left"
-                  >
-                    {abierto === g.acreedor
-                      ? <CaretDown size={14} className="text-muted-foreground shrink-0" />
-                      : <CaretRight size={14} className="text-muted-foreground shrink-0" />}
-                    <span className="font-semibold text-sm truncate">
-                      {g.acreedor === SIN_ACREEDOR ? 'Sin acreedor cargado' : g.acreedor}
-                    </span>
-                    <span className="text-[11px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground shrink-0">
-                      {g.items.length} ítem{g.items.length > 1 ? 's' : ''}
-                    </span>
-                    {g.vencido && (
-                      <span className="text-[11px] px-1.5 py-0.5 rounded bg-destructive/10 text-destructive font-medium shrink-0">
-                        vencido
-                      </span>
-                    )}
-                  </button>
-                  <div className="text-right shrink-0">
-                    <div className="font-semibold text-sm tabular-nums">{fmtUSD(g.total)}</div>
-                    {g.enVentana > 0 && (
-                      <div className="text-[11px] text-amber-600 dark:text-amber-400 tabular-nums">
-                        {fmtUSD(g.totalVentana)} esta semana
+          ) : (
+            /* UNA lista con filas divididas, no una tarjeta por acreedor: con 17
+               acreedores las tarjetas ocupaban una pantalla cada 6 (Brian 12/08). */
+            <div className="rounded-lg border bg-card divide-y divide-border overflow-hidden">
+              {grupos.map(g => {
+                const claves = g.items.map(claveItem)
+                const todos = claves.every(k => sel.has(k))
+                const algunos = !todos && claves.some(k => sel.has(k))
+                const toggleGrupo = () => setSel(cur => {
+                  const n = new Set(cur)
+                  claves.forEach(k => todos ? n.delete(k) : n.add(k))
+                  return n
+                })
+                return (
+                  <div key={g.acreedor}>
+                    <div className="flex items-center gap-2.5 px-3 py-2 hover:bg-muted/30 transition-colors">
+                      <input
+                        type="checkbox"
+                        checked={todos}
+                        ref={el => { if (el) el.indeterminate = algunos }}
+                        onChange={toggleGrupo}
+                        aria-label={`Seleccionar todo lo de ${g.acreedor}`}
+                        className="shrink-0"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setAbierto(a => a === g.acreedor ? null : g.acreedor)}
+                        className="flex-1 min-w-0 flex items-center gap-2 text-left"
+                      >
+                        {abierto === g.acreedor
+                          ? <CaretDown size={13} className="text-muted-foreground shrink-0" />
+                          : <CaretRight size={13} className="text-muted-foreground shrink-0" />}
+                        <span className="font-semibold text-sm truncate min-w-[90px]">
+                          {g.acreedor === SIN_ACREEDOR ? 'Sin acreedor cargado' : g.acreedor}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground shrink-0">
+                          {g.items.length} ítem{g.items.length > 1 ? 's' : ''}
+                        </span>
+                        {g.vencido && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-destructive/10 text-destructive font-medium shrink-0">
+                            vencido
+                          </span>
+                        )}
+                        {g.enVentana > 0 && (
+                          <span className="hidden sm:inline text-[11px] text-amber-600 dark:text-amber-400 tabular-nums ml-auto pr-3">
+                            {fmtUSD(g.totalVentana)} esta semana
+                          </span>
+                        )}
+                      </button>
+                      <span className="font-semibold text-sm tabular-nums shrink-0">{fmtUSD(g.total)}</span>
+                    </div>
+                    {abierto === g.acreedor && (
+                      <div className="border-t bg-muted/20 divide-y divide-border/60">
+                        {g.items.map(it => {
+                          const k = claveItem(it)
+                          return (
+                            <label key={k} className="flex items-center gap-3 pl-9 pr-3 py-1.5 text-xs cursor-pointer hover:bg-muted/40">
+                              <input
+                                type="checkbox"
+                                checked={sel.has(k)}
+                                onChange={e => setSel(cur => {
+                                  const n = new Set(cur)
+                                  e.target.checked ? n.add(k) : n.delete(k)
+                                  return n
+                                })}
+                                className="shrink-0"
+                              />
+                              <span className="font-mono font-semibold w-[72px] shrink-0">{it.ref}</span>
+                              <span className="w-[76px] shrink-0 text-muted-foreground">{RUBRO_LABELS[it.rubro]}</span>
+                              <span className="flex-1 min-w-0 truncate text-muted-foreground">{it.cliente}</span>
+                              {/* BL/MAWB en la fila (pedido 12/08): es el dato con el que
+                                  se concilia contra la factura del acreedor. */}
+                              <span className="hidden md:inline font-mono text-[11px] text-muted-foreground w-[150px] truncate text-right shrink-0" title={it.docNumber}>
+                                {it.docNumber || '—'}
+                              </span>
+                              <span className={`w-[86px] text-right shrink-0 tabular-nums ${
+                                it.dias !== null && it.dias < 0 ? 'text-destructive font-medium' : 'text-muted-foreground'
+                              }`}>
+                                {it.vence ? fmtDateDMY(it.vence) : 'sin fecha'}
+                              </span>
+                              <span className="w-[92px] text-right shrink-0 tabular-nums font-medium">{fmtUSD(it.monto)}</span>
+                            </label>
+                          )
+                        })}
                       </div>
                     )}
                   </div>
-                </div>
-                {abierto === g.acreedor && (
-                  <div className="border-t bg-muted/20 divide-y divide-border/60">
-                    {g.items.map(it => {
-                      const k = claveItem(it)
-                      return (
-                        <label key={k} className="flex items-center gap-3 px-4 py-2 text-xs cursor-pointer hover:bg-muted/40">
-                          <input
-                            type="checkbox"
-                            checked={sel.has(k)}
-                            onChange={e => setSel(cur => {
-                              const n = new Set(cur)
-                              e.target.checked ? n.add(k) : n.delete(k)
-                              return n
-                            })}
-                            className="shrink-0"
-                          />
-                          <span className="font-mono font-semibold w-[72px] shrink-0">{it.ref}</span>
-                          <span className="w-[76px] shrink-0 text-muted-foreground">{RUBRO_LABELS[it.rubro]}</span>
-                          <span className="flex-1 min-w-0 truncate text-muted-foreground">{it.cliente}</span>
-                          <span className={`w-[86px] text-right shrink-0 tabular-nums ${
-                            it.dias !== null && it.dias < 0 ? 'text-destructive font-medium' : 'text-muted-foreground'
-                          }`}>
-                            {it.vence ? fmtDateDMY(it.vence) : 'sin fecha'}
-                          </span>
-                          <span className="w-[92px] text-right shrink-0 tabular-nums font-medium">{fmtUSD(it.monto)}</span>
-                        </label>
-                      )
-                    })}
-                  </div>
-                )}
-              </Card>
-            )
-          })}
+                )
+              })}
+            </div>
+          )}
 
           {/* Barra de pago en lote: una transferencia cubre varios ítems. */}
           {seleccionados.length > 0 && (
