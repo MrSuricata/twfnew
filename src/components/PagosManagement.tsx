@@ -18,6 +18,8 @@ import {
   PencilSimple,
   DownloadSimple,
   Warning,
+  CaretDown,
+  CaretRight,
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import type { DbShipment } from '@/lib/operationsTypes'
@@ -38,6 +40,8 @@ import {
   type PagoRubro,
   type FormaPago,
   type KpiBucket,
+  agruparPorAcreedor,
+  SIN_ACREEDOR,
 } from '@/lib/pagosVencimientos'
 import { fmtMoneyUY } from '@/lib/fichaFacturacionPdf'
 import { fmtDateDMY } from '@/lib/format'
@@ -57,7 +61,7 @@ interface PagosManagementProps {
   onOpenDetail?: (key: string) => void
 }
 
-type SubTab = 'pendientes' | 'pagados' | 'sin_datos'
+type SubTab = 'pendientes' | 'acreedor' | 'pagados' | 'sin_datos'
 
 /** Fecha de HOY en hora local (toISOString es UTC y a la noche ya es "mañana" en UY). */
 function todayISO(): string {
@@ -74,6 +78,9 @@ interface MontosDraft {
   formaPago: '' | FormaPago
 }
 
+/** USD con el mismo formato que el resto del panel. */
+const fmtUSD = (n: number) => `USD ${fmtMoneyUY(n)}`
+
 export default function PagosManagement({ dbShipments = [], onPatchShipment, onOpenDetail }: PagosManagementProps) {
   const hoy = useMemo(() => todayISO(), [])
   const [subTab, setSubTab] = useState<SubTab>('pendientes')
@@ -84,6 +91,9 @@ export default function PagosManagement({ dbShipments = [], onPatchShipment, onO
   const [fechaCorte, setFechaCorte] = useState(hoy)
   const [soloCorte, setSoloCorte] = useState(false)
   // Editor de montos (dialog): carga abierta + drafts de los 4 rubros + forma de pago.
+  // Selección para el pago en lote de la vista por acreedor.
+  const [sel, setSel] = useState<Set<string>>(new Set())
+  const [abierto, setAbierto] = useState<string | null>(null)
   const [editS, setEditS] = useState<DbShipment | null>(null)
   const [draft, setDraft] = useState<MontosDraft>({ devolucion: '', terminal: '', locales: '', flete: '', formaPago: '' })
 
@@ -116,6 +126,16 @@ export default function PagosManagement({ dbShipments = [], onPatchShipment, onO
     })
   }, [pendientes, rubroFilter, lineaFilter, terminalFilter, soloCorte, fechaCorte, search])
 
+  // Agrupado por acreedor: así se paga en la práctica — una transferencia a
+  // Repremar cubre varias cargas. Respeta los filtros de arriba.
+  const grupos = useMemo(() => agruparPorAcreedor(filtered, hoy, 7), [filtered, hoy])
+  const claveItem = (it: PagoItem) => `${it.id}|${it.rubro}`
+  const seleccionados = useMemo(
+    () => filtered.filter(i => sel.has(claveItem(i))),
+    [filtered, sel],
+  )
+  const totalSel = seleccionados.reduce((a, i) => a + i.monto, 0)
+
   const byId = useMemo(() => {
     const m = new Map<string, DbShipment>()
     for (const s of dbShipments) m.set(s.id, s)
@@ -129,6 +149,12 @@ export default function PagosManagement({ dbShipments = [], onPatchShipment, onO
     toast.success(`${RUBRO_LABELS[it.rubro]} de ${it.ref} marcado como pagado`, {
       action: { label: 'Deshacer', onClick: () => onPatchShipment(it.id, { [key]: null }) },
     })
+  }
+
+  /** Igual que marcarPagado pero sin toast: el lote muestra uno solo al final. */
+  const marcarPagadoSilencioso = (it: PagoItem) => {
+    if (!onPatchShipment) return
+    onPatchShipment(it.id, { [PAGO_AT_KEYS[it.rubro]]: new Date().toISOString() })
   }
 
   const deshacerPago = (it: PagoItem) => {
@@ -248,6 +274,7 @@ export default function PagosManagement({ dbShipments = [], onPatchShipment, onO
       {/* Sub-tabs */}
       <div className="flex flex-wrap gap-2">
         <SubTabChip label="Pendientes" count={pendientes.length} tone="amber" active={subTab === 'pendientes'} onClick={() => setSubTab('pendientes')} />
+        <SubTabChip label="Por acreedor" count={grupos.length} tone="amber" active={subTab === 'acreedor'} onClick={() => setSubTab('acreedor')} />
         <SubTabChip label="Pagados" count={pagados.length} tone="green" active={subTab === 'pagados'} onClick={() => setSubTab('pagados')} />
         <SubTabChip label="Sin datos de pago" count={sinDatos.length} tone="muted" active={subTab === 'sin_datos'} onClick={() => setSubTab('sin_datos')} />
       </div>
@@ -351,6 +378,126 @@ export default function PagosManagement({ dbShipments = [], onPatchShipment, onO
             </CardContent>
           </Card>
         </>
+      )}
+
+      {subTab === 'acreedor' && (
+        <div className="space-y-2">
+          {grupos.length === 0 ? (
+            <Card><CardContent className="py-10 text-center text-sm text-muted-foreground">
+              No hay pagos pendientes con los filtros actuales.
+            </CardContent></Card>
+          ) : grupos.map(g => {
+            const claves = g.items.map(claveItem)
+            const todos = claves.every(k => sel.has(k))
+            const algunos = !todos && claves.some(k => sel.has(k))
+            const toggleGrupo = () => setSel(cur => {
+              const n = new Set(cur)
+              claves.forEach(k => todos ? n.delete(k) : n.add(k))
+              return n
+            })
+            return (
+              <Card key={g.acreedor} className="overflow-hidden">
+                <div className="flex items-center gap-3 px-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={todos}
+                    ref={el => { if (el) el.indeterminate = algunos }}
+                    onChange={toggleGrupo}
+                    aria-label={`Seleccionar todo lo de ${g.acreedor}`}
+                    className="shrink-0"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setAbierto(a => a === g.acreedor ? null : g.acreedor)}
+                    className="flex-1 min-w-0 flex items-center gap-2.5 text-left"
+                  >
+                    {abierto === g.acreedor
+                      ? <CaretDown size={14} className="text-muted-foreground shrink-0" />
+                      : <CaretRight size={14} className="text-muted-foreground shrink-0" />}
+                    <span className="font-semibold text-sm truncate">
+                      {g.acreedor === SIN_ACREEDOR ? 'Sin acreedor cargado' : g.acreedor}
+                    </span>
+                    <span className="text-[11px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground shrink-0">
+                      {g.items.length} ítem{g.items.length > 1 ? 's' : ''}
+                    </span>
+                    {g.vencido && (
+                      <span className="text-[11px] px-1.5 py-0.5 rounded bg-destructive/10 text-destructive font-medium shrink-0">
+                        vencido
+                      </span>
+                    )}
+                  </button>
+                  <div className="text-right shrink-0">
+                    <div className="font-semibold text-sm tabular-nums">{fmtUSD(g.total)}</div>
+                    {g.enVentana > 0 && (
+                      <div className="text-[11px] text-amber-600 dark:text-amber-400 tabular-nums">
+                        {fmtUSD(g.totalVentana)} esta semana
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {abierto === g.acreedor && (
+                  <div className="border-t bg-muted/20 divide-y divide-border/60">
+                    {g.items.map(it => {
+                      const k = claveItem(it)
+                      return (
+                        <label key={k} className="flex items-center gap-3 px-4 py-2 text-xs cursor-pointer hover:bg-muted/40">
+                          <input
+                            type="checkbox"
+                            checked={sel.has(k)}
+                            onChange={e => setSel(cur => {
+                              const n = new Set(cur)
+                              e.target.checked ? n.add(k) : n.delete(k)
+                              return n
+                            })}
+                            className="shrink-0"
+                          />
+                          <span className="font-mono font-semibold w-[72px] shrink-0">{it.ref}</span>
+                          <span className="w-[76px] shrink-0 text-muted-foreground">{RUBRO_LABELS[it.rubro]}</span>
+                          <span className="flex-1 min-w-0 truncate text-muted-foreground">{it.cliente}</span>
+                          <span className={`w-[86px] text-right shrink-0 tabular-nums ${
+                            it.dias !== null && it.dias < 0 ? 'text-destructive font-medium' : 'text-muted-foreground'
+                          }`}>
+                            {it.vence ? fmtDateDMY(it.vence) : 'sin fecha'}
+                          </span>
+                          <span className="w-[92px] text-right shrink-0 tabular-nums font-medium">{fmtUSD(it.monto)}</span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                )}
+              </Card>
+            )
+          })}
+
+          {/* Barra de pago en lote: una transferencia cubre varios ítems. */}
+          {seleccionados.length > 0 && (
+            <div className="sticky bottom-3 z-10 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/40 bg-background/95 backdrop-blur px-4 py-3 shadow-lg">
+              <span className="text-sm">
+                <b>{seleccionados.length}</b> ítem{seleccionados.length > 1 ? 's' : ''} ·{' '}
+                <b className="tabular-nums">{fmtUSD(totalSel)}</b>
+              </span>
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="ghost" onClick={() => setSel(new Set())}>Deseleccionar</Button>
+                <Button size="sm" onClick={() => {
+                  const n = seleccionados.length
+                  const previos = seleccionados.map(i => ({ id: i.id, rubro: i.rubro }))
+                  seleccionados.forEach(marcarPagadoSilencioso)
+                  setSel(new Set())
+                  toast.success(`${n} pago${n > 1 ? 's' : ''} marcado${n > 1 ? 's' : ''} — ${fmtUSD(totalSel)}`, {
+                    action: {
+                      label: 'Deshacer',
+                      onClick: () => previos.forEach(p =>
+                        onPatchShipment?.(p.id, { [PAGO_AT_KEYS[p.rubro]]: null })),
+                    },
+                  })
+                }} disabled={!onPatchShipment}>
+                  <CheckCircle size={15} className="mr-1.5" />
+                  Marcar como pagados
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
       {subTab === 'pagados' && (

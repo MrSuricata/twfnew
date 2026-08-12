@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   addDaysISO, diffDaysISO, esLineaOne, esLineaRepremar, deriveFormaPago,
   normalizeFormaPago, formaPagoEfectiva, venceRubro, buildPagoItems, corteHasta, kpisPagos,
-  costoTerminalDefault, costoDevDefault,
+  costoTerminalDefault, costoDevDefault, empresaRubro, agruparPorAcreedor, SIN_ACREEDOR,
 } from './pagosVencimientos'
 import type { DbShipment } from './operationsTypes'
 
@@ -225,5 +225,94 @@ describe('costos default por terminal/devolución (17/07)', () => {
     expect(costoDevDefault('stl')).toBe(205)
     expect(costoDevDefault('MPS')).toBe(189)
     expect(costoDevDefault('MURCHISON')).toBeNull()
+  })
+})
+
+describe('empresaRubro — a quién se le paga', () => {
+  it('flete y locales van al AGENTE, que es quien factura', () => {
+    // Repremar vende espacio de Maersk: el carrier es Maersk pero se le paga a
+    // Repremar (verificado en el mail, caso A8036).
+    const s = base({ linea: 'MAERSK', agente: 'REPREMAR' })
+    expect(empresaRubro('flete', s)).toBe('REPREMAR')
+    expect(empresaRubro('locales', s)).toBe('REPREMAR')
+  })
+
+  it('sin agente cargado cae en la línea', () => {
+    const s = base({ linea: 'ONE', agente: '' })
+    expect(empresaRubro('flete', s)).toBe('ONE')
+  })
+
+  it('terminal se le paga a la terminal, no al agente', () => {
+    expect(empresaRubro('terminal', base({ terminal: 'MONTECON', agente: 'REPREMAR' }))).toBe('MONTECON')
+  })
+
+  it('la devolución se le paga a la terminal donde se devuelve', () => {
+    expect(empresaRubro('devolucion', base({ dev: 'STL', agente: 'REPREMAR' }))).toBe('STL')
+  })
+
+  it('buildPagoItems usa el agente en el campo empresa', () => {
+    const { items } = buildPagoItems(
+      [base({ linea: 'MAERSK', agente: 'REPREMAR', monto_flete: 5000, monto_terminal: 600, dev: 'STL' })],
+      '2026-07-01')
+    expect(items.find(i => i.rubro === 'flete')!.empresa).toBe('REPREMAR')
+    expect(items.find(i => i.rubro === 'terminal')!.empresa).toBe('TCP')
+  })
+})
+
+describe('agruparPorAcreedor', () => {
+  const items = (over: Partial<DbShipment>[] = []) =>
+    buildPagoItems(over.map(o => base(o)), '2026-07-01').items
+
+  it('junta todo lo de un mismo acreedor', () => {
+    const g = agruparPorAcreedor(items([
+      { id: '1', ref: 'A1', linea: 'ONE', monto_flete: 5000 },
+      { id: '2', ref: 'A2', linea: 'ONE', monto_locales: 700 },
+    ]))
+    expect(g).toHaveLength(1)
+    expect(g[0].acreedor).toBe('ONE')
+    expect(g[0].total).toBe(5700)
+    expect(g[0].items).toHaveLength(2)
+  })
+
+  it('separa acreedores distintos y ordena por monto', () => {
+    const g = agruparPorAcreedor(items([
+      { id: '1', ref: 'A1', linea: 'ONE', monto_flete: 500 },
+      { id: '2', ref: 'A2', linea: 'MAERSK', agente: 'REPREMAR', monto_flete: 9000 },
+    ]))
+    expect(g.map(x => x.acreedor)).toEqual(['REPREMAR', 'ONE'])
+  })
+
+  it('deja fuera lo ya pagado', () => {
+    const g = agruparPorAcreedor(items([
+      { id: '1', ref: 'A1', linea: 'ONE', monto_flete: 0 },              // 0 = pagado
+      { id: '2', ref: 'A2', linea: 'ONE', monto_locales: 700, pago_locales_at: '2026-06-30' },
+    ]))
+    expect(g).toHaveLength(0)
+  })
+
+  it('los ítems sin acreedor van juntos a un grupo aparte', () => {
+    const g = agruparPorAcreedor(items([{ id: '1', ref: 'A1', dev: '', monto_devolucion: 200 }]))
+    expect(g[0].acreedor).toBe(SIN_ACREEDOR)
+  })
+
+  it('cuenta el primer vencimiento y lo que vence en la ventana', () => {
+    const g = agruparPorAcreedor(items([
+      { id: '1', ref: 'A1', linea: 'ONE', eta: '2026-07-05', monto_terminal: 600 },
+      { id: '2', ref: 'A2', linea: 'ONE', eta: '2026-08-20', monto_terminal: 600 },
+    ]), '2026-07-01', 7)
+    expect(g[0].primerVto).toBe('2026-07-05')
+    expect(g[0].enVentana).toBe(1)
+    expect(g[0].totalVentana).toBe(600)
+  })
+
+  it('marca el grupo como vencido si algo ya pasó de fecha', () => {
+    const g = agruparPorAcreedor(items([
+      { id: '1', ref: 'A1', linea: 'ONE', eta: '2026-06-01', monto_terminal: 600 },
+    ]), '2026-07-01')
+    expect(g[0].vencido).toBe(true)
+  })
+
+  it('sin ítems no devuelve grupos', () => {
+    expect(agruparPorAcreedor([])).toEqual([])
   })
 })

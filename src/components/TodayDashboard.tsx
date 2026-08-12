@@ -6,6 +6,7 @@ import {
   Warehouse,
   MapPin,
   Warning,
+  LockKey,
   Coffee,
   Package,
   Siren,
@@ -115,10 +116,6 @@ export default function TodayDashboard({
 
   // Los consolidados entran en las MISMAS 3 columnas que las cargas sueltas, y
   // sus cargas no se listan aparte (van dentro de la tarjeta del camión).
-  const snapshot = useMemo(
-    () => buildTodaySnapshot(shipments, trucks, truckLoads),
-    [shipments, trucks, truckLoads],
-  )
 
   // ── Estado de los avisos (ref_checks) — fetch + refetch on focus + Realtime ──
   // Fuente de verdad = ref_checks. Los 3 pasos-aviso son POR CONTENEDOR: cada
@@ -132,6 +129,13 @@ export default function TodayDashboard({
       console.warn('[hoy] no se pudieron cargar los avisos:', err)
     }
   }, [])
+  // El snapshot se arma DESPUÉS de checksByRef: la alerta "llegan sin liberar"
+  // necesita saber cuáles ya tienen la liberación marcada.
+  const snapshot = useMemo(
+    () => buildTodaySnapshot(shipments, trucks, truckLoads, checksByRef),
+    [shipments, trucks, truckLoads, checksByRef],
+  )
+
   useEffect(() => { refreshChecks() }, [refreshChecks])
   useEffect(() => {
     const onFocus = () => refreshChecks()
@@ -298,6 +302,58 @@ export default function TodayDashboard({
             </div>
             <p className="text-lg font-semibold text-foreground">Nada programado hoy</p>
             <p className="text-sm mt-1">Tomá un café ☕</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Llegan sin liberar ───────────────────────────── */}
+      {snapshot.sinLiberar.length > 0 && (
+        <Card className="accent-top overflow-hidden bg-amber-500/[0.04] border-amber-500/25" style={{ ['--bar-color' as any]: 'rgb(245 158 11)' }}>
+          <CardContent className="pt-5 pb-4">
+            <div className="flex items-center gap-2.5 mb-1">
+              <div className="p-1.5 bg-amber-500/10 rounded-md">
+                <LockKey size={18} weight="fill" className="text-amber-600 dark:text-amber-400" />
+              </div>
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
+                Llegan sin liberar
+              </h2>
+              <span className="ml-auto inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-full bg-amber-500 text-white text-xs font-bold">
+                {snapshot.sinLiberar.length}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground mb-3">
+              La naviera todavía no confirmó la liberación — sin eso el contenedor no se retira.
+            </p>
+            <div className="space-y-1">
+              {snapshot.sinLiberar.map(a => (
+                <button
+                  key={a.shipment.REF}
+                  type="button"
+                  onClick={() => {
+                    const op = (a.shipment.operativas ?? [])[0]
+                    if (op) openOpMatch({ shipment: a.shipment, op })
+                    else openShipment(a.shipment)
+                  }}
+                  className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-left hover:bg-amber-500/10 transition-colors"
+                >
+                  <span className="font-mono text-sm font-semibold shrink-0 min-w-[64px]">{a.shipment.REF}</span>
+                  <span className="text-sm text-foreground/85 truncate flex-1 min-w-0">{a.shipment.CLIENTE || '—'}</span>
+                  {a.shipment.BUQUE && (
+                    <span className="hidden md:inline text-xs text-muted-foreground truncate max-w-[160px]">{a.shipment.BUQUE}</span>
+                  )}
+                  <span className={`text-xs font-semibold shrink-0 ${
+                    a.severity === 'vencido' ? 'text-destructive'
+                      : a.severity === 'urgente' ? 'text-amber-600 dark:text-amber-400'
+                      : 'text-muted-foreground'
+                  }`}>
+                    {a.diasParaLlegar < 0
+                      ? `llegó hace ${-a.diasParaLlegar}d`
+                      : a.diasParaLlegar === 0 ? 'llega hoy'
+                      : `en ${a.diasParaLlegar}d`}
+                  </span>
+                </button>
+              ))}
+            </div>
           </CardContent>
         </Card>
       )}
