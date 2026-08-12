@@ -299,7 +299,9 @@ const ContainerDatesSection = forwardRef<ContainerDatesHandle, {
       // Resolver los avisos "salida antes de llegada" con confirm; si el usuario
       // rechaza alguno, se excluye ese índice y se recomputa (una sola pasada:
       // todos los confirmes se responden antes del commit).
-      let { next, salidaWarnings } = computeFlush(cntrs, existingNow, op, drafts, skip)
+      const primera = computeFlush(cntrs, existingNow, op, drafts, skip)
+      let next = primera.next
+      const salidaWarnings = primera.salidaWarnings
       if (salidaWarnings.length > 0) {
         for (const w of salidaWarnings) {
           const ok = window.confirm(
