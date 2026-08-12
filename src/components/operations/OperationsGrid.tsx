@@ -373,6 +373,7 @@ export default function OperationsGrid({
   // Fiscales de destino y terminales de devolución ya usados → combos con
   // catálogo del panel (16/07). DEV unifica alias (APM=MPS).
   const knownFiscales = useMemo(() => deriveKnownValues(allOperations.map(o => o.fiscal)), [allOperations])
+  const knownAgentes = useMemo(() => deriveKnownValues(allOperations.map(o => o.agente)), [allOperations])
   const knownDevs = useMemo(() => canonicalizarLista(allOperations.map(o => o.dev), DEV_ALIASES), [allOperations])
   const knownLugaresDescarga = useMemo(() => deriveKnownValues(allOperations.map(o => o.descarga)), [allOperations])
   const knownTerminales = useMemo(() => deriveKnownValues(allOperations.map(o => o.terminal)), [allOperations])
@@ -1255,6 +1256,7 @@ export default function OperationsGrid({
         knownDepositos={knownDepositos}
         knownTransportes={knownTransportes}
         knownFiscales={knownFiscales}
+        knownAgentes={knownAgentes}
         knownDevs={knownDevs}
         knownLugaresDescarga={knownLugaresDescarga}
         knownTerminales={knownTerminales}
