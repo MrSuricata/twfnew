@@ -164,6 +164,7 @@ export default function OperationDetailPanel({
   knownDepositos = [],
   knownTransportes = [],
   knownFiscales = [],
+  knownAgentes = [],
   fiscalSugerido,
   fiscalesRecientes,
   transporteSugerido,
@@ -195,6 +196,8 @@ export default function OperationDetailPanel({
   knownTransportes?: string[]
   /** Fiscales de destino y devoluciones ya usados → combos con catálogo. */
   knownFiscales?: string[]
+  /** Agentes (acreedor de flete/locales) ya usados → combo Agente. */
+  knownAgentes?: string[]
   /** Fiscal habitual del cliente (atajo en el bloque de datos clave). */
   fiscalSugerido?: Sugerencia | null
   /** Últimos fiscales del cliente (se muestran si no hay uno dominante). */
@@ -461,6 +464,7 @@ export default function OperationDetailPanel({
             knownDepositos={knownDepositos}
             knownTransportes={knownTransportes}
             knownFiscales={knownFiscales}
+            knownAgentes={knownAgentes}
             fiscalSugerido={fiscalSugerido}
             fiscalesRecientes={fiscalesRecientes}
             transporteSugerido={transporteSugerido}

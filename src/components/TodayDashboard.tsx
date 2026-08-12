@@ -197,6 +197,12 @@ export default function TodayDashboard({
     const ref = shipment.REF
     const step = checksByRef.get(normalizeRef(ref))?.[key]
     if (!cntr) {
+      // Si la ref ya lleva estado POR CONTENEDOR, el toggle nivel-ref lo pisaría
+      // entero (hallazgo revisión 12/08): se pierde qué contenedor estaba avisado.
+      if (step?.cntrs && Object.keys(step.cntrs).length > 0) {
+        toast.error('Esta ref lleva avisos por contenedor — marcá el aviso desde la tarjeta del contenedor', { description: ref })
+        return
+      }
       const done = !!step?.done
       const mk = (d: boolean): RefCheckStep | null => (d ? { done: true, date: todayIso(), by: getAdminName() } : null)
       applyAvisoStep(ref, key, mk(!done))

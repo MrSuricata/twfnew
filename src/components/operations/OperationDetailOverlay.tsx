@@ -123,6 +123,7 @@ export default function OperationDetailOverlay({
 
   // Fiscales y devoluciones ya usados → combos con catálogo (DEV unifica APM=MPS).
   const knownFiscales = useMemo(() => deriveKnownValues(operations.map(o => o.fiscal)), [operations])
+  const knownAgentes = useMemo(() => deriveKnownValues(operations.map(o => o.agente)), [operations])
   const knownDevs = useMemo(() => canonicalizarLista(operations.map(o => o.dev), DEV_ALIASES), [operations])
   const knownLugaresDescarga = useMemo(() => deriveKnownValues(operations.map(o => o.descarga)), [operations])
   const knownTerminales = useMemo(() => deriveKnownValues(operations.map(o => o.terminal)), [operations])
@@ -166,6 +167,7 @@ export default function OperationDetailOverlay({
       knownDepositos={knownDepositos}
       knownTransportes={knownTransportes}
       knownFiscales={knownFiscales}
+      knownAgentes={knownAgentes}
       knownDevs={knownDevs}
       knownLugaresDescarga={knownLugaresDescarga}
       knownTerminales={knownTerminales}

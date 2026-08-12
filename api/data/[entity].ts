@@ -141,7 +141,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       case 'push-subscriptions':
         return handlePushSubscriptions(req, res, db, payload)
       case 'audit-log':
-        return handleAuditLog(req, res, db)
+        return handleAuditLog(req, res, db, payload)
       default:
         return res.status(404).json({ error: `Unknown entity: ${entity}` })
     }
@@ -1988,6 +1988,17 @@ async function handleShipments(req: VercelRequest, res: VercelResponse, db: any,
       return res.status(200).json({ updated: true, webEdits: merged })
     }
 
+    // Scoping por cliente: el GET filtra lo que un admin acotado VE, pero el
+    // PATCH aceptaba cualquier id (hallazgo revisión 12/08). Mismo patrón que
+    // ref-checks POST: fuera del patrón → 404, indistinguible de inexistente.
+    const allowedPatch = await allowedRefsForPayload(db, payload)
+    if (allowedPatch) {
+      const { data: target } = await db.from('shipments').select('ref').eq('id', id).maybeSingle()
+      if (!target || !allowedPatch.has(refOf(target.ref))) {
+        return res.status(404).json({ error: 'Carga no encontrada' })
+      }
+    }
+
     const updates: Record<string, unknown> = {}
     for (const [k, v] of Object.entries(body)) {
       if (SHIPMENT_COLS.has(k)) updates[k] = v
@@ -2031,6 +2042,12 @@ async function handleShipments(req: VercelRequest, res: VercelResponse, db: any,
 
   if (req.method === 'POST') {
     const arr = Array.isArray(req.body) ? req.body : [req.body]
+    // Admin acotado: solo puede crear/actualizar cargas de SUS clientes.
+    if (payload && payload.role === 'admin' && (payload as AdminPayload).clientePattern) {
+      const pattern = (payload as AdminPayload).clientePattern as string
+      const fuera = arr.find((r: any) => !matchesClientePattern(String(r?.cliente || ''), pattern))
+      if (fuera) return res.status(403).json({ error: 'No podés crear cargas de ese cliente' })
+    }
     const now = Date.now()
     const rows = arr.map((r: any) => {
       const row: Record<string, unknown> = { id: r.id, updated_at_ts: now }
@@ -2055,6 +2072,10 @@ async function handleShipments(req: VercelRequest, res: VercelResponse, db: any,
     const { data: ship, error: shipErr } = await db.from('shipments').select('id, ref').eq('id', id).maybeSingle()
     if (shipErr) throw shipErr
     if (!ship) return res.status(404).json({ error: 'Carga no encontrada' })
+    const allowedDel = await allowedRefsForPayload(db, payload)
+    if (allowedDel && !allowedDel.has(refOf(ship.ref))) {
+      return res.status(404).json({ error: 'Carga no encontrada' })
+    }
     const ref = (ship.ref || '').trim()
     if (ref) {
       const { data: loads, error: loadsErr } = await db.from('truck_loads').select('id, truck_id').eq('source_ref', ref)
@@ -2265,14 +2286,21 @@ async function handlePushSubscriptions(req: VercelRequest, res: VercelResponse, 
 }
 
 // ── Log de actividad (lectura) ──────────────────────────────────────
-async function handleAuditLog(req: VercelRequest, res: VercelResponse, db: any) {
+async function handleAuditLog(req: VercelRequest, res: VercelResponse, db: any, payload: TokenPayload | null = null) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
   const { data, error } = await db.from('audit_log')
     .select('id, ts, usuario, action, entity, ref, details')
     .order('ts', { ascending: false })
     .limit(300)
   if (error) throw error
-  return res.status(200).json({ log: data || [] })
+  // Admin acotado: solo las entradas de refs de SUS clientes. Las entradas sin
+  // ref (config, cuotas) se ocultan — details puede traer montos de cualquiera
+  // (hallazgo revisión 12/08).
+  const allowed = await allowedRefsForPayload(db, payload)
+  const log = allowed
+    ? (data || []).filter((r: any) => r.ref && allowed.has(refOf(r.ref)))
+    : (data || [])
+  return res.status(200).json({ log })
 }
 
 // ── Operator assignments (overlay ref → operativo) ─────────────────

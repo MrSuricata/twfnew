@@ -424,7 +424,18 @@ export const TransporteCuotasSchema = z.object({
     porcentaje: z.number().min(0).max(100),
     activo: z.boolean().optional(),
     orden: z.number().int().min(0).max(999).optional(),
-  })).max(30),
+  })).max(30)
+    // Dos variantes del mismo nombre ('Rigatosso' y 'RIGATOSSO ') colisionan en
+    // el upsert por PK y devolvían un 500 pelado (hallazgo revisión 12/08).
+    .refine(cs => {
+      const vistos = new Set<string>()
+      for (const c of cs) {
+        const k = c.transporte.trim().toUpperCase()
+        if (vistos.has(k)) return false
+        vistos.add(k)
+      }
+      return true
+    }, { message: 'Hay transportes repetidos (mismo nombre con otra escritura)' }),
 })
 
 // ─── validate() helper ──────────────────────────────────────────────

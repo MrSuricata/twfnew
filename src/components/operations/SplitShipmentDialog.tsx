@@ -215,8 +215,8 @@ export default function SplitShipmentDialog({ op, dbShipment, onClose, onCreate,
 
             {preview && (
               <div className="rounded-md border bg-muted/30 p-2.5 text-xs space-y-1">
-                <p><strong>{refA.trim() || `${op.ref} A`}</strong>: {preview.a.cntrs.length ? `${preview.a.cntrs.length} cntr · ` : ''}{fmtNum(preview.a.pkgs)} bultos · {fmtNum(Math.round(preview.a.kg))} kg · {preview.a.m3} m³</p>
-                <p><strong>{refB.trim()}</strong>: {preview.b.cntrs.length ? `${preview.b.cntrs.length} cntr · ` : ''}{fmtNum(preview.b.pkgs)} bultos · {fmtNum(Math.round(preview.b.kg))} kg · {preview.b.m3} m³</p>
+                <p><strong>{refA.trim() || `${op.ref} A`}</strong>: {preview.a.cntrs.length ? `${preview.a.cntrs.length} cntr · ` : ''}{fmtNum(preview.a.pkgs)} bultos · {fmtNum(Math.round(preview.a.kg))} kg · {fmtNum(preview.a.m3)} m³</p>
+                <p><strong>{refB.trim()}</strong>: {preview.b.cntrs.length ? `${preview.b.cntrs.length} cntr · ` : ''}{fmtNum(preview.b.pkgs)} bultos · {fmtNum(Math.round(preview.b.kg))} kg · {fmtNum(preview.b.m3)} m³</p>
               </div>
             )}
             {!preview && problema && <p className="text-xs text-amber-700">{problema}</p>}

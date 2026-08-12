@@ -485,7 +485,12 @@ export function dbFclToParsedShipment(d: DbShipment): ParsedShipment {
  *  DB gana. Evita el doble conteo si el cache se contamina con FCL de la DB
  *  (p.ej. el onSave de HOY que reescribe la lista completa). Una sola carga por REF. */
 export function mergeFclShipments(cache: ParsedShipment[], dbShipments: DbShipment[]): ParsedShipment[] {
-  const fromDb = dbShipments.filter(d => d.mode === 'fcl').map(dbFclToParsedShipment)
+  // Sin archivadas: ParsedShipment no tiene campo archived, así que si entran
+  // acá ningún consumidor puede filtrarlas después — contaban en el reparto de
+  // transportes y alertaban en "Llegan sin liberar" sin existir en Checks
+  // (hallazgo revisión 12/08). Los tableros muestran cargas vivas; las
+  // archivadas se ven desde la grilla (buildOperations, que sí trae el flag).
+  const fromDb = dbShipments.filter(d => d.mode === 'fcl' && !d.archived).map(dbFclToParsedShipment)
   const dbRefs = new Set(fromDb.map(s => s.REF))
   const fromCache = (cache || []).filter(s => !dbRefs.has(s.REF))
   return [...fromCache, ...fromDb]
