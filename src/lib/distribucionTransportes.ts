@@ -273,8 +273,8 @@ export interface RepartoSugerido {
  *
  * Asigna de a uno al de mayor deuda y recalcula después de cada asignación: si
  * se hiciera de una sola pasada, todo caería en el que más atrás viene y se
- * pasaría de largo. `base` es la foto contra la que se mide — normalmente los
- * 90 días despachados, que es donde la cuota tiene sentido.
+ * pasaría de largo. `base` es la foto contra la que se mide — el período que
+ * el panel está mostrando (por defecto, el mes calendario en curso).
  *
  * No mira las restricciones por cliente (Vairolatti y los furgones): es un
  * reparto agregado, no una asignación carga por carga.
@@ -315,10 +315,21 @@ export function sugerirReparto(
   }))
 }
 
+const MESES = [
+  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+]
+
 /**
  * Sugiere el transporte con mayor deuda contra su objetivo. Es una sugerencia:
  * el operador elige el que quiera. Medir por deuda (y no por sorteo) hace que
  * el reparto se autocorrija y que la sugerencia sea explicable.
+ *
+ * La deuda se mide contra el MES CALENDARIO en curso (regla Brian 13/08): cada
+ * mes arranca de cero — lo que faltó en julio no es deuda de agosto. Cuenta el
+ * mes ENTERO, salidas despachadas Y agendadas: una salida ya coordinada para
+ * la semana que viene es cupo del mes ya repartido, y si no contara la
+ * sugerencia insistiría con el mismo transporte hasta que despache.
  */
 export function recomendarTransporte(
   carga: CargaReparto,
@@ -337,7 +348,11 @@ export function recomendarTransporte(
   const cliente = norm(clienteDe(carga))
   const bloqueaVairolatti = VAIROLATTI_BLOQUEADOS.some(b => cliente.includes(b))
 
-  const { filas } = calcularDistribucion(historial, cuotas, '90d', hoy)
+  const mesEntero: Rango = {
+    desde: ventanaDesde('mes', hoy),
+    hasta: new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0), // último día del mes
+  }
+  const { filas } = calcularDistribucion(historial, cuotas, mesEntero, hoy)
   const candidatas = filas
     .filter(f => f.enCuota)
     .filter(f => !(bloqueaVairolatti && f.transporte === 'VAIROLATTI'))
@@ -354,9 +369,10 @@ export function recomendarTransporte(
 
   const elegida = ranking[0]
   const faltan = elegida.diferencia ?? 0
+  const mes = MESES[hoy.getMonth()]
   const motivo = faltan > 0
-    ? `${elegida.transporte} — le faltan ${faltan} para su ${elegida.objetivo}%`
-    : `${elegida.transporte} — todos en meta, va por cuota (${elegida.objetivo}%)`
+    ? `${elegida.transporte} — le faltan ${faltan} en ${mes} para su ${elegida.objetivo}%`
+    : `${elegida.transporte} — todos en meta en ${mes}, va por cuota (${elegida.objetivo}%)`
 
   return {
     transporte: elegida.transporte,

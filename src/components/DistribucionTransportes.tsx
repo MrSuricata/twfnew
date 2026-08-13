@@ -50,7 +50,9 @@ export default function DistribucionTransportes({ shipments }: Props) {
   const [cuotas, setCuotas] = useState<CuotaTransporte[]>([])
   const [guardadas, setGuardadas] = useState<CuotaTransporte[]>([])
   const [modo, setModo] = useState<Modo>('despachado')
-  const [corte, setCorte] = useState<Ventana>('90d')
+  // El período de la cuota es el MES calendario (regla Brian 13/08): la deuda
+  // no se arrastra de meses anteriores. 90 días queda como vista opcional.
+  const [corte, setCorte] = useState<Ventana>('mes')
   const [cargando, setCargando] = useState(true)
   const [guardando, setGuardando] = useState(false)
 

@@ -237,6 +237,27 @@ describe('recomendarTransporte', () => {
     expect(r.transporte).toBe('TRANSCAL')
   })
 
+  it('la deuda es del MES en curso: lo de julio no cuenta (regla Brian 13/08)', () => {
+    // Todo el desbalance es de julio → agosto arranca de cero y se reparte
+    // por cuota, como si no hubiera historial. Antes (ventana 90d) Rigatosso
+    // arrastraba la deuda vieja y acaparaba las sugerencias del mes nuevo.
+    const julio = conCargas({ TRANSCAL: 30, VAIROLATTI: 8, ENZO: 5, RIGATOSSO: 0 })
+      .map(s => ({ ...s, operativas: s.operativas!.map(o => ({ ...o, SALIDA: '2026-07-15' })) }))
+    const r = recomendarTransporte(ship({ CLIENTE: 'PERETTI' }), julio, CUOTAS, HOY)
+    expect(r.transporte).toBe('TRANSCAL')
+    expect(r.motivo).toContain('agosto')
+  })
+
+  it('las salidas AGENDADAS del mes cuentan como cupo ya asignado', () => {
+    // Transcal ya tiene 10 coordinadas para fin de mes (después de HOY=11/08):
+    // son cupo de agosto aunque no hayan despachado — la sugerencia pasa al
+    // siguiente en deuda en vez de insistir con Transcal.
+    const agendadas = conCargas({ TRANSCAL: 10 })
+      .map(s => ({ ...s, operativas: s.operativas!.map(o => ({ ...o, SALIDA: '2026-08-25' })) }))
+    const r = recomendarTransporte(ship({ CLIENTE: 'PERETTI' }), agendadas, CUOTAS, HOY)
+    expect(r.transporte).toBe('RIGATOSSO')
+  })
+
   it('la recomendación es una sugerencia: siempre devuelve alternativas', () => {
     const r = recomendarTransporte(ship({ CLIENTE: 'PERETTI' }), [], CUOTAS, HOY)
     expect(r.opciones.length).toBeGreaterThan(1)
