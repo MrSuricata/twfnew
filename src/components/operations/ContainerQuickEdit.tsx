@@ -12,7 +12,7 @@ import {
 import type { ParsedShipment, OperativasRecord } from '@/lib/shipmentTypes'
 import { getShipmentStatus } from '@/lib/shipmentTypes'
 import { buildPerContainerPatch, applyLugarSalida, lugarOrDeposito } from '@/lib/operationsTypes'
-import { isSalidaBeforeArrival, avisoSalida, fmtDMY } from '@/lib/salidaCheck'
+import { isSalidaBeforeArrival, avisoSalida, fmtDMY, etaVigente } from '@/lib/salidaCheck'
 import { sugerirEtaFiscal, nombreDia } from '@/lib/transitoFiscal'
 import { isSinTelex, SIN_TELEX_MSG } from '@/lib/telexCheck'
 import { fmtDateDMY } from '@/lib/format'
@@ -202,7 +202,7 @@ export default function ContainerQuickEdit({
 
   const canSave = editable && !!shipment.__dbId
   // Llegada de la carga a MVD para este contenedor (per-op, si no la de la carga).
-  const etaArrival = currentOp.ETA_OP || shipment.ETA || ''
+  const etaArrival = etaVigente(shipment.ETA, currentOp.ETA_OP)
 
   /**
    * Commit the current draft values to the DB.

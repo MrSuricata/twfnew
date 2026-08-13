@@ -1,7 +1,7 @@
 import type { ParsedShipment, OperativasRecord } from './shipmentTypes'
 import { parseLocalDate } from './shipmentTypes'
 import { fmtDateDMY } from './format'
-import { isSalidaBeforeArrival, avisoSalida } from './salidaCheck'
+import { isSalidaBeforeArrival, avisoSalida, etaVigente } from './salidaCheck'
 import { needsTelexAlert, SIN_TELEX_MSG } from './telexCheck'
 import type { CalendarEvent, AlertEmoji, EventType } from './agendaTypes'
 import { getShipmentStatus, processShipmentRecord } from './shipmentTypes'
@@ -246,7 +246,7 @@ export function shipmentsToEvents(
       // Salida pegada a la llegada del buque: imposible (antes de que llegue) o
       // sin el margen mínimo de 2 días que necesita descarga + retiro. La ETA
       // se corre seguido y deja la salida colgada → alertar en el chip.
-      const avisoSal = avisoSalida(op.SALIDA, op.ETA_OP || shipment.ETA)
+      const avisoSal = avisoSalida(op.SALIDA, etaVigente(shipment.ETA, op.ETA_OP))
       if (avisoSal) {
         alerts.push({ emoji: '⏰', label: avisoSal, type: 'salida_antes_llegada' })
       }

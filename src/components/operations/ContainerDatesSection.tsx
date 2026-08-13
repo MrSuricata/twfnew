@@ -8,7 +8,7 @@ import { applyLugarSalida, lugarOrDeposito } from '@/lib/operationsTypes'
 import type { ParsedShipment, OperativasRecord } from '@/lib/shipmentTypes'
 import { getShipmentStatus } from '@/lib/shipmentTypes'
 import { parseCntr } from '@/lib/cntrUtils'
-import { isSalidaBeforeArrival, avisoSalida, fmtDMY } from '@/lib/salidaCheck'
+import { isSalidaBeforeArrival, avisoSalida, fmtDMY, etaVigente } from '@/lib/salidaCheck'
 import { sugerirEtaFiscal, llegadaFiscalAtipica, nombreDia } from '@/lib/transitoFiscal'
 import { isSinTelex, SIN_TELEX_MSG } from '@/lib/telexCheck'
 import { toast } from 'sonner'
@@ -237,7 +237,7 @@ export function computeFlush(
     if (field === 'SALIDA') {
       if (skipSalidaIdx.has(idx)) continue // el usuario eligió no guardar esta salida
       const rec = resolveRecord(cntrs, existing, idx, op)
-      const eta = rec.ETA_OP || op.eta || ''
+      const eta = etaVigente(op.eta, rec.ETA_OP)
       if (avisoSalida(rawValue, eta)) {
         salidaWarnings.push({ idx, cntr: cntrs[idx], salida: rawValue, eta })
       }
@@ -393,7 +393,7 @@ const ContainerDatesSection = forwardRef<ContainerDatesHandle, {
     if (field === 'SALIDA') {
       const rec = resolveRecord(cntrs, existing, i, op)
       // La salida no puede ser anterior a la llegada a MVD: avisar y pedir confirmación.
-      const eta = rec.ETA_OP || op.eta || ''
+      const eta = etaVigente(op.eta, rec.ETA_OP)
       if (isSalidaBeforeArrival(value, eta)) {
         const ok = window.confirm(
           `⏰ La salida (${fmtDMY(value)}) del contenedor ${cntrs[i]} queda ANTES de la llegada a MVD (${fmtDMY(eta)}).\n\n¿Guardar igual?`
@@ -514,9 +514,9 @@ const ContainerDatesSection = forwardRef<ContainerDatesHandle, {
                     </span>
                   )}
                   {(() => {
-                    const aviso = avisoSalida(getDraft(i, 'SALIDA', rec.SALIDA || ''), rec.ETA_OP || op.eta || '')
+                    const aviso = avisoSalida(getDraft(i, 'SALIDA', rec.SALIDA || ''), etaVigente(op.eta, rec.ETA_OP))
                     if (!aviso) return null
-                    const grave = isSalidaBeforeArrival(getDraft(i, 'SALIDA', rec.SALIDA || ''), rec.ETA_OP || op.eta || '')
+                    const grave = isSalidaBeforeArrival(getDraft(i, 'SALIDA', rec.SALIDA || ''), etaVigente(op.eta, rec.ETA_OP))
                     return (
                       <span className={`text-[10px] font-medium leading-tight ${grave ? 'text-red-600' : 'text-amber-600'}`}>
                         ⏰ {aviso}

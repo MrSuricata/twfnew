@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isSalidaBeforeArrival, margenSalida, avisoSalida, isSalidaAjustada } from './salidaCheck'
+import { isSalidaBeforeArrival, margenSalida, avisoSalida, isSalidaAjustada, etaVigente } from './salidaCheck'
 
 describe('isSalidaBeforeArrival', () => {
   it('salida anterior a la llegada → true', () => {
@@ -73,5 +73,23 @@ describe('margen entre la llegada del buque y la salida', () => {
 
   it('caso real A7867: 09/08 llega, 11/08 sale → justo en el mínimo, sin aviso', () => {
     expect(avisoSalida('2026-08-11', '2026-08-09')).toBe('')
+  })
+})
+
+describe('etaVigente — la ETA de la carga manda sobre la copia del contenedor', () => {
+  it('con ETA de carga parseable, gana aunque ETA_OP tenga otra fecha', () => {
+    // Buque atrasado: la carga se actualizó, la copia por contenedor no.
+    expect(etaVigente('2026-08-15', '2026-08-07')).toBe('2026-08-15')
+  })
+
+  it('sin ETA de carga (o no parseable) cae a la del contenedor', () => {
+    expect(etaVigente('', '2026-08-07')).toBe('2026-08-07')
+    expect(etaVigente('9-ago-', '2026-08-07')).toBe('2026-08-07')
+    expect(etaVigente(undefined, '2026-08-07')).toBe('2026-08-07')
+  })
+
+  it('sin ninguna de las dos devuelve vacío (no se inventa)', () => {
+    expect(etaVigente('', '')).toBe('')
+    expect(etaVigente(null, null)).toBe('')
   })
 })

@@ -479,8 +479,10 @@ describe('sinLiberarAlerts — solo lo que se puede resolver en Checks', () => {
 })
 
 describe('salidasPisadasAlerts — el buque se movió y pisa la salida', () => {
+  // ETA de carga vacía por default: estos tests fijan la llegada con ETA_OP.
+  // La ETA de la CARGA manda cuando existe (etaVigente) — test propio abajo.
   const uy = (ref: string, ops: Partial<OperativasRecord>[], extra: Partial<ParsedShipment> = {}) =>
-    mkShip(ref, ops.map(o => mkOp({ REF: ref, CNTR_OP: 'ABCD1234567', ...o })), { PAIS: 'UY', ...extra })
+    mkShip(ref, ops.map(o => mkOp({ REF: ref, CNTR_OP: 'ABCD1234567', ...o })), { PAIS: 'UY', ETA: '', ...extra })
 
   it('salida ANTES de la llegada del buque → IMPOSIBLE (caso A7914 de Brian)', () => {
     // Salida coordinada mañana, el buque atrasado llega pasado mañana.
@@ -522,6 +524,19 @@ describe('salidasPisadasAlerts — el buque se movió y pisa la salida', () => {
   it('pares con ambas fechas en el pasado son historia, no acción', () => {
     const s = uy('A1', [{ SALIDA: '2026-04-10', ETA_OP: '2026-04-12' }])
     expect(salidasPisadasAlerts([s])).toHaveLength(0)
+  })
+
+  it('el buque atrasado manda: la ETA de la CARGA pisa la copia vieja de ETA_OP (caso A7995)', () => {
+    // El buque venía para el 10/04 (ETA_OP horneado) y se corrió al 21/04 —
+    // el sync/la ficha actualizan la ETA de la carga, NADIE toca ETA_OP.
+    // La salida coordinada el 21/04 quedó el MISMO día que la llegada real:
+    // comparar contra la copia vieja (margen +11) la dejaba pasar muda.
+    const s = uy('A7995', [{ SALIDA: TOMORROW, ETA_OP: '2026-04-10' }], { ETA: TOMORROW })
+    const out = salidasPisadasAlerts([s])
+    expect(out).toHaveLength(1)
+    expect(out[0].grave).toBe(true)
+    expect(out[0].margen).toBe(0)
+    expect(out[0].eta).toBe(TOMORROW)
   })
 
   it('sin ETA del contenedor usa la ETA de la carga', () => {

@@ -20,6 +20,26 @@ export function isSalidaBeforeArrival(salida: string | undefined | null, eta: st
   return s.getTime() < e.getTime()
 }
 
+/**
+ * ETA VIGENTE para comparar contra la salida coordinada.
+ *
+ * Cuando el buque se atrasa, la fecha nueva se carga en la ETA de la CARGA
+ * (columna `eta` — la edita la ficha y la actualizan los syncs). La copia por
+ * contenedor (ETA_OP) queda congelada al hornear y nadie la vuelve a tocar.
+ * Comparar contra ETA_OP hacía que una salida pisada por el buque atrasado no
+ * alertara (caso A7995, 13/08: buque corrido del 07 al 15/08, ETA_OP en 07/08).
+ *
+ * Regla: la ETA de la carga si es una fecha parseable; si no, la del contenedor.
+ */
+export function etaVigente(
+  etaCarga: string | undefined | null,
+  etaOp: string | undefined | null,
+): string {
+  const c = (etaCarga || '').trim()
+  if (parseLocalDate(c)) return c
+  return (etaOp || '').trim()
+}
+
 /** YYYY-MM-DD → DD/MM/YYYY para los mensajes (más legible que el ISO). */
 export function fmtDMY(iso: string | undefined | null): string {
   const p = (iso || '').split('-')
