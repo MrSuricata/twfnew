@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest'
 import type { ParsedShipment, OperativasRecord } from './shipmentTypes'
 import {
   salientesHoy,
+  salidasPisadasAlerts,
   enFronteraHoy,
   llegandoFiscalHoy,
   libreAlerts,
@@ -474,5 +475,81 @@ describe('sinLiberarAlerts — solo lo que se puede resolver en Checks', () => {
   it('devuelta pero todavía sin llegar a fiscal: sigue viva', () => {
     const s = uy('A1', '2026-04-18', [{ LIBRE: 'DEVUELTO', ETA_FISC: '2026-04-30' }])
     expect(sinLiberarAlerts([s], new Map())).toHaveLength(1)
+  })
+})
+
+describe('salidasPisadasAlerts — el buque se movió y pisa la salida', () => {
+  const uy = (ref: string, ops: Partial<OperativasRecord>[], extra: Partial<ParsedShipment> = {}) =>
+    mkShip(ref, ops.map(o => mkOp({ REF: ref, CNTR_OP: 'ABCD1234567', ...o })), { PAIS: 'UY', ...extra })
+
+  it('salida ANTES de la llegada del buque → IMPOSIBLE (caso A7914 de Brian)', () => {
+    // Salida coordinada mañana, el buque atrasado llega pasado mañana.
+    const s = uy('A7914', [{ SALIDA: TOMORROW, ETA_OP: '2026-04-22' }])
+    const out = salidasPisadasAlerts([s])
+    expect(out).toHaveLength(1)
+    expect(out[0].grave).toBe(true)
+    expect(out[0].margen).toBeLessThan(0)
+  })
+
+  it('sale el MISMO día que opera el buque → también imposible', () => {
+    const s = uy('A1', [{ SALIDA: TOMORROW, ETA_OP: TOMORROW }])
+    const out = salidasPisadasAlerts([s])
+    expect(out).toHaveLength(1)
+    expect(out[0].grave).toBe(true)
+    expect(out[0].margen).toBe(0)
+  })
+
+  it('sale al día siguiente de la llegada → aviso "muy justa", no grave', () => {
+    const s = uy('A1', [{ SALIDA: '2026-04-22', ETA_OP: TOMORROW }])
+    const out = salidasPisadasAlerts([s])
+    expect(out).toHaveLength(1)
+    expect(out[0].grave).toBe(false)
+    expect(out[0].margen).toBe(1)
+  })
+
+  it('con el margen normal (2+ días después de la llegada) no molesta', () => {
+    const s = uy('A1', [{ SALIDA: '2026-04-23', ETA_OP: TOMORROW }])
+    expect(salidasPisadasAlerts([s])).toHaveLength(0)
+  })
+
+  it('salida "pasada" pero el buque aún no llegó: ese camión no salió → sigue alertando', () => {
+    const s = uy('A1', [{ SALIDA: YESTERDAY, ETA_OP: '2026-04-25' }])
+    const out = salidasPisadasAlerts([s])
+    expect(out).toHaveLength(1)
+    expect(out[0].grave).toBe(true)
+  })
+
+  it('pares con ambas fechas en el pasado son historia, no acción', () => {
+    const s = uy('A1', [{ SALIDA: '2026-04-10', ETA_OP: '2026-04-12' }])
+    expect(salidasPisadasAlerts([s])).toHaveLength(0)
+  })
+
+  it('sin ETA del contenedor usa la ETA de la carga', () => {
+    const s = uy('A1', [{ SALIDA: TOMORROW, ETA_OP: '' }], { ETA: '2026-04-23' })
+    const out = salidasPisadasAlerts([s])
+    expect(out).toHaveLength(1)
+    expect(out[0].eta).toBe('2026-04-23')
+  })
+
+  it('cargas que no van por Uruguay quedan afuera', () => {
+    const s = uy('A1', [{ SALIDA: TOMORROW, ETA_OP: '2026-04-23' }], { PAIS: 'AR' })
+    expect(salidasPisadasAlerts([s])).toHaveLength(0)
+  })
+
+  it('sin salida coordinada o sin ETA no hay comparación posible → silencio', () => {
+    const s1 = uy('A1', [{ SALIDA: '', ETA_OP: TOMORROW }])
+    const s2 = uy('A2', [{ SALIDA: 'CONFIRMAR', ETA_OP: TOMORROW }], { ETA: '' })
+    const s3 = uy('A3', [{ SALIDA: TOMORROW, ETA_OP: '' }], { ETA: '' })
+    expect(salidasPisadasAlerts([s1, s2, s3])).toHaveLength(0)
+  })
+
+  it('imposibles primero, después las justas; el snapshot las incluye', () => {
+    const grave = uy('A2', [{ SALIDA: '2026-04-24', ETA_OP: '2026-04-26' }])
+    const justa = uy('A1', [{ SALIDA: '2026-04-22', ETA_OP: TOMORROW }])
+    const out = salidasPisadasAlerts([justa, grave])
+    expect(out.map(a => a.shipment.REF)).toEqual(['A2', 'A1'])
+    const snap = buildTodaySnapshot([grave])
+    expect(snap.salidasPisadas).toHaveLength(1)
+    expect(snap.hasMovement).toBe(true)
   })
 })

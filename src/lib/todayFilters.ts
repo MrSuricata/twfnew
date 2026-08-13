@@ -27,6 +27,7 @@ import {
 } from './checksTypes'
 import { refsEnConsolidado, type Truck, type TruckLoad } from './truckTypes'
 import { cargaFclActiva } from './operationsTypes'
+import { margenSalida, MARGEN_SALIDA_DIAS } from './salidaCheck'
 
 /** A single operativa matched along with its parent shipment for context. */
 export interface OpMatch {
@@ -305,6 +306,68 @@ export function sinLiberarAlerts(
   return out.sort((a, b) => a.diasParaLlegar - b.diasParaLlegar)
 }
 
+// ── Salidas pisadas por la llegada del buque ────────────────────────────
+// La regla salida-vs-llegada (margenSalida) se chequea al EDITAR la salida,
+// pero el buque se mueve DESPUÉS: si la ETA se corre y pisa una salida ya
+// coordinada, nadie la vuelve a mirar. Pedido Brian 13/08 ("para mañana
+// tenemos asignada la A7914; si el buque se atrasa y opera mañana, avisame
+// que la salida se pisa con la llegada — es imposible"). Esta alerta vigila
+// eso continuamente en HOY.
+
+export interface SalidaPisadaAlert {
+  shipment: ParsedShipment
+  op: OperativasRecord
+  cntr: string
+  salida: string
+  eta: string
+  /** Días entre la llegada y la salida. Negativo = salida ANTES de la llegada. */
+  margen: number
+  /** true = imposible (sale antes o el mismo día que llega el buque). */
+  grave: boolean
+}
+
+/**
+ * Salidas coordinadas que quedaron pisadas (o muy justas) contra la llegada
+ * del buque a MVD. Por contenedor: la ETA es la del contenedor (ETA_OP) o la
+ * de la carga.
+ *
+ * Entra una salida cuando:
+ *  - GRAVE (imposible): sale ANTES o el MISMO día que llega el buque. Se
+ *    incluye aunque la fecha de salida ya haya pasado si el buque todavía no
+ *    llegó — ese camión no salió, hay que recoordinar sí o sí.
+ *  - JUSTA: sale al día siguiente de la llegada (menos del margen normal de
+ *    2 días) y la salida es hoy o futura — puede pisarse si el buque se
+ *    atrasa un día más.
+ *
+ * Pares con ambas fechas en el pasado son historia, no acción: se ignoran.
+ */
+export function salidasPisadasAlerts(shipments: ParsedShipment[]): SalidaPisadaAlert[] {
+  const hoy = hoyMidnight()
+  const out: SalidaPisadaAlert[] = []
+  for (const s of shipments) {
+    if (!isPorUruguay(s.PAIS)) continue
+    for (const op of s.operativas || []) {
+      const salida = (op.SALIDA || '').trim()
+      const eta = (op.ETA_OP || '').trim() || (s.ETA || '').trim()
+      const margen = margenSalida(salida, eta)
+      if (margen === null || margen >= MARGEN_SALIDA_DIAS) continue
+
+      const salidaFutura = (parseLocalDate(salida)?.getTime() ?? -1) >= hoy.getTime()
+      const etaFutura = (parseLocalDate(eta)?.getTime() ?? -1) >= hoy.getTime()
+      // margen <= 0 = imposible (sale antes o el mismo día que llega).
+      // margen 1 = justa: solo avisar mientras la salida no haya pasado.
+      const grave = margen <= 0
+      const accionable = grave ? (salidaFutura || etaFutura) : salidaFutura
+      if (!accionable) continue
+
+      out.push({ shipment: s, op, cntr: (op.CNTR_OP || s.CNTR || '').trim(), salida, eta, margen, grave })
+    }
+  }
+  // Imposibles primero; dentro de cada grupo, la salida más próxima arriba.
+  return out.sort((a, b) =>
+    Number(b.grave) - Number(a.grave) || a.salida.localeCompare(b.salida))
+}
+
 export interface TodaySnapshot {
   salientes: OpMatch[]
   frontera: OpMatch[]
@@ -316,6 +379,8 @@ export interface TodaySnapshot {
   libreAlerts: LibreAlert[]
   /** Llegan dentro de SIN_LIBERAR_DIAS y todavía no las liberó la naviera. */
   sinLiberar: SinLiberarAlert[]
+  /** Salidas coordinadas pisadas (o muy justas) contra la llegada del buque. */
+  salidasPisadas: SalidaPisadaAlert[]
   totalCount: number
   hasMovement: boolean
 }
@@ -337,6 +402,7 @@ export function buildTodaySnapshot(
   const trucksLlegandoFiscal = trucksLlegandoFiscalHoy(trucks, truckLoads)
   const alerts = libreAlerts(shipments)
   const sinLiberar = sinLiberarAlerts(shipments, checksByRef)
+  const salidasPisadas = salidasPisadasAlerts(shipments)
   const totalCount =
     salientes.length + frontera.length + llegandoFiscal.length +
     trucksSalientes.length + trucksFrontera.length + trucksLlegandoFiscal.length
@@ -349,7 +415,8 @@ export function buildTodaySnapshot(
     trucksLlegandoFiscal,
     libreAlerts: alerts,
     sinLiberar,
+    salidasPisadas,
     totalCount,
-    hasMovement: totalCount > 0 || alerts.length > 0 || sinLiberar.length > 0,
+    hasMovement: totalCount > 0 || alerts.length > 0 || sinLiberar.length > 0 || salidasPisadas.length > 0,
   }
 }
