@@ -250,7 +250,7 @@ export function computeFlush(
         const p2 = parseDraftKey(k)
         return p2?.idx === idx && p2.field === 'ETA_FISC'
       })
-      if (!tocoFiscal) {
+      if (!tocoFiscal && rawValue !== (rec.SALIDA || '').trim()) {
         const sugerida = sugerirEtaFiscal(rawValue)
         const actual = (rec.ETA_FISC || '').trim()
         if (sugerida && sugerida !== actual) {
@@ -336,7 +336,8 @@ const ContainerDatesSection = forwardRef<ContainerDatesHandle, {
       let agregoFiscal = false
       for (const f of primera.fiscalSuggestions) {
         if (skip.has(f.idx)) continue
-        const actualTxt = f.actual ? `${nombreDia(f.actual)} ${fmtDMY(f.actual)}` : 'sin fecha'
+        // .trim(): con fiscal legacy no-ISO nombreDia da '' → evita "(ahora:  CONFIRMAR)"
+        const actualTxt = f.actual ? `${nombreDia(f.actual)} ${fmtDMY(f.actual)}`.trim() : 'sin fecha'
         const ok = window.confirm(
           `🚛 ${f.cntr}: la salida queda el ${nombreDia(f.salida)} ${fmtDMY(f.salida)}.\n\n` +
           `¿Llevar la llegada a fiscal al ${nombreDia(f.sugerida)} ${fmtDMY(f.sugerida)}? (ahora: ${actualTxt})`
@@ -384,9 +385,14 @@ const ContainerDatesSection = forwardRef<ContainerDatesHandle, {
     const k = draftKey(i, field)
     if (!(k in drafts)) return
     const value = drafts[k]
-    // La salida no puede ser anterior a la llegada a MVD: avisar y pedir confirmación.
+    // El guardado normal pasa por acá (onBlur/Enter), NO por flush() — flush solo
+    // ve drafts cuyo blur nunca llegó a disparar (cierre por click afuera). Por
+    // eso la sugerencia de fiscal tiene que vivir acá también, no solo en flush.
+    let patch: Partial<Pick<OperativasRecord, 'SALIDA' | 'ETA_FISC'>> =
+      field === 'SALIDA' ? { SALIDA: value } : { ETA_FISC: value }
     if (field === 'SALIDA') {
       const rec = resolveRecord(cntrs, existing, i, op)
+      // La salida no puede ser anterior a la llegada a MVD: avisar y pedir confirmación.
       const eta = rec.ETA_OP || op.eta || ''
       if (isSalidaBeforeArrival(value, eta)) {
         const ok = window.confirm(
@@ -397,13 +403,30 @@ const ContainerDatesSection = forwardRef<ContainerDatesHandle, {
           return
         }
       }
+      // Salida movida sin tocar el arribo fiscal → ofrecer la llegada normal
+      // (salida+2, finde → lunes). Si hay draft de ETA_FISC pendiente o el
+      // usuario dejó la misma fecha, no molestar. Si acepta, UN solo patch con
+      // las dos fechas (evita doble escritura).
+      const tocoFiscal = draftKey(i, 'ETA_FISC') in drafts
+      if (!tocoFiscal && value !== (rec.SALIDA || '').trim()) {
+        const sugerida = sugerirEtaFiscal(value)
+        const actual = (rec.ETA_FISC || '').trim()
+        if (sugerida && sugerida !== actual) {
+          const actualTxt = actual ? `${nombreDia(actual)} ${fmtDMY(actual)}`.trim() : 'sin fecha'
+          const ok = window.confirm(
+            `🚛 ${cntrs[i]}: la salida queda el ${nombreDia(value)} ${fmtDMY(value)}.\n\n` +
+            `¿Llevar la llegada a fiscal al ${nombreDia(sugerida)} ${fmtDMY(sugerida)}? (ahora: ${actualTxt})`
+          )
+          if (ok) patch = { SALIDA: value, ETA_FISC: sugerida }
+        }
+      }
     }
     setDrafts(prev => { const next = { ...prev }; delete next[k]; return next })
     // Aviso (no bloquea): se coordinó una salida pero el telex sigue sin liberar.
     if (field === 'SALIDA' && value.trim() && isSinTelex(op.tlx)) {
       toast.warning(`🚨 ${op.ref} — ${SIN_TELEX_MSG}`)
     }
-    onCommitOperativas(buildNextOperativas(cntrs, existing, op, i, { [field]: value }))
+    onCommitOperativas(buildNextOperativas(cntrs, existing, op, i, patch))
   }
 
   // Fix 3: LUGAR_SALIDA is a discrete pick — commit onChange (no draft needed).

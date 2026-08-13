@@ -17,6 +17,8 @@ import {
   DEPOSITOS_UY, STATUS_OPTIONS,
 } from '@/lib/operationsTypes'
 import { parseCntr } from '@/lib/cntrUtils'
+import { fmtDMY } from '@/lib/salidaCheck'
+import { sugerirEtaFiscal, nombreDia } from '@/lib/transitoFiscal'
 import { canonicalizeCliente, type CatalogClient } from '@/lib/clientCatalog'
 import { matchCanonico, upperCat } from '@/lib/fuzzyCatalog'
 
@@ -247,6 +249,25 @@ export default function NewShipmentDialog({
       return
     }
     const m = mode as Modality
+    // Salida cargada con el fiscal vacío → ofrecer la llegada normal del
+    // tránsito (salida+2, finde → lunes), como en la ficha y el quick-edit.
+    // Leer f directo (setState es async: set('etaFisc',…) no llegaría a este
+    // mismo tick) y resolver en una variable local que va al row.
+    let etaFiscFinal = f.etaFisc.trim()
+    const salidaTrim = f.salida.trim()
+    if (salidaTrim && !etaFiscFinal) {
+      const sugerida = sugerirEtaFiscal(salidaTrim)
+      if (sugerida) {
+        const ok = window.confirm(
+          `🚛 La salida queda el ${nombreDia(salidaTrim)} ${fmtDMY(salidaTrim)}.\n\n` +
+          `¿Llevar la llegada a fiscal al ${nombreDia(sugerida)} ${fmtDMY(sugerida)}? (ahora: sin fecha)`
+        )
+        // Persistir también en el form: si el alta se aborta (REF duplicada y
+        // el usuario cancela), el diálogo queda abierto — sin esto el próximo
+        // click re-preguntaría y el campo ETA fiscal mostraría vacío.
+        if (ok) { etaFiscFinal = sugerida; set('etaFisc', sugerida) }
+      }
+    }
     const row = newDbShipment({
       mode: m,
       ref: f.ref.trim(),
@@ -268,7 +289,7 @@ export default function NewShipmentDialog({
       etd: f.etd.trim(),
       eta: f.eta.trim(),
       salida: f.salida.trim(),
-      eta_fiscal: f.etaFisc.trim(),
+      eta_fiscal: etaFiscFinal,
       seguimiento: f.seguimiento.trim(),
       deposito: f.deposito.trim(),
       operativa: f.operativa.trim(),
