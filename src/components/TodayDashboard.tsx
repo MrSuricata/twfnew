@@ -7,6 +7,7 @@ import {
   MapPin,
   Warning,
   LockKey,
+  CheckCircle,
   Coffee,
   Package,
   Siren,
@@ -313,6 +314,16 @@ export default function TodayDashboard({
       )}
 
       {/* ── Llegan sin liberar ───────────────────────────── */}
+      {snapshot.sinLiberar.length === 0 && (
+        /* Estado feliz explícito (pedido Brian 13/08): que se VEA que el
+           trabajo de liberación está al día, no solo la ausencia de alerta. */
+        <div className="flex items-center gap-2.5 rounded-lg border border-emerald-500/25 bg-emerald-500/[0.05] px-4 py-2.5">
+          <CheckCircle size={18} weight="fill" className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+          <p className="text-sm text-emerald-700 dark:text-emerald-400">
+            <b>¡Felicitaciones!</b> Todas tus cargas de los próximos 10 días están liberadas.
+          </p>
+        </div>
+      )}
       {snapshot.sinLiberar.length > 0 && (
         <Card className="accent-top overflow-hidden bg-amber-500/[0.04] border-amber-500/25" style={{ ['--bar-color' as any]: 'rgb(245 158 11)' }}>
           <CardContent className="pt-5 pb-4">
@@ -328,7 +339,7 @@ export default function TodayDashboard({
               </span>
             </div>
             <p className="text-xs text-muted-foreground mb-3">
-              La naviera todavía no confirmó la liberación — sin eso el contenedor no se retira.
+              Llegan dentro de 10 días y la naviera todavía no confirmó la liberación — sin eso el contenedor no se retira.
             </p>
             <div className="space-y-1">
               {snapshot.sinLiberar.map(a => (

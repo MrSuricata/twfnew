@@ -252,8 +252,8 @@ export function trucksLlegandoFiscalHoy(trucks: Truck[], loads: TruckLoad[]): Tr
 
 const hoyMidnight = (): Date => { const d = new Date(); d.setHours(0, 0, 0, 0); return d }
 
-/** Días antes del arribo a partir de los cuales se avisa. */
-export const SIN_LIBERAR_DIAS = 7
+/** Días antes del arribo a partir de los cuales se avisa (Brian 13/08: 10). */
+export const SIN_LIBERAR_DIAS = 10
 
 export interface SinLiberarAlert {
   shipment: ParsedShipment
@@ -314,7 +314,7 @@ export interface TodaySnapshot {
   trucksFrontera: TruckMatch[]
   trucksLlegandoFiscal: TruckMatch[]
   libreAlerts: LibreAlert[]
-  /** Llegan dentro de 7 días y todavía no las liberó la naviera. */
+  /** Llegan dentro de SIN_LIBERAR_DIAS y todavía no las liberó la naviera. */
   sinLiberar: SinLiberarAlert[]
   totalCount: number
   hasMovement: boolean
