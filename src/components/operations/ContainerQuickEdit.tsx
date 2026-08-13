@@ -13,6 +13,7 @@ import type { ParsedShipment, OperativasRecord } from '@/lib/shipmentTypes'
 import { getShipmentStatus } from '@/lib/shipmentTypes'
 import { buildPerContainerPatch, applyLugarSalida, lugarOrDeposito } from '@/lib/operationsTypes'
 import { isSalidaBeforeArrival, avisoSalida, fmtDMY } from '@/lib/salidaCheck'
+import { sugerirEtaFiscal, nombreDia } from '@/lib/transitoFiscal'
 import { isSinTelex, SIN_TELEX_MSG } from '@/lib/telexCheck'
 import { fmtDateDMY } from '@/lib/format'
 import { isLibreDevuelto, libreDevueltoToggle, LIBRE_DEVUELTO } from '@/lib/libreDevuelto'
@@ -234,11 +235,34 @@ export default function ContainerQuickEdit({
         return
       }
     }
+    // Salida movida SIN tocar el fiscal en este commit → ofrecer la llegada
+    // normal del tránsito (salida+2, finde → lunes; regla Brian 13/08). Si el
+    // usuario también editó el arribo, eligió él y no se pregunta.
+    let etaFiscFinal = etaFisc
+    let prevEtaFisc = ''
+    try { prevEtaFisc = (JSON.parse(lastCommittedRef.current).etaFisc as string) || '' } catch { /* sin commit previo */ }
+    if (salida !== prevSalida && etaFisc === prevEtaFisc) {
+      const sugerida = sugerirEtaFiscal(salida)
+      if (sugerida && sugerida !== etaFisc) {
+        const actualTxt = etaFisc ? `${nombreDia(etaFisc)} ${fmtDMY(etaFisc)}` : 'sin fecha'
+        const llevar = window.confirm(
+          `🚛 La salida queda el ${nombreDia(salida)} ${fmtDMY(salida)}.
+
+` +
+          `¿Llevar la llegada a fiscal al ${nombreDia(sugerida)} ${fmtDMY(sugerida)}? (ahora: ${actualTxt})`
+        )
+        if (llevar) {
+          etaFiscFinal = sugerida
+          setDrafts(d => ({ ...d, etaFisc: sugerida }))
+        }
+      }
+    }
+    const serializedFinal = JSON.stringify({ salida, etaFisc: etaFiscFinal, lugar: lugarVal, transporte: transVal, libre: libreV })
     setSaving(true)
     try {
       const next = buildPatchedOperativas(shipment, cntr, {
         SALIDA: salida,
-        ETA_FISC: etaFisc,
+        ETA_FISC: etaFiscFinal,
         LUGAR_SALIDA: lugarVal,
       })
       const fields: Record<string, unknown> = { operativas: next }
@@ -282,7 +306,7 @@ export default function ContainerQuickEdit({
         fields.operativas = propagated
       }
       await onPatch(shipment.__dbId!, fields)
-      lastCommittedRef.current = serialized
+      lastCommittedRef.current = serializedFinal
       // Aviso (no bloquea): se coordinó una salida con el telex sin liberar.
       if (salida !== prevSalida && (salida || '').trim() && isSinTelex(currentOp.TLX)) {
         toast.warning(`🚨 ${shipment.REF} — ${SIN_TELEX_MSG}`)

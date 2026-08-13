@@ -464,7 +464,6 @@ export default function OperationDetailPanel({
             knownDepositos={knownDepositos}
             knownTransportes={knownTransportes}
             knownFiscales={knownFiscales}
-            knownAgentes={knownAgentes}
             fiscalSugerido={fiscalSugerido}
             fiscalesRecientes={fiscalesRecientes}
             transporteSugerido={transporteSugerido}
@@ -498,6 +497,7 @@ export default function OperationDetailPanel({
             <PagosSection
               dbRow={dbRow}
               editable={op.source === 'db' && !!op.dbId && !op.readOnly}
+              knownAgentes={knownAgentes}
               onPatch={onPatch}
             />
           )}

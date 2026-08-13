@@ -31,7 +31,6 @@ export default function ViabilityBlock({
   editable,
   knownDepositos,
   knownTransportes = [],
-  knownAgentes = [],
   knownFiscales = [],
   knownDevs = [],
   knownLugaresDescarga = [],
@@ -46,8 +45,6 @@ export default function ViabilityBlock({
   editable: boolean
   knownDepositos: string[]
   knownTransportes?: string[]
-  /** Agentes (= acreedor de flete/locales) ya usados → combo Agente. */
-  knownAgentes?: string[]
   /** Fiscales de destino ya usados en las cargas → combo (antes texto libre). */
   knownFiscales?: string[]
   /** Terminales de devolución ya usadas → se suman a DEV_OPTIONS (alias APM=MPS unificado). */
@@ -215,20 +212,6 @@ export default function ViabilityBlock({
             </div>
           ) : undefined}
           onCommit={v => onCommit('transporte', v)}
-        />
-        {/* Agente = a QUIÉN se le paga flete/locales (Repremar, Craft, Maersk
-            directo…). No confundir con la línea (el carrier): Repremar vende
-            espacio de Maersk y factura ella. El panel de Pagos agrupa por esto.
-            Cargarlo al crear la carga evita la arqueología del 12/08. */}
-        <StatBox
-          label="Agente (paga flete)"
-          value={op.agente}
-          kind="combo"
-          options={knownAgentes}
-          upper
-          catalogo
-          editable={editable}
-          onCommit={v => onCommit('agente', v)}
         />
         {/* Operativa y LIBRE son datos de la CARGA (no de un contenedor suelto):
             editarlos acá propaga a TODOS los contenedores + la columna (vía

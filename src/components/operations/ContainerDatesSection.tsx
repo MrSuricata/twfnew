@@ -9,6 +9,7 @@ import type { ParsedShipment, OperativasRecord } from '@/lib/shipmentTypes'
 import { getShipmentStatus } from '@/lib/shipmentTypes'
 import { parseCntr } from '@/lib/cntrUtils'
 import { isSalidaBeforeArrival, avisoSalida, fmtDMY } from '@/lib/salidaCheck'
+import { sugerirEtaFiscal, llegadaFiscalAtipica, nombreDia } from '@/lib/transitoFiscal'
 import { isSinTelex, SIN_TELEX_MSG } from '@/lib/telexCheck'
 import { toast } from 'sonner'
 
@@ -217,10 +218,15 @@ export function computeFlush(
 ): {
   next: OperativasRecord[] | null
   salidaWarnings: { idx: number; cntr: string; salida: string; eta: string }[]
+  /** SALIDA cambiada sin tocar el arribo fiscal: la llegada normal es salida+2
+   *  (fin de semana → lunes). El caller pregunta y, si acepta, agrega el draft
+   *  de ETA_FISC y recomputa (regla Brian 13/08). */
+  fiscalSuggestions: { idx: number; cntr: string; salida: string; sugerida: string; actual: string }[]
 } {
   // patch acumulado por índice de contenedor
   const patchByIdx = new Map<number, Partial<Pick<OperativasRecord, FlushField>>>()
   const salidaWarnings: { idx: number; cntr: string; salida: string; eta: string }[] = []
+  const fiscalSuggestions: { idx: number; cntr: string; salida: string; sugerida: string; actual: string }[] = []
 
   for (const [key, rawValue] of Object.entries(drafts)) {
     const parsed = parseDraftKey(key)
@@ -238,6 +244,19 @@ export function computeFlush(
       const acc = patchByIdx.get(idx) || {}
       acc.SALIDA = rawValue
       patchByIdx.set(idx, acc)
+      // ¿Cambió la salida sin tocar el arribo fiscal en el mismo flush? Sugerir
+      // la llegada normal. Si el usuario también editó ETA_FISC, eligió él.
+      const tocoFiscal = Object.keys(drafts).some(k => {
+        const p2 = parseDraftKey(k)
+        return p2?.idx === idx && p2.field === 'ETA_FISC'
+      })
+      if (!tocoFiscal) {
+        const sugerida = sugerirEtaFiscal(rawValue)
+        const actual = (rec.ETA_FISC || '').trim()
+        if (sugerida && sugerida !== actual) {
+          fiscalSuggestions.push({ idx, cntr: cntrs[idx], salida: rawValue, sugerida, actual })
+        }
+      }
       continue
     }
 
@@ -256,7 +275,7 @@ export function computeFlush(
     patchByIdx.set(idx, acc)
   }
 
-  if (patchByIdx.size === 0) return { next: null, salidaWarnings }
+  if (patchByIdx.size === 0) return { next: null, salidaWarnings, fiscalSuggestions }
 
   // Un solo array: parte de resolveRecord por índice y superpone TODOS los
   // patches acumulados (preserva hermanos y campos no tocados, igual que
@@ -266,7 +285,7 @@ export function computeFlush(
     const patch = patchByIdx.get(i)
     return patch ? { ...base, ...patch } : base
   })
-  return { next, salidaWarnings }
+  return { next, salidaWarnings, fiscalSuggestions }
 }
 
 const ContainerDatesSection = forwardRef<ContainerDatesHandle, {
@@ -309,9 +328,26 @@ const ContainerDatesSection = forwardRef<ContainerDatesHandle, {
           )
           if (!ok) skip.add(w.idx)
         }
-        if (skip.size > 0) {
-          ;({ next } = computeFlush(cntrs, existingNow, op, drafts, skip))
+      }
+      // Salida movida sin tocar el fiscal → ofrecer la llegada normal (salida+2,
+      // fin de semana → lunes). Si acepta, se agrega como draft y se recomputa
+      // junto con los skips en UNA pasada (regla Brian 13/08).
+      const draftsFinal = { ...drafts }
+      let agregoFiscal = false
+      for (const f of primera.fiscalSuggestions) {
+        if (skip.has(f.idx)) continue
+        const actualTxt = f.actual ? `${nombreDia(f.actual)} ${fmtDMY(f.actual)}` : 'sin fecha'
+        const ok = window.confirm(
+          `🚛 ${f.cntr}: la salida queda el ${nombreDia(f.salida)} ${fmtDMY(f.salida)}.\n\n` +
+          `¿Llevar la llegada a fiscal al ${nombreDia(f.sugerida)} ${fmtDMY(f.sugerida)}? (ahora: ${actualTxt})`
+        )
+        if (ok) {
+          draftsFinal[`${cntrs[f.idx]}-${f.idx}-ETA_FISC`] = f.sugerida
+          agregoFiscal = true
         }
+      }
+      if (skip.size > 0 || agregoFiscal) {
+        ;({ next } = computeFlush(cntrs, existingNow, op, draftsFinal, skip))
       }
       setDrafts({}) // limpiar SIEMPRE (incluye los rechazados: se descartan)
       if (!next) return false
@@ -483,6 +519,18 @@ const ContainerDatesSection = forwardRef<ContainerDatesHandle, {
                       {rec.ETA_FISC || '—'}
                     </span>
                   )}
+                  {/* Llegada atípica (regla 13/08): sábado = pedido del cliente ·
+                      martes = cliente o lunes feriado. Se marca, no se bloquea. */}
+                  {(() => {
+                    const a = llegadaFiscalAtipica(
+                      editable ? getDraft(i, 'ETA_FISC', rec.ETA_FISC || '') : (rec.ETA_FISC || ''),
+                    )
+                    return a ? (
+                      <span className="text-[10px] font-medium leading-tight text-amber-600" title={a.motivo}>
+                        📌 {a.motivo}
+                      </span>
+                    ) : null
+                  })()}
                 </div>
 
                 {/* Lugar de salida — discrete pick: commit onChange. Default de
