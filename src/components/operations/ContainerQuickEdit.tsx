@@ -244,7 +244,7 @@ export default function ContainerQuickEdit({
     if (salida !== prevSalida && etaFisc === prevEtaFisc) {
       const sugerida = sugerirEtaFiscal(salida)
       if (sugerida && sugerida !== etaFisc) {
-        const actualTxt = etaFisc ? `${nombreDia(etaFisc)} ${fmtDMY(etaFisc)}` : 'sin fecha'
+        const actualTxt = etaFisc ? `${nombreDia(etaFisc)} ${fmtDMY(etaFisc)}`.trim() : 'sin fecha'
         const llevar = window.confirm(
           `🚛 La salida queda el ${nombreDia(salida)} ${fmtDMY(salida)}.
 
@@ -258,6 +258,12 @@ export default function ContainerQuickEdit({
       }
     }
     const serializedFinal = JSON.stringify({ salida, etaFisc: etaFiscFinal, lugar: lugarVal, transporte: transVal, libre: libreV })
+    // Actualizar el ref ANTES del await: onPatch es optimista (revert propio en
+    // el caller), y un segundo commitSave que entre durante el await (blur +
+    // cierre en el mismo gesto) debe ver este commit como hecho — si no,
+    // re-evalúa los prev viejos y re-pregunta la sugerencia o pisa el fiscal.
+    const serializedPrevio = lastCommittedRef.current
+    lastCommittedRef.current = serializedFinal
     setSaving(true)
     try {
       const next = buildPatchedOperativas(shipment, cntr, {
@@ -273,7 +279,7 @@ export default function ContainerQuickEdit({
       // para que un ajuste de fechas no pise transportes distintos por contenedor
       // en datos históricos.
       let prevTrans = initialTransporte
-      try { prevTrans = normTrans((JSON.parse(lastCommittedRef.current).transporte as string) || '') } catch { /* sin commit previo */ }
+      try { prevTrans = normTrans((JSON.parse(serializedPrevio).transporte as string) || '') } catch { /* sin commit previo */ }
       // Las propagaciones nivel-carga se ENCADENAN sobre `propagated` (no sobre
       // `next` cada una): si transporte Y libre cambian en el mismo commit, la
       // segunda debe mapear el array ya propagado por la primera o la pisa.
@@ -288,7 +294,7 @@ export default function ContainerQuickEdit({
       // el MISMO buildPerContainerPatch, conservando las fechas/lugar recién
       // editados de este contenedor.
       let prevLibre = storedLibre
-      try { prevLibre = (JSON.parse(lastCommittedRef.current).libre as string) ?? storedLibre } catch { /* sin commit previo */ }
+      try { prevLibre = (JSON.parse(serializedPrevio).libre as string) ?? storedLibre } catch { /* sin commit previo */ }
       if (libreV !== prevLibre) {
         const p = buildPerContainerPatch({ operativas: propagated }, 'libre', libreV)
         propagated = (p.operativas as OperativasRecord[] | undefined) ?? propagated
@@ -300,13 +306,12 @@ export default function ContainerQuickEdit({
       // DEPOSITO del array (la columna deposito la materializa el rollup).
       // Solo cuando cambió, igual que transporte/libre.
       let prevLugar = currentOp.LUGAR_SALIDA || ''
-      try { prevLugar = (JSON.parse(lastCommittedRef.current).lugar as string) ?? prevLugar } catch { /* sin commit previo */ }
+      try { prevLugar = (JSON.parse(serializedPrevio).lugar as string) ?? prevLugar } catch { /* sin commit previo */ }
       if (lugarVal !== prevLugar) {
         propagated = applyLugarSalida(propagated, lugarVal)
         fields.operativas = propagated
       }
       await onPatch(shipment.__dbId!, fields)
-      lastCommittedRef.current = serializedFinal
       // Aviso (no bloquea): se coordinó una salida con el telex sin liberar.
       if (salida !== prevSalida && (salida || '').trim() && isSinTelex(currentOp.TLX)) {
         toast.warning(`🚨 ${shipment.REF} — ${SIN_TELEX_MSG}`)
@@ -315,14 +320,14 @@ export default function ContainerQuickEdit({
       // lugar) en el mismo modal. El cierre lo manejan "Listo" y Escape. Cerrar
       // en cada commit (vía onBlur) hacía que al pasar de un campo a otro se
       // cerrara el diálogo.
+    } catch (err) {
+      // El patch no entró: permitir recommit. Condicional por si un commit
+      // posterior ya actualizó el ref durante nuestro await — no pisarlo.
+      if (lastCommittedRef.current === serializedFinal) lastCommittedRef.current = serializedPrevio
+      throw err
     } finally {
       setSaving(false)
     }
-  }
-
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') void commitSave()
-    // Escape is handled natively by the Dialog (Radix closes on Escape)
   }
 
   // Botón rápido "Devuelto" — flujo estrella: alerta LIBRE → quick-edit →
@@ -371,10 +376,11 @@ export default function ContainerQuickEdit({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent
-        className="max-w-sm w-[calc(100%-2rem)] p-0 gap-0 overflow-hidden"
-        onKeyDown={handleKeyDown}
-      >
+      {/* Sin onKeyDown propio: cada input maneja su Enter. Un handler acá
+          recibía el MISMO keydown burbujeado y disparaba commitSave dos veces
+          en el mismo dispatch (el guard anti doble-save aún no veía el ref
+          actualizado) → doble confirm de sugerencia fiscal. */}
+      <DialogContent className="max-w-sm w-[calc(100%-2rem)] p-0 gap-0 overflow-hidden">
         {/* ── Header ─────────────────────────────────────────────────── */}
         <div className="px-5 pt-5 pb-4 border-b bg-[#1e3a8a]/5">
           {/* REF + CNTR row */}

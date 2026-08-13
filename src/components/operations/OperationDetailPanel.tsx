@@ -14,6 +14,8 @@ import {
   buildPerContainerPatch, statusBadgeClass,
 } from '@/lib/operationsTypes'
 import { fmtDateDMY } from '@/lib/format'
+import { fmtDMY } from '@/lib/salidaCheck'
+import { sugerirEtaFiscal, nombreDia } from '@/lib/transitoFiscal'
 import { parseCntr, serializeCntr, normalizeCntr, isStandardCntr } from '@/lib/cntrUtils'
 import { canonicalizeCliente, type CatalogClient } from '@/lib/clientCatalog'
 import type { OriginPhoto, OperativeReport } from '@/lib/quotationTypes'
@@ -259,6 +261,28 @@ export default function OperationDetailPanel({
       // valor POR CONTENEDOR, no la columna. El helper solo agrega `operativas`
       // para esos campos; el resto setea solo la columna.
       const patch = buildPerContainerPatch(op, mode.col, v)
+      // Salida movida desde el FieldRow "Fechas" (FCL sin contenedores, LCL,
+      // aéreo, terrestre) sin tocar el fiscal → ofrecer la llegada normal
+      // (salida+2, finde → lunes), igual que la ficha por contenedor y el
+      // quick-edit. El fiscal sugerido viaja EN EL MISMO patch, mapeando sobre
+      // las operativas ya parcheadas con la salida (no las pisa).
+      if (key === 'salida' && typeof v === 'string' && v !== (op.salida || '').trim()) {
+        const sugerida = sugerirEtaFiscal(v)
+        const actual = String(op.etaFisc || '').trim()
+        if (sugerida && sugerida !== actual) {
+          const actualTxt = actual ? `${nombreDia(actual)} ${fmtDMY(actual)}`.trim() : 'sin fecha'
+          const ok = window.confirm(
+            `🚛 La salida queda el ${nombreDia(v)} ${fmtDMY(v)}.\n\n` +
+            `¿Llevar la llegada a fiscal al ${nombreDia(sugerida)} ${fmtDMY(sugerida)}? (ahora: ${actualTxt})`
+          )
+          if (ok) {
+            Object.assign(patch, buildPerContainerPatch(
+              { operativas: (patch.operativas as UnifiedOperation['operativas']) ?? op.operativas },
+              'eta_fiscal', sugerida,
+            ))
+          }
+        }
+      }
       // Costos DEFAULT (Brian 17/07): al setear Terminal (MONTECON 618 / TCP
       // 507,16) o Devuelve en (STL 205 / MPS 189) se completa el monto del
       // rubro EN EL MISMO PATCH — solo si estaba sin datos (null): un 0 (=

@@ -32,7 +32,8 @@ import ContainerQuickEdit, { buildPatchedOperativas } from '../operations/Contai
 import { deriveKnownTransportes } from '@/lib/operationsTypes'
 import { dropPatch, dropPatchTruck } from './agendaDnd'
 import { fmtDateDMY } from '@/lib/format'
-import { avisoSalida } from '@/lib/salidaCheck'
+import { avisoSalida, fmtDMY } from '@/lib/salidaCheck'
+import { sugerirEtaFiscal, nombreDia } from '@/lib/transitoFiscal'
 import { isSinTelex, SIN_TELEX_MSG } from '@/lib/telexCheck'
 import { toast } from 'sonner'
 
@@ -436,7 +437,25 @@ export default function AgendaCalendar({
     if (event?.type === 'salida' && newDate && isSinTelex(event.op?.TLX)) {
       toast.warning(`🚨 ${event.ref} — ${SIN_TELEX_MSG}`)
     }
-    onPatchShipment?.(result.dbId, result.fields)
+    // Arrastrar la salida a otro día = moverla sin tocar el fiscal → ofrecer la
+    // llegada normal (salida+2, finde → lunes), igual que la ficha y el quick-edit.
+    // Mover el chip de eta_fisc no sugiere nada: ahí el fiscal lo eligió el usuario.
+    let fields = result.fields
+    if (event?.type === 'salida' && newDate && event.shipment && event.cntr) {
+      const sugerida = sugerirEtaFiscal(newDate)
+      const actual = (event.op?.ETA_FISC || '').trim()
+      if (sugerida && sugerida !== actual) {
+        const actualTxt = actual ? `${nombreDia(actual)} ${fmtDMY(actual)}`.trim() : 'sin fecha'
+        const ok = window.confirm(
+          `🚛 ${event.cntr}: la salida queda el ${nombreDia(newDate)} ${fmtDMY(newDate)}.\n\n` +
+          `¿Llevar la llegada a fiscal al ${nombreDia(sugerida)} ${fmtDMY(sugerida)}? (ahora: ${actualTxt})`
+        )
+        if (ok) {
+          fields = { operativas: buildPatchedOperativas(event.shipment, event.cntr, { SALIDA: newDate, ETA_FISC: sugerida }) }
+        }
+      }
+    }
+    onPatchShipment?.(result.dbId, fields)
   }, [onPatchShipment, onUpdateTrucks, applyTruckFields])
 
   return (
