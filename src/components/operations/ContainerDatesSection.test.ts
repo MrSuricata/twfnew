@@ -314,9 +314,10 @@ describe('computeFlush — flush de borradores al cerrar el Sheet', () => {
 
   it('reporta salida-antes-de-llegada en salidaWarnings sin frenar el resto', () => {
     const cntrs = ['AAAA1111111']
-    // ETA de llegada 2026-07-10; salida 2026-07-05 es ANTERIOR
-    const existing = [record({ CNTR_OP: 'AAAA1111111', ETA_OP: '2026-07-10' })]
-    const o = op('AAAA1111111', existing)
+    // La ETA de la CARGA manda (etaVigente): el buque se corrió al 10/07 y la
+    // copia ETA_OP quedó rancia en 20/06 — la salida 05/07 igual es ANTERIOR.
+    const existing = [record({ CNTR_OP: 'AAAA1111111', ETA_OP: '2026-06-20' })]
+    const o = { ...op('AAAA1111111', existing), eta: '2026-07-10' }
     const drafts = { 'AAAA1111111-0-SALIDA': '2026-07-05' }
     const { next, salidaWarnings } = computeFlush(cntrs, existing, o, drafts)
     expect(salidaWarnings).toHaveLength(1)

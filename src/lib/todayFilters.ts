@@ -27,7 +27,7 @@ import {
 } from './checksTypes'
 import { refsEnConsolidado, type Truck, type TruckLoad } from './truckTypes'
 import { cargaFclActiva } from './operationsTypes'
-import { margenSalida, MARGEN_SALIDA_DIAS } from './salidaCheck'
+import { margenSalida, MARGEN_SALIDA_DIAS, etaVigente } from './salidaCheck'
 
 /** A single operativa matched along with its parent shipment for context. */
 export interface OpMatch {
@@ -348,7 +348,9 @@ export function salidasPisadasAlerts(shipments: ParsedShipment[]): SalidaPisadaA
     if (!isPorUruguay(s.PAIS)) continue
     for (const op of s.operativas || []) {
       const salida = (op.SALIDA || '').trim()
-      const eta = (op.ETA_OP || '').trim() || (s.ETA || '').trim()
+      // ETA de la CARGA primero: es la que se actualiza cuando el buque se
+      // mueve; ETA_OP es una copia congelada al hornear (caso A7995).
+      const eta = etaVigente(s.ETA, op.ETA_OP)
       const margen = margenSalida(salida, eta)
       if (margen === null || margen >= MARGEN_SALIDA_DIAS) continue
 
