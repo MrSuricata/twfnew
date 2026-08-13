@@ -46,6 +46,7 @@ import { parseCntr } from '@/lib/cntrUtils'
 import { subscribeTrucksLive } from '@/lib/realtimeBus'
 import { getAdminName } from '@/lib/authClient'
 import { fmtDateDMY } from '@/lib/format'
+import { fmtDMY } from '@/lib/salidaCheck'
 import { isSinTelex } from '@/lib/telexCheck'
 
 // ─── Avisos por tarjeta (unificados con la pestaña Checks) ────────────────
@@ -278,6 +279,9 @@ export default function TodayDashboard({
               {snapshot.libreAlerts.length > 0 && (
                 <StatChip icon={<Warning size={14} weight="fill" />} label={`${snapshot.libreAlerts.length} alerta${snapshot.libreAlerts.length === 1 ? '' : 's'} LIBRE`} tone="destructive" />
               )}
+              {snapshot.salidasPisadas.length > 0 && (
+                <StatChip icon={<Siren size={14} weight="fill" />} label={`${snapshot.salidasPisadas.length} salida${snapshot.salidasPisadas.length === 1 ? '' : 's'} pisada${snapshot.salidasPisadas.length === 1 ? '' : 's'}`} tone="destructive" />
+              )}
             </div>
           ) : initialLoading ? (
             <p className="text-sm text-muted-foreground mt-1">Cargando movimientos…</p>
@@ -309,6 +313,54 @@ export default function TodayDashboard({
             </div>
             <p className="text-lg font-semibold text-foreground">Nada programado hoy</p>
             <p className="text-sm mt-1">Tomá un café ☕</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Salidas pisadas por el buque ─────────────────── */}
+      {snapshot.salidasPisadas.length > 0 && (
+        <Card className="accent-top overflow-hidden bg-destructive/[0.04] border-destructive/25" style={{ ['--bar-color' as any]: 'var(--destructive)' }}>
+          <CardContent className="pt-5 pb-4">
+            <div className="flex items-center gap-2.5 mb-1">
+              <div className="p-1.5 bg-destructive/10 rounded-md">
+                <Warning size={18} weight="fill" className="text-destructive pulse-soft" />
+              </div>
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-destructive">
+                Salidas pisadas por el buque
+              </h2>
+              <span className="ml-auto inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-full bg-destructive text-destructive-foreground text-xs font-bold">
+                {snapshot.salidasPisadas.length}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground mb-3">
+              El buque se movió y estas salidas quedaron pisadas (o muy justas) con la llegada a MVD — recoordinar con depósito y transporte.
+            </p>
+            <div className="space-y-1">
+              {snapshot.salidasPisadas.map(a => (
+                <button
+                  key={`${a.shipment.REF}-${a.cntr}`}
+                  type="button"
+                  onClick={() => openOpMatch({ shipment: a.shipment, op: a.op })}
+                  className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-left hover:bg-destructive/10 transition-colors"
+                >
+                  <span className="font-mono text-sm font-semibold shrink-0 min-w-[64px]">{a.shipment.REF}</span>
+                  <span className="text-sm text-foreground/85 truncate flex-1 min-w-0">
+                    {a.shipment.CLIENTE || '—'}
+                    {a.cntr && <span className="hidden sm:inline font-mono text-xs text-muted-foreground ml-2">{a.cntr}</span>}
+                  </span>
+                  <span className="text-xs text-muted-foreground shrink-0 hidden md:inline">
+                    sale {fmtDMY(a.salida)} · buque llega {fmtDMY(a.eta)}
+                  </span>
+                  <span className={`text-xs font-bold shrink-0 px-1.5 py-0.5 rounded ${
+                    a.grave
+                      ? 'bg-destructive/10 text-destructive'
+                      : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                  }`}>
+                    {a.margen < 0 ? 'IMPOSIBLE' : a.margen === 0 ? 'MISMO DÍA' : 'MUY JUSTA'}
+                  </span>
+                </button>
+              ))}
+            </div>
           </CardContent>
         </Card>
       )}
