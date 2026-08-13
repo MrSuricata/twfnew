@@ -40,11 +40,14 @@ function todayISO(): string {
 export default function PagosSection({
   dbRow,
   editable,
+  knownAgentes = [],
   onPatch,
 }: {
   /** Fila cruda de shipments (los montos/pago_*_at viven ahí, no en UnifiedOperation). */
   dbRow: DbShipment
   editable: boolean
+  /** Agentes ya usados → sugerencias del campo Agente. */
+  knownAgentes?: string[]
   onPatch: (id: string, fields: Record<string, unknown>) => void
 }) {
   const hoy = todayISO()
@@ -99,6 +102,29 @@ export default function PagosSection({
           </select>
         </label>
       </div>
+
+      {/* Agente = a QUIÉN se le paga flete/locales (Repremar, Craft, Maersk
+          directo…). Vive acá y no en Datos clave (pedido Brian 13/08): es un
+          dato de pagos — la columna "empresa" de los rubros de abajo lo lee. */}
+      <label className="flex items-center gap-1.5 mb-2 text-[10px] text-muted-foreground">
+        Agente (cobra flete y locales)
+        <input
+          list="pagos-agentes"
+          defaultValue={dbRow.agente || ''}
+          key={dbRow.id + (dbRow.agente || '')}
+          disabled={!editable}
+          placeholder={`sin cargar → ${(dbRow.linea || '—').toUpperCase()}`}
+          onBlur={e => {
+            const v = e.target.value.trim().toUpperCase()
+            if (v !== String(dbRow.agente || '').trim().toUpperCase()) onPatch(dbRow.id, { agente: v })
+          }}
+          onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+          className="h-6 flex-1 min-w-0 rounded border border-input bg-background px-1.5 text-[11px] uppercase placeholder:normal-case disabled:opacity-50"
+        />
+        <datalist id="pagos-agentes">
+          {knownAgentes.map(a => <option key={a} value={a} />)}
+        </datalist>
+      </label>
 
       <div className="rounded-md border border-teal-200/80 bg-background divide-y divide-border/60">
         {PAGO_RUBROS.map(rubro => {
