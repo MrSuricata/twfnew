@@ -9,6 +9,7 @@ import {
   ChartBar,
   Scales,
   UsersThree,
+  Boat,
   CalendarBlank,
   Warning,
   Lightning,
@@ -26,7 +27,8 @@ import {
   Question,
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
-import { authFetch, getAdminLevel } from '@/lib/authClient'
+import { authFetch, getAdminLevel, getAdminHomeArea } from '@/lib/authClient'
+import { colaSeguimientos } from '@/lib/seguimientos'
 import { isPushSupported, isSubscribed, subscribePush, unsubscribePush, isIosWithoutStandalone, getPushPrefs, patchPushPrefs, DEFAULT_PUSH_PREFS, type PushPrefs } from '@/lib/push'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Switch } from '@/components/ui/switch'
@@ -35,6 +37,7 @@ import TeamManager from './TeamManager'
 import HelpGuide from './HelpGuide'
 
 import TodayDashboard from './TodayDashboard'
+import SeguimientosBoard from './SeguimientosBoard'
 import AgendaCalendar from './agenda/AgendaCalendar'
 import { mergeFclShipments } from '@/lib/operationsTypes'
 import ExcelImport from './ExcelImport'
@@ -137,8 +140,26 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
     }
     return set
   }, [dbShipments])
+  // Cola de seguimientos: cuántos updates tocan hoy (badge de la pestaña).
+  const seguimientosCount = useMemo(() => {
+    const cargas = (dbShipments || []).map(s => ({
+      ref: s.ref, etd: s.etd, eta: s.eta, seguimiento: s.seguimiento, mode: s.mode, archived: s.archived,
+    }))
+    return colaSeguimientos(cargas, new Date()).pendientes.length
+  }, [dbShipments])
   // TWF brand has no ops tabs → land on the first content tab.
-  const [activeTab, setActiveTab] = useState(ops ? 'hoy' : 'contenido')
+  // Pantalla de inicio POR USUARIO (admin_users.home_area, viaja en el JWT):
+  // Nico arranca en Seguimientos, el resto donde diga su selector de Equipo.
+  // Validada contra las pestañas reales — un valor inválido (o 'equipo' sin
+  // ser owner) caería en un dashboard en blanco.
+  const [activeTab, setActiveTab] = useState(() => {
+    const brandDefault = ops ? 'hoy' : 'contenido'
+    const area = getAdminHomeArea()
+    if (!area || !ops) return brandDefault
+    const validas = new Set(['hoy', 'seguimientos', 'agenda', 'analytics', 'operaciones', 'checks', 'trucks', 'transportes', 'quotes', 'billing', 'pagos', 'contenido', 'clients', 'partners'])
+    if (area === 'equipo' && getAdminLevel() === 'owner') return 'equipo'
+    return validas.has(area) ? area : brandDefault
+  })
   // Sub-pestaña de "Contenido web" (Casos de éxito / Testimonios). Vive acá para
   // que la CommandPalette pueda abrir directo la sub-pestaña correcta.
   const [contenidoTab, setContenidoTab] = useState<'casos' | 'testimonios'>('casos')
@@ -249,6 +270,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
   const getBreadcrumbs = () => {
     const breadcrumbMap: Record<string, string> = {
       hoy: 'Hoy',
+      seguimientos: 'Seguimientos',
       agenda: 'Agenda',
       analytics: 'Analíticas',
       shipments: 'Cargas',
@@ -372,6 +394,15 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
               <CalendarBlank size={16} className="mr-1.5" />
               <span className="hidden sm:inline">Agenda</span>
             </TabsTrigger>
+            <TabsTrigger value="seguimientos" className="tab-underline" aria-label="Seguimientos">
+              <Boat size={16} className="mr-1.5" weight="fill" />
+              <span className="hidden sm:inline">Seguimientos</span>
+              {seguimientosCount > 0 && (
+                <span className="ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold rounded-full text-white shrink-0 bg-amber-500">
+                  {seguimientosCount}
+                </span>
+              )}
+            </TabsTrigger>
             <TabsTrigger value="analytics" className="tab-underline" aria-label="Analíticas">
               <ChartBar size={16} className="mr-1.5" />
               <span className="hidden sm:inline">Analíticas</span>
@@ -469,6 +500,14 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
               originPhotos={originPhotos}
               onUpdateShipments={onUpdateShipments}
               onUpdateOriginPhotos={onUpdateOriginPhotos}
+              onPatchShipment={onPatchShipment}
+              onOpenDetail={onOpenDetail}
+            />
+          </TabsContent>
+
+          <TabsContent value="seguimientos">
+            <SeguimientosBoard
+              dbShipments={dbShipments}
               onPatchShipment={onPatchShipment}
               onOpenDetail={onOpenDetail}
             />

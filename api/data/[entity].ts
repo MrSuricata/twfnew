@@ -142,6 +142,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return handlePushSubscriptions(req, res, db, payload)
       case 'audit-log':
         return handleAuditLog(req, res, db, payload)
+      case 'seguimientos-log':
+        return handleSeguimientosLog(req, res, db, payload)
       default:
         return res.status(404).json({ error: `Unknown entity: ${entity}` })
     }
@@ -2117,7 +2119,7 @@ async function handleAdminUsers(req: VercelRequest, res: VercelResponse, db: any
 
   if (req.method === 'GET') {
     const { data, error } = await db.from('admin_users')
-      .select('id, email, name, level, active, created_at, last_login, cliente_pattern')
+      .select('id, email, name, level, active, created_at, last_login, cliente_pattern, home_area')
       .order('created_at', { ascending: true })
     if (error) throw error
     return res.status(200).json({ users: data || [] })
@@ -2142,9 +2144,11 @@ async function handleAdminUsers(req: VercelRequest, res: VercelResponse, db: any
           })
         }
       }),
+      // Pestaña con la que arranca al loguearse ('' = la default de la marca).
+      homeArea: z.string().max(40).optional(),
     }), req.body)
     if (!v.ok) return res.status(400).json({ error: v.error })
-    const { id, email, name, password, clientePattern } = v.data
+    const { id, email, name, password, clientePattern, homeArea } = v.data
     const emailNorm = email.toLowerCase().trim()
 
     if (!id) {
@@ -2160,6 +2164,7 @@ async function handleAdminUsers(req: VercelRequest, res: VercelResponse, db: any
         level: 'admin',
         active: true,
         cliente_pattern: (clientePattern || '').trim() || null,
+        home_area: (homeArea || '').trim() || null,
       }
       const { error } = await db.from('admin_users').insert(row)
       if (error) throw error
@@ -2171,6 +2176,7 @@ async function handleAdminUsers(req: VercelRequest, res: VercelResponse, db: any
     const updates: Record<string, unknown> = { email: emailNorm, name: name.trim() }
     if (password) updates.password_hash = await hashPassword(password)
     if (clientePattern !== undefined) updates.cliente_pattern = (clientePattern || '').trim() || null
+    if (homeArea !== undefined) updates.home_area = (homeArea || '').trim() || null
     const { error } = await db.from('admin_users').update(updates).eq('id', id)
     if (error) throw error
     logAudit(db, payload, password ? 'editar usuario + contraseña' : 'editar usuario', 'admin_users', emailNorm)
@@ -2305,6 +2311,62 @@ async function handleAuditLog(req: VercelRequest, res: VercelResponse, db: any, 
 
 // ── Operator assignments (overlay ref → operativo) ─────────────────
 // GET /api/data/operator-assignments · POST upsert · DELETE ?ref=
+
+// ── Historial de seguimientos (cola de Nico, 13/08/2026) ────────────
+// Trazabilidad del buque: cada 'enviado' guarda la foto de la ETA/buque al
+// momento del update, y cada 'eta' registra un cambio de fecha hecho desde
+// la cola (anterior → nueva). El usuario lo pone el server (del token), no
+// el cliente. Solo lectura + alta: el historial no se edita ni se borra.
+
+async function handleSeguimientosLog(req: VercelRequest, res: VercelResponse, db: any, payload: TokenPayload | null) {
+  if (req.method === 'GET') {
+    // La ref se guarda SIEMPRE en mayúsculas (ver POST) → normalizar el filtro,
+    // si no una carga dada de alta en minúsculas nunca encuentra su historial.
+    const ref = (req.query.ref as string || '').trim().toUpperCase()
+    let q = db.from('seguimientos_log').select('*').order('created_at', { ascending: false }).limit(500)
+    if (ref) q = q.eq('ref', ref)
+    const { data, error } = await q
+    if (error) throw error
+    // Scoping por cliente: admin acotado solo ve historial de SUS cargas
+    // (mismo patrón que ref-checks / audit-log).
+    const allowed = await allowedRefsForPayload(db, payload)
+    return res.status(200).json({ rows: filterByAllowedRef(data || [], allowed, (r: any) => r.ref) })
+  }
+
+  if (req.method === 'POST') {
+    const v = validate(z.object({
+      ref: z.string().min(1).max(40),
+      tipo: z.enum(['enviado', 'eta', 'deshecho']),
+      fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      // max 40: hay ETAs legacy de texto libre ('CONFIRMAR CON NAVIERA') que
+      // valen como foto histórica — el cliente además trunca a 40.
+      etaAnterior: z.string().max(40).optional(),
+      etaNueva: z.string().max(40).optional(),
+      buque: z.string().max(120).optional(),
+    }), req.body)
+    if (!v.ok) return res.status(400).json({ error: v.error })
+    const { ref, tipo, fecha, etaAnterior, etaNueva, buque } = v.data
+
+    // Scoping también al escribir: no se falsifica historial de cargas ajenas.
+    const allowed = await allowedRefsForPayload(db, payload)
+    if (allowed && !allowed.has(refOf(ref))) return res.status(404).json({ error: 'Carga no encontrada' })
+
+    const row = {
+      ref: ref.trim().toUpperCase(),
+      tipo,
+      ...(fecha ? { fecha } : {}),
+      eta_anterior: (etaAnterior || '').trim() || null,
+      eta_nueva: (etaNueva || '').trim() || null,
+      buque: (buque || '').trim() || null,
+      usuario: auditUser(payload as { user?: string; name?: string } | null),
+    }
+    const { error } = await db.from('seguimientos_log').insert(row)
+    if (error) throw error
+    return res.status(200).json({ saved: true })
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' })
+}
 
 async function handleOperatorAssignments(req: VercelRequest, res: VercelResponse, db: any) {
   if (req.method === 'GET') {

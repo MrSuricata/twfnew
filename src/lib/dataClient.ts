@@ -786,6 +786,38 @@ export async function patchDbShipment(id: string, fields: Record<string, unknown
   }
 }
 
+// ── Historial de seguimientos (cola de Nico) ─────────────────────────
+
+/** Trae el historial (todo o de una ref). Filas más nuevas primero. */
+export async function fetchSeguimientosLog(ref?: string): Promise<Record<string, unknown>[]> {
+  const q = ref ? `?ref=${encodeURIComponent(ref)}` : ''
+  const res = await authFetch(`/api/data/seguimientos-log${q}`)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const data = await res.json()
+  return data.rows || []
+}
+
+/** Registra un evento del historial ('enviado' con foto de eta/buque, o
+ *  'eta' con anterior→nueva). El usuario lo estampa el server (del token). */
+export async function postSeguimientoLog(row: {
+  ref: string
+  tipo: 'enviado' | 'eta' | 'deshecho'
+  fecha?: string
+  etaAnterior?: string
+  etaNueva?: string
+  buque?: string
+}): Promise<void> {
+  const res = await authFetch('/api/data/seguimientos-log', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(row),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
+}
+
 /** Etapa 3 migración: editar un campo de una FCL espejo (overlay web_edits).
  *  Claves de ParsedShipment (ETA, BUQUE, CNTR...); value null = revertir al
  *  valor de la planilla. La REF no se edita por acá. */

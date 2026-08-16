@@ -85,8 +85,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .then(() => {}, () => {}) // best-effort, no bloquea el login
 
     const level = teamUser.level === 'owner' ? 'owner' : 'admin'
-    const token = signAdminToken(teamUser.email, teamUser.name || teamUser.email, level, teamUser.cliente_pattern)
-    return res.status(200).json({ token, role: 'admin', user: teamUser.email, name: teamUser.name, level })
+    const token = signAdminToken(teamUser.email, teamUser.name || teamUser.email, level, teamUser.cliente_pattern, teamUser.home_area)
+    return res.status(200).json({ token, role: 'admin', user: teamUser.email, name: teamUser.name, level, homeArea: teamUser.home_area || null })
   } catch (error: any) {
     console.error('Admin login error:', error?.message || error, error?.stack)
     return res.status(500).json({ error: 'Internal server error' })

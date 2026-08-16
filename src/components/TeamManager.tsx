@@ -48,7 +48,23 @@ interface AdminUser {
   created_at: string | null
   last_login: string | null
   cliente_pattern?: string | null
+  home_area?: string | null
 }
+
+// Pantalla con la que arranca el usuario al loguearse ('' = HOY, la default).
+// Mismos values que las pestañas del dashboard — al sumar áreas nuevas
+// (widget LCL, resumen), se agregan acá.
+const HOME_AREAS: { value: string; label: string }[] = [
+  { value: '', label: 'HOY (default)' },
+  { value: 'seguimientos', label: 'Seguimientos' },
+  { value: 'agenda', label: 'Agenda' },
+  { value: 'operaciones', label: 'Operaciones' },
+  { value: 'checks', label: 'Checks' },
+  { value: 'trucks', label: 'Camiones' },
+  { value: 'pagos', label: 'Pagos' },
+  { value: 'billing', label: 'Facturación' },
+  { value: 'quotes', label: 'Cotizaciones' },
+]
 
 interface AuditEntry {
   id: number
@@ -113,6 +129,7 @@ export default function TeamManager({ refreshKey = 0 }: { refreshKey?: number })
   const [fEmail, setFEmail] = useState('')
   const [fPassword, setFPassword] = useState('')
   const [fPattern, setFPattern] = useState('')
+  const [fHome, setFHome] = useState('')
   const [saving, setSaving] = useState(false)
   const [migrating, setMigrating] = useState(false)
   const [baking, setBaking] = useState(false)
@@ -139,8 +156,8 @@ export default function TeamManager({ refreshKey = 0 }: { refreshKey?: number })
   // refreshKey: el botón Refrescar global del navbar también recarga esto.
   useEffect(() => { load() }, [load, refreshKey])
 
-  const openCreate = () => { setEditing(null); setFName(''); setFEmail(''); setFPassword(''); setFPattern(''); setDialogOpen(true) }
-  const openEdit = (u: AdminUser) => { setEditing(u); setFName(u.name); setFEmail(u.email); setFPassword(''); setFPattern(u.cliente_pattern || ''); setDialogOpen(true) }
+  const openCreate = () => { setEditing(null); setFName(''); setFEmail(''); setFPassword(''); setFPattern(''); setFHome(''); setDialogOpen(true) }
+  const openEdit = (u: AdminUser) => { setEditing(u); setFName(u.name); setFEmail(u.email); setFPassword(''); setFPattern(u.cliente_pattern || ''); setFHome(u.home_area || ''); setDialogOpen(true) }
 
   const save = async () => {
     if (!fName.trim() || !fEmail.trim()) { toast.error('Nombre y email son obligatorios'); return }
@@ -166,6 +183,7 @@ export default function TeamManager({ refreshKey = 0 }: { refreshKey?: number })
           email: fEmail.trim(),
           name: fName.trim(),
           clientePattern: fPattern.trim(),
+          homeArea: fHome,
           ...(fPassword ? { password: fPassword } : {}),
         }),
       })
@@ -552,6 +570,18 @@ export default function TeamManager({ refreshKey = 0 }: { refreshKey?: number })
               <Label htmlFor="tm-pattern">Clientes que puede ver</Label>
               <Input id="tm-pattern" value={fPattern} onChange={e => setFPattern(e.target.value)} placeholder="Ej: PERETTI, TOMASELLI (vacío = todas)" />
               <p className="text-[11px] text-muted-foreground">Separá varios con coma. Vacío = ve <b>todas</b> las cargas (como el owner). Coincide por nombre de cliente — mínimo 4 letras por cliente; para clientes cortos (VMG, AIT) usá la razón social como figura en la planilla.</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="tm-home">Pantalla de inicio</Label>
+              <select
+                id="tm-home"
+                value={fHome}
+                onChange={e => setFHome(e.target.value)}
+                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"
+              >
+                {HOME_AREAS.map(a => <option key={a.value} value={a.value}>{a.label}</option>)}
+              </select>
+              <p className="text-[11px] text-muted-foreground">Con qué pestaña arranca al loguearse — su área de trabajo. El cambio aplica en el próximo login.</p>
             </div>
           </div>
           <DialogFooter>

@@ -13,6 +13,9 @@ export interface AdminPayload {
    *  este patrón (misma semántica que clients.cliente_pattern). Vacío/undefined
    *  = ve TODAS las cargas (owner y tokens viejos). */
   clientePattern?: string
+  /** Pestaña con la que arranca este usuario al loguearse (admin_users.home_area).
+   *  Vacío/undefined = la default de la marca ('hoy'). */
+  homeArea?: string
 }
 
 export interface ClientPayload {
@@ -59,10 +62,11 @@ function getSecret(): string {
 }
 
 /** Sign an admin JWT (8h expiry) */
-export function signAdminToken(user: string, name?: string, level: 'owner' | 'admin' = 'owner', clientePattern?: string): string {
+export function signAdminToken(user: string, name?: string, level: 'owner' | 'admin' = 'owner', clientePattern?: string, homeArea?: string): string {
   const payload: AdminPayload = { role: 'admin', user, name: name || user, level }
   // Solo los admin acotados llevan patrón; el owner ve todo (sin patrón).
   if (level === 'admin' && clientePattern && clientePattern.trim()) payload.clientePattern = clientePattern.trim()
+  if (homeArea && homeArea.trim()) payload.homeArea = homeArea.trim()
   return jwt.sign(payload, getSecret(), { expiresIn: '8h' })
 }
 
