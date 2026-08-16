@@ -596,7 +596,7 @@ export function buildOperations(
  *  seguimiento. Si ya llegó a fiscal / se entregó, no molesta. Sin fecha de
  *  seguimiento no alerta. Acepta 'YYYY-MM-DD' (web) y 'D/M/YYYY' (planilla). */
 export const SEGUIMIENTO_DIAS = 7
-function parseSegDate(s: string): Date | null {
+export function parseSegDate(s: string): Date | null {
   const t = (s || '').trim()
   let m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(t)
   if (m) return new Date(+m[1], +m[2] - 1, +m[3])

@@ -57,6 +57,15 @@ export function getAdminName(): string {
   return String(p?.name || p?.user || '')
 }
 
+/** Pestaña de inicio del usuario logueado (admin_users.home_area, viaja en el
+ *  JWT). '' = usar la default de la marca. Sobrevive el F5 igual que el nivel:
+ *  se lee del token guardado, sin fetch extra. */
+export function getAdminHomeArea(): string {
+  const p = decodeTokenPayload()
+  if (!p || p.role !== 'admin') return ''
+  return String(p.homeArea || '')
+}
+
 /** Clear auth state and all cached data (logout).
  * SECURITY: removes all business data from localStorage to prevent leakage after logout. */
 export function clearAuth() {
