@@ -9,7 +9,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Card, CardContent } from '@/components/ui/card'
-import { CheckCircle, PaperPlaneTilt, CaretDown, CaretRight, Boat, ClockCounterClockwise, Copy, MapPin, Checks } from '@phosphor-icons/react'
+import { CheckCircle, PaperPlaneTilt, CaretDown, CaretRight, Boat, ClockCounterClockwise, Copy, MapPin, Checks, ArrowSquareOut } from '@phosphor-icons/react'
 import type { DbShipment } from '@/lib/operationsTypes'
 import { dbShipmentToOperation } from '@/lib/operationsTypes'
 import { groupByVoyage, buildEtaShiftPatch } from '@/lib/vesselGroups'
@@ -17,6 +17,7 @@ import {
   colaSeguimientos, grupoDestino, ORDEN_GRUPOS, textoUpdate, nombreBuqueBase,
   type CargaSeguimiento, type FilaSeguimiento,
 } from '@/lib/seguimientos'
+import { trackingCarrier } from '@/lib/trackingLinea'
 import { fetchSeguimientosLog, postSeguimientoLog } from '@/lib/dataClient'
 import { fmtDateDMY } from '@/lib/format'
 
@@ -65,6 +66,7 @@ export default function SeguimientosBoard({ dbShipments, onPatchShipment, onOpen
   const cargas: CargaSeguimiento[] = useMemo(() =>
     (dbShipments || []).map(s => ({
       dbId: s.id, ref: s.ref, cliente: s.cliente, buque: s.buque, etd: s.etd, eta: s.eta,
+      linea: s.linea, docNumber: s.doc_number, cntr: s.contenedor,
       seguimiento: s.seguimiento, pais: s.dest_country, mode: s.mode, archived: s.archived,
     })), [dbShipments])
 
@@ -274,6 +276,9 @@ export default function SeguimientosBoard({ dbShipments, onPatchShipment, onOpen
     const hist = historial[c.ref]
     const etaIso = ISO_RE.test((c.eta || '').trim()) ? (c.eta || '').trim() : ''
     const draftKey = `fila-${c.dbId}`
+    // Tracking DE LA LÍNEA (contenedor/BL): el buque puede cambiar en un
+    // trasbordo — Nico captura el seguimiento ahí y después copia el mensaje.
+    const tracking = trackingCarrier({ linea: c.linea, docNumber: c.docNumber, cntr: c.cntr })
     return (
       <div key={c.ref} className="py-1.5">
         <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
@@ -310,6 +315,16 @@ export default function SeguimientosBoard({ dbShipments, onPatchShipment, onOpen
           ) : etaIso ? (
             <span className="text-xs text-muted-foreground tabular-nums shrink-0">ETA {fmtDateDMY(etaIso)}</span>
           ) : null}
+          {tracking && (
+            <a
+              href={tracking.url}
+              target="_blank" rel="noreferrer"
+              className="inline-flex items-center gap-1 h-7 px-2 rounded-md border border-border text-[11px] font-semibold text-primary hover:bg-primary/10 transition-colors shrink-0"
+              title={`Abrir el tracking de ${tracking.linea} para esta carga (contenedor/BL — sigue la carga aunque el buque cambie en un trasbordo)`}
+            >
+              <ArrowSquareOut size={13} weight="bold" /> {tracking.linea}
+            </a>
+          )}
           <button
             type="button"
             onClick={() => copiarUpdate(f)}
