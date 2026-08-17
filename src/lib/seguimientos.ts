@@ -33,6 +33,10 @@ export interface CargaSeguimiento {
   ref: string
   cliente?: string | null
   buque?: string | null
+  /** Línea marítima + BL + contenedores → link de tracking de la línea. */
+  linea?: string | null
+  docNumber?: string | null
+  cntr?: string | null
   etd?: string | null
   eta?: string | null
   /** Fecha del último seguimiento enviado ('' = nunca). ISO o D/M/YYYY legacy. */
