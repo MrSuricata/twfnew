@@ -94,7 +94,11 @@ export function datosFaltantes(c: CargaCampos, hoy: Date): CampoFaltante[] {
   // Coordinación (solo por Uruguay): con el buque encima hay que saber a qué
   // depósito va, cómo opera, quién la lleva y a qué fiscal.
   if (ventanaCoord && isPorUruguay(c.pais)) {
-    if (vacio(c.deposito)) falta('deposito', 'Depósito')
+    // Operativa CONTENEDOR = retiro directo desde terminal: el depósito UY va
+    // legítimamente vacío — pedirlo acá invitaba a "completarlo" y la regla
+    // "Depósito manda" pisaba el LUGAR_SALIDA puesto a mano (revisión 17/08).
+    const directa = String(c.operativa || '').trim().toUpperCase() === 'CONTENEDOR'
+    if (!directa && vacio(c.deposito)) falta('deposito', 'Depósito')
     if (vacio(c.operativa)) falta('operativa', 'Operativa')
     if (vacio(c.transporte)) falta('transporte', 'Transporte')
     if (vacio(c.fiscal)) falta('fiscal', 'Fiscal')

@@ -51,6 +51,18 @@ describe('datosFaltantes — exigencia por etapa', () => {
     expect(f.map(x => x.campo)).not.toContain('transporte')
   })
 
+  it('operativa CONTENEDOR (directa desde terminal) no pide depósito', () => {
+    // El depósito UY va legítimamente vacío en un retiro directo: pedirlo
+    // invitaba a "completarlo" y la regla "Depósito manda" pisaba el
+    // LUGAR_SALIDA (TCP/MONTECON) puesto a mano.
+    const f = datosFaltantes(carga({ eta: '2026-08-22', operativa: 'CONTENEDOR' }), HOY)
+    expect(f.map(x => x.campo)).not.toContain('deposito')
+    expect(f.map(x => x.campo)).toContain('transporte')
+    // Con TRASIEGO sí se sigue pidiendo.
+    expect(datosFaltantes(carga({ eta: '2026-08-22', operativa: 'TRASIEGO' }), HOY).map(x => x.campo))
+      .toContain('deposito')
+  })
+
   it('con todo cargado no molesta ni encima de la llegada', () => {
     const completa = carga({
       eta: '2026-08-19', etd: '2026-07-10', buque: 'MAERSK X 001W',

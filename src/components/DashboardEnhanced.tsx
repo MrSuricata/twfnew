@@ -503,6 +503,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
               onUpdateOriginPhotos={onUpdateOriginPhotos}
               onPatchShipment={onPatchShipment}
               onOpenDetail={onOpenDetail}
+              clients={clients}
             />
           </TabsContent>
 
