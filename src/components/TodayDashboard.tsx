@@ -29,8 +29,10 @@ import {
 } from '@/lib/todayFilters'
 import ShipmentDetailsDialog from './ShipmentDetailsDialog'
 import ContainerQuickEdit from './operations/ContainerQuickEdit'
-import { deriveKnownTransportes, type DbShipment } from '@/lib/operationsTypes'
-import { faltantesUrgentes, resumenFaltantes, FALTANTES_DIAS_COORDINACION } from '@/lib/datosFaltantes'
+import { deriveKnownTransportes, deriveKnownValues, DEPOSITOS_UY, type DbShipment } from '@/lib/operationsTypes'
+import { faltantesUrgentes, resumenFaltantes, FALTANTES_DIAS_COORDINACION, type FaltanteUrgente, type CampoFaltante } from '@/lib/datosFaltantes'
+import { buildFaltantePatch, columnaDeCampo, FALTANTE_INPUTS } from '@/lib/faltantesEdit'
+import type { CatalogClient } from '@/lib/clientCatalog'
 import type { ShipmentDocument, OperativeReport, OriginPhoto } from '@/lib/quotationTypes'
 import type { Truck as TruckType, TruckLoad } from '@/lib/truckTypes'
 import { Badge } from '@/components/ui/badge'
@@ -94,6 +96,8 @@ interface TodayDashboardProps {
   onPatchShipment?: (id: string, fields: Record<string, unknown>) => void
   /** Opens the OperationDetailPanel for the given FCL ref (navigates to operaciones tab). */
   onOpenDetail?: (ref: string) => void
+  /** Catálogo de clientes — canonicaliza el cliente tipeado en el editor de faltantes. */
+  clients?: CatalogClient[]
 }
 
 /**
@@ -115,6 +119,7 @@ export default function TodayDashboard({
   onUpdateOriginPhotos,
   onPatchShipment,
   onOpenDetail,
+  clients = [],
 }: TodayDashboardProps) {
   const [selected, setSelected] = useState<ParsedShipment | null>(null)
   const [open, setOpen] = useState(false)
@@ -240,6 +245,15 @@ export default function TodayDashboard({
     () => deriveKnownTransportes(shipments.flatMap(s => (s.operativas ?? []).map(o => o.TRANSPORTE))),
     [shipments]
   )
+
+  // Agentes ya usados → sugerencias del input Agente del editor de faltantes.
+  const knownAgentes = useMemo(
+    () => deriveKnownValues((dbShipments || []).map(s => s.agente)),
+    [dbShipments]
+  )
+
+  // Fila desplegada de la tarjeta de incompletas (una a la vez, keyed por ref).
+  const [incompletaAbierta, setIncompletaAbierta] = useState<string | null>(null)
 
   // Campos pendientes URGENTES: llegan dentro de la semana (o ya llegaron sin
   // salida) con datos faltantes según su etapa — la webapp repartiendo tareas.
@@ -411,26 +425,28 @@ export default function TodayDashboard({
               </span>
             </div>
             <p className="text-xs text-muted-foreground mb-3">
-              Llegan dentro de {FALTANTES_DIAS_COORDINACION} días (o ya llegaron sin salida) y les faltan campos según su etapa — completar acá evita que se traben checks, pagos y coordinación.
+              Llegan dentro de {FALTANTES_DIAS_COORDINACION} días (o ya llegaron sin salida) y les faltan campos según su etapa — tocá una carga y completá los campos acá mismo.
             </p>
             <div className="space-y-1">
-              {incompletas.slice(0, 10).map(u => (
-                <button
-                  key={u.carga.ref}
-                  type="button"
-                  onClick={() => onOpenDetail?.(String(u.carga.dbId || u.carga.ref || ''))}
-                  className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-left hover:bg-amber-500/10 transition-colors"
-                >
-                  <span className="font-mono text-sm font-semibold shrink-0 min-w-[64px]">{u.carga.ref}</span>
-                  <span className="text-sm text-foreground/85 truncate flex-1 min-w-0">{u.carga.cliente || '—'}</span>
-                  <span className="hidden sm:inline text-xs text-amber-700 truncate max-w-[300px]">
-                    faltan: {resumenFaltantes(u.faltantes)}
-                  </span>
-                  <span className="text-xs font-semibold shrink-0 text-muted-foreground">
-                    {u.diasAEta < 0 ? `llegó hace ${-u.diasAEta}d` : u.diasAEta === 0 ? 'llega hoy' : `en ${u.diasAEta}d`}
-                  </span>
-                </button>
-              ))}
+              {incompletas.slice(0, 10).map(u => {
+                // dbId como clave: la REF puede estar duplicada (el alta lo
+                // permite con confirmación) y duplicaría keys/expansión.
+                const rowKey = String(u.carga.dbId || u.carga.ref)
+                return (
+                  <IncompletaRow
+                    key={rowKey}
+                    u={u}
+                    dbRow={dbShipments.find(s => s.id === u.carga.dbId)}
+                    expanded={incompletaAbierta === rowKey}
+                    onToggle={() => setIncompletaAbierta(prev => (prev === rowKey ? null : rowKey))}
+                    onPatchShipment={onPatchShipment}
+                    onOpenDetail={onOpenDetail}
+                    transportes={knownTransportes}
+                    agentes={knownAgentes}
+                    clientes={clients}
+                  />
+                )
+              })}
               {incompletas.length > 10 && (
                 <p className="px-2.5 pt-1 text-xs text-muted-foreground">
                   … y {incompletas.length - 10} más — están todas en Operaciones con el filtro <b>Faltan datos</b>.
@@ -870,5 +886,211 @@ function AvisoChip({ aviso, label, onToggle }: { aviso?: RefCheckStep; label: st
       <Check size={11} weight="bold" className={done ? 'opacity-100' : 'opacity-50'} />
       Aviso
     </span>
+  )
+}
+
+// ─── Fila desplegable de "Llegan con datos incompletos" ──────────────────
+// Tocar la fila la despliega con UN input por campo faltante para completarlo
+// ahí mismo (pedido Brian 17/08). El guardado usa el mismo camino que el panel
+// de detalle: buildFaltantePatch (columna + propagación al array operativas) →
+// onPatchShipment (optimista con revert en App). Los campos completados quedan
+// visibles como chips ✓ mientras la fila siga desplegada (si desaparecieran al
+// instante, el layout se corre bajo el puntero y se comen clicks); cuando no
+// falta nada, la fila sale sola de la tarjeta.
+function IncompletaRow({ u, dbRow, expanded, onToggle, onPatchShipment, onOpenDetail, transportes, agentes, clientes }: {
+  u: FaltanteUrgente
+  dbRow?: DbShipment
+  expanded: boolean
+  onToggle: () => void
+  onPatchShipment?: (id: string, fields: Record<string, unknown>) => void
+  onOpenDetail?: (ref: string) => void
+  transportes: string[]
+  agentes: string[]
+  clientes: CatalogClient[]
+}) {
+  // Snapshot de los faltantes al ABRIR la fila: el panel muestra esa lista fija
+  // (input si sigue faltando, chip ✓ si ya se completó) para que nada se
+  // desmonte bajo el foco mientras se completan varios campos seguidos.
+  const [camposPanel, setCamposPanel] = useState<CampoFaltante[] | null>(null)
+  useEffect(() => {
+    if (expanded) setCamposPanel(prev => prev ?? u.faltantes)
+    else setCamposPanel(null)
+    // u.faltantes solo importa en el instante de abrir — el snapshot es a propósito.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expanded])
+  const diasLabel = u.diasAEta < 0 ? `llegó hace ${-u.diasAEta}d` : u.diasAEta === 0 ? 'llega hoy' : `en ${u.diasAEta}d`
+  const header = (
+    <>
+      <span className="font-mono text-sm font-semibold shrink-0 min-w-[64px]">{u.carga.ref}</span>
+      <span className="text-sm text-foreground/85 truncate flex-1 min-w-0">{u.carga.cliente || '—'}</span>
+      <span className="hidden sm:inline text-xs text-amber-700 truncate max-w-[300px]">
+        faltan: {resumenFaltantes(u.faltantes)}
+      </span>
+      <span className="text-xs font-semibold shrink-0 text-muted-foreground">{diasLabel}</span>
+    </>
+  )
+
+  // Sin PATCH o sin fila de DB (no debería pasar: la tarjeta nace de dbShipments),
+  // el click navega a la ficha como antes.
+  if (!onPatchShipment || !dbRow) {
+    return (
+      <button
+        type="button"
+        onClick={() => onOpenDetail?.(String(u.carga.dbId || u.carga.ref || ''))}
+        className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-left hover:bg-amber-500/10 transition-colors"
+      >
+        {header}
+      </button>
+    )
+  }
+
+  return (
+    <div className={`rounded-md transition-colors ${expanded ? 'bg-amber-500/10' : 'hover:bg-amber-500/10'}`}>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={expanded}
+        className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-left"
+      >
+        <CaretRight size={12} weight="bold" className={`shrink-0 text-muted-foreground transition-transform ${expanded ? 'rotate-90' : ''}`} />
+        {header}
+      </button>
+      {expanded && (
+        <div className="px-2.5 pb-2.5 pl-8">
+          <div className="flex flex-wrap items-end gap-2">
+            {(camposPanel ?? u.faltantes).map(f => {
+              const sigueFaltando = u.faltantes.some(x => x.campo === f.campo)
+              if (!sigueFaltando) {
+                const col = columnaDeCampo(f.campo)
+                const valor = col ? String((dbRow as unknown as Record<string, unknown>)[col] ?? '') : ''
+                return (
+                  <span
+                    key={f.campo}
+                    className="inline-flex items-center gap-1 h-9 rounded border border-emerald-500/30 bg-emerald-500/[0.07] px-2 text-sm text-emerald-700 dark:text-emerald-400"
+                  >
+                    <Check size={13} weight="bold" />
+                    <span className="text-[11px] uppercase tracking-wide opacity-70">{f.etiqueta}</span>
+                    <span className="font-medium truncate max-w-[160px]">{valor || '✓'}</span>
+                  </span>
+                )
+              }
+              return (
+                <CampoFaltanteInput
+                  key={f.campo}
+                  campo={f.campo}
+                  etiqueta={f.etiqueta}
+                  dbRow={dbRow}
+                  onPatchShipment={onPatchShipment}
+                  transportes={transportes}
+                  agentes={agentes}
+                  clientes={clientes}
+                />
+              )
+            })}
+          </div>
+          <button
+            type="button"
+            onClick={() => onOpenDetail?.(String(u.carga.dbId || u.carga.ref || ''))}
+            className="mt-2 text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+          >
+            Abrir ficha completa →
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// Un input por campo faltante. Borrador local + commit en blur/Enter (Escape
+// limpia) — NUNCA onChange→PATCH directo (tipear el año dispara '0002-…' y el
+// remount pierde el foco; misma regla que la grilla). Los selects también
+// guardan en blur/Enter: con onChange, navegar las opciones con ↑/↓ en un
+// select nativo cerrado disparaba un PATCH + toast por cada flecha (revisión
+// 17/08). Toast con Deshacer SOLO para patches escalares: si el patch propaga
+// el array `operativas`, reponer el snapshot completo pisaría commits
+// posteriores de la misma fila (misma razón por la que el revert de App es
+// granular por clave — con el array, la clave ES el conjunto entero).
+function CampoFaltanteInput({ campo, etiqueta, dbRow, onPatchShipment, transportes, agentes, clientes }: {
+  campo: CampoFaltante['campo']
+  etiqueta: string
+  dbRow: DbShipment
+  onPatchShipment: (id: string, fields: Record<string, unknown>) => void
+  transportes: string[]
+  agentes: string[]
+  clientes: CatalogClient[]
+}) {
+  const [draft, setDraft] = useState('')
+  const [invalido, setInvalido] = useState(false)
+  const spec = FALTANTE_INPUTS[campo]
+  if (!spec) return null
+
+  const commit = () => {
+    const texto = draft.trim()
+    if (!texto) return
+    const r = buildFaltantePatch(campo, texto, dbRow.operativas, clientes)
+    if (!r.ok) { setInvalido(true); toast.error(`${etiqueta}: ${r.error}`, { description: String(dbRow.ref) }); return }
+    setInvalido(false)
+    const conArray = 'operativas' in r.patch
+    // Valores previos de la fila para el Deshacer (granular, como App) —
+    // solo cuando el patch es escalar (ver comentario del componente).
+    const previos = Object.fromEntries(
+      Object.keys(r.patch).map(k => [k, (dbRow as unknown as Record<string, unknown>)[k]])
+    )
+    onPatchShipment(dbRow.id, r.patch)
+    toast.success(`${etiqueta} guardado · ${dbRow.ref}`, {
+      description: String((r.patch as Record<string, unknown>)[Object.keys(r.patch)[0]] ?? texto),
+      ...(conArray ? {} : { action: { label: 'Deshacer', onClick: () => onPatchShipment(dbRow.id, previos) } }),
+    })
+  }
+
+  const base = 'h-9 rounded border bg-background px-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring'
+  const borde = invalido ? 'border-red-400' : 'border-input'
+  const listId = `dl-faltante-${campo}-${dbRow.id}`
+  const sugerencias = spec.sugerencias === 'transportes' ? transportes
+    : spec.sugerencias === 'agentes' ? agentes
+    : spec.sugerencias === 'depositos' ? DEPOSITOS_UY
+    : []
+
+  return (
+    <label className="flex flex-col gap-0.5 min-w-0">
+      <span className="text-[10px] uppercase tracking-wide text-muted-foreground leading-none">{etiqueta}</span>
+      {spec.widget === 'select' ? (
+        <select
+          value={draft}
+          onChange={e => { setDraft(e.target.value); if (invalido) setInvalido(false) }}
+          onBlur={commit}
+          onKeyDown={e => {
+            if (e.key === 'Enter') { e.preventDefault(); commit() }
+            else if (e.key === 'Escape') { setDraft(''); setInvalido(false) }
+          }}
+          className={`${base} ${borde} w-44`}
+        >
+          <option value="">—</option>
+          {(spec.opciones ?? []).map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+      ) : (
+        <>
+          <input
+            type={spec.widget === 'date' ? 'date' : 'text'}
+            inputMode={spec.widget === 'number' ? 'decimal' : undefined}
+            value={draft}
+            placeholder={spec.placeholder}
+            list={spec.widget === 'datalist' ? listId : undefined}
+            onChange={e => { setDraft(e.target.value); if (invalido) setInvalido(false) }}
+            onBlur={commit}
+            onKeyDown={e => {
+              if (e.key === 'Enter') { e.preventDefault(); commit() }
+              else if (e.key === 'Escape') { setDraft(''); setInvalido(false) }
+            }}
+            className={`${base} ${borde} ${spec.widget === 'number' ? 'w-24' : spec.widget === 'date' ? 'w-36' : 'w-44'}`}
+          />
+          {spec.widget === 'datalist' && (
+            <datalist id={listId}>
+              {sugerencias.map(v => <option key={v} value={v} />)}
+            </datalist>
+          )}
+        </>
+      )}
+    </label>
   )
 }
