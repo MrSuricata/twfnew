@@ -407,7 +407,7 @@ export default function TodayDashboard({
               Llegan dentro de {FALTANTES_DIAS_COORDINACION} días (o ya llegaron sin salida) y les faltan campos según su etapa — completar acá evita que se traben checks, pagos y coordinación.
             </p>
             <div className="space-y-1">
-              {incompletas.map(u => (
+              {incompletas.slice(0, 10).map(u => (
                 <button
                   key={u.carga.ref}
                   type="button"
@@ -424,6 +424,11 @@ export default function TodayDashboard({
                   </span>
                 </button>
               ))}
+              {incompletas.length > 10 && (
+                <p className="px-2.5 pt-1 text-xs text-muted-foreground">
+                  … y {incompletas.length - 10} más — están todas en Operaciones con el filtro <b>Faltan datos</b>.
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>

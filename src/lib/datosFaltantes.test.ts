@@ -98,3 +98,12 @@ describe('resumenFaltantes', () => {
     expect(resumenFaltantes(f)).toBe('Buque, BL, Contenedor, Bultos, Kg, M³, Agente')
   })
 })
+
+describe('faltantesUrgentes — piso para llegadas viejas', () => {
+  it('una llegada de hace meses sin salida es deuda histórica, no tarea de hoy', () => {
+    const vieja = { ...carga({ eta: '2026-05-01', salida: '' }), ref: 'VIEJA' }
+    const reciente = { ...carga({ eta: '2026-08-10', salida: '' }), ref: 'RECIENTE' }
+    const out = faltantesUrgentes([vieja, reciente], HOY)
+    expect(out.map(u => u.carga.ref)).toEqual(['RECIENTE'])
+  })
+})
