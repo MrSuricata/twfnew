@@ -36,6 +36,8 @@ import { getAdminName } from '@/lib/authClient'
 import { buildOperations, buildPerContainerPatch, type DbShipment, type UnifiedOperation } from '@/lib/operationsTypes'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
 import { parseCntr } from '@/lib/cntrUtils'
+import { RefNotaLine, useRefNotas } from '../RefNotaLine'
+import type { NotaRef } from '@/lib/refNotas'
 import { hasTelex as hasTelexValue } from '@/lib/telexCheck'
 import { subscribeTrucksLive } from '@/lib/realtimeBus'
 import { fetchRefChecks, saveRefCheckSteps, saveRefCheckCntrs } from '@/lib/dataClient'
@@ -132,6 +134,8 @@ export default function ChecksBoard({ shipments = [], dbShipments = [], onPatchS
   const [soloPendientes, setSoloPendientes] = useState(false)
   const [verLiberadas, setVerLiberadas] = useState(false)
   const [expandedRef, setExpandedRef] = useState<string | null>(null)
+  // Bitácora de gestiones (ref_notas) — compartida con la tarjeta de HOY.
+  const { notas, agregar: agregarNota } = useRefNotas()
 
   const visible = useMemo(() => {
     const q = search.trim().toUpperCase()
@@ -370,6 +374,8 @@ export default function ChecksBoard({ shipments = [], dbShipments = [], onPatchS
                 onToggleTelex={telexEditable ? () => handleToggleTelex(op) : undefined}
                 onToggleLiberado={() => handleToggleLiberado(op)}
                 onOpenRef={onOpenDetail ? () => onOpenDetail(op.dbId || op.ref) : undefined}
+                nota={notas.get(norm)}
+                onAgregarNota={agregarNota}
               />
             )
           })}
@@ -402,9 +408,12 @@ interface ChecksRowProps {
   onToggleLiberado: () => void
   /** Abrir la ficha completa de la carga (click en la ref). */
   onOpenRef?: () => void
+  /** Última nota de la bitácora de gestiones (ref_notas) + agregar. */
+  nota?: NotaRef
+  onAgregarNota: (ref: string, texto: string) => void
 }
 
-function ChecksRow({ op, steps, expanded, onToggleExpand, onToggleStep, onDateChange, onReclamo, onToggleTelex, onToggleLiberado, onOpenRef }: ChecksRowProps) {
+function ChecksRow({ op, steps, expanded, onToggleExpand, onToggleStep, onDateChange, onReclamo, onToggleTelex, onToggleLiberado, onOpenRef, nota, onAgregarNota }: ChecksRowProps) {
   const hoyIso = todayIso()
   const operativa = (op.operativa || '').trim()
   const opColor = operativa ? getOperativaColor(operativa) : null
@@ -676,6 +685,12 @@ function ChecksRow({ op, steps, expanded, onToggleExpand, onToggleStep, onDateCh
                   ? 'Apretalo cuando la línea confirme la liberación'
                   : 'Se habilita con los 5 checks completos'}
             </span>
+          </div>
+
+          {/* Bitácora de gestiones: "reclamado por wpp al cliente" con quién y
+              cuándo — la misma que se ve en la tarjeta sin-liberar de HOY. */}
+          <div className="mt-2">
+            <RefNotaLine refCarga={op.ref} nota={nota} onAgregar={onAgregarNota} />
           </div>
         </div>
       )}

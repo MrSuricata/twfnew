@@ -46,6 +46,7 @@ import {
 } from '@/lib/checksTypes'
 import { parseCntr } from '@/lib/cntrUtils'
 import { subscribeTrucksLive } from '@/lib/realtimeBus'
+import { RefNotaLine, useRefNotas } from './RefNotaLine'
 import { getAdminName } from '@/lib/authClient'
 import { fmtDateDMY } from '@/lib/format'
 import { fmtDMY } from '@/lib/salidaCheck'
@@ -117,6 +118,10 @@ export default function TodayDashboard({
 }: TodayDashboardProps) {
   const [selected, setSelected] = useState<ParsedShipment | null>(null)
   const [open, setOpen] = useState(false)
+
+  // Bitácora de gestiones (ref_notas) — las notas de "lo reclamé por wpp…"
+  // que se ven acá y en la pestaña Checks.
+  const { notas, agregar: agregarNota } = useRefNotas()
 
   // Quick-edit state for FCL rows (opened via ContainerQuickEdit)
   const [quickEditMatch, setQuickEditMatch] = useState<OpMatch | null>(null)
@@ -464,32 +469,40 @@ export default function TodayDashboard({
             </p>
             <div className="space-y-1">
               {snapshot.sinLiberar.map(a => (
-                <button
-                  key={a.shipment.REF}
-                  type="button"
-                  onClick={() => {
-                    const op = (a.shipment.operativas ?? [])[0]
-                    if (op) openOpMatch({ shipment: a.shipment, op })
-                    else openShipment(a.shipment)
-                  }}
-                  className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-left hover:bg-amber-500/10 transition-colors"
-                >
-                  <span className="font-mono text-sm font-semibold shrink-0 min-w-[64px]">{a.shipment.REF}</span>
-                  <span className="text-sm text-foreground/85 truncate flex-1 min-w-0">{a.shipment.CLIENTE || '—'}</span>
-                  {a.shipment.BUQUE && (
-                    <span className="hidden md:inline text-xs text-muted-foreground truncate max-w-[160px]">{a.shipment.BUQUE}</span>
-                  )}
-                  <span className={`text-xs font-semibold shrink-0 ${
-                    a.severity === 'vencido' ? 'text-destructive'
-                      : a.severity === 'urgente' ? 'text-amber-600 dark:text-amber-400'
-                      : 'text-muted-foreground'
-                  }`}>
-                    {a.diasParaLlegar < 0
-                      ? `llegó hace ${-a.diasParaLlegar}d`
-                      : a.diasParaLlegar === 0 ? 'llega hoy'
-                      : `en ${a.diasParaLlegar}d`}
-                  </span>
-                </button>
+                <div key={a.shipment.REF} className="rounded-md hover:bg-amber-500/10 transition-colors pb-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const op = (a.shipment.operativas ?? [])[0]
+                      if (op) openOpMatch({ shipment: a.shipment, op })
+                      else openShipment(a.shipment)
+                    }}
+                    className="w-full flex items-center gap-2.5 px-2.5 pt-2 pb-0.5 text-left"
+                  >
+                    <span className="font-mono text-sm font-semibold shrink-0 min-w-[64px]">{a.shipment.REF}</span>
+                    <span className="text-sm text-foreground/85 truncate flex-1 min-w-0">{a.shipment.CLIENTE || '—'}</span>
+                    {a.shipment.BUQUE && (
+                      <span className="hidden md:inline text-xs text-muted-foreground truncate max-w-[160px]">{a.shipment.BUQUE}</span>
+                    )}
+                    <span className={`text-xs font-semibold shrink-0 ${
+                      a.severity === 'vencido' ? 'text-destructive'
+                        : a.severity === 'urgente' ? 'text-amber-600 dark:text-amber-400'
+                        : 'text-muted-foreground'
+                    }`}>
+                      {a.diasParaLlegar < 0
+                        ? `llegó hace ${-a.diasParaLlegar}d`
+                        : a.diasParaLlegar === 0 ? 'llega hoy'
+                        : `en ${a.diasParaLlegar}d`}
+                    </span>
+                  </button>
+                  {/* Bitácora de gestiones: la última nota ES el estado del
+                      reclamo; verde = gestionada hoy, ámbar = quedó de antes. */}
+                  <RefNotaLine
+                    refCarga={a.shipment.REF}
+                    nota={notas.get(normalizeRef(a.shipment.REF))}
+                    onAgregar={agregarNota}
+                  />
+                </div>
               ))}
             </div>
           </CardContent>
