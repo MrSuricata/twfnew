@@ -6,10 +6,10 @@
 // enviada. Barra de progreso del día arriba. Todo deja rastro en
 // seguimientos_log (trazabilidad del buque).
 
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Card, CardContent } from '@/components/ui/card'
-import { CheckCircle, PaperPlaneTilt, CaretDown, CaretRight, Boat, ClockCounterClockwise, Copy, MapPin, Checks, ArrowSquareOut } from '@phosphor-icons/react'
+import { CheckCircle, PaperPlaneTilt, CaretDown, CaretRight, Boat, ClockCounterClockwise, Copy, MapPin, Checks, ArrowSquareOut, ArrowsLeftRight } from '@phosphor-icons/react'
 import type { DbShipment } from '@/lib/operationsTypes'
 import { dbShipmentToOperation } from '@/lib/operationsTypes'
 import { groupByVoyage, buildEtaShiftPatch } from '@/lib/vesselGroups'
@@ -18,7 +18,8 @@ import {
   type CargaSeguimiento, type FilaSeguimiento,
 } from '@/lib/seguimientos'
 import { trackingCarrier } from '@/lib/trackingLinea'
-import { fetchSeguimientosLog, postSeguimientoLog } from '@/lib/dataClient'
+import { cambiosDeBuque, detectarTrasbordo, lineaDeTiempo, type CambioBuque, type AuditRow } from '@/lib/trasbordo'
+import { fetchAuditLog, fetchSeguimientosLog, postSeguimientoLog } from '@/lib/dataClient'
 import { fmtDateDMY } from '@/lib/format'
 
 const hoyIso = (): string => {
@@ -116,6 +117,32 @@ export default function SeguimientosBoard({ dbShipments, onPatchShipment, onOpen
     if (etaCambiadas.size) setEtaCambiadas(new Set())
   }
 
+  // Trasbordos: cambios de buque por ref, del audit. Se traen TODOS de una
+  // (una sola llamada, filtrada al campo buque) porque el aviso tiene que
+  // verse en la fila sin desplegar nada, y porque copiarUpdate no puede
+  // fetchear (el clipboard se escribe dentro del gesto del click).
+  const [cambiosBuque, setCambiosBuque] = useState<Record<string, CambioBuque[]>>({})
+  useEffect(() => {
+    let vivo = true
+    fetchAuditLog({ campo: 'buque' })
+      .then(rows => {
+        if (!vivo) return
+        const porRef: Record<string, AuditRow[]> = {}
+        for (const r of rows as unknown as AuditRow[]) {
+          const ref = String(r.ref || '').trim().toUpperCase()
+          if (ref) (porRef[ref] ||= []).push(r)
+        }
+        setCambiosBuque(Object.fromEntries(
+          Object.entries(porRef).map(([ref, rs]) => [ref, cambiosDeBuque(rs)])
+        ))
+      })
+      // Sin audit el tablero funciona igual: solo no marca trasbordos.
+      .catch(err => console.warn('audit-log (buque):', err))
+    return () => { vivo = false }
+    // Se re-trae cuando cambian las cargas: editar el buque abre la ficha como
+    // OVERLAY (el board no se desmonta), así que sin esto el mapa quedaba viejo.
+  }, [dbShipments])
+
   // Historial expandible por ref (fetch perezoso, cache en memoria del tab).
   const [abierto, setAbierto] = useState<string | null>(null)
   const [historial, setHistorial] = useState<Record<string, LogRow[] | 'cargando'>>({})
@@ -129,8 +156,56 @@ export default function SeguimientosBoard({ dbShipments, onPatchShipment, onOpen
         .catch(() => setHistorial(h => ({ ...h, [ref]: [] })))
     }
   }
-  const invalidarHistorial = (ref: string) =>
+  const invalidarHistorial = (ref: string) => {
     setHistorial(h => { const n = { ...h }; delete n[ref]; return n })
+    // Si el acordeón está abierto, recargarlo: borrar la entrada dejaba el
+    // panel en blanco (ni "Cargando…" ni "Sin historial") hasta cerrarlo.
+    if (abierto === ref) {
+      setHistorial(h => ({ ...h, [ref]: 'cargando' }))
+      fetchSeguimientosLog(ref)
+        .then(rows => setHistorial(h => ({ ...h, [ref]: rows as unknown as LogRow[] })))
+        .catch(() => setHistorial(h => ({ ...h, [ref]: [] })))
+    }
+  }
+
+  /** ¿Esta carga cambió de buque desde el último update al cliente? El
+   *  historial propio (si está cacheado) es la verdad exacta; si no, el audit
+   *  contra la fecha del último seguimiento enviado. */
+  const trasbordoDe = (c: CargaSeguimiento) => {
+    // El cache del historial se indexa con la ref CRUDA (igual que el resto
+    // del board); el mapa del audit con la ref normalizada del server.
+    const hist = historial[c.ref]
+    const filas = Array.isArray(hist) ? hist : []
+    const ultimoEnviado = filas.find(r => r.tipo === 'enviado')
+    // Marca manual vigente = posterior al último update enviado (una vez que
+    // el update sale, la marca ya se comunicó y deja de aplicar).
+    const marca = filas.find(r => r.tipo === 'trasbordo')
+    const marcadoManual = !!marca && (!ultimoEnviado || (marca.created_at || '') > (ultimoEnviado.created_at || ''))
+    return detectarTrasbordo({
+      buqueActual: c.buque,
+      marcadoManual: marcadoManual || marcasLocales.has(c.ref),
+      buqueUltimoEnviado: ultimoEnviado?.buque || '',
+      cambios: cambiosBuque[String(c.ref || '').trim().toUpperCase()],
+      fechaUltimoEnviado: c.seguimiento || '',
+    })
+  }
+
+  /** Marcar/desmarcar el trasbordo a mano: para las cargas donde el buque
+   *  viejo no quedó registrado en ningún lado, la única fuente confiable es
+   *  quien está mirando el tracking de la línea. */
+  const [marcasLocales, setMarcasLocales] = useState<Set<string>>(new Set())
+  const marcarTrasbordo = (c: CargaSeguimiento) => {
+    setMarcasLocales(prev => new Set(prev).add(c.ref))
+    logSeguimiento({ ref: c.ref, tipo: 'trasbordo', fecha: hoyIso(), buque: c.buque || '' })
+    invalidarHistorial(c.ref)
+    toast.success(`${c.ref} — marcado como trasbordo`, {
+      description: 'El update va a avisar el cambio de buque.',
+      action: {
+        label: 'Deshacer',
+        onClick: () => setMarcasLocales(prev => { const n = new Set(prev); n.delete(c.ref); return n }),
+      },
+    })
+  }
 
   // ── Acciones ──────────────────────────────────────────────────────────
   // El historial es best-effort (el dato real vive en la carga): si el POST
@@ -245,11 +320,16 @@ export default function SeguimientosBoard({ dbShipments, onPatchShipment, onOpen
     const actualizada = ultimoEnviado
       ? (ultimoEnviado.eta_nueva || '').trim() !== eta
       : etaCambiadas.has(c.ref)
+    // Si cambió de buque, el mensaje avisa el TRASBORDO: decirle al cliente
+    // que "el MSC ADELE mantiene su fecha" no le dice nada — ese buque es
+    // nuevo para él (caso A7967, Brian 17/08).
+    const tras = trasbordoDe(c)
     const texto = textoUpdate({
       buque: (c.buque || '').trim() || 'asignado',
       puerto,
       etaISO: eta,
       actualizada,
+      ...(tras.hubo ? { trasbordo: { anterior: tras.anterior } } : {}),
     })
     navigator.clipboard.writeText(texto)
       .then(() => toast.success(`Update de ${c.ref} copiado — pegalo en el mail`, { description: texto.split('\n')[2] }))
@@ -279,6 +359,11 @@ export default function SeguimientosBoard({ dbShipments, onPatchShipment, onOpen
     // Tracking DE LA LÍNEA (contenedor/BL): el buque puede cambiar en un
     // trasbordo — Nico captura el seguimiento ahí y después copia el mensaje.
     const tracking = trackingCarrier({ linea: c.linea, docNumber: c.docNumber, cntr: c.cntr })
+    const tras = trasbordoDe(c)
+    // Historial = updates + cambios de buque, en una sola línea de tiempo.
+    const timeline = Array.isArray(hist)
+      ? lineaDeTiempo(hist as unknown as Parameters<typeof lineaDeTiempo>[0], cambiosBuque[String(c.ref || '').trim().toUpperCase()] || [])
+      : []
     return (
       <div key={c.ref} className="py-1.5">
         <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
@@ -299,6 +384,29 @@ export default function SeguimientosBoard({ dbShipments, onPatchShipment, onOpen
             {c.cliente || '—'}
             {c.mode === 'lcl' && <span className="ml-2 text-[10px] font-bold text-sky-600">LCL</span>}
           </span>
+          {tras.hubo && (
+            <span
+              className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-700 dark:text-violet-300 shrink-0"
+              title={tras.anterior
+                ? `Trasbordo: venía en ${tras.anterior} y ahora viaja en ${c.buque} — el update lo avisa`
+                : `Trasbordo marcado (ahora viaja en ${c.buque}) — el update lo avisa`}
+            >
+              <ArrowsLeftRight size={11} weight="bold" /> TRASBORDO
+            </span>
+          )}
+          {!tras.hubo && tras.sospecha && (
+            // El buque se tocó después del último update, pero el audit no
+            // prueba que sea un trasbordo (puede ser la primera carga del
+            // dato o una corrección): se OFRECE marcarlo, no se afirma.
+            <button
+              type="button"
+              onClick={() => marcarTrasbordo(c)}
+              className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded border border-violet-400/40 text-violet-700 dark:text-violet-300 hover:bg-violet-500/10 transition-colors shrink-0"
+              title={`El buque se cargó/cambió después del último update (ahora ${c.buque}). Si la carga hizo trasbordo, marcalo y el update lo va a avisar.`}
+            >
+              <ArrowsLeftRight size={11} weight="bold" /> ¿trasbordo?
+            </button>
+          )}
           {conEtaPropia ? (
             <label className="flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
               ETA
@@ -356,17 +464,33 @@ export default function SeguimientosBoard({ dbShipments, onPatchShipment, onOpen
         {abierto === c.ref && (
           <div className="mt-2 ml-1 pl-3 border-l-2 border-border text-xs text-muted-foreground space-y-1">
             {hist === 'cargando' && <p>Cargando historial…</p>}
-            {Array.isArray(hist) && hist.length === 0 && <p>Sin historial todavía — arranca con el primer update.</p>}
-            {Array.isArray(hist) && hist.map((r, i) => (
-              <p key={i}>
-                <span className="font-medium text-foreground/70">{fmtDateDMY(r.fecha || (r.created_at || '').slice(0, 10))}</span>
-                {' — '}
-                {r.tipo === 'enviado' && <>update enviado{r.eta_nueva ? ` (ETA era ${fmtDateDMY(r.eta_nueva)})` : ''}</>}
-                {r.tipo === 'deshecho' && <>envío deshecho — el update anterior no salió</>}
-                {r.tipo === 'eta' && <>ETA {r.eta_anterior ? fmtDateDMY(r.eta_anterior) : 'sin fecha'} → {r.eta_nueva ? fmtDateDMY(r.eta_nueva) : 'sin fecha'}</>}
-                {r.usuario ? ` · ${r.usuario}` : ''}
-              </p>
-            ))}
+            {Array.isArray(hist) && timeline.length === 0 && <p>Sin historial todavía — arranca con el primer update.</p>}
+            {Array.isArray(hist) && timeline.map((e, i) => {
+              if (e.kind === 'buque') {
+                // Cambio de buque (del audit): la trazabilidad del trasbordo,
+                // aunque a esta carga nunca se le haya mandado un update.
+                return (
+                  <p key={`b-${i}`} className="text-violet-700 dark:text-violet-300">
+                    <span className="font-medium">{fmtDateDMY(e.fecha)}</span>
+                    {' — '}
+                    {e.anterior ? <>trasbordo: {e.anterior} → <b>{e.buque}</b></> : <>buque: <b>{e.buque}</b></>}
+                    {e.usuario ? ` · ${e.usuario}` : ''}
+                  </p>
+                )
+              }
+              const r = e.row as LogRow
+              return (
+                <p key={`l-${i}`}>
+                  <span className="font-medium text-foreground/70">{fmtDateDMY(e.fecha)}</span>
+                  {' — '}
+                  {r.tipo === 'enviado' && <>update enviado{r.eta_nueva ? ` (ETA era ${fmtDateDMY(r.eta_nueva)})` : ''}</>}
+                  {r.tipo === 'deshecho' && <>envío deshecho — el update anterior no salió</>}
+                  {r.tipo === 'trasbordo' && <>trasbordo marcado{r.buque ? ` — ahora viaja en ${r.buque}` : ''}</>}
+                  {r.tipo === 'eta' && <>ETA {r.eta_anterior ? fmtDateDMY(r.eta_anterior) : 'sin fecha'} → {r.eta_nueva ? fmtDateDMY(r.eta_nueva) : 'sin fecha'}</>}
+                  {r.usuario ? ` · ${r.usuario}` : ''}
+                </p>
+              )
+            })}
           </div>
         )}
       </div>
