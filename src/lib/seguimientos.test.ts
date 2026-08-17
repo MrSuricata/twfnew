@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { colaSeguimientos, grupoDestino, type CargaSeguimiento } from './seguimientos'
+import { colaSeguimientos, grupoDestino, textoUpdate, nombreBuqueBase, type CargaSeguimiento } from './seguimientos'
 
 const HOY = new Date(2026, 7, 13) // jueves 13/08/2026
 
@@ -100,5 +100,34 @@ describe('grupoDestino', () => {
     expect(grupoDestino('CL')).toBe('Chile')
     expect(grupoDestino('OTRO')).toBe('Otros destinos')
     expect(grupoDestino('')).toBe('Otros destinos')
+  })
+})
+
+describe('textoUpdate — el formato de los mails de Nicolás', () => {
+  it('ETA que se mantiene, a la tarde', () => {
+    const t = textoUpdate({ buque: 'COSCO SHIPPING LILY 002E', puerto: 'Montevideo', etaISO: '2026-10-04', actualizada: false, hora: 15 })
+    expect(t).toContain('Estimados, buenas tardes.')
+    expect(t).toContain('sigue rumbo según lo previsto')
+    expect(t).toContain('se mantiene para el día 04/10/2026')
+    expect(t).toContain('Volveremos con novedades a la brevedad.')
+  })
+
+  it('ETA actualizada, a la mañana', () => {
+    const t = textoUpdate({ buque: 'EVER FAITH 036W', puerto: 'Buenos Aires', etaISO: '2026-09-20', actualizada: true, hora: 9 })
+    expect(t).toContain('Estimados, buenos días.')
+    expect(t).toContain('se actualiza la ETA del buque EVER FAITH 036W al puerto de Buenos Aires para el día 20/09/2026')
+  })
+})
+
+describe('nombreBuqueBase — para el link de tracking', () => {
+  it('recorta el número de viaje', () => {
+    expect(nombreBuqueBase('TIGER GAUCHO 0935S')).toBe('TIGER GAUCHO')
+    expect(nombreBuqueBase('SAN FRANCISCA 628W')).toBe('SAN FRANCISCA')
+    expect(nombreBuqueBase('COSCO SHIPPING LILY 002E')).toBe('COSCO SHIPPING LILY')
+  })
+
+  it('sin número de viaje queda igual; vacío no rompe', () => {
+    expect(nombreBuqueBase('PALENA')).toBe('PALENA')
+    expect(nombreBuqueBase('')).toBe('')
   })
 })

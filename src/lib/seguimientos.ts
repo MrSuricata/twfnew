@@ -131,6 +131,43 @@ export function grupoDestino(pais: string | null | undefined): string {
 /** Orden fijo de los grupos en pantalla. */
 export const ORDEN_GRUPOS = ['Montevideo', 'Buenos Aires', 'Chile', 'Otros destinos']
 
+// ─── Texto del update (formato de los mails reales de Nicolás) ───────────
+// Extraído de sus mails (13/08/2026): "Estimados, buenas tardes. Les informo
+// que el buque X sigue rumbo según lo previsto. La ETA al puerto de Montevideo
+// se mantiene para el día 04/10/2026. Volveremos con novedades a la brevedad.
+// Saludos" — y la variante "se actualiza la ETA ... para el día X" cuando la
+// fecha cambió.
+
+const fmtDMYtexto = (iso: string): string => {
+  const p = iso.split('-')
+  return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : iso
+}
+
+export function textoUpdate(args: {
+  buque: string
+  /** Puerto de destino para el texto ("Montevideo", "Buenos Aires", "San Antonio"…). */
+  puerto: string
+  etaISO: string
+  /** true = la ETA cambió en esta sesión → "se actualiza"; false = "se mantiene". */
+  actualizada: boolean
+  /** Hora local para el saludo (default: ahora). */
+  hora?: number
+}): string {
+  const hora = args.hora ?? new Date().getHours()
+  const saludo = hora < 13 ? 'buenos días' : 'buenas tardes'
+  const fecha = fmtDMYtexto(args.etaISO)
+  const cuerpo = args.actualizada
+    ? `Les informo que, según lo indicado por la web de la línea marítima, se actualiza la ETA del buque ${args.buque} al puerto de ${args.puerto} para el día ${fecha}.`
+    : `Les informo que el buque ${args.buque} sigue rumbo según lo previsto. La ETA al puerto de ${args.puerto} se mantiene para el día ${fecha}.`
+  return `Estimados, ${saludo}.\n\n${cuerpo}\n\nVolveremos con novedades a la brevedad.\n\nSaludos`
+}
+
+/** Nombre del buque sin el número de viaje ("TIGER GAUCHO 0935S" → "TIGER
+ *  GAUCHO") — para buscarlo en MarineTraffic. */
+export function nombreBuqueBase(buque: string | null | undefined): string {
+  return String(buque || '').trim().replace(/\s+\S*\d\S*$/, '').trim()
+}
+
 // ─── Historial (tabla seguimientos_log) ──────────────────────────────────
 
 export interface SeguimientoLogRow {
