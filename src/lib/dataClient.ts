@@ -815,6 +815,20 @@ export async function postRefNota(ref: string, texto: string): Promise<Record<st
 
 // ── Historial de seguimientos (cola de Nico) ─────────────────────────
 
+/** Log de actividad. `ref` acota a una carga; `campo` trae solo los patches
+ *  que tocaron ese campo (whitelist server: 'buque') — así Seguimientos arma
+ *  los trasbordos de toda la cola con una sola llamada. Más nuevas primero. */
+export async function fetchAuditLog(opts: { ref?: string; campo?: 'buque' } = {}): Promise<Record<string, unknown>[]> {
+  const p = new URLSearchParams()
+  if (opts.ref) p.set('ref', opts.ref)
+  if (opts.campo) p.set('campo', opts.campo)
+  const q = p.toString()
+  const res = await authFetch(`/api/data/audit-log${q ? `?${q}` : ''}`)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const data = await res.json()
+  return data.log || []
+}
+
 /** Trae el historial (todo o de una ref). Filas más nuevas primero. */
 export async function fetchSeguimientosLog(ref?: string): Promise<Record<string, unknown>[]> {
   const q = ref ? `?ref=${encodeURIComponent(ref)}` : ''
@@ -828,7 +842,7 @@ export async function fetchSeguimientosLog(ref?: string): Promise<Record<string,
  *  'eta' con anterior→nueva). El usuario lo estampa el server (del token). */
 export async function postSeguimientoLog(row: {
   ref: string
-  tipo: 'enviado' | 'eta' | 'deshecho'
+  tipo: 'enviado' | 'eta' | 'deshecho' | 'trasbordo'
   fecha?: string
   etaAnterior?: string
   etaNueva?: string

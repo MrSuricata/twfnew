@@ -154,15 +154,22 @@ export function textoUpdate(args: {
   etaISO: string
   /** true = la ETA cambió en esta sesión → "se actualiza"; false = "se mantiene". */
   actualizada: boolean
+  /** La carga cambió de buque desde el último update: el mensaje tiene que
+   *  avisar el TRASBORDO, no reportar que el buque nuevo "mantiene" su fecha
+   *  (para el cliente ese buque no existía). `anterior` va cuando se sabe. */
+  trasbordo?: { anterior?: string }
   /** Hora local para el saludo (default: ahora). */
   hora?: number
 }): string {
   const hora = args.hora ?? new Date().getHours()
   const saludo = hora < 13 ? 'buenos días' : 'buenas tardes'
   const fecha = fmtDMYtexto(args.etaISO)
-  const cuerpo = args.actualizada
-    ? `Les informo que, según lo indicado por la web de la línea marítima, se actualiza la ETA del buque ${args.buque} al puerto de ${args.puerto} para el día ${fecha}.`
-    : `Les informo que el buque ${args.buque} sigue rumbo según lo previsto. La ETA al puerto de ${args.puerto} se mantiene para el día ${fecha}.`
+  const desde = args.trasbordo?.anterior ? ` del buque ${args.trasbordo.anterior}` : ''
+  const cuerpo = args.trasbordo
+    ? `Les informo que la carga fue trasbordada${desde} al buque ${args.buque}. Según lo indicado por la web de la línea marítima, la ETA al puerto de ${args.puerto} pasa a ser el día ${fecha}.`
+    : args.actualizada
+      ? `Les informo que, según lo indicado por la web de la línea marítima, se actualiza la ETA del buque ${args.buque} al puerto de ${args.puerto} para el día ${fecha}.`
+      : `Les informo que el buque ${args.buque} sigue rumbo según lo previsto. La ETA al puerto de ${args.puerto} se mantiene para el día ${fecha}.`
   return `Estimados, ${saludo}.\n\n${cuerpo}\n\nVolveremos con novedades a la brevedad.\n\nSaludos`
 }
 
@@ -178,8 +185,9 @@ export interface SeguimientoLogRow {
   id?: string
   ref: string
   /** 'enviado' = update al cliente (con foto de eta/buque) · 'eta' = cambio de
-   *  ETA desde la cola · 'deshecho' = un 'enviado' que se deshizo (no salió). */
-  tipo: 'enviado' | 'eta' | 'deshecho'
+   *  ETA desde la cola · 'deshecho' = un 'enviado' que se deshizo (no salió) ·
+   *  'trasbordo' = la carga cambió de buque y hay que avisarlo en el update. */
+  tipo: 'enviado' | 'eta' | 'deshecho' | 'trasbordo'
   fecha?: string
   eta_anterior?: string | null
   eta_nueva?: string | null

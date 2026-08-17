@@ -2296,10 +2296,38 @@ async function handlePushSubscriptions(req: VercelRequest, res: VercelResponse, 
 // ── Log de actividad (lectura) ──────────────────────────────────────
 async function handleAuditLog(req: VercelRequest, res: VercelResponse, db: any, payload: TokenPayload | null = null) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
-  const { data, error } = await db.from('audit_log')
+  // ?ref= trae el log de UNA carga (Seguimientos lo usa para reconstruir los
+  // cambios de buque: el trasbordo no se registra en ningún otro lado). Sin
+  // ref, el listado general de actividad. Las refs se guardan en mayúsculas.
+  const ref = (req.query.ref as string || '').trim().toUpperCase()
+  // ?campo=buque trae SOLO los patches que tocaron ese campo, de todas las
+  // cargas: así Seguimientos arma el mapa de trasbordos de la cola entera con
+  // una sola llamada (los cambios de buque son pocos). Whitelist cerrada: el
+  // nombre entra en un path JSONB, no se acepta cualquier cosa.
+  const CAMPOS_FILTRABLES = new Set(['buque'])
+  const campo = (req.query.campo as string || '').trim()
+  if (campo && !CAMPOS_FILTRABLES.has(campo)) {
+    return res.status(400).json({ error: `campo no filtrable: ${campo}` })
+  }
+  const base = () => db.from('audit_log')
     .select('id, ts, usuario, action, entity, ref, details')
     .order('ts', { ascending: false })
-    .limit(300)
+  let q = base()
+  if (ref) q = q.eq('ref', ref)
+  if (campo) q = q.not(`details->>${campo}`, 'is', null)
+  q = q.limit(ref || campo ? 500 : 300)
+  let { data, error } = await q
+  // Red de seguridad del filtro JSONB: si PostgREST no acepta el path, se
+  // resuelve en JS sobre una ventana grande en vez de devolver un 500 (los
+  // cambios de buque son poquísimos — 15 en 2.800 entradas, medido 17/08).
+  if (error && campo) {
+    let alt = base().limit(3000)
+    if (ref) alt = alt.eq('ref', ref)
+    const retry = await alt
+    if (retry.error) throw retry.error
+    data = (retry.data || []).filter((r: any) => r?.details && r.details[campo] != null)
+    error = null
+  }
   if (error) throw error
   // Admin acotado: solo las entradas de refs de SUS clientes. Las entradas sin
   // ref (config, cuotas) se ocultan — details puede traer montos de cualquiera
@@ -2379,7 +2407,7 @@ async function handleSeguimientosLog(req: VercelRequest, res: VercelResponse, db
   if (req.method === 'POST') {
     const v = validate(z.object({
       ref: z.string().min(1).max(40),
-      tipo: z.enum(['enviado', 'eta', 'deshecho']),
+      tipo: z.enum(['enviado', 'eta', 'deshecho', 'trasbordo']),
       fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
       // max 40: hay ETAs legacy de texto libre ('CONFIRMAR CON NAVIERA') que
       // valen como foto histórica — el cliente además trunca a 40.
