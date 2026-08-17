@@ -786,6 +786,33 @@ export async function patchDbShipment(id: string, fields: Record<string, unknown
   }
 }
 
+// ── Bitácora de gestiones por carga (ref_notas) ──────────────────────
+
+/** Últimas notas de gestión (todas o de una ref). Más nuevas primero. */
+export async function fetchRefNotas(ref?: string): Promise<Record<string, unknown>[]> {
+  const q = ref ? `?ref=${encodeURIComponent(ref)}` : ''
+  const res = await authFetch(`/api/data/ref-notas${q}`)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const data = await res.json()
+  return data.rows || []
+}
+
+/** Agrega una nota de gestión ("reclamado por wpp al cliente"). El usuario y
+ *  la hora los estampa el server. Devuelve la fila creada. */
+export async function postRefNota(ref: string, texto: string): Promise<Record<string, unknown>> {
+  const res = await authFetch('/api/data/ref-notas', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ref, texto }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
+  const data = await res.json()
+  return data.row || {}
+}
+
 // ── Historial de seguimientos (cola de Nico) ─────────────────────────
 
 /** Trae el historial (todo o de una ref). Filas más nuevas primero. */

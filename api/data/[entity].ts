@@ -144,6 +144,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return handleAuditLog(req, res, db, payload)
       case 'seguimientos-log':
         return handleSeguimientosLog(req, res, db, payload)
+      case 'ref-notas':
+        return handleRefNotas(req, res, db, payload)
       default:
         return res.status(404).json({ error: `Unknown entity: ${entity}` })
     }
@@ -2311,6 +2313,47 @@ async function handleAuditLog(req: VercelRequest, res: VercelResponse, db: any, 
 
 // ── Operator assignments (overlay ref → operativo) ─────────────────
 // GET /api/data/operator-assignments · POST upsert · DELETE ?ref=
+
+// ── Bitácora de gestiones por carga (ref_notas, 17/08/2026) ─────────
+// "Reclamado por wpp al cliente", "reclamado a la agencia"… con quién y
+// cuándo. Append-only: el estado es el último renglón, la historia queda.
+// La usan la tarjeta "Llegan sin liberar" de HOY y la pestaña Checks.
+
+async function handleRefNotas(req: VercelRequest, res: VercelResponse, db: any, payload: TokenPayload | null) {
+  if (req.method === 'GET') {
+    const ref = (req.query.ref as string || '').trim().toUpperCase()
+    let q = db.from('ref_notas').select('*').order('created_at', { ascending: false }).limit(500)
+    if (ref) q = q.eq('ref', ref)
+    const { data, error } = await q
+    if (error) throw error
+    // Scoping por cliente (mismo patrón que seguimientos-log / audit-log).
+    const allowed = await allowedRefsForPayload(db, payload)
+    return res.status(200).json({ rows: filterByAllowedRef(data || [], allowed, (r: any) => r.ref) })
+  }
+
+  if (req.method === 'POST') {
+    const v = validate(z.object({
+      ref: z.string().min(1).max(40),
+      texto: z.string().min(1).max(300),
+    }), req.body)
+    if (!v.ok) return res.status(400).json({ error: v.error })
+    const { ref, texto } = v.data
+
+    const allowed = await allowedRefsForPayload(db, payload)
+    if (allowed && !allowed.has(refOf(ref))) return res.status(404).json({ error: 'Carga no encontrada' })
+
+    const row = {
+      ref: ref.trim().toUpperCase(),
+      texto: texto.trim(),
+      usuario: auditUser(payload as { user?: string; name?: string } | null),
+    }
+    const { data, error } = await db.from('ref_notas').insert(row).select('*').single()
+    if (error) throw error
+    return res.status(200).json({ saved: true, row: data })
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' })
+}
 
 // ── Historial de seguimientos (cola de Nico, 13/08/2026) ────────────
 // Trazabilidad del buque: cada 'enviado' guarda la foto de la ETA/buque al
