@@ -247,7 +247,9 @@ export default function TodayDashboard({
     const hoy = new Date()
     return faltantesUrgentes(
       (dbShipments || [])
-        .filter(s => !s.archived)
+        // Por ahora SOLO Uruguay (Brian 18/08): el circuito de completar datos
+        // arranca por MVD; los demás países se desbloquean después.
+        .filter(s => !s.archived && (s.dest_country || '').trim().toUpperCase() === 'UY')
         .map(s => ({
           dbId: s.id, ref: s.ref, mode: s.mode, pais: s.dest_country, cliente: s.cliente,
           eta: s.eta, etd: s.etd, buque: s.buque, docNumber: s.doc_number, cntr: s.contenedor,
