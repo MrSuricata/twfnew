@@ -492,6 +492,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
           <TabsContent value="hoy">
             <TodayDashboard
               shipments={fclShipments}
+              dbShipments={dbShipments}
               isDataLoading={isDataLoading}
               trucks={trucks}
               truckLoads={truckLoads}

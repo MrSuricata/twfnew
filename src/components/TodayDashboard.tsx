@@ -11,6 +11,7 @@ import {
   Coffee,
   Package,
   Siren,
+  PencilSimple,
   CaretRight,
   CalendarBlank,
   CircleNotch,
@@ -28,7 +29,8 @@ import {
 } from '@/lib/todayFilters'
 import ShipmentDetailsDialog from './ShipmentDetailsDialog'
 import ContainerQuickEdit from './operations/ContainerQuickEdit'
-import { deriveKnownTransportes } from '@/lib/operationsTypes'
+import { deriveKnownTransportes, type DbShipment } from '@/lib/operationsTypes'
+import { faltantesUrgentes, resumenFaltantes, FALTANTES_DIAS_COORDINACION } from '@/lib/datosFaltantes'
 import type { ShipmentDocument, OperativeReport, OriginPhoto } from '@/lib/quotationTypes'
 import type { Truck as TruckType, TruckLoad } from '@/lib/truckTypes'
 import { Badge } from '@/components/ui/badge'
@@ -75,6 +77,9 @@ function shortWho(by: string | undefined): string {
 
 interface TodayDashboardProps {
   shipments: ParsedShipment[]
+  /** Filas crudas de la DB (pkgs/agente/doc_number…) — alimentan la tarjeta
+   *  de campos pendientes; los demás bloques siguen sobre ParsedShipment. */
+  dbShipments?: DbShipment[]
   /** Carga inicial de datos en curso (banner "Sincronizando datos..." activo). */
   isDataLoading?: boolean
   trucks?: TruckType[]
@@ -98,6 +103,7 @@ interface TodayDashboardProps {
  */
 export default function TodayDashboard({
   shipments,
+  dbShipments = [],
   isDataLoading = false,
   trucks = [],
   truckLoads = [],
@@ -230,6 +236,23 @@ export default function TodayDashboard({
     [shipments]
   )
 
+  // Campos pendientes URGENTES: llegan dentro de la semana (o ya llegaron sin
+  // salida) con datos faltantes según su etapa — la webapp repartiendo tareas.
+  const incompletas = useMemo(() => {
+    const hoy = new Date()
+    return faltantesUrgentes(
+      (dbShipments || [])
+        .filter(s => !s.archived)
+        .map(s => ({
+          dbId: s.id, ref: s.ref, mode: s.mode, pais: s.dest_country, cliente: s.cliente,
+          eta: s.eta, etd: s.etd, buque: s.buque, docNumber: s.doc_number, cntr: s.contenedor,
+          pkgs: s.pkgs, kg: s.kg, m3: s.m3, agente: s.agente, deposito: s.deposito,
+          operativa: s.operativa, transporte: s.transporte, fiscal: s.fiscal, salida: s.salida,
+        })),
+      hoy,
+    )
+  }, [dbShipments])
+
   // Carga inicial en curso y todavía sin nada que mostrar → estado "Cargando"
   // en vez del empty state ("Día tranquilo"), para no dar un falso "no hay nada
   // hoy" mientras el banner de sincronizando sigue activo. Con datos ya
@@ -360,6 +383,52 @@ export default function TodayDashboard({
                   </span>
                 </button>
               ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Llegan con datos incompletos ─────────────────── */}
+      {incompletas.length > 0 && (
+        <Card className="accent-top overflow-hidden bg-amber-500/[0.04] border-amber-500/25" style={{ ['--bar-color' as any]: 'rgb(245 158 11)' }}>
+          <CardContent className="pt-5 pb-4">
+            <div className="flex items-center gap-2.5 mb-1">
+              <div className="p-1.5 bg-amber-500/10 rounded-md">
+                <PencilSimple size={18} weight="fill" className="text-amber-600" />
+              </div>
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-amber-700">
+                Llegan con datos incompletos
+              </h2>
+              <span className="ml-auto inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-full bg-amber-500 text-white text-xs font-bold">
+                {incompletas.length}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground mb-3">
+              Llegan dentro de {FALTANTES_DIAS_COORDINACION} días (o ya llegaron sin salida) y les faltan campos según su etapa — completar acá evita que se traben checks, pagos y coordinación.
+            </p>
+            <div className="space-y-1">
+              {incompletas.slice(0, 10).map(u => (
+                <button
+                  key={u.carga.ref}
+                  type="button"
+                  onClick={() => onOpenDetail?.(String(u.carga.dbId || u.carga.ref || ''))}
+                  className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-left hover:bg-amber-500/10 transition-colors"
+                >
+                  <span className="font-mono text-sm font-semibold shrink-0 min-w-[64px]">{u.carga.ref}</span>
+                  <span className="text-sm text-foreground/85 truncate flex-1 min-w-0">{u.carga.cliente || '—'}</span>
+                  <span className="hidden sm:inline text-xs text-amber-700 truncate max-w-[300px]">
+                    faltan: {resumenFaltantes(u.faltantes)}
+                  </span>
+                  <span className="text-xs font-semibold shrink-0 text-muted-foreground">
+                    {u.diasAEta < 0 ? `llegó hace ${-u.diasAEta}d` : u.diasAEta === 0 ? 'llega hoy' : `en ${u.diasAEta}d`}
+                  </span>
+                </button>
+              ))}
+              {incompletas.length > 10 && (
+                <p className="px-2.5 pt-1 text-xs text-muted-foreground">
+                  … y {incompletas.length - 10} más — están todas en Operaciones con el filtro <b>Faltan datos</b>.
+                </p>
+              )}
             </div>
           </CardContent>
         </Card>

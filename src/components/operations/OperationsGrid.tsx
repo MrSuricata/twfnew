@@ -26,6 +26,7 @@ import {
   Trash,
   Scales,
   Clock,
+  PencilSimple,
   CaretDown,
   CaretRight,
 } from '@phosphor-icons/react'
@@ -51,6 +52,7 @@ import type { CatalogClient } from '@/lib/clientCatalog'
 import { canonicalizarLista, DEV_ALIASES } from '@/lib/fuzzyCatalog'
 import { fiscalSugerido, fiscalesRecientes } from '@/lib/sugerenciaHistorica'
 import { recomendarTransporte } from '@/lib/distribucionTransportes'
+import { datosFaltantes, resumenFaltantes } from '@/lib/datosFaltantes'
 import { useTransporteCuotas } from '@/hooks/useTransporteCuotas'
 import {
   buildOperations,
@@ -202,6 +204,8 @@ export default function OperationsGrid({
   const brand = useBrand()
   // Filtro "Seguimiento vencido" (7+ días sin actualizar, solo cargas activas).
   const [segFilter, setSegFilter] = useState(false)
+  // Filtro "Faltan datos" (campos pendientes según la etapa de la carga).
+  const [faltanFilter, setFaltanFilter] = useState(false)
   // "Ver archivadas" (OFF por defecto) + confirmación de eliminado definitivo.
   const [showArchived, setShowArchived] = useState(false)
   const [deleteTarget, setDeleteTarget] = useState<UnifiedOperation | null>(null)
@@ -493,6 +497,19 @@ export default function OperationsGrid({
     )
   }
 
+  // Campos pendientes por ETAPA (lib datosFaltantes): uid → "Bultos, Kg, …".
+  // Solo cargas activas — completar datos de una carga cerrada no es tarea.
+  const faltantesPorUid = useMemo(() => {
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    const m = new Map<string, string>()
+    for (const o of visibleOps) {
+      if (!isOperationActive(o, truckByRef.get(o.ref)?.status, today)) continue
+      const f = datosFaltantes(o, today)
+      if (f.length) m.set(o.uid, resumenFaltantes(f))
+    }
+    return m
+  }, [visibleOps, truckByRef])
+
   // useDeferredValue: al tipear, el filtrado sobre ~1400 filas usa un valor
   // diferido → el input queda fluido (React no bloquea el tecleo recomputando todo).
   const deferredSearch = useDeferredValue(search)
@@ -511,6 +528,7 @@ export default function OperationsGrid({
       if (vMin !== null && (o.m3 || 0) < vMin) return false
       if (vMax !== null && (o.m3 || 0) > vMax) return false
       if (segFilter && !isSeguimientoVencido(o, truckByRef.get(o.ref)?.status, today)) return false
+      if (faltanFilter && !faltantesPorUid.has(o.uid)) return false
       if (operatorFilter !== 'all' && (o.operatorId || '') !== operatorFilter) return false
       if (q) {
         const blob = `${o.ref} ${o.clientRef} ${o.cliente} ${o.cntr} ${o.docNumber} ${o.fiscal} ${o.descripcion} ${o.transporte}`.toLowerCase()
@@ -518,7 +536,7 @@ export default function OperationsGrid({
       }
       return true
     })
-  }, [visibleOps, modeFilter, zonaFilter, originFilter, destFilter, kgMin, kgMax, m3Min, m3Max, segFilter, truckByRef, operatorFilter, deferredSearch])
+  }, [visibleOps, modeFilter, zonaFilter, originFilter, destFilter, kgMin, kgMax, m3Min, m3Max, segFilter, faltanFilter, faltantesPorUid, truckByRef, operatorFilter, deferredSearch])
 
   const pesoVolActivo = !!(kgMin || kgMax || m3Min || m3Max)
 
@@ -833,6 +851,18 @@ export default function OperationsGrid({
             <span className="text-[10px] tabular-nums font-bold">{segVencidos}</span>
           </button>
         )}
+        {faltantesPorUid.size > 0 && (
+          <button
+            onClick={() => setFaltanFilter(v => !v)}
+            title={`${faltantesPorUid.size} carga${faltantesPorUid.size === 1 ? ' activa tiene' : 's activas tienen'} campos pendientes según su etapa (embarcada → buque/BL/CNTR · por llegar → bultos/kg/m³/agente · llegando → coordinación) — clic para ver solo esas`}
+            className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 border text-xs transition-all hover:shadow-sm ${
+              faltanFilter ? 'bg-amber-100 border-amber-400 text-amber-800 font-semibold' : 'bg-amber-50 border-amber-300 text-amber-700'
+            }`}
+          >
+            <PencilSimple size={12} weight="bold" /> Faltan datos
+            <span className="text-[10px] tabular-nums font-bold">{faltantesPorUid.size}</span>
+          </button>
+        )}
         <button
           onClick={() => setShowArchived(v => !v)}
           title="Ver SOLO las cargas archivadas (el número indica cuántas hay)"
@@ -1061,6 +1091,7 @@ export default function OperationsGrid({
                 operatorById={operatorById}
                 truckStatus={truckByRef.get(op.ref)}
                 hoy={hoy}
+                faltantes={faltantesPorUid.get(op.uid)}
                 zebra={i % 2 === 1}
                 expanded={expandedUid === op.uid}
                 onToggleExpand={toggleExpand}
@@ -1330,6 +1361,7 @@ const OperationRow = memo(function OperationRow({
   operatorById,
   truckStatus,
   hoy,
+  faltantes,
   zebra,
   expanded,
   onToggleExpand,
@@ -1344,6 +1376,8 @@ const OperationRow = memo(function OperationRow({
   operatorById: Map<string, Operator>
   truckStatus?: TruckRefInfo
   hoy: Date
+  /** "Bultos, Kg, M³" — campos pendientes según la etapa (lib datosFaltantes). */
+  faltantes?: string
   /** Fila par → fondo alternado. Explícito (no CSS even:) porque la fila de
    *  expansión insertada rompería la paridad nth-child. */
   zebra: boolean
@@ -1382,6 +1416,14 @@ const OperationRow = memo(function OperationRow({
               <span title={`Editada en la web: ${op.webEdited.join(', ')} (pisa a la planilla)`} className="text-[10px]">✏️</span>
             )}
             {op.archived && <Badge variant="outline" className="h-4 text-[8px] text-amber-700 border-amber-300">ARCHIVADA</Badge>}
+            {faltantes && (
+              <span
+                title={`Campos pendientes según la etapa: ${faltantes}`}
+                className="inline-flex items-center gap-0.5 text-[9px] font-bold text-amber-700 bg-amber-500/15 rounded px-1 py-px shrink-0"
+              >
+                <PencilSimple size={9} weight="bold" />{faltantes.split(', ').length}
+              </span>
+            )}
           </span>
         )
       case 'operator':
