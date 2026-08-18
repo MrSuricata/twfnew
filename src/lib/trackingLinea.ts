@@ -8,8 +8,11 @@
  *  - MAERSK  → maersk.com/tracking/{BL}                    (ej. A7996: 271528268)
  *  - HAPAG   → hapag-lloyd.com …?container={CNTR}          (ej. A7967: TLLU5948854)
  *  - HMM     → hmm21.com/e-service/search?query={BL}       (ej. A8050: SZPM79977300)
- *  - ONE     → ecomm.one-line.com …?ctrack-field={N}&trakNoParam={N}
- *              (BL sin el prefijo ONEY; también acepta contenedor)
+ *  - ONE     → ecomm.one-line.com …?trakNoParam={BL}&trakNoTpCdParam=B
+ *              (formato que pasó Brian 18/08 con la A8143: SZPGL2968300. El
+ *              `trakNoTpCdParam` declara QUÉ es el número — B = BL —, sin él
+ *              la página abre el buscador vacío. Sin BL cae al contenedor,
+ *              donde el tipo es C.)
  *  - COSCO   → elines.coscoshipping.com …?trackingType=BILLOFLADING&number={BL}
  *
  * Pendientes de confirmar formato (Brian los va pasando): MSC, PIL, CMA CGM,
@@ -59,12 +62,15 @@ export function trackingCarrier(c: {
   }
 
   if (linea === 'ONE') {
-    // El tracking de ONE no acepta el prefijo ONEY del BL; también trackea
-    // por contenedor, que es el respaldo cuando no hay BL cargado.
-    const n = doc.replace(/^ONEY/, '') || cntr
+    // El tracking de ONE no acepta el prefijo ONEY del BL; también trackea por
+    // contenedor, que es el respaldo cuando no hay BL cargado. `trakNoTpCdParam`
+    // dice qué es el número que va: B = BL, C = contenedor.
+    const bl = doc.replace(/^ONEY/, '')
+    const n = bl || cntr
     if (!n) return null
+    const tipo = bl ? 'B' : 'C'
     return {
-      url: `https://ecomm.one-line.com/one-ecom/manage-shipment/cargo-tracking?ctrack-field=${encodeURIComponent(n)}&trakNoParam=${encodeURIComponent(n)}`,
+      url: `https://ecomm.one-line.com/one-ecom/manage-shipment/cargo-tracking?trakNoParam=${encodeURIComponent(n)}&trakNoTpCdParam=${tipo}`,
       linea: 'ONE',
     }
   }

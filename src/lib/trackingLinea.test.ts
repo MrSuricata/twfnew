@@ -19,12 +19,18 @@ describe('trackingCarrier — el link de la línea, no del buque (trasbordos)', 
       .toBe('https://www.hmm21.com/e-service/search/index.do?query=SZPM79977300')
   })
 
-  it('ONE recorta el prefijo ONEY del BL; sin BL usa el contenedor', () => {
+  it('ONE: formato exacto que pasó Brian con la A8143', () => {
+    expect(trackingCarrier({ linea: 'ONE', docNumber: 'SZPGL2968300' })?.url)
+      .toBe('https://ecomm.one-line.com/one-ecom/manage-shipment/cargo-tracking?trakNoParam=SZPGL2968300&trakNoTpCdParam=B')
+  })
+
+  it('ONE recorta el prefijo ONEY del BL; sin BL usa el contenedor (tipo C)', () => {
     const conBl = trackingCarrier({ linea: 'ONE', docNumber: 'ONEYNB5BE8541300' })
-    expect(conBl?.url).toContain('ctrack-field=NB5BE8541300')
     expect(conBl?.url).toContain('trakNoParam=NB5BE8541300')
+    expect(conBl?.url).toContain('trakNoTpCdParam=B')
     const sinBl = trackingCarrier({ linea: 'ONE', docNumber: '', cntr: 'NYKU5168531' })
-    expect(sinBl?.url).toContain('ctrack-field=NYKU5168531')
+    expect(sinBl?.url).toContain('trakNoParam=NYKU5168531')
+    expect(sinBl?.url).toContain('trakNoTpCdParam=C')
   })
 
   it('COSCO por BL numérico', () => {
