@@ -829,13 +829,22 @@ export async function fetchAuditLog(opts: { ref?: string; campo?: 'buque' } = {}
   return data.log || []
 }
 
-/** Trae el historial (todo o de una ref). Filas más nuevas primero. */
-export async function fetchSeguimientosLog(ref?: string): Promise<Record<string, unknown>[]> {
-  const q = ref ? `?ref=${encodeURIComponent(ref)}` : ''
-  const res = await authFetch(`/api/data/seguimientos-log${q}`)
+/** Trae el historial (todo o de una ref). Filas más nuevas primero.
+ *  `desde` (YYYY-MM-DD) acota por período; `truncado` avisa que se llegó al
+ *  tope y quedaron filas afuera — el que muestra la lista tiene que decirlo. */
+export async function fetchSeguimientosLog(
+  ref?: string,
+  opts: { desde?: string; limit?: number } = {},
+): Promise<{ rows: Record<string, unknown>[]; truncado: boolean }> {
+  const p = new URLSearchParams()
+  if (ref) p.set('ref', ref)
+  if (opts.desde) p.set('desde', opts.desde)
+  if (opts.limit) p.set('limit', String(opts.limit))
+  const q = p.toString()
+  const res = await authFetch(`/api/data/seguimientos-log${q ? `?${q}` : ''}`)
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const data = await res.json()
-  return data.rows || []
+  return { rows: data.rows || [], truncado: !!data.truncado }
 }
 
 /** Registra un evento del historial ('enviado' con foto de eta/buque, o

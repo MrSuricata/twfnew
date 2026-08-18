@@ -329,6 +329,9 @@ describe('ordenarPagos — la tabla se ordena, los totales no se tocan', () => {
   })
 
   const refs = (l: PagoItem[]) => l.map(i => i.ref)
+  // Sin `.at(-1)`: el tsconfig apunta a ES2020 y Array.prototype.at es ES2022,
+  // así que el typecheck del repo lo rechaza aunque en runtime funcione.
+  const ultimo = (l: string[]): string => l[l.length - 1]
 
   it('por ETA: ascendente lo que llega primero, descendente al revés', () => {
     const l = [
@@ -347,8 +350,8 @@ describe('ordenarPagos — la tabla se ordena, los totales no se tocan', () => {
       it_({ ref: 'A1', eta: '2026-07-05' }),
       it_({ ref: 'A2', eta: '2026-07-20' }),
     ]
-    expect(refs(ordenarPagos(l, 'eta', 'asc')).at(-1)).toBe('SIN')
-    expect(refs(ordenarPagos(l, 'eta', 'desc')).at(-1)).toBe('SIN')
+    expect(ultimo(refs(ordenarPagos(l, 'eta', 'asc')))).toBe('SIN')
+    expect(ultimo(refs(ordenarPagos(l, 'eta', 'desc')))).toBe('SIN')
   })
 
   it('por monto: de menor a mayor y al revés', () => {
