@@ -426,9 +426,14 @@ function Fila({ f, onToggle, onOpenDetail }: {
         {f.fecha ? fmtDateDMY(f.fecha) : '—'}
       </td>
       <td className="py-2 px-1 text-center">
-        <Tilde activo={f.visita} onClick={() => onToggle(f.ref, 'visita_deposito', f.visita && !f.fotos, f.cntrs)}
-          bloqueado={f.fotos}
-          titulo={f.fotos ? 'Confirmada por las fotos de Uruguay' : f.visita ? 'Visita declarada — click para desmarcar' : 'Marcar que fuiste al depósito'} />
+        {/* El tilde NUNCA se bloquea. Antes se deshabilitaba cuando la carga
+            tenía fotos ("confirmada por las fotos"), pero desde la corrección
+            del modelo las fotos NO prueban la visita —pueden ser del depósito—
+            y la visita es solo este tilde. Quedaron contradiciéndose: la carga
+            con fotos no se podía marcar Y contaba como "no fuiste" para
+            siempre (caso A8025, Brian 18/08). */}
+        <Tilde activo={f.visita} onClick={() => onToggle(f.ref, 'visita_deposito', f.visita, f.cntrs)}
+          titulo={f.visita ? 'Fuiste al depósito — click para desmarcar' : 'Marcar que fuiste al depósito'} />
       </td>
       <td className="py-2 px-1 text-center">
         <Derivado activo={f.fotos} titulo={
@@ -471,8 +476,8 @@ function Fila({ f, onToggle, onOpenDetail }: {
 
 /** Señal que se marca a mano. `parcial` = avisado en algunos contenedores pero
  *  no en todos: se pinta ámbar para que no se lea como hecho. */
-function Tilde({ activo, onClick, titulo, bloqueado, parcial }: {
-  activo: boolean; onClick: () => void; titulo: string; bloqueado?: boolean; parcial?: boolean
+function Tilde({ activo, onClick, titulo, parcial }: {
+  activo: boolean; onClick: () => void; titulo: string; parcial?: boolean
 }) {
   const tono = activo
     ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300'
@@ -482,13 +487,10 @@ function Tilde({ activo, onClick, titulo, bloqueado, parcial }: {
   return (
     <button
       type="button"
-      onClick={bloqueado ? undefined : onClick}
-      disabled={bloqueado}
+      onClick={onClick}
       aria-pressed={activo}
       title={titulo}
-      className={`w-6 h-6 rounded-full inline-flex items-center justify-center transition-colors ${tono} ${
-        bloqueado ? 'cursor-default' : 'cursor-pointer'
-      }`}
+      className={`w-6 h-6 rounded-full inline-flex items-center justify-center transition-colors cursor-pointer ${tono}`}
     >
       <CheckCircle size={15} weight={activo || parcial ? 'fill' : 'regular'} />
     </button>
