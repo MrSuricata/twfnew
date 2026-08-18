@@ -215,7 +215,7 @@ describe('dropPatch', () => {
     expect(result).toBeNull()
   })
 
-  it('missing cntr → returns null', () => {
+  it('cntr vacío YA NO bloquea el drop (cambio 23/07 — antes documentaba el no-op)', () => {
     const op = makeOp('')
     const shipment = makeShipment('db-row-abc', [op])
     const event: CalendarEvent = {
@@ -225,7 +225,8 @@ describe('dropPatch', () => {
 
     const result = dropPatch(event, '2026-06-25', buildPatchedOperativas)
 
-    expect(result).toBeNull()
+    expect(result).not.toBeNull()
+    expect(result!.fields.operativas.find(o => (o.CNTR_OP || '') === '')!.SALIDA).toBe('2026-06-25')
   })
 
   it('undefined event → returns null', () => {
@@ -290,5 +291,35 @@ describe('dropPatchTruck', () => {
     expect(dropPatchTruck(truckEvent('eta_fisc', '2026-07-20'), '2026-07-22', [mkTruck()])).toBeNull()
     expect(dropPatchTruck(truckEvent('salida', '2026-07-12'), '2026-07-14', [mkTruck({ draft: true })])).toBeNull()
     expect(dropPatchTruck(truckEvent('salida', '2026-07-12', 'otro-id'), '2026-07-14', [mkTruck()])).toBeNull()
+  })
+})
+
+describe('dropPatch — carga SIN contenedor asignado (bug FCL-LATINART 23/07)', () => {
+  it('cntr vacío → patchea la operativa con CNTR_OP vacío (antes: no-op silencioso)', () => {
+    const op = makeOp('', { SALIDA: '2026-07-28', ETA_FISC: '2026-07-30' })
+    const shipment = makeShipment('db-row-latinart', [op])
+    const event = makeEvent('salida', '2026-07-28', '', shipment)
+
+    const result = dropPatch(event, '2026-07-29', buildPatchedOperativas)
+
+    expect(result).not.toBeNull()
+    expect(result!.dbId).toBe('db-row-latinart')
+    const patched = result!.fields.operativas.find(o => (o.CNTR_OP || '') === '')!
+    expect(patched.SALIDA).toBe('2026-07-29')
+    expect(patched.ETA_FISC).toBe('2026-07-30')
+    expect(result!.fields.operativas).toHaveLength(1)
+  })
+
+  it('cntr vacío + eta_fisc también funciona', () => {
+    const op = makeOp('', { SALIDA: '2026-07-28', ETA_FISC: '2026-07-30' })
+    const shipment = makeShipment('db-row-latinart2', [op])
+    const event = makeEvent('eta_fisc', '2026-07-30', '', shipment)
+
+    const result = dropPatch(event, '2026-08-01', buildPatchedOperativas)
+
+    expect(result).not.toBeNull()
+    const patched = result!.fields.operativas.find(o => (o.CNTR_OP || '') === '')!
+    expect(patched.ETA_FISC).toBe('2026-08-01')
+    expect(patched.SALIDA).toBe('2026-07-28')
   })
 })

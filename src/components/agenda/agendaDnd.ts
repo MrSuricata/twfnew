@@ -51,14 +51,17 @@ export function dropPatch(
   const dbId = event.shipment?.__dbId
   if (!dbId) return null
 
-  // Guard: must have a container identifier to patch the right operativas row
-  if (!event.cntr) return null
+  // cntr puede ser '' (carga SIN contenedor asignado — ej. alta web tipo
+  // FCL-LATINART): buildPatchedOperativas matchea la operativa con CNTR_OP
+  // vacío o la crea — mismo criterio que el click (quick-edit con cntr '').
+  // Antes un guard `!event.cntr` hacía el drop un no-op SILENCIOSO y esas
+  // cargas "no se dejaban mover" (bug 23/07).
 
   // No-op: dropped on the same day
   if (newDate === event.date) return null
 
   const field = event.type === 'salida' ? 'SALIDA' : 'ETA_FISC'
-  const operativas = buildPatchedOperativas(event.shipment, event.cntr, { [field]: newDate })
+  const operativas = buildPatchedOperativas(event.shipment, event.cntr || '', { [field]: newDate })
 
   return { dbId, fields: { operativas } }
 }
