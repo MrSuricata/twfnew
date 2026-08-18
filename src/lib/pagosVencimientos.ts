@@ -120,6 +120,9 @@ export interface PagoItem {
   empresa: string
   rubro: PagoRubro
   monto: number
+  /** Llegada de la carga (ISO). El vencimiento se DERIVA de acá, pero Brian
+   *  ordena por la llegada: es la fecha con la que piensa la semana. */
+  eta: string | null
   vence: string | null
   /** vence − hoy: negativo = vencido hace |n| · 0 = hoy · positivo = vence en n. null = sin ETA. */
   dias: number | null
@@ -259,7 +262,7 @@ export function buildPagoItems(dbShipments: DbShipment[], hoyISO: string): { ite
         docNumber: s.doc_number || '', contenedor: s.contenedor || '',
         linea: s.linea || '', terminal: s.terminal || '',
         empresa: empresaRubro(rubro, s),
-        rubro, monto, vence,
+        rubro, monto, eta: s.eta || null, vence,
         dias: vence ? diffDaysISO(hoyISO, vence) : null,
         pagadoAt, pagadoBy: s[PAGO_BY_KEYS[rubro]] || '',
         formaPago: fp.value, formaPagoOverride: fp.overridden,
@@ -275,6 +278,50 @@ export function buildPagoItems(dbShipments: DbShipment[], hoyISO: string): { ite
     return a.vence.localeCompare(b.vence) || a.ref.localeCompare(b.ref)
   })
   return { items, sinDatos }
+}
+
+/** Campos por los que se puede ordenar la lista de pagos. */
+export type OrdenPagoCampo = 'vence' | 'eta' | 'monto' | 'ref' | 'cliente'
+export type OrdenPagoDir = 'asc' | 'desc'
+
+export const ORDEN_PAGO_LABELS: Record<OrdenPagoCampo, string> = {
+  vence: 'Vencimiento',
+  eta: 'Llegada (ETA)',
+  monto: 'Monto',
+  ref: 'Ref',
+  cliente: 'Cliente',
+}
+
+/**
+ * Ordena los pagos sin mutar la lista original.
+ *
+ * Las cargas SIN el dato (sin ETA, sin vencimiento) van SIEMPRE al final, en
+ * las dos direcciones: al invertir el orden saltaban arriba de todo y tapaban
+ * justo lo que se estaba mirando. Empate → por ref, para que el orden sea
+ * estable entre renders.
+ */
+export function ordenarPagos(items: PagoItem[], campo: OrdenPagoCampo, dir: OrdenPagoDir): PagoItem[] {
+  const signo = dir === 'asc' ? 1 : -1
+  const texto = (i: PagoItem): string | null => {
+    if (campo === 'vence') return i.vence
+    if (campo === 'eta') return i.eta
+    if (campo === 'ref') return i.ref
+    if (campo === 'cliente') return i.cliente || null
+    return null
+  }
+  return [...items].sort((a, b) => {
+    if (campo === 'monto') {
+      if (a.monto !== b.monto) return (a.monto - b.monto) * signo
+      return a.ref.localeCompare(b.ref)
+    }
+    const x = texto(a)
+    const y = texto(b)
+    // Sin dato: al final SIEMPRE (no multiplica por el signo a propósito).
+    if (!x && !y) return a.ref.localeCompare(b.ref)
+    if (!x) return 1
+    if (!y) return -1
+    return x.localeCompare(y) * signo || a.ref.localeCompare(b.ref)
+  })
 }
 
 /** "¿Cuánto tengo que pagar hasta el X?": pendientes con vence ≤ fecha (vencidos incluidos). */

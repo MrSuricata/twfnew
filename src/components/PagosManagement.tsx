@@ -20,6 +20,7 @@ import {
   Warning,
   CaretDown,
   CaretRight,
+  CaretUp,
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import type { DbShipment } from '@/lib/operationsTypes'
@@ -42,6 +43,9 @@ import {
   type KpiBucket,
   agruparPorAcreedor,
   SIN_ACREEDOR,
+  ordenarPagos,
+  type OrdenPagoCampo,
+  type OrdenPagoDir,
 } from '@/lib/pagosVencimientos'
 import { fmtMoneyUY } from '@/lib/fichaFacturacionPdf'
 import { fmtDateDMY } from '@/lib/format'
@@ -62,6 +66,37 @@ interface PagosManagementProps {
 }
 
 type SubTab = 'pendientes' | 'acreedor' | 'pagados' | 'sin_datos'
+
+/** Encabezado que ordena. La flecha marca el campo activo y la dirección;
+ *  sin ella no se sabe por qué está ordenada la tabla. */
+function ThOrden({ campo, orden, onOrdenar, align = 'left', children }: {
+  campo: OrdenPagoCampo
+  orden: { campo: OrdenPagoCampo; dir: OrdenPagoDir }
+  onOrdenar: (c: OrdenPagoCampo) => void
+  align?: 'left' | 'right'
+  children: React.ReactNode
+}) {
+  const activo = orden.campo === campo
+  const asc = orden.dir === 'asc'
+  return (
+    <th className={`px-3 py-2 ${align === 'right' ? 'text-right' : 'text-left'}`}>
+      <button
+        type="button"
+        onClick={() => onOrdenar(campo)}
+        aria-sort={activo ? (asc ? 'ascending' : 'descending') : 'none'}
+        title={activo ? `Ordenado ${asc ? 'de menor a mayor' : 'de mayor a menor'} — click para invertir` : 'Ordenar por esta columna'}
+        className={`inline-flex items-center gap-1 uppercase transition-colors hover:text-foreground ${
+          activo ? 'text-foreground font-semibold' : ''
+        } ${align === 'right' ? 'flex-row-reverse' : ''}`}
+      >
+        {children}
+        {activo
+          ? (asc ? <CaretUp size={11} weight="bold" /> : <CaretDown size={11} weight="bold" />)
+          : <CaretUp size={11} className="opacity-0 group-hover:opacity-40" />}
+      </button>
+    </th>
+  )
+}
 
 /** Fecha de HOY en hora local (toISOString es UTC y a la noche ya es "mañana" en UY). */
 function todayISO(): string {
@@ -90,6 +125,14 @@ export default function PagosManagement({ dbShipments = [], onPatchShipment, onO
   const [terminalFilter, setTerminalFilter] = useState('all')
   const [fechaCorte, setFechaCorte] = useState(hoy)
   const [soloCorte, setSoloCorte] = useState(false)
+  // Orden de la lista. Default = vencimiento ascendente (lo que vence primero
+  // arriba), que es como venía. Brian pidió poder ordenar por LLEGADA: es la
+  // fecha con la que piensa la semana, no la del vencimiento derivado.
+  const [orden, setOrden] = useState<{ campo: OrdenPagoCampo; dir: OrdenPagoDir }>({ campo: 'vence', dir: 'asc' })
+  /** Click en el encabezado: mismo campo → invierte; campo nuevo → arranca
+   *  ascendente (fechas: lo más próximo arriba; monto: de menor a mayor). */
+  const ordenarPor = (campo: OrdenPagoCampo) =>
+    setOrden(o => (o.campo === campo ? { campo, dir: o.dir === 'asc' ? 'desc' : 'asc' } : { campo, dir: 'asc' }))
   // Editor de montos (dialog): carga abierta + drafts de los 4 rubros + forma de pago.
   // Selección para el pago en lote de la vista por acreedor.
   const [sel, setSel] = useState<Set<string>>(new Set())
@@ -125,6 +168,10 @@ export default function PagosManagement({ dbShipments = [], onPatchShipment, onO
       return true
     })
   }, [pendientes, rubroFilter, lineaFilter, terminalFilter, soloCorte, fechaCorte, search])
+
+  // El orden es SOLO de la tabla: los totales, el corte y el agrupado por
+  // acreedor se calculan sobre `filtered`, así reordenar no mueve ni un peso.
+  const ordenados = useMemo(() => ordenarPagos(filtered, orden.campo, orden.dir), [filtered, orden])
 
   // Agrupado por acreedor: así se paga en la práctica — una transferencia a
   // Repremar cubre varias cargas. Respeta los filtros de arriba.
@@ -214,6 +261,7 @@ export default function PagosManagement({ dbShipments = [], onPatchShipment, onO
         Empresa: i.empresa,
         Rubro: RUBRO_LABELS[i.rubro],
         'Monto USD': i.monto,
+        Llegada: i.eta ? fmtDateDMY(i.eta) : '',
         Vence: i.vence ? fmtDateDMY(i.vence) : 'sin ETA',
         Dias: i.dias ?? '',
         'Forma de pago': FORMA_PAGO_LABELS[i.formaPago],
@@ -344,18 +392,19 @@ export default function PagosManagement({ dbShipments = [], onPatchShipment, onO
                 <table className="w-full min-w-[720px] text-sm">
                   <thead className="sticky top-0 z-10 bg-muted text-xs uppercase text-muted-foreground">
                     <tr>
-                      <th className="px-3 py-2 text-left">Ref</th>
-                      <th className="px-3 py-2 text-left">Cliente</th>
+                      <ThOrden campo="ref" orden={orden} onOrdenar={ordenarPor}>Ref</ThOrden>
+                      <ThOrden campo="cliente" orden={orden} onOrdenar={ordenarPor}>Cliente</ThOrden>
                       <th className="px-3 py-2 text-left">Empresa</th>
                       <th className="px-3 py-2 text-left">Rubro</th>
-                      <th className="px-3 py-2 text-right">Monto USD</th>
-                      <th className="px-3 py-2 text-left">Vence</th>
+                      <ThOrden campo="monto" orden={orden} onOrdenar={ordenarPor} align="right">Monto USD</ThOrden>
+                      <ThOrden campo="eta" orden={orden} onOrdenar={ordenarPor}>Llegada</ThOrden>
+                      <ThOrden campo="vence" orden={orden} onOrdenar={ordenarPor}>Vence</ThOrden>
                       <th className="px-3 py-2 text-left">Días</th>
                       <th className="px-3 py-2 text-right">Acciones</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y">
-                    {filtered.map(it => (
+                    {ordenados.map(it => (
                       <tr key={`${it.id}-${it.rubro}`} className="hover:bg-muted/40 transition-colors">
                         <td className="px-3 py-2 font-medium whitespace-nowrap"><RefCell it={it} onOpenDetail={onOpenDetail} /></td>
                         <td className="px-3 py-2 max-w-[220px] truncate" title={it.cliente}>{it.cliente || '—'}</td>
@@ -369,7 +418,8 @@ export default function PagosManagement({ dbShipments = [], onPatchShipment, onO
                         </td>
                         <td className="px-3 py-2 whitespace-nowrap">{RUBRO_LABELS[it.rubro]}</td>
                         <td className="px-3 py-2 text-right tabular-nums font-medium">{fmtMoneyUY(it.monto)}</td>
-                        <td className="px-3 py-2 whitespace-nowrap">{it.vence ? fmtDateDMY(it.vence) : <span className="text-muted-foreground">sin ETA</span>}</td>
+                        <td className="px-3 py-2 whitespace-nowrap tabular-nums">{it.eta ? fmtDateDMY(it.eta) : <span className="text-muted-foreground">—</span>}</td>
+                        <td className="px-3 py-2 whitespace-nowrap tabular-nums">{it.vence ? fmtDateDMY(it.vence) : <span className="text-muted-foreground">sin ETA</span>}</td>
                         <td className="px-3 py-2 whitespace-nowrap"><DiasChip dias={it.dias} /></td>
                         <td className="px-3 py-2 text-right whitespace-nowrap">
                           <Button variant="ghost" size="sm" className="h-7 px-2 text-muted-foreground" onClick={() => { const s = byId.get(it.id); if (s) openEditor(s) }} title="Editar montos">

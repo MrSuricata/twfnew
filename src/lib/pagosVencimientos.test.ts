@@ -3,6 +3,7 @@ import {
   addDaysISO, diffDaysISO, esLineaOne, esLineaRepremar, deriveFormaPago,
   normalizeFormaPago, formaPagoEfectiva, venceRubro, buildPagoItems, corteHasta, kpisPagos,
   costoTerminalDefault, costoDevDefault, empresaRubro, agruparPorAcreedor, SIN_ACREEDOR,
+  ordenarPagos, type PagoItem,
 } from './pagosVencimientos'
 import type { DbShipment } from './operationsTypes'
 
@@ -314,5 +315,66 @@ describe('agruparPorAcreedor', () => {
 
   it('sin ítems no devuelve grupos', () => {
     expect(agruparPorAcreedor([])).toEqual([])
+  })
+})
+
+
+describe('ordenarPagos — la tabla se ordena, los totales no se tocan', () => {
+  const it_ = (over: Partial<PagoItem>): PagoItem => ({
+    id: over.ref || 'x', ref: 'A1', cliente: 'PERETTI', docNumber: '', contenedor: '',
+    linea: 'ONE', terminal: 'TCP', empresa: 'ONE', rubro: 'flete', monto: 100,
+    eta: '2026-07-10', vence: '2026-08-14', dias: 5, pagadoAt: null, pagadoBy: '',
+    formaPago: 'cuenta corriente', formaPagoOverride: false, estado: 'pendiente',
+    ...over,
+  })
+
+  const refs = (l: PagoItem[]) => l.map(i => i.ref)
+
+  it('por ETA: ascendente lo que llega primero, descendente al revés', () => {
+    const l = [
+      it_({ ref: 'A2', eta: '2026-07-20' }),
+      it_({ ref: 'A1', eta: '2026-07-05' }),
+      it_({ ref: 'A3', eta: '2026-08-01' }),
+    ]
+    expect(refs(ordenarPagos(l, 'eta', 'asc'))).toEqual(['A1', 'A2', 'A3'])
+    expect(refs(ordenarPagos(l, 'eta', 'desc'))).toEqual(['A3', 'A2', 'A1'])
+  })
+
+  it('la carga SIN ETA queda al final en las dos direcciones', () => {
+    // Al invertir, un null saltaba arriba de todo y tapaba lo que se miraba.
+    const l = [
+      it_({ ref: 'SIN', eta: null }),
+      it_({ ref: 'A1', eta: '2026-07-05' }),
+      it_({ ref: 'A2', eta: '2026-07-20' }),
+    ]
+    expect(refs(ordenarPagos(l, 'eta', 'asc')).at(-1)).toBe('SIN')
+    expect(refs(ordenarPagos(l, 'eta', 'desc')).at(-1)).toBe('SIN')
+  })
+
+  it('por monto: de menor a mayor y al revés', () => {
+    const l = [it_({ ref: 'A1', monto: 500 }), it_({ ref: 'A2', monto: 100 }), it_({ ref: 'A3', monto: 900 })]
+    expect(refs(ordenarPagos(l, 'monto', 'asc'))).toEqual(['A2', 'A1', 'A3'])
+    expect(refs(ordenarPagos(l, 'monto', 'desc'))).toEqual(['A3', 'A1', 'A2'])
+  })
+
+  it('por vencimiento, con los sin-fecha al final', () => {
+    const l = [
+      it_({ ref: 'A2', vence: '2026-08-20' }),
+      it_({ ref: 'SIN', vence: null }),
+      it_({ ref: 'A1', vence: '2026-08-01' }),
+    ]
+    expect(refs(ordenarPagos(l, 'vence', 'asc'))).toEqual(['A1', 'A2', 'SIN'])
+  })
+
+  it('empate → por ref, así el orden no baila entre renders', () => {
+    const l = [it_({ ref: 'A9', eta: '2026-07-05' }), it_({ ref: 'A3', eta: '2026-07-05' })]
+    expect(refs(ordenarPagos(l, 'eta', 'asc'))).toEqual(['A3', 'A9'])
+    expect(refs(ordenarPagos(l, 'eta', 'desc'))).toEqual(['A3', 'A9'])
+  })
+
+  it('no muta la lista original', () => {
+    const l = [it_({ ref: 'A2', eta: '2026-07-20' }), it_({ ref: 'A1', eta: '2026-07-05' })]
+    ordenarPagos(l, 'eta', 'asc')
+    expect(refs(l)).toEqual(['A2', 'A1'])
   })
 })
