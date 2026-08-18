@@ -146,6 +146,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return handleSeguimientosLog(req, res, db, payload)
       case 'ref-notas':
         return handleRefNotas(req, res, db, payload)
+      case 'deposito-actas':
+        return handleDepositoActas(req, res, db, payload)
       default:
         return res.status(404).json({ error: `Unknown entity: ${entity}` })
     }
@@ -2471,6 +2473,73 @@ async function handleSeguimientosLog(req: VercelRequest, res: VercelResponse, db
     const { error } = await db.from('seguimientos_log').insert(row)
     if (error) throw error
     return res.status(200).json({ saved: true })
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' })
+}
+
+// ── Actas de deposito (EN DEPOSITO) ──────────────────────────────────
+// GET  /api/data/deposito-actas?ref=A8025  → actas de esa carga
+// GET  /api/data/deposito-actas            → las ultimas (panel de campo)
+// POST /api/data/deposito-actas            → agrega una
+//
+// Es un LOG por (ref, contenedor): no se edita ni se borra. Cada trasiego deja
+// su acta; el historial ES el dato (pedido de Brian 18/08: "poder cargar
+// diferentes dias y dejar registro por cada trasiego").
+// El usuario lo pone el server desde el token, nunca el cliente.
+
+async function handleDepositoActas(req: VercelRequest, res: VercelResponse, db: any, payload: TokenPayload | null) {
+  if (req.method === 'GET') {
+    const ref = (req.query.ref as string || '').trim().toUpperCase()
+    const limitePedido = Number(req.query.limit)
+    const limite = Number.isFinite(limitePedido) && limitePedido > 0
+      ? Math.min(Math.floor(limitePedido), 5000)
+      : 1000
+    let q = db.from('deposito_actas').select('*').order('created_at', { ascending: false }).limit(limite)
+    if (ref) q = q.eq('ref', ref)
+    const { data, error } = await q
+    if (error) throw error
+    // Scoping por cliente: admin acotado solo ve las actas de SUS cargas.
+    const allowed = await allowedRefsForPayload(db, payload)
+    const truncado = (data || []).length >= limite
+    if (truncado) {
+      console.warn(`[deposito-actas] listado truncado en ${limite}: hay actas que no se estan devolviendo`)
+    }
+    return res.status(200).json({
+      actas: filterByAllowedRef(data || [], allowed, (r: any) => r.ref),
+      truncado,
+    })
+  }
+
+  if (req.method === 'POST') {
+    const v = validate(z.object({
+      ref: z.string().min(1).max(40),
+      // UN contenedor, nunca la lista de la planilla. '' = toda la carga.
+      contenedor: z.string().max(40).optional(),
+      fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      // jsonb libre de booleanos: sumar un check no obliga a migrar la tabla.
+      checks: z.record(z.string(), z.boolean()).optional(),
+      comentario: z.string().max(4000).optional(),
+    }), req.body)
+    if (!v.ok) return res.status(400).json({ error: v.error })
+    const { ref, contenedor, fecha, checks, comentario } = v.data
+
+    // Scoping tambien al escribir: no se falsifican actas de cargas ajenas.
+    const allowed = await allowedRefsForPayload(db, payload)
+    if (allowed && !allowed.has(refOf(ref))) return res.status(404).json({ error: 'Carga no encontrada' })
+
+    const row = {
+      ref: ref.trim().toUpperCase(),
+      contenedor: (contenedor || '').trim().toUpperCase(),
+      ...(fecha ? { fecha } : {}),
+      checks: checks || {},
+      comentario: (comentario || '').trim(),
+      usuario: auditUser(payload as { user?: string; name?: string } | null),
+    }
+    const { data, error } = await db.from('deposito_actas').insert(row).select().single()
+    if (error) throw error
+    logAudit(db, payload, 'create', 'deposito_acta', row.ref, { contenedor: row.contenedor })
+    return res.status(200).json({ acta: data })
   }
 
   return res.status(405).json({ error: 'Method not allowed' })

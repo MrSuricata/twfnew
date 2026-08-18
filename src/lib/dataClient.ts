@@ -962,3 +962,42 @@ export async function loadAdminData(): Promise<AdminData> {
     syncedAt: shipmentsRes.syncedAt,
   }
 }
+
+// ─── Actas de depósito (EN DEPÓSITO) ─────────────────────────────────
+// Log por (ref, contenedor): cada trasiego deja su acta, no se pisa nada.
+
+/** Trae las actas (todas o de una ref). Más nuevas primero. */
+export async function fetchDepositoActas(
+  ref?: string,
+  opts: { limit?: number } = {},
+): Promise<{ actas: Record<string, unknown>[]; truncado: boolean }> {
+  const p = new URLSearchParams()
+  if (ref) p.set('ref', ref)
+  if (opts.limit) p.set('limit', String(opts.limit))
+  const q = p.toString()
+  const res = await authFetch(`/api/data/deposito-actas${q ? `?${q}` : ''}`)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const data = await res.json()
+  return { actas: data.actas || [], truncado: !!data.truncado }
+}
+
+/** Guarda un acta nueva. El usuario lo estampa el server desde el token. */
+export async function saveDepositoActa(acta: {
+  ref: string
+  contenedor?: string
+  fecha?: string
+  checks?: Record<string, boolean>
+  comentario?: string
+}): Promise<Record<string, unknown>> {
+  const res = await authFetch('/api/data/deposito-actas', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(acta),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
+  const data = await res.json()
+  return data.acta || {}
+}
