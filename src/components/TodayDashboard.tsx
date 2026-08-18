@@ -16,6 +16,7 @@ import {
   CalendarBlank,
   CircleNotch,
   Check,
+  Coins,
 } from '@phosphor-icons/react'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
 import {
@@ -32,6 +33,7 @@ import ContainerQuickEdit from './operations/ContainerQuickEdit'
 import { deriveKnownTransportes, deriveKnownValues, DEPOSITOS_UY, type DbShipment } from '@/lib/operationsTypes'
 import { faltantesUrgentes, resumenFaltantes, FALTANTES_DIAS_COORDINACION, type FaltanteUrgente, type CampoFaltante } from '@/lib/datosFaltantes'
 import { buildFaltantePatch, columnaDeCampo, FALTANTE_INPUTS } from '@/lib/faltantesEdit'
+import { esCargaSinDatosPago } from '@/lib/pagosVencimientos'
 import type { CatalogClient } from '@/lib/clientCatalog'
 import type { ShipmentDocument, OperativeReport, OriginPhoto } from '@/lib/quotationTypes'
 import type { Truck as TruckType, TruckLoad } from '@/lib/truckTypes'
@@ -73,6 +75,18 @@ function todayIso(): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }
 
+/** Puertos donde TWF recibe carga — filtro de la tarjeta de incompletas.
+ *  "Sin destino" es su propio grupo: esas cargas no matchean ningún país y
+ *  son justo las que necesitan que les completen el dato. */
+const DESTINOS_FILTRO: { id: string; label: string }[] = [
+  { id: 'all', label: 'Todos' },
+  { id: 'UY', label: 'Montevideo' },
+  { id: 'AR', label: 'Buenos Aires' },
+  { id: 'CL', label: 'Chile' },
+  { id: 'OTRO', label: 'Otros' },
+  { id: 'SIN', label: 'Sin destino' },
+]
+
 /** "quién lo marcó" corto para el tooltip: parte antes de la @ si es email. */
 function shortWho(by: string | undefined): string {
   return String(by || '').split('@')[0]
@@ -98,6 +112,8 @@ interface TodayDashboardProps {
   onOpenDetail?: (ref: string) => void
   /** Catálogo de clientes — canonicaliza el cliente tipeado en el editor de faltantes. */
   clients?: CatalogClient[]
+  /** Navega a otra pestaña del dashboard (el contador de montos abre Pagos). */
+  onOpenTab?: (tab: string) => void
 }
 
 /**
@@ -120,6 +136,7 @@ export default function TodayDashboard({
   onPatchShipment,
   onOpenDetail,
   clients = [],
+  onOpenTab,
 }: TodayDashboardProps) {
   const [selected, setSelected] = useState<ParsedShipment | null>(null)
   const [open, setOpen] = useState(false)
@@ -246,9 +263,13 @@ export default function TodayDashboard({
     [shipments]
   )
 
-  // Agentes ya usados → sugerencias del input Agente del editor de faltantes.
+  // Agentes y líneas ya usados → sugerencias de los inputs del editor.
   const knownAgentes = useMemo(
     () => deriveKnownValues((dbShipments || []).map(s => s.agente)),
+    [dbShipments]
+  )
+  const knownLineas = useMemo(
+    () => deriveKnownValues((dbShipments || []).map(s => s.linea)),
     [dbShipments]
   )
 
@@ -257,21 +278,48 @@ export default function TodayDashboard({
 
   // Campos pendientes URGENTES: llegan dentro de la semana (o ya llegaron sin
   // salida) con datos faltantes según su etapa — la webapp repartiendo tareas.
-  const incompletas = useMemo(() => {
+  const incompletasTodas = useMemo(() => {
     const hoy = new Date()
     return faltantesUrgentes(
       (dbShipments || [])
-        // Por ahora SOLO Uruguay (Brian 18/08): el circuito de completar datos
-        // arranca por MVD; los demás países se desbloquean después.
-        .filter(s => !s.archived && (s.dest_country || '').trim().toUpperCase() === 'UY')
+        .filter(s => !s.archived)
         .map(s => ({
           dbId: s.id, ref: s.ref, mode: s.mode, pais: s.dest_country, cliente: s.cliente,
-          eta: s.eta, etd: s.etd, buque: s.buque, docNumber: s.doc_number, cntr: s.contenedor,
+          eta: s.eta, etd: s.etd, buque: s.buque, linea: s.linea, docNumber: s.doc_number,
+          cntr: s.contenedor,
           pkgs: s.pkgs, kg: s.kg, m3: s.m3, agente: s.agente, deposito: s.deposito,
           operativa: s.operativa, transporte: s.transporte, fiscal: s.fiscal, salida: s.salida,
         })),
       hoy,
     )
+  }, [dbShipments])
+
+  // Filtro por puerto de llegada (Brian 18/08): la tarjeta arrancó solo con
+  // Uruguay; ahora se elige el destino. "Sin destino" es su propio grupo — si
+  // no, esas cargas quedan invisibles bajo cualquier filtro y son justo las
+  // que necesitan que les completen el país.
+  const [destinoFiltro, setDestinoFiltro] = useState<string>('UY')
+  const paisDe = (p: string | null | undefined): string => {
+    const v = String(p || '').trim().toUpperCase()
+    return v === 'UY' || v === 'AR' || v === 'CL' || v === 'OTRO' ? v : 'SIN'
+  }
+  const incompletasPorDestino = useMemo(() => {
+    const m: Record<string, number> = { all: incompletasTodas.length }
+    for (const u of incompletasTodas) m[paisDe(u.carga.pais)] = (m[paisDe(u.carga.pais)] || 0) + 1
+    return m
+  }, [incompletasTodas])
+  const incompletas = useMemo(
+    () => destinoFiltro === 'all' ? incompletasTodas : incompletasTodas.filter(u => paisDe(u.carga.pais) === destinoFiltro),
+    [incompletasTodas, destinoFiltro]
+  )
+
+  // Cargas sin NINGÚN monto cargado — mismo criterio que la pestaña Pagos
+  // (esCargaSinDatosPago: FCL viva, sin Chile, ETA no más vieja de 60 días).
+  // Va como contador que lleva a Pagos, no como campo de cada fila: son 60 de
+  // 76 cargas y taparían lo operativo, y el criterio tiene que ser UNO solo.
+  const sinMontos = useMemo(() => {
+    const hoyIso = todayIso()
+    return (dbShipments || []).filter(s => esCargaSinDatosPago(s, hoyIso)).length
   }, [dbShipments])
 
   // Carga inicial en curso y todavía sin nada que mostrar → estado "Cargando"
@@ -410,7 +458,7 @@ export default function TodayDashboard({
       )}
 
       {/* ── Llegan con datos incompletos ─────────────────── */}
-      {incompletas.length > 0 && (
+      {incompletasTodas.length > 0 && (
         <Card className="accent-top overflow-hidden bg-amber-500/[0.04] border-amber-500/25" style={{ ['--bar-color' as any]: 'rgb(245 158 11)' }}>
           <CardContent className="pt-5 pb-4">
             <div className="flex items-center gap-2.5 mb-1">
@@ -424,10 +472,56 @@ export default function TodayDashboard({
                 {incompletas.length}
               </span>
             </div>
-            <p className="text-xs text-muted-foreground mb-3">
+            <p className="text-xs text-muted-foreground mb-2.5">
               Llegan dentro de {FALTANTES_DIAS_COORDINACION} días (o ya llegaron sin salida) y les faltan campos según su etapa — tocá una carga y completá los campos acá mismo.
             </p>
+            <div className="flex flex-wrap items-center gap-1.5 mb-3">
+              {DESTINOS_FILTRO.map(d => {
+                const n = incompletasPorDestino[d.id] || 0
+                // Un destino sin nada no ocupa lugar, salvo que sea el elegido
+                // (si no, tocarlo lo haría desaparecer) o el "Todos".
+                if (n === 0 && d.id !== destinoFiltro && d.id !== 'all') return null
+                const activo = destinoFiltro === d.id
+                return (
+                  <button
+                    key={d.id}
+                    type="button"
+                    onClick={() => setDestinoFiltro(d.id)}
+                    aria-pressed={activo}
+                    className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-xs font-semibold transition-colors ${
+                      activo
+                        ? 'bg-amber-500 text-white'
+                        : 'bg-background/60 text-muted-foreground border border-border hover:bg-amber-500/10'
+                    }`}
+                  >
+                    {d.label}
+                    <span className={activo ? 'opacity-80' : 'opacity-60'}>{n}</span>
+                  </button>
+                )
+              })}
+              {sinMontos > 0 && (
+                // Flete y locales NO van como campo de cada fila (Brian 18/08):
+                // son 60 de 76 cargas y taparían lo operativo, y Pagos ya tiene
+                // el criterio fino (sin Chile, sin LCL, sin ETA vieja de 60d).
+                // Un solo lugar para el dato, un solo criterio.
+                <button
+                  type="button"
+                  onClick={() => onOpenTab?.('pagos')}
+                  className="ml-auto inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-xs font-semibold text-muted-foreground border border-dashed border-border hover:bg-muted transition-colors"
+                  title="Cargas sin flete ni locales cargados — se completan en la pestaña Pagos"
+                >
+                  <Coins size={13} weight="bold" />
+                  {sinMontos} sin montos
+                  <CaretRight size={11} weight="bold" />
+                </button>
+              )}
+            </div>
             <div className="space-y-1">
+              {incompletas.length === 0 && (
+                <p className="px-2.5 py-3 text-xs text-muted-foreground">
+                  Nada incompleto en este destino — probá otro filtro.
+                </p>
+              )}
               {incompletas.slice(0, 10).map(u => {
                 // dbId como clave: la REF puede estar duplicada (el alta lo
                 // permite con confirmación) y duplicaría keys/expansión.
@@ -443,6 +537,7 @@ export default function TodayDashboard({
                     onOpenDetail={onOpenDetail}
                     transportes={knownTransportes}
                     agentes={knownAgentes}
+                    lineas={knownLineas}
                     clientes={clients}
                   />
                 )
@@ -897,7 +992,7 @@ function AvisoChip({ aviso, label, onToggle }: { aviso?: RefCheckStep; label: st
 // visibles como chips ✓ mientras la fila siga desplegada (si desaparecieran al
 // instante, el layout se corre bajo el puntero y se comen clicks); cuando no
 // falta nada, la fila sale sola de la tarjeta.
-function IncompletaRow({ u, dbRow, expanded, onToggle, onPatchShipment, onOpenDetail, transportes, agentes, clientes }: {
+function IncompletaRow({ u, dbRow, expanded, onToggle, onPatchShipment, onOpenDetail, transportes, agentes, lineas, clientes }: {
   u: FaltanteUrgente
   dbRow?: DbShipment
   expanded: boolean
@@ -906,6 +1001,7 @@ function IncompletaRow({ u, dbRow, expanded, onToggle, onPatchShipment, onOpenDe
   onOpenDetail?: (ref: string) => void
   transportes: string[]
   agentes: string[]
+  lineas: string[]
   clientes: CatalogClient[]
 }) {
   // Snapshot de los faltantes al ABRIR la fila: el panel muestra esa lista fija
@@ -983,6 +1079,7 @@ function IncompletaRow({ u, dbRow, expanded, onToggle, onPatchShipment, onOpenDe
                   onPatchShipment={onPatchShipment}
                   transportes={transportes}
                   agentes={agentes}
+                  lineas={lineas}
                   clientes={clientes}
                 />
               )
@@ -1010,13 +1107,14 @@ function IncompletaRow({ u, dbRow, expanded, onToggle, onPatchShipment, onOpenDe
 // el array `operativas`, reponer el snapshot completo pisaría commits
 // posteriores de la misma fila (misma razón por la que el revert de App es
 // granular por clave — con el array, la clave ES el conjunto entero).
-function CampoFaltanteInput({ campo, etiqueta, dbRow, onPatchShipment, transportes, agentes, clientes }: {
+function CampoFaltanteInput({ campo, etiqueta, dbRow, onPatchShipment, transportes, agentes, lineas, clientes }: {
   campo: CampoFaltante['campo']
   etiqueta: string
   dbRow: DbShipment
   onPatchShipment: (id: string, fields: Record<string, unknown>) => void
   transportes: string[]
   agentes: string[]
+  lineas: string[]
   clientes: CatalogClient[]
 }) {
   const [draft, setDraft] = useState('')
@@ -1048,6 +1146,7 @@ function CampoFaltanteInput({ campo, etiqueta, dbRow, onPatchShipment, transport
   const listId = `dl-faltante-${campo}-${dbRow.id}`
   const sugerencias = spec.sugerencias === 'transportes' ? transportes
     : spec.sugerencias === 'agentes' ? agentes
+    : spec.sugerencias === 'lineas' ? lineas
     : spec.sugerencias === 'depositos' ? DEPOSITOS_UY
     : []
 

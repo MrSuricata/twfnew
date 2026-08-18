@@ -504,6 +504,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
               onPatchShipment={onPatchShipment}
               onOpenDetail={onOpenDetail}
               clients={clients}
+              onOpenTab={setActiveTab}
             />
           </TabsContent>
 

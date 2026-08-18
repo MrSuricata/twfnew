@@ -7,7 +7,7 @@
  * "incompleta", es normal. Cuanto más cerca la llegada, más exigente:
  *
  *   Siempre (activa)      → Cliente · País destino · ETA
- *   Embarcada (ETD pasó)  → Buque · BL · Contenedor (solo FCL)
+ *   Embarcada (ETD pasó)  → Buque · Línea · BL · Contenedor (solo FCL)
  *   Llega en ≤14 días     → Bultos · Kg · M³ · Agente (quién factura)
  *   Llega en ≤7 / llegó   → Depósito · Operativa · Transporte · Fiscal
  *                            (coordinación: solo cargas por Uruguay)
@@ -26,6 +26,9 @@ export interface CargaCampos {
   eta?: string | null
   etd?: string | null
   buque?: string | null
+  /** Naviera. No es cosmética: de acá sale la forma de pago (deriveFormaPago)
+   *  y por lo tanto el vencimiento de flete y locales, y el link de tracking. */
+  linea?: string | null
   docNumber?: string | null
   cntr?: string | null
   pkgs?: number | null
@@ -78,6 +81,7 @@ export function datosFaltantes(c: CargaCampos, hoy: Date): CampoFaltante[] {
   // Embarcada: el viaje existe, estos datos ya viajaron en el pre-alerta.
   if (embarcada || ventanaChecks) {
     if (vacio(c.buque)) falta('buque', 'Buque')
+    if (vacio(c.linea)) falta('linea', 'Línea')
     if (vacio(c.docNumber)) falta('docNumber', 'BL')
     if (m === 'fcl' && vacio(c.cntr)) falta('cntr', 'Contenedor')
   }
