@@ -2394,14 +2394,35 @@ async function handleSeguimientosLog(req: VercelRequest, res: VercelResponse, db
     // La ref se guarda SIEMPRE en mayúsculas (ver POST) → normalizar el filtro,
     // si no una carga dada de alta en minúsculas nunca encuentra su historial.
     const ref = (req.query.ref as string || '').trim().toUpperCase()
-    let q = db.from('seguimientos_log').select('*').order('created_at', { ascending: false }).limit(500)
+    // El tope estaba fijo en 500 y se aplicaba EN SILENCIO. Para el historial
+    // de UNA carga sobra, pero la pestaña Historial pide el global: con ~90
+    // cargas en viaje y un update semanal por carga son unas 5 semanas, y a
+    // partir de ahí lo más viejo desaparecía sin decir nada. Ahora se acota
+    // por PERÍODO (?desde=YYYY-MM-DD) y, si igual se llega al tope, se avisa.
+    const desde = (req.query.desde as string || '').trim()
+    const limitePedido = Number(req.query.limit)
+    const limite = Number.isFinite(limitePedido) && limitePedido > 0
+      ? Math.min(Math.floor(limitePedido), 5000)
+      : 500
+    let q = db.from('seguimientos_log').select('*').order('created_at', { ascending: false }).limit(limite)
     if (ref) q = q.eq('ref', ref)
+    // Uruguay es UTC-3 fijo (sin horario de verano desde 2015): el corte se
+    // hace en la medianoche LOCAL, para que "últimos 30 días" no arrastre las
+    // últimas horas del día anterior.
+    if (/^\d{4}-\d{2}-\d{2}$/.test(desde)) q = q.gte('created_at', `${desde}T00:00:00-03:00`)
     const { data, error } = await q
     if (error) throw error
     // Scoping por cliente: admin acotado solo ve historial de SUS cargas
     // (mismo patrón que ref-checks / audit-log).
     const allowed = await allowedRefsForPayload(db, payload)
-    return res.status(200).json({ rows: filterByAllowedRef(data || [], allowed, (r: any) => r.ref) })
+    const truncado = (data || []).length >= limite
+    if (truncado) {
+      console.warn(`[seguimientos-log] listado truncado en ${limite}: hay filas que no se están devolviendo`)
+    }
+    return res.status(200).json({
+      rows: filterByAllowedRef(data || [], allowed, (r: any) => r.ref),
+      truncado,
+    })
   }
 
   if (req.method === 'POST') {

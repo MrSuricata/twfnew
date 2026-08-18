@@ -21,6 +21,8 @@ import { trackingCarrier } from '@/lib/trackingLinea'
 import { cambiosDeBuque, detectarTrasbordo, lineaDeTiempo, type CambioBuque, type AuditRow } from '@/lib/trasbordo'
 import { fetchAuditLog, fetchSeguimientosLog, postSeguimientoLog } from '@/lib/dataClient'
 import { fmtDateDMY } from '@/lib/format'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import HistorialSeguimientos from '@/components/HistorialSeguimientos'
 
 const hoyIso = (): string => {
   const d = new Date()
@@ -143,6 +145,21 @@ export default function SeguimientosBoard({ dbShipments, onPatchShipment, onOpen
     // OVERLAY (el board no se desmonta), así que sin esto el mapa quedaba viejo.
   }, [dbShipments])
 
+  // Cola (el trabajo de hoy) vs Historial (lo que ya salió).
+  const [tab, setTab] = useState('cola')
+  /** REF → cliente, para que el historial global pueda mostrar de quién es
+   *  cada carga: `seguimientos_log` guarda la ref, no el cliente. */
+  const clientePorRef = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const s of dbShipments || []) {
+      const k = String(s.ref || '').trim().toUpperCase()
+      if (k && !m.has(k)) m.set(k, String(s.cliente || '').trim())
+    }
+    return m
+  }, [dbShipments])
+  /** Sube cada vez que la cola registra algo: el historial se refresca solo. */
+  const [recargarToken, setRecargarToken] = useState(0)
+
   // Historial expandible por ref (fetch perezoso, cache en memoria del tab).
   const [abierto, setAbierto] = useState<string | null>(null)
   const [historial, setHistorial] = useState<Record<string, LogRow[] | 'cargando'>>({})
@@ -152,18 +169,19 @@ export default function SeguimientosBoard({ dbShipments, onPatchShipment, onOpen
     if (!historial[ref]) {
       setHistorial(h => ({ ...h, [ref]: 'cargando' }))
       fetchSeguimientosLog(ref)
-        .then(rows => setHistorial(h => ({ ...h, [ref]: rows as unknown as LogRow[] })))
+        .then(({ rows }) => setHistorial(h => ({ ...h, [ref]: rows as unknown as LogRow[] })))
         .catch(() => setHistorial(h => ({ ...h, [ref]: [] })))
     }
   }
   const invalidarHistorial = (ref: string) => {
     setHistorial(h => { const n = { ...h }; delete n[ref]; return n })
+    setRecargarToken(n => n + 1)   // el historial global también quedó viejo
     // Si el acordeón está abierto, recargarlo: borrar la entrada dejaba el
     // panel en blanco (ni "Cargando…" ni "Sin historial") hasta cerrarlo.
     if (abierto === ref) {
       setHistorial(h => ({ ...h, [ref]: 'cargando' }))
       fetchSeguimientosLog(ref)
-        .then(rows => setHistorial(h => ({ ...h, [ref]: rows as unknown as LogRow[] })))
+        .then(({ rows }) => setHistorial(h => ({ ...h, [ref]: rows as unknown as LogRow[] })))
         .catch(() => setHistorial(h => ({ ...h, [ref]: [] })))
     }
   }
@@ -516,103 +534,120 @@ export default function SeguimientosBoard({ dbShipments, onPatchShipment, onOpen
         )}
       </div>
 
-      {cola.pendientes.length === 0 && (
-        <div className="flex items-center gap-2.5 rounded-lg border border-emerald-500/25 bg-emerald-500/[0.05] px-4 py-2.5">
-          <CheckCircle size={18} weight="fill" className="text-emerald-600 shrink-0" />
-          <p className="text-sm text-emerald-700">
-            {enviadosHoy > 0
-              ? <><b>¡Terminaste!</b> {enviadosHoy} update{enviadosHoy === 1 ? '' : 's'} enviado{enviadosHoy === 1 ? '' : 's'} hoy — todos los seguimientos al día.</>
-              : <><b>¡Felicitaciones!</b> Todos los seguimientos están al día — ninguna carga en viaje lleva 7 días sin update.</>}
-          </p>
-        </div>
-      )}
+      <Tabs value={tab} onValueChange={setTab}>
+        <TabsList className="tabs-list-underline">
+          <TabsTrigger value="cola" className="tab-underline">Cola</TabsTrigger>
+          <TabsTrigger value="historial" className="tab-underline">Historial</TabsTrigger>
+        </TabsList>
 
-      {secciones.map(sec => (
-        <div key={sec.destino} className="space-y-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-            {sec.destino} <span className="font-normal">({sec.viajes.reduce((a, g) => a + g.ops.length, 0) + sec.sinBuque.length})</span>
-          </h2>
-
-          {sec.viajes.map((g, gi) => {
-            const filas = g.ops.map(o => o.fila)
-            const dbIds = filas.map(f => f.carga.dbId).filter((x): x is string => !!x)
-            // Clave SIN etaMin: si un refetch (co-edición en vivo) corre la ETA
-            // del viaje mientras se tipea, la Card no se remonta ni pierde el
-            // draft/foco. El índice separa dos viajes del mismo buque.
-            const draftKey = `buque-${sec.destino}-${g.buque}-${g.sinEta ? 'sf' : gi}`
-            const etaComun = !g.sinEta && g.etaMin === g.etaMax ? g.etaMin : ''
-            const base = nombreBuqueBase(g.buque)
-            return (
-              <Card key={draftKey} className="overflow-hidden">
-                <CardContent className="pt-3.5 pb-3">
-                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mb-1.5">
-                    <Boat size={17} weight="fill" className="text-primary/70 shrink-0" />
-                    <span className="font-semibold text-sm shrink-0">{g.buque}</span>
-                    <span className="text-xs text-muted-foreground shrink-0">{filas.length} carga{filas.length === 1 ? '' : 's'}</span>
-                    {base && (
-                      <a
-                        href={`https://www.marinetraffic.com/en/ais/index/search/all?keyword=${encodeURIComponent(base)}`}
-                        target="_blank" rel="noreferrer"
-                        className="inline-flex items-center gap-1 text-xs text-primary hover:underline shrink-0"
-                        title="Ver posición en MarineTraffic"
-                      >
-                        <MapPin size={13} /> ver posición
-                      </a>
-                    )}
-                    <label className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
-                      ETA del buque
-                      <input
-                        type="date"
-                        value={etaDrafts[draftKey] ?? etaComun}
-                        disabled={!editable}
-                        onChange={e => setEtaDrafts(d => ({ ...d, [draftKey]: e.target.value }))}
-                        onBlur={() => commitDraft(draftKey, nueva => commitEtaBuque(g.buque, dbIds, nueva))}
-                        onKeyDown={e => { if (e.key === 'Enter') commitDraft(draftKey, nueva => commitEtaBuque(g.buque, dbIds, nueva)) }}
-                        className="h-8 rounded-md border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-50"
-                      />
-                    </label>
-                  </div>
-                  {!etaComun && !g.sinEta && (
-                    <p className="text-[11px] text-muted-foreground mb-1">
-                      ETAs distintas en el viaje ({fmtDateDMY(g.etaMin)} – {fmtDateDMY(g.etaMax)}) — poner una acá las unifica.
-                    </p>
-                  )}
-                  <div className="divide-y divide-border/60 border-t border-border/60">
-                    {filas.map(f => filaRow(f, false))}
-                  </div>
-                  {filas.length > 1 && (
-                    <div className="flex justify-end mt-2">
-                      <button
-                        type="button"
-                        disabled={!editable}
-                        onClick={() => marcarEnviadoGrupo(g.buque, filas)}
-                        className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-border text-xs font-semibold text-foreground/80 hover:bg-muted disabled:opacity-50 transition-colors"
-                      >
-                        <Checks size={15} weight="bold" /> Enviado a las {filas.length} de este buque
-                      </button>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )
-          })}
-
-          {sec.sinBuque.length > 0 && (
-            <Card className="overflow-hidden">
-              <CardContent className="pt-3.5 pb-3">
-                <div className="flex items-center gap-2 mb-1.5">
-                  <Boat size={17} className="text-muted-foreground/60 shrink-0" />
-                  <span className="font-semibold text-sm text-muted-foreground">Sin buque asignado</span>
-                  <span className="text-xs text-muted-foreground">{sec.sinBuque.length}</span>
-                </div>
-                <div className="divide-y divide-border/60 border-t border-border/60">
-                  {sec.sinBuque.map(f => filaRow(f, true))}
-                </div>
-              </CardContent>
-            </Card>
+        <TabsContent value="cola" className="space-y-5 mt-4">
+          {cola.pendientes.length === 0 && (
+            <div className="flex items-center gap-2.5 rounded-lg border border-emerald-500/25 bg-emerald-500/[0.05] px-4 py-2.5">
+              <CheckCircle size={18} weight="fill" className="text-emerald-600 shrink-0" />
+              <p className="text-sm text-emerald-700">
+                {enviadosHoy > 0
+                  ? <><b>¡Terminaste!</b> {enviadosHoy} update{enviadosHoy === 1 ? '' : 's'} enviado{enviadosHoy === 1 ? '' : 's'} hoy — todos los seguimientos al día.</>
+                  : <><b>¡Felicitaciones!</b> Todos los seguimientos están al día — ninguna carga en viaje lleva 7 días sin update.</>}
+              </p>
+            </div>
           )}
-        </div>
-      ))}
+
+          {secciones.map(sec => (
+            <div key={sec.destino} className="space-y-3">
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+                {sec.destino} <span className="font-normal">({sec.viajes.reduce((a, g) => a + g.ops.length, 0) + sec.sinBuque.length})</span>
+              </h2>
+
+              {sec.viajes.map((g, gi) => {
+                const filas = g.ops.map(o => o.fila)
+                const dbIds = filas.map(f => f.carga.dbId).filter((x): x is string => !!x)
+                // Clave SIN etaMin: si un refetch (co-edición en vivo) corre la ETA
+                // del viaje mientras se tipea, la Card no se remonta ni pierde el
+                // draft/foco. El índice separa dos viajes del mismo buque.
+                const draftKey = `buque-${sec.destino}-${g.buque}-${g.sinEta ? 'sf' : gi}`
+                const etaComun = !g.sinEta && g.etaMin === g.etaMax ? g.etaMin : ''
+                const base = nombreBuqueBase(g.buque)
+                return (
+                  <Card key={draftKey} className="overflow-hidden">
+                    <CardContent className="pt-3.5 pb-3">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 mb-1.5">
+                        <Boat size={17} weight="fill" className="text-primary/70 shrink-0" />
+                        <span className="font-semibold text-sm shrink-0">{g.buque}</span>
+                        <span className="text-xs text-muted-foreground shrink-0">{filas.length} carga{filas.length === 1 ? '' : 's'}</span>
+                        {base && (
+                          <a
+                            href={`https://www.marinetraffic.com/en/ais/index/search/all?keyword=${encodeURIComponent(base)}`}
+                            target="_blank" rel="noreferrer"
+                            className="inline-flex items-center gap-1 text-xs text-primary hover:underline shrink-0"
+                            title="Ver posición en MarineTraffic"
+                          >
+                            <MapPin size={13} /> ver posición
+                          </a>
+                        )}
+                        <label className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground shrink-0">
+                          ETA del buque
+                          <input
+                            type="date"
+                            value={etaDrafts[draftKey] ?? etaComun}
+                            disabled={!editable}
+                            onChange={e => setEtaDrafts(d => ({ ...d, [draftKey]: e.target.value }))}
+                            onBlur={() => commitDraft(draftKey, nueva => commitEtaBuque(g.buque, dbIds, nueva))}
+                            onKeyDown={e => { if (e.key === 'Enter') commitDraft(draftKey, nueva => commitEtaBuque(g.buque, dbIds, nueva)) }}
+                            className="h-8 rounded-md border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 disabled:opacity-50"
+                          />
+                        </label>
+                      </div>
+                      {!etaComun && !g.sinEta && (
+                        <p className="text-[11px] text-muted-foreground mb-1">
+                          ETAs distintas en el viaje ({fmtDateDMY(g.etaMin)} – {fmtDateDMY(g.etaMax)}) — poner una acá las unifica.
+                        </p>
+                      )}
+                      <div className="divide-y divide-border/60 border-t border-border/60">
+                        {filas.map(f => filaRow(f, false))}
+                      </div>
+                      {filas.length > 1 && (
+                        <div className="flex justify-end mt-2">
+                          <button
+                            type="button"
+                            disabled={!editable}
+                            onClick={() => marcarEnviadoGrupo(g.buque, filas)}
+                            className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-border text-xs font-semibold text-foreground/80 hover:bg-muted disabled:opacity-50 transition-colors"
+                          >
+                            <Checks size={15} weight="bold" /> Enviado a las {filas.length} de este buque
+                          </button>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )
+              })}
+
+              {sec.sinBuque.length > 0 && (
+                <Card className="overflow-hidden">
+                  <CardContent className="pt-3.5 pb-3">
+                    <div className="flex items-center gap-2 mb-1.5">
+                      <Boat size={17} className="text-muted-foreground/60 shrink-0" />
+                      <span className="font-semibold text-sm text-muted-foreground">Sin buque asignado</span>
+                      <span className="text-xs text-muted-foreground">{sec.sinBuque.length}</span>
+                    </div>
+                    <div className="divide-y divide-border/60 border-t border-border/60">
+                      {sec.sinBuque.map(f => filaRow(f, true))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          ))}
+        </TabsContent>
+
+        <TabsContent value="historial" className="mt-4">
+          <HistorialSeguimientos
+            clientePorRef={clientePorRef}
+            onOpenDetail={onOpenDetail}
+            recargarToken={recargarToken}
+          />
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }
