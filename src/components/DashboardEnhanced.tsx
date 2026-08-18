@@ -25,6 +25,7 @@ import {
   BellRinging,
   CurrencyDollar,
   Question,
+  Warehouse,
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import { authFetch, getAdminLevel, getAdminHomeArea } from '@/lib/authClient'
@@ -38,6 +39,7 @@ import HelpGuide from './HelpGuide'
 
 import TodayDashboard from './TodayDashboard'
 import MiRendimientoPanel from './MiRendimientoPanel'
+import DepositoPanel from './DepositoPanel'
 import SeguimientosBoard from './SeguimientosBoard'
 import AgendaCalendar from './agenda/AgendaCalendar'
 import { mergeFclShipments } from '@/lib/operationsTypes'
@@ -157,12 +159,15 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
     if (typeof window !== 'undefined' && window.location.pathname.toLowerCase() === '/mirendimiento' && ops) {
       return 'rendimiento'
     }
+    if (typeof window !== 'undefined' && window.location.pathname.toLowerCase() === '/deposito' && ops) {
+      return 'deposito'
+    }
     const brandDefault = ops ? 'hoy' : 'contenido'
     const area = getAdminHomeArea()
     if (!area || !ops) return brandDefault
     // 'rendimiento' es válida pero NO tiene TabsTrigger: es la página personal
     // a la que se entra tipeando /mirendimiento (no se ve en la barra).
-    const validas = new Set(['hoy', 'seguimientos', 'agenda', 'analytics', 'operaciones', 'checks', 'trucks', 'transportes', 'quotes', 'billing', 'pagos', 'contenido', 'clients', 'partners', 'rendimiento'])
+    const validas = new Set(['hoy', 'seguimientos', 'agenda', 'analytics', 'operaciones', 'checks', 'trucks', 'transportes', 'quotes', 'billing', 'pagos', 'contenido', 'clients', 'partners', 'rendimiento', 'deposito'])
     if (area === 'equipo' && getAdminLevel() === 'owner') return 'equipo'
     return validas.has(area) ? area : brandDefault
   })
@@ -375,10 +380,26 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
       )}
 
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-8">
-        <Breadcrumbs
-          items={getBreadcrumbs()}
-          onHomeClick={activeTab !== (ops ? 'hoy' : 'contenido') ? () => setActiveTab(ops ? 'hoy' : 'contenido') : undefined}
-        />
+        <div className="flex items-center justify-between gap-3">
+          <Breadcrumbs
+            items={getBreadcrumbs()}
+            onHomeClick={activeTab !== (ops ? 'hoy' : 'contenido') ? () => setActiveTab(ops ? 'hoy' : 'contenido') : undefined}
+          />
+          {/* EN DEPOSITO: atajo a la pantalla de campo. Vive aca y no como una
+              pestana mas porque la barra ya tiene 16 y esta se usa desde el
+              celular, parado en el deposito. */}
+          {ops && activeTab !== 'deposito' && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('deposito')}
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg border border-primary/30 bg-primary/10 text-sm font-semibold text-primary hover:bg-primary/15 transition-colors shrink-0"
+              title="Subir fotos parado en el deposito"
+            >
+              <Warehouse size={17} weight="duotone" />
+              <span className="hidden sm:inline">En deposito</span>
+            </button>
+          )}
+        </div>
 
         <Tabs
           value={activeTab}
@@ -511,6 +532,15 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
               onOpenDetail={onOpenDetail}
               clients={clients}
               onOpenTab={setActiveTab}
+            />
+          </TabsContent>
+
+          <TabsContent value="deposito">
+            <DepositoPanel
+              dbShipments={dbShipments}
+              originPhotos={originPhotos}
+              onUpdateOriginPhotos={onUpdateOriginPhotos}
+              onOpenDetail={onOpenDetail}
             />
           </TabsContent>
 
