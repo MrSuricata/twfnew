@@ -1001,3 +1001,13 @@ export async function saveDepositoActa(acta: {
   const data = await res.json()
   return data.acta || {}
 }
+
+/** Anula un acta cargada por error. No la borra: la fila queda con quién y
+ *  cuándo la anuló, pero desaparece de la pantalla y del informe. */
+export async function anularDepositoActa(id: string): Promise<void> {
+  const res = await authFetch(`/api/data/deposito-actas?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
+}

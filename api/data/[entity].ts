@@ -2497,6 +2497,9 @@ async function handleDepositoActas(req: VercelRequest, res: VercelResponse, db: 
       : 1000
     let q = db.from('deposito_actas').select('*').order('created_at', { ascending: false }).limit(limite)
     if (ref) q = q.eq('ref', ref)
+    // Por defecto solo las VIGENTES: las anuladas no se muestran ni alimentan
+    // el informe. ?anuladas=1 las trae para auditar quien anulo que.
+    if (String(req.query.anuladas || '') !== '1') q = q.is('anulada_at', null)
     const { data, error } = await q
     if (error) throw error
     // Scoping por cliente: admin acotado solo ve las actas de SUS cargas.
@@ -2540,6 +2543,31 @@ async function handleDepositoActas(req: VercelRequest, res: VercelResponse, db: 
     if (error) throw error
     logAudit(db, payload, 'create', 'deposito_acta', row.ref, { contenedor: row.contenedor })
     return res.status(200).json({ acta: data })
+  }
+
+  // ANULAR, no borrar: se cargo por error (Brian 18/08) pero el acta es
+  // material de expediente. La fila queda con quien y cuando la anulo.
+  if (req.method === 'DELETE') {
+    const id = (req.query.id as string || '').trim()
+    if (!id) return res.status(400).json({ error: 'id query parameter required' })
+
+    const { data: previa, error: eGet } = await db
+      .from('deposito_actas').select('ref, contenedor, anulada_at').eq('id', id).maybeSingle()
+    if (eGet) throw eGet
+    if (!previa) return res.status(404).json({ error: 'Acta no encontrada' })
+
+    const allowed = await allowedRefsForPayload(db, payload)
+    if (allowed && !allowed.has(refOf(previa.ref))) return res.status(404).json({ error: 'Acta no encontrada' })
+    // Ya anulada: no se re-estampa el autor ni la fecha del primero que la anulo.
+    if (previa.anulada_at) return res.status(200).json({ anulada: true, yaEstaba: true })
+
+    const { error } = await db
+      .from('deposito_actas')
+      .update({ anulada_at: new Date().toISOString(), anulada_por: auditUser(payload as { user?: string; name?: string } | null) })
+      .eq('id', id)
+    if (error) throw error
+    logAudit(db, payload, 'anular', 'deposito_acta', previa.ref, { contenedor: previa.contenedor, id })
+    return res.status(200).json({ anulada: true })
   }
 
   return res.status(405).json({ error: 'Method not allowed' })
