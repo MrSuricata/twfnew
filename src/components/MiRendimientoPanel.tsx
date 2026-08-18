@@ -4,18 +4,25 @@
 // no está en la barra de pestañas (pedido de Brian 18/08: "que tenga que
 // ponerlo yo para verlo").
 //
-// Responde, operativa por operativa: ¿fui al depósito? ¿pasé las fotos?
+// Responde, operativa por operativa: ¿fui al depósito? ¿hay fotos de la carga?
 // ¿avisé el traslado del contenedor? ¿avisé la salida? ¿hice el informe?
 // El denominador sale de las CARGAS (las operativas que pasaron por depósito
 // en el período), así el número no se infla marcando de más.
+//
+// OJO con dos reglas que corrigió Brian (18/08):
+//  · las FOTOS no prueban la visita — las manda el depósito;
+//  · el INFORME se mide sobre las VISITAS, no sobre el total: sale de haber ido.
 
 import { useState, useMemo, useCallback, useEffect } from 'react'
 import { toast } from 'sonner'
 import { Card, CardContent } from '@/components/ui/card'
-import { Warehouse, Camera, ArrowsLeftRight, PaperPlaneTilt, FileText, Copy, CheckCircle } from '@phosphor-icons/react'
+import { Warehouse, Camera, ArrowsLeftRight, PaperPlaneTilt, FileText, Copy, CheckCircle, Warning } from '@phosphor-icons/react'
 import type { DbShipment } from '@/lib/operationsTypes'
 import type { OperativeReport, OriginPhoto } from '@/lib/quotationTypes'
-import { buildRendimiento, depositosVisitados, textoParte, esAutorPropio, type FilaRendimiento } from '@/lib/miRendimiento'
+import {
+  buildRendimiento, depositosVisitados, textoParte, esAutorPropio, resumenMensual, ultimosMeses,
+  type FilaRendimiento, type MesRendimiento,
+} from '@/lib/miRendimiento'
 import { fetchRefChecks, saveRefCheckSteps, saveRefCheckCntrs } from '@/lib/dataClient'
 import {
   normalizeRef, mergeChecksSteps, isAvisoStep, avisoForCntr,
@@ -93,14 +100,28 @@ export default function MiRendimientoPanel({ dbShipments, reports = [], originPh
     return s
   }, [reports, identidades])
 
-  const resumen = useMemo(() => buildRendimiento({
+  // Lo que define QUÉ se cuenta, una sola vez: la semana y el resumen mensual
+  // salen de acá, así los dos números nunca se pueden contradecir.
+  const comun = useMemo(() => ({
     cargas: (dbShipments || []).map(s => ({
       ref: s.ref, cliente: s.cliente, deposito: s.deposito, operativa: s.operativa,
       cntr: s.contenedor, eta: s.eta, salida: s.salida, pais: s.dest_country,
       mode: s.mode, archived: s.archived,
     })),
-    checksByRef, refsConFotos, refsConInforme, desde, hasta, identidades,
-  }), [dbShipments, checksByRef, refsConFotos, refsConInforme, desde, hasta, identidades])
+    checksByRef, refsConFotos, refsConInforme, identidades,
+  }), [dbShipments, checksByRef, refsConFotos, refsConInforme, identidades])
+
+  const resumen = useMemo(
+    () => buildRendimiento({ ...comun, desde, hasta }),
+    [comun, desde, hasta],
+  )
+
+  // Dashboard: los últimos 6 meses cerrados, del mes de la semana que se está
+  // mirando hacia atrás (moverse de semana también mueve el histórico).
+  const meses = useMemo(
+    () => resumenMensual({ ...comun, meses: ultimosMeses(desde.slice(0, 7), 6) }),
+    [comun, desde],
+  )
 
   const depositos = useMemo(() => depositosVisitados(resumen), [resumen])
 
@@ -214,12 +235,16 @@ export default function MiRendimientoPanel({ dbShipments, reports = [], originPh
       ) : (
         <>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5">
-            <Metrica icon={<Warehouse size={16} weight="fill" />} label="Fui al depósito" n={resumen.visitas} total={resumen.total} pct={pct(resumen.visitas)}
-              nota={resumen.visitasConfirmadas > 0 ? `${resumen.visitasConfirmadas} con fotos` : undefined} />
-            <Metrica icon={<Camera size={16} weight="fill" />} label="Pasé las fotos" n={resumen.fotos} total={resumen.total} pct={pct(resumen.fotos)} />
+            <Metrica icon={<Warehouse size={16} weight="fill" />} label="Fui al depósito" n={resumen.visitas} total={resumen.total} pct={pct(resumen.visitas)} />
+            <Metrica icon={<Camera size={16} weight="fill" />} label="Fotos de la carga" n={resumen.fotos} total={resumen.total} pct={pct(resumen.fotos)}
+              nota="propias o del depósito" />
             <Metrica icon={<ArrowsLeftRight size={16} weight="fill" />} label="Avisé traslado" n={resumen.traslados} total={resumen.total} pct={pct(resumen.traslados)} />
             <Metrica icon={<PaperPlaneTilt size={16} weight="fill" />} label="Avisé salida" n={resumen.salidas} total={resumen.total} pct={pct(resumen.salidas)} />
-            <Metrica icon={<FileText size={16} weight="fill" />} label="Informe operativo" n={resumen.informes} total={resumen.total} pct={pct(resumen.informes)} />
+            {/* El informe sale de haber ido: el denominador son las visitas. */}
+            <Metrica icon={<FileText size={16} weight="fill" />} label="Informe de las que fui"
+              n={resumen.informesDeVisitadas} total={resumen.visitas}
+              pct={resumen.visitas > 0 ? Math.round((resumen.informesDeVisitadas / resumen.visitas) * 100) : 0}
+              nota={resumen.visitas === 0 ? 'sin visitas esta semana' : resumen.visitasSinInforme > 0 ? `falta${resumen.visitasSinInforme > 1 ? 'n' : ''} ${resumen.visitasSinInforme}` : undefined} />
           </div>
 
           {depositos.length > 0 && (
@@ -255,7 +280,7 @@ export default function MiRendimientoPanel({ dbShipments, reports = [], originPh
                       <th className="text-left font-semibold pb-2 pr-2 hidden sm:table-cell">Depósito</th>
                       <th className="text-left font-semibold pb-2 pr-2 hidden md:table-cell">Fecha</th>
                       <th className="text-center font-semibold pb-2 px-1">Fui</th>
-                      <th className="text-center font-semibold pb-2 px-1">Fotos</th>
+                      <th className="text-center font-semibold pb-2 px-1" title="Fotos de Uruguay (pueden ser del depósito) o dentro del informe">Fotos</th>
                       <th className="text-center font-semibold pb-2 px-1">Traslado</th>
                       <th className="text-center font-semibold pb-2 px-1">Salida</th>
                       <th className="text-center font-semibold pb-2 px-1">Informe</th>
@@ -269,8 +294,10 @@ export default function MiRendimientoPanel({ dbShipments, reports = [], originPh
                 </table>
               </div>
               <p className="text-[11px] text-muted-foreground mt-3">
-                <b>Fotos</b> e <b>Informe</b> se derivan solos de lo que subís a la carga — no se tildan.
-                Una visita con fotos cuenta como <b>confirmada</b>; sin fotos, como declarada.
+                <b>Fotos</b> e <b>Informe</b> se derivan solos de lo que hay subido a la carga — no se tildan.
+                Las fotos <b>no cuentan como visita</b>: puede mandarlas el depósito. Y si hay informe,
+                cuenta como fotos, porque van adentro. El informe se mide sobre las operativas a las
+                que fuiste, no sobre el total.
                 Lo que marcó otra persona con su usuario no cuenta acá; lo de la época del
                 usuario compartido sí, porque no se puede atribuir a nadie.
               </p>
@@ -278,7 +305,77 @@ export default function MiRendimientoPanel({ dbShipments, reports = [], originPh
           </Card>
         </>
       )}
+
+      {/* ── Cómo viene, mes a mes ── */}
+      <MesesPanel meses={meses} />
     </div>
+  )
+}
+
+/** Resumen mes a mes: la foto larga, para no discutir sobre una sola semana. */
+function MesesPanel({ meses }: { meses: MesRendimiento[] }) {
+  const conDatos = meses.filter(m => m.total > 0)
+  if (conDatos.length === 0) return null
+  const nombre = (mes: string) => {
+    const [y, m] = mes.split('-').map(Number)
+    const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'set', 'oct', 'nov', 'dic']
+    return `${MESES[m - 1] || mes} ${String(y).slice(2)}`
+  }
+  return (
+    <Card>
+      <CardContent className="pt-5 pb-4">
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+          Cómo viene, mes a mes
+        </h2>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="text-[10px] uppercase tracking-wide text-muted-foreground border-b border-border">
+                <th className="text-left font-semibold pb-2 pr-2">Mes</th>
+                <th className="text-right font-semibold pb-2 px-2">Operativas</th>
+                <th className="text-right font-semibold pb-2 px-2">Fui</th>
+                <th className="text-right font-semibold pb-2 px-2">Traslado</th>
+                <th className="text-right font-semibold pb-2 px-2">Salida</th>
+                <th className="text-right font-semibold pb-2 px-2" title="Informes sobre las operativas a las que fuiste">Informe</th>
+                <th className="text-right font-semibold pb-2 pl-2">Fotos</th>
+              </tr>
+            </thead>
+            <tbody>
+              {conDatos.map(m => (
+                <tr key={m.mes} className="border-b border-border/50 last:border-0">
+                  <td className="py-2 pr-2 font-medium whitespace-nowrap">{nombre(m.mes)}</td>
+                  <td className="py-2 px-2 text-right tabular-nums text-muted-foreground">{m.total}</td>
+                  <CeldaMes n={m.visitas} total={m.total} />
+                  <CeldaMes n={m.traslados} total={m.total} />
+                  <CeldaMes n={m.salidas} total={m.total} />
+                  {/* Denominador = visitas, igual que la tarjeta de arriba. */}
+                  <CeldaMes n={m.informesDeVisitadas} total={m.visitas} />
+                  <CeldaMes n={m.fotos} total={m.total} />
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="text-[11px] text-muted-foreground mt-3">
+          Se cuentan los trasiegos y cargas a piso por Uruguay de cada mes, por fecha de salida
+          (o de llegada si todavía no salió). <b>Informe</b> va sobre las operativas a las que fuiste.
+        </p>
+      </CardContent>
+    </Card>
+  )
+}
+
+function CeldaMes({ n, total }: { n: number; total: number }) {
+  const pct = total > 0 ? Math.round((n / total) * 100) : 0
+  const tono = total === 0 ? 'text-muted-foreground'
+    : pct >= 80 ? 'text-emerald-600 dark:text-emerald-400'
+    : pct >= 50 ? 'text-amber-600 dark:text-amber-400'
+    : 'text-destructive'
+  return (
+    <td className="py-2 px-2 text-right tabular-nums whitespace-nowrap">
+      <span className={`font-semibold ${tono}`}>{n}</span>
+      <span className="text-muted-foreground text-xs">/{total}</span>
+    </td>
   )
 }
 
@@ -333,7 +430,13 @@ function Fila({ f, onToggle, onOpenDetail }: {
           bloqueado={f.fotos}
           titulo={f.fotos ? 'Confirmada por las fotos de Uruguay' : f.visita ? 'Visita declarada — click para desmarcar' : 'Marcar que fuiste al depósito'} />
       </td>
-      <td className="py-2 px-1 text-center"><Derivado activo={f.fotos} titulo={f.fotos ? 'Hay fotos de Uruguay' : 'Sin fotos cargadas'} /></td>
+      <td className="py-2 px-1 text-center">
+        <Derivado activo={f.fotos} titulo={
+          f.fotosSubidas ? 'Hay fotos de Uruguay en la galeria'
+            : f.fotos ? 'Van dentro del informe operativo'
+            : 'Sin fotos ni informe'
+        } />
+      </td>
       <td className="py-2 px-1 text-center">
         <Tilde activo={f.avisoTraslado} parcial={f.avisoTrasladoParcial}
           onClick={() => onToggle(f.ref, 'aviso_traslado', f.avisoTraslado, f.cntrs)}
@@ -352,7 +455,16 @@ function Fila({ f, onToggle, onOpenDetail }: {
               ? `Avisada en algunos${detalleCntr} — click para avisar los que faltan`
               : `Marcar que avisaste la salida${detalleCntr}`} />
       </td>
-      <td className="py-2 px-1 text-center"><Derivado activo={f.informe} titulo={f.informe ? 'Informe operativo subido' : 'Sin informe'} /></td>
+      <td className="py-2 px-1 text-center">
+        {f.informeSinVisita ? (
+          <span title="Hay informe pero la visita no está marcada — o falta el tilde, o el informe no corresponde"
+            className="w-6 h-6 rounded-full inline-flex items-center justify-center bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300">
+            <Warning size={15} weight="fill" />
+          </span>
+        ) : (
+          <Derivado activo={f.informe} titulo={f.informe ? 'Informe operativo subido' : f.visita ? 'Fuiste pero falta el informe' : 'Sin informe (no fuiste)'} />
+        )}
+      </td>
     </tr>
   )
 }

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   buildRendimiento, esOperativaDeposito, fechaDeOperativa, depositosVisitados, textoParte,
-  esAutorPropio, type CargaRendimiento,
+  esAutorPropio, resumenMensual, ultimosMeses, type CargaRendimiento,
 } from './miRendimiento'
 import type { RefCheckSteps } from './checksTypes'
 
@@ -118,18 +118,48 @@ describe('buildRendimiento — las cinco señales por operativa', () => {
     expect(r.sinNada).toBe(1)
   })
 
-  it('las fotos de Uruguay valen como visita, aunque no se haya tildado', () => {
+  it('las fotos NO cuentan como visita: las manda el depósito', () => {
+    // Corrección de Brian (18/08). Antes esto daba visita=true e inflaba
+    // justo el número que la página existe para defender.
     const r = build([carga({ ref: 'A8000' })], {}, ['A8000'])
-    expect(r.filas[0].visita).toBe(true)
-    expect(r.filas[0].visitaConfirmada).toBe(true)
+    expect(r.filas[0].fotos).toBe(true)
+    expect(r.filas[0].visita).toBe(false)
+    expect(r.visitas).toBe(0)
+    expect(r.fotos).toBe(1)
   })
 
-  it('el tilde sin fotos es visita DECLARADA, no confirmada', () => {
+  it('la visita es el tilde y nada más', () => {
     const r = build([carga({ ref: 'A8000' })], { A8000: { visita_deposito: hecho() } })
     expect(r.filas[0].visita).toBe(true)
-    expect(r.filas[0].visitaConfirmada).toBe(false)
     expect(r.visitas).toBe(1)
-    expect(r.visitasConfirmadas).toBe(0)
+  })
+
+  it('el informe implica fotos: van adentro del informe', () => {
+    // Brian 18/08. Sin esto, una carga con informe figuraba "sin fotos".
+    const r = build([carga({ ref: 'A8000' })], {}, [], ['A8000'])
+    expect(r.filas[0].fotos).toBe(true)
+    expect(r.filas[0].fotosSubidas).toBe(false)
+    expect(r.fotos).toBe(1)
+  })
+
+  it('el informe se mide sobre las visitas, no sobre el total', () => {
+    const r = build(
+      [carga({ ref: 'FUI' }), carga({ ref: 'FUI2' }), carga({ ref: 'NOFUI' })],
+      { FUI: { visita_deposito: hecho() }, FUI2: { visita_deposito: hecho() } },
+      [], ['FUI'],
+    )
+    expect(r.total).toBe(3)
+    expect(r.visitas).toBe(2)
+    expect(r.informes).toBe(1)
+    expect(r.informesDeVisitadas).toBe(1)   // 1 de las 2 a las que fue
+    expect(r.visitasSinInforme).toBe(1)
+  })
+
+  it('informe sin visita se marca como anomalía, no como logro', () => {
+    const r = build([carga({ ref: 'A8000' })], {}, [], ['A8000'])
+    expect(r.filas[0].informe).toBe(true)
+    expect(r.filas[0].informeSinVisita).toBe(true)
+    expect(r.informesDeVisitadas).toBe(0)
   })
 
   it('respeta el período: lo de otra semana no entra', () => {
@@ -190,7 +220,7 @@ describe('depositosVisitados', () => {
   it('agrupa las visitas por depósito, el más visitado primero', () => {
     const r = build(
       [carga({ ref: 'A1', deposito: 'GODILCO' }), carga({ ref: 'A2', deposito: 'GODILCO' }), carga({ ref: 'A3', deposito: 'PLANIR' })],
-      {}, ['A1', 'A2', 'A3'],
+      { A1: { visita_deposito: hecho() }, A2: { visita_deposito: hecho() }, A3: { visita_deposito: hecho() } },
     )
     expect(depositosVisitados(r)).toEqual([
       { deposito: 'GODILCO', refs: ['A1', 'A2'] },
@@ -208,16 +238,19 @@ describe('textoParte — muestra lo hecho Y lo que falta', () => {
     )
     const t = textoParte(r, '2026-08-17', '2026-08-23')
     expect(t).toContain('2 operativas por depósito')
+    expect(t).toContain('Fui al depósito: 1/2')
     expect(t).toContain('Traslado avisado al cliente: 1/2')
     // Lo pendiente NO se esconde
     expect(t).toContain('Pendientes: A7938, A8000')
   })
 
-  it('la visita declarada no se cuenta como confirmada', () => {
-    // Tilde sin fotos: el parte dice 0 confirmadas y aclara la declarada.
-    const r = build([carga({ ref: 'A7938' })], { A7938: { visita_deposito: hecho() } })
-    const t = textoParte(r, '2026-08-17', '2026-08-23')
-    expect(t).toContain('Fui al depósito: 0/1 confirmadas con fotos (+1 declaradas)')
+  it('el informe del parte va sobre las visitas, no sobre el total', () => {
+    const r = build(
+      [carga({ ref: 'FUI' }), carga({ ref: 'NOFUI' })],
+      { FUI: { visita_deposito: hecho() } },
+      [], ['FUI'],
+    )
+    expect(textoParte(r, '2026-08-17', '2026-08-23')).toContain('Informe operativo: 1/1 de las que fui')
   })
 
   it('la línea de pendientes mira las CINCO señales, no solo los avisos', () => {
@@ -234,4 +267,48 @@ describe('textoParte — muestra lo hecho Y lo que falta', () => {
     )
     expect(textoParte(r, '2026-08-17', '2026-08-23')).not.toContain('Pendientes')
   })
+})
+
+
+describe('resumenMensual — cómo viene mes a mes', () => {
+  const mensual = (cargas: CargaRendimiento[], checks: Record<string, RefCheckSteps> = {}, informes: string[] = []) =>
+    resumenMensual({
+      cargas,
+      checksByRef: new Map(Object.entries(checks)),
+      refsConFotos: new Set<string>(),
+      refsConInforme: new Set(informes),
+      meses: ['2026-08', '2026-07'],
+    })
+
+  it('separa las operativas por mes según su fecha', () => {
+    const r = mensual([
+      carga({ ref: 'AGO1', salida: '2026-08-05' }),
+      carga({ ref: 'AGO2', salida: '2026-08-31' }),
+      carga({ ref: 'JUL', salida: '2026-07-15' }),
+    ])
+    expect(r.map(m => [m.mes, m.total])).toEqual([['2026-08', 2], ['2026-07', 1]])
+  })
+
+  it('el último día del mes entra (no se cae por el 31)', () => {
+    const r = mensual([carga({ ref: 'X', salida: '2026-07-31' })])
+    expect(r.find(m => m.mes === '2026-07')?.total).toBe(1)
+  })
+
+  it('el informe del mes se cuenta sobre las visitas', () => {
+    const r = mensual(
+      [carga({ ref: 'FUI', salida: '2026-08-05' }), carga({ ref: 'NOFUI', salida: '2026-08-06' })],
+      { FUI: { visita_deposito: hecho() } },
+      ['FUI', 'NOFUI'],
+    )
+    const ago = r.find(m => m.mes === '2026-08')!
+    expect(ago.visitas).toBe(1)
+    expect(ago.informesDeVisitadas).toBe(1)
+  })
+})
+
+describe('ultimosMeses', () => {
+  it('cuenta para atrás cruzando el año', () => {
+    expect(ultimosMeses('2026-02', 4)).toEqual(['2026-02', '2026-01', '2025-12', '2025-11'])
+  })
+  it('mes inválido → vacío', () => expect(ultimosMeses('', 3)).toEqual([]))
 })
