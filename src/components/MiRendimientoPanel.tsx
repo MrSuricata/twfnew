@@ -81,14 +81,22 @@ export default function MiRendimientoPanel({ dbShipments, reports = [], originPh
   // van las dos para que el filtro no se coma trabajo propio.
   const identidades = useMemo(() => [getAdminUser(), getAdminName()].filter(Boolean), [])
 
-  const refsConFotos = useMemo(() => {
-    const s = new Set<string>()
+  // Las fotos son de UN contenedor: se indexan por `REF|CNTR`. Las viejas, de
+  // antes de que se etiquetaran, no tienen contenedor: van aparte y cuentan
+  // para todos los contenedores de esa ref, que es lo único que se puede
+  // afirmar sin inventar.
+  const { fotosPorCntr, refsConFotosSinCntr } = useMemo(() => {
+    const porCntr = new Set<string>()
+    const sinCntr = new Set<string>()
     for (const p of originPhotos) {
       if (String(p.photoType || '') !== 'uruguay' || !p.shipmentRef) continue
       if (!esAutorPropio(p.createdBy, identidades)) continue
-      s.add(normalizeRef(p.shipmentRef))
+      const ref = normalizeRef(p.shipmentRef)
+      const cntr = String(p.containerNumber || '').trim().toUpperCase()
+      if (cntr) porCntr.add(`${ref}|${cntr}`)
+      else sinCntr.add(ref)
     }
-    return s
+    return { fotosPorCntr: porCntr, refsConFotosSinCntr: sinCntr }
   }, [originPhotos, identidades])
 
   const refsConInforme = useMemo(() => {
@@ -108,8 +116,8 @@ export default function MiRendimientoPanel({ dbShipments, reports = [], originPh
       cntr: s.contenedor, eta: s.eta, salida: s.salida, pais: s.dest_country,
       mode: s.mode, archived: s.archived,
     })),
-    checksByRef, refsConFotos, refsConInforme, identidades,
-  }), [dbShipments, checksByRef, refsConFotos, refsConInforme, identidades])
+    checksByRef, fotosPorCntr, refsConFotosSinCntr, refsConInforme, identidades,
+  }), [dbShipments, checksByRef, fotosPorCntr, refsConFotosSinCntr, refsConInforme, identidades])
 
   const resumen = useMemo(
     () => buildRendimiento({ ...comun, desde, hasta }),
@@ -134,7 +142,7 @@ export default function MiRendimientoPanel({ dbShipments, reports = [], originPh
    * `saveRefCheckCntrs`, sembrando el mapa completo desde el estado actual:
    * los contenedores ya avisados conservan su fecha y su autor.
    */
-  const toggle = async (ref: string, key: CheckStepKey, activo: boolean, cntrs: string[]) => {
+  const toggle = async (ref: string, key: CheckStepKey, activo: boolean, cntrs: string[], cntrFila: string) => {
     const norm = normalizeRef(ref)
     const previo = checksByRef.get(norm) || {}
     const marcar = !activo
@@ -149,8 +157,15 @@ export default function MiRendimientoPanel({ dbShipments, reports = [], originPh
       const mapa: Record<string, { done: boolean; date?: string; by?: string }> = {}
       for (const c of cntrs) {
         const eff = avisoForCntr(step, c)
-        // Al marcar, el que ya estaba avisado queda como estaba (no le piso ni
-        // la fecha ni el autor); al desmarcar, se limpian todos.
+        if (c !== cntrFila) {
+          // Los OTROS contenedores se re-siembran tal cual estaban: escribir el
+          // mapa completo es obligatorio (si no se borra lo que no va), pero
+          // tocar uno no puede arrastrar a los demás — cada contenedor sale en
+          // su propio camión y se marca por separado (Brian 18/08).
+          mapa[c] = eff ? { done: true, date: eff.date, by: eff.by } : { done: false }
+          continue
+        }
+        // El de la fila: al marcar conserva fecha y autor si ya estaba.
         mapa[c] = marcar
           ? (eff ? { done: true, date: eff.date, by: eff.by } : { done: true, ...ctx })
           : { done: false }
@@ -277,6 +292,7 @@ export default function MiRendimientoPanel({ dbShipments, reports = [], originPh
                     <tr className="text-[10px] uppercase tracking-wide text-muted-foreground border-b border-border">
                       <th className="text-left font-semibold pb-2 pr-2">Ref</th>
                       <th className="text-left font-semibold pb-2 pr-2">Cliente</th>
+                      <th className="text-left font-semibold pb-2 pr-2">Contenedor</th>
                       <th className="text-left font-semibold pb-2 pr-2 hidden sm:table-cell">Depósito</th>
                       <th className="text-left font-semibold pb-2 pr-2 hidden md:table-cell">Fecha</th>
                       <th className="text-center font-semibold pb-2 px-1">Fui</th>
@@ -288,7 +304,7 @@ export default function MiRendimientoPanel({ dbShipments, reports = [], originPh
                   </thead>
                   <tbody>
                     {resumen.filas.map(f => (
-                      <Fila key={f.ref} f={f} onToggle={toggle} onOpenDetail={onOpenDetail} />
+                      <Fila key={`${f.ref}|${f.cntr}`} f={f} onToggle={toggle} onOpenDetail={onOpenDetail} />
                     ))}
                   </tbody>
                 </table>
@@ -404,11 +420,10 @@ function Metrica({ icon, label, n, total, pct, nota }: {
 
 function Fila({ f, onToggle, onOpenDetail }: {
   f: FilaRendimiento
-  onToggle: (ref: string, key: CheckStepKey, activo: boolean, cntrs: string[]) => void
+  onToggle: (ref: string, key: CheckStepKey, activo: boolean, cntrs: string[], cntrFila: string) => void
   onOpenDetail?: (ref: string) => void
 }) {
-  const varios = f.cntrs.length > 1
-  const detalleCntr = varios ? ` (${f.cntrs.length} contenedores)` : ''
+  // Ya no hay "parcial": la fila ES un contenedor. El detalle sobra.
   return (
     <tr className="border-b border-border/50 last:border-0 hover:bg-muted/40 transition-colors">
       <td className="py-2 pr-2">
@@ -420,7 +435,10 @@ function Fila({ f, onToggle, onOpenDetail }: {
           {f.ref}
         </button>
       </td>
-      <td className="py-2 pr-2 text-foreground/85 truncate max-w-[180px]">{f.cliente}</td>
+      <td className="py-2 pr-2 text-foreground/85 truncate max-w-[160px]">{f.cliente}</td>
+      <td className="py-2 pr-2 font-mono text-[11px] text-muted-foreground whitespace-nowrap">
+        {f.cntr || <span className="italic">sin cntr</span>}
+      </td>
       <td className="py-2 pr-2 text-muted-foreground hidden sm:table-cell">{f.deposito}</td>
       <td className="py-2 pr-2 text-muted-foreground tabular-nums hidden md:table-cell">
         {f.fecha ? fmtDateDMY(f.fecha) : '—'}
@@ -432,7 +450,7 @@ function Fila({ f, onToggle, onOpenDetail }: {
             y la visita es solo este tilde. Quedaron contradiciéndose: la carga
             con fotos no se podía marcar Y contaba como "no fuiste" para
             siempre (caso A8025, Brian 18/08). */}
-        <Tilde activo={f.visita} onClick={() => onToggle(f.ref, 'visita_deposito', f.visita, f.cntrs)}
+        <Tilde activo={f.visita} onClick={() => onToggle(f.ref, 'visita_deposito', f.visita, f.cntrs, f.cntr)}
           titulo={f.visita ? 'Fuiste al depósito — click para desmarcar' : 'Marcar que fuiste al depósito'} />
       </td>
       <td className="py-2 px-1 text-center">
@@ -443,22 +461,18 @@ function Fila({ f, onToggle, onOpenDetail }: {
         } />
       </td>
       <td className="py-2 px-1 text-center">
-        <Tilde activo={f.avisoTraslado} parcial={f.avisoTrasladoParcial}
-          onClick={() => onToggle(f.ref, 'aviso_traslado', f.avisoTraslado, f.cntrs)}
+        <Tilde activo={f.avisoTraslado}
+          onClick={() => onToggle(f.ref, 'aviso_traslado', f.avisoTraslado, f.cntrs, f.cntr)}
           titulo={f.avisoTraslado
-            ? `Traslado avisado${detalleCntr} — click para desmarcar`
-            : f.avisoTrasladoParcial
-              ? `Avisado en algunos${detalleCntr} — click para avisar los que faltan`
-              : `Marcar que avisaste el traslado al cliente${detalleCntr}`} />
+            ? 'Traslado avisado — click para desmarcar'
+            : 'Marcar que avisaste el traslado al cliente'} />
       </td>
       <td className="py-2 px-1 text-center">
-        <Tilde activo={f.avisoSalida} parcial={f.avisoSalidaParcial}
-          onClick={() => onToggle(f.ref, 'aviso_salida', f.avisoSalida, f.cntrs)}
+        <Tilde activo={f.avisoSalida}
+          onClick={() => onToggle(f.ref, 'aviso_salida', f.avisoSalida, f.cntrs, f.cntr)}
           titulo={f.avisoSalida
-            ? `Salida avisada${detalleCntr} — click para desmarcar`
-            : f.avisoSalidaParcial
-              ? `Avisada en algunos${detalleCntr} — click para avisar los que faltan`
-              : `Marcar que avisaste la salida${detalleCntr}`} />
+            ? 'Salida avisada — click para desmarcar'
+            : 'Marcar que avisaste la salida'} />
       </td>
       <td className="py-2 px-1 text-center">
         {f.informeSinVisita ? (
