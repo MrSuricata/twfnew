@@ -22,6 +22,9 @@ import { Camera, FilePdf, DownloadSimple, Trash, SpinnerGap, Plus } from '@phosp
 import { toast } from 'sonner'
 import type { OriginPhoto, OperativeReport, PhotoLocation } from '@/lib/quotationTypes'
 import { processPhoto } from '@/lib/imageUtils'
+import {
+  MAX_FOTOS_POR_LOTE, clasificarSeleccion, avisoDescartes, subirEnTandas,
+} from '@/lib/subirFotos'
 import { saveOriginPhoto, saveReportWithFile, deleteReport, fetchReportFile } from '@/lib/dataClient'
 import OriginPhotoGallery from '../OriginPhotoGallery'
 
@@ -49,9 +52,8 @@ export function reportsForRef(reports: OperativeReport[], ref: string): Operativ
   return reports.filter(r => r.shipmentRef === ref).sort((a, b) => b.createdAt - a.createdAt)
 }
 
-// Límites del pipeline existente (ShipmentTracking):
-const MAX_PHOTOS_PER_BATCH = 10
-const MAX_PHOTO_BYTES = 10 * 1024 * 1024   // 10MB por foto (antes de comprimir)
+// Los límites de fotos (cantidad por lote, peso, paralelismo) viven en
+// subirFotos.ts, que además decide qué se sube y qué queda afuera.
 const MAX_REPORT_BYTES = 3 * 1024 * 1024   // 3MB por informe
 
 const STAGES: { stage: PhotoLocation; label: string }[] = [
@@ -93,26 +95,28 @@ export default function OperationMediaSection({
     const files = Array.from(e.target.files || [])
     e.target.value = ''   // permite volver a elegir los mismos archivos
     if (files.length === 0 || !onUpdateOriginPhotos) return
-    if (files.length > MAX_PHOTOS_PER_BATCH) {
-      toast.error(`Máximo ${MAX_PHOTOS_PER_BATCH} fotos por vez`)
+
+    // No es todo o nada: se sube lo que se puede y se dice qué quedó afuera.
+    const sel = clasificarSeleccion(files)
+    const aviso = avisoDescartes(sel)
+    if (sel.aceptadas.length === 0) {
+      toast.error(`No se puede subir nada: ${aviso}`)
       return
     }
-    const oversized = files.filter(f => f.size > MAX_PHOTO_BYTES)
-    if (oversized.length > 0) {
-      toast.error(`${oversized.length} archivo(s) superan los 10MB`)
-      return
+    if (aviso) {
+      toast.warning(`Se suben ${sel.aceptadas.length} de ${files.length}`, { description: `${aviso}.` })
     }
 
     setUploadingStage(stage)
-    setUploadProgress({ current: 0, total: files.length })
-    const newPhotos: OriginPhoto[] = []
-    try {
-      for (let i = 0; i < files.length; i++) {
-        setUploadProgress({ current: i + 1, total: files.length })
-        const file = files[i]
+    setUploadProgress({ current: 0, total: sel.aceptadas.length })
+    // El lote entero comparte el timestamp: el índice es lo que separa los ids.
+    const lote = Date.now()
+    const { ok, errores } = await subirEnTandas(
+      sel.aceptadas,
+      async (file, i) => {
         const { full, thumbnail } = await processPhoto(file)
         const photo: OriginPhoto = {
-          id: `photo-${Date.now()}-${i}`,
+          id: `photo-${lote}-${i}`,
           shipmentRef,
           photoType: stage,
           fileName: file.name,
@@ -120,19 +124,25 @@ export default function OperationMediaSection({
           fileData: full,
           thumbnailData: thumbnail,
           createdAt: Date.now(),
-          createdBy: 'admin',
+          createdBy: '',        // lo estampa el server desde el token
         }
         await saveOriginPhoto(photo)
-        newPhotos.push({ ...photo, fileData: undefined })   // sin fileData en el estado local
-      }
-      toast.success(`${newPhotos.length} foto${newPhotos.length > 1 ? 's' : ''} subida${newPhotos.length > 1 ? 's' : ''}`)
-    } catch (err) {
-      console.error('Photo upload error:', err)
-      toast.error(`Error al subir fotos: ${(err as Error)?.message || 'error'}`)
-    } finally {
-      // Las que se alcanzaron a subir entran al estado aunque una haya fallado.
-      if (newPhotos.length > 0) onUpdateOriginPhotos([...newPhotos, ...originPhotos])
-      setUploadingStage(null)
+        return { ...photo, fileData: undefined } as OriginPhoto   // sin fileData en el estado local
+      },
+      (hechas, total) => setUploadProgress({ current: hechas, total }),
+    )
+
+    // Las que subieron entran al estado aunque otras hayan fallado.
+    if (ok.length > 0) onUpdateOriginPhotos([...ok, ...originPhotos])
+    setUploadingStage(null)
+
+    if (errores.length > 0) {
+      console.error('Photo upload errors:', errores)
+      toast.error(`${errores.length} de ${sel.aceptadas.length} no se pudieron subir`, {
+        description: errores[0].error.message,
+      })
+    } else {
+      toast.success(`${ok.length} foto${ok.length > 1 ? 's' : ''} subida${ok.length > 1 ? 's' : ''}`)
     }
   }
 
@@ -255,12 +265,23 @@ export default function OperationMediaSection({
                       {uploading ? (
                         <><SpinnerGap size={11} className="animate-spin" /> Subiendo {uploadProgress.current}/{uploadProgress.total}…</>
                       ) : (
-                        <><Camera size={11} /> Subir fotos</>
+                        <><Camera size={11} /> Subir fotos (hasta {MAX_FOTOS_POR_LOTE})</>
                       )}
                     </button>
                   </>
                 )}
               </div>
+              {/* Con lotes grandes el contador del botón no alcanza: la barra
+                  muestra cuánto falta de verdad (avanza al TERMINAR cada foto). */}
+              {uploading && uploadProgress.total > 0 && (
+                <div className="h-1 w-full rounded-full bg-muted overflow-hidden mb-2" role="progressbar"
+                  aria-valuenow={uploadProgress.current} aria-valuemin={0} aria-valuemax={uploadProgress.total}>
+                  <div
+                    className="h-full bg-primary transition-all duration-300"
+                    style={{ width: `${Math.round((uploadProgress.current / uploadProgress.total) * 100)}%` }}
+                  />
+                </div>
+              )}
               {stagePhotos.length > 0 ? (
                 <OriginPhotoGallery
                   photos={stagePhotos}

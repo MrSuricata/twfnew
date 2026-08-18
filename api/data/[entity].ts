@@ -854,11 +854,18 @@ async function handleOriginPhotos(req: VercelRequest, res: VercelResponse, db: a
       })
     }
 
-    // Bulk list — thumbnails included, file_data excluded
+    // Bulk list — thumbnails included, file_data excluded.
+    // El tope estaba en 500 y el cliente pide SIEMPRE el listado global: al
+    // pasarlo, las fotos más viejas desaparecían de la galería sin ningún
+    // aviso (siguen en la DB y en Storage). Con ~300 fotos y el lote subido a
+    // 40 eso llegaba en meses. Las filas migradas no llevan base64 —solo
+    // metadata + signed URL—, así que 3000 pesa poco. Igual se avisa cuando
+    // se corta, para no repetir el truncado mudo.
+    const TOPE_LISTADO = 3000
     let query = db.from('origin_photos')
       .select('id, shipment_ref, container_number, caption, photo_type, file_name, file_type, thumbnail_data, storage_path, thumb_path, created_at_ts, created_by')
       .order('created_at_ts', { ascending: false })
-      .limit(500)
+      .limit(TOPE_LISTADO)
     const shipmentRef = req.query.shipmentRef as string
     if (shipmentRef) query = query.eq('shipment_ref', shipmentRef)
     const { data, error } = await query
@@ -881,7 +888,13 @@ async function handleOriginPhotos(req: VercelRequest, res: VercelResponse, db: a
       createdBy: p.created_by,
     }))
     const allowed = await allowedRefsForPayload(db, payload)
-    return res.status(200).json({ photos: filterByAllowedRef(photos, allowed, p => p.shipmentRef) })
+    if ((data || []).length >= TOPE_LISTADO) {
+      console.warn(`[origin-photos] listado truncado en ${TOPE_LISTADO}: hay fotos que no se están devolviendo`)
+    }
+    return res.status(200).json({
+      photos: filterByAllowedRef(photos, allowed, p => p.shipmentRef),
+      truncado: (data || []).length >= TOPE_LISTADO,
+    })
   }
 
   if (req.method === 'POST') {
@@ -943,7 +956,10 @@ async function handleOriginPhotos(req: VercelRequest, res: VercelResponse, db: a
       storage_path: storagePath,
       thumb_path: thumbPathOut,
       created_at_ts: p.createdAt || p.created_at_ts || Date.now(),
-      created_by: p.createdBy || p.created_by || '',
+      // Del TOKEN, nunca del body (mismo criterio que el `by` de ref_checks).
+      // Antes el cliente mandaba 'admin' hardcodeado y no se sabía quién había
+      // subido qué — lo que además rompía la atribución en /mirendimiento.
+      created_by: auditUser(payload as any),
     }
     const { error } = await db.from('origin_photos').upsert(row, { onConflict: 'id' })
     if (error) throw error
