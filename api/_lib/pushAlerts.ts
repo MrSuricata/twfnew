@@ -69,9 +69,11 @@ export const MAX_PUSH_LINES = 6
 
 const ISO_RE = /^\d{4}-\d{2}-\d{2}$/
 const MS_PER_DAY = 86_400_000
-// Ventana de "en frontera" — igual que todayFilters.ts (SALIDA hace 1 o 2 días).
-const BORDER_DAYS_MIN = 1
-const BORDER_DAYS_MAX = 2
+// "En frontera" — igual que todayFilters.ts: ya salió (mínimo ayer) y el límite
+// superior lo pone la ETA fiscal (en frontera hasta el día ANTERIOR al arribo),
+// no un tope de días. BORDER_MAX_DAYS_NO_FISC solo aplica sin ETA fiscal cargada.
+const BORDER_MIN_DAYS = 1
+const BORDER_MAX_DAYS_NO_FISC = 7
 // Ventana de "días libres": vence hoy o en los próximos N días (vencidos NO).
 const LIBRE_DAYS_AHEAD = 3
 
@@ -200,9 +202,10 @@ export function computeFiscalLines(shipments: PushShipmentRow[], todayIso: strin
   return out.sort((a, b) => a.localeCompare(b))
 }
 
-/** "Hoy en frontera": SALIDA hace 1–2 días y sin llegar a fiscal — misma
- *  derivación que enFronteraHoy de src/lib/todayFilters.ts (si ETA_FISC ya
- *  pasó no está en frontera; si es HOY cuenta en "fiscal", acá se excluye).
+/** "Hoy en frontera": ya salió (mínimo ayer) y sigue en frontera hasta el día
+ *  ANTERIOR al arribo a fiscal — misma derivación que enFronteraHoy de
+ *  src/lib/todayFilters.ts (ETA fiscal pasada = ya llegó; hoy = cuenta en "fiscal",
+ *  acá se excluye; futura = en frontera). Sin ETA fiscal: tope de seguridad.
  *  Línea: `CNTR · ref · [transporte]`. */
 export function computeFronteraLines(shipments: PushShipmentRow[], todayIso: string): string[] {
   const out: string[] = []
@@ -210,9 +213,12 @@ export function computeFronteraLines(shipments: PushShipmentRow[], todayIso: str
     for (const op of effectiveOps(s)) {
       if (!isIso(op.salida)) continue
       const days = daysSinceIso(op.salida, todayIso)
-      if (days < BORDER_DAYS_MIN || days > BORDER_DAYS_MAX) continue
-      const fiscValida = !!op.etaFisc && isIso(op.etaFisc)
-      if (fiscValida && daysSinceIso(op.etaFisc, todayIso) >= 0) continue // ya llegó o llega hoy
+      if (days < BORDER_MIN_DAYS) continue // sale hoy / no salió aún
+      if (op.etaFisc && isIso(op.etaFisc)) {
+        if (daysSinceIso(op.etaFisc, todayIso) >= 0) continue // ETA fiscal hoy o pasada
+      } else if (days > BORDER_MAX_DAYS_NO_FISC) {
+        continue // sin ETA fiscal y demasiado vieja
+      }
       out.push(line(op.cntr, s.ref, op.transporte || '—'))
     }
   }

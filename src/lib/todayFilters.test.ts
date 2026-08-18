@@ -30,7 +30,9 @@ const TODAY = '2026-04-20'
 const YESTERDAY = '2026-04-19'
 const TWO_DAYS_AGO = '2026-04-18'
 const THREE_DAYS_AGO = '2026-04-17'
+const EIGHT_DAYS_AGO = '2026-04-12'
 const TOMORROW = '2026-04-21'
+const IN_TWO_DAYS = '2026-04-22'
 
 function mkOp(partial: Partial<OperativasRecord>): OperativasRecord {
   return {
@@ -121,31 +123,41 @@ describe('salientesHoy', () => {
 })
 
 describe('enFronteraHoy', () => {
-  it('matches ops whose SALIDA was 1-2 days ago', () => {
+  // El caso del dueño: un domingo, las que salieron el jueves Y el viernes siguen
+  // en frontera mientras su arribo fiscal sea futuro — NO solo las de 1–2 días.
+  it('en frontera mientras la ETA fiscal sea futura, sin importar los días desde la salida', () => {
     const s = mkShip('A7500', [
-      mkOp({ SALIDA: YESTERDAY }),     // 1 day ago — match
-      mkOp({ SALIDA: TWO_DAYS_AGO }),  // 2 days ago — match
+      mkOp({ SALIDA: THREE_DAYS_AGO, ETA_FISC: IN_TWO_DAYS, CNTR_OP: 'JUE' }), // "jueves"
+      mkOp({ SALIDA: TWO_DAYS_AGO, ETA_FISC: TOMORROW, CNTR_OP: 'VIE' }),      // "viernes"
+      mkOp({ SALIDA: YESTERDAY, ETA_FISC: IN_TWO_DAYS, CNTR_OP: 'SAB' }),      // sábado
     ])
-    expect(enFronteraHoy([s])).toHaveLength(2)
+    expect(enFronteraHoy([s])).toHaveLength(3)
   })
 
-  it('skips ops with SALIDA today or 3+ days ago', () => {
-    const s = mkShip('A7500', [
-      mkOp({ SALIDA: TODAY }),         // 0 days — not in border window
-      mkOp({ SALIDA: THREE_DAYS_AGO }), // 3 days — passed the border
-    ])
+  it('excluye las que salen HOY (van en "Saliendo hoy")', () => {
+    const s = mkShip('A7500', [mkOp({ SALIDA: TODAY, ETA_FISC: TOMORROW })])
     expect(enFronteraHoy([s])).toHaveLength(0)
   })
 
-  it('skips ops that already reached fiscal', () => {
+  it('acotado por la ETA fiscal: llegó (pasada) o llega hoy → fuera; futura → dentro', () => {
     const s = mkShip('A7500', [
-      mkOp({ SALIDA: YESTERDAY, ETA_FISC: YESTERDAY }), // arrived yesterday
-      mkOp({ SALIDA: YESTERDAY, ETA_FISC: TODAY }),     // arriving today
-      mkOp({ SALIDA: YESTERDAY, ETA_FISC: TOMORROW }),  // arriving tomorrow — still at border
+      mkOp({ SALIDA: THREE_DAYS_AGO, ETA_FISC: YESTERDAY }), // ya llegó → fuera
+      mkOp({ SALIDA: THREE_DAYS_AGO, ETA_FISC: TODAY }),     // llega hoy → card fiscal
+      mkOp({ SALIDA: THREE_DAYS_AGO, ETA_FISC: TOMORROW }),  // futura → en frontera
     ])
     const matches = enFronteraHoy([s])
     expect(matches).toHaveLength(1)
     expect(matches[0].op.ETA_FISC).toBe(TOMORROW)
+  })
+
+  it('sin ETA fiscal: sigue en frontera con tope de seguridad (≤7 días)', () => {
+    const s = mkShip('A7500', [
+      mkOp({ SALIDA: TWO_DAYS_AGO, ETA_FISC: '', CNTR_OP: 'RECIENTE' }), // dentro del tope
+      mkOp({ SALIDA: EIGHT_DAYS_AGO, ETA_FISC: '', CNTR_OP: 'VIEJA' }),  // pasó el tope → fuera
+    ])
+    const matches = enFronteraHoy([s])
+    expect(matches).toHaveLength(1)
+    expect(matches[0].op.CNTR_OP).toBe('RECIENTE')
   })
 
   it('handles missing or invalid SALIDA gracefully', () => {
