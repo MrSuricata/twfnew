@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   CHECKS_ACTA, CHECK_KEYS,
   contenedoresDeCarga, checksMarcados, hayNovedades, resumenActa,
-  actasDe, ultimaActa, actaVacia, tieneContenido,
+  actasDe, ultimaActa, actaVacia, tieneContenido, estaAnulada,
   type ActaDeposito,
 } from './actasDeposito'
 
@@ -150,5 +150,38 @@ describe('actaVacia / tieneContenido', () => {
 
   it('un comentario de solo espacios no cuenta', () => {
     expect(tieneContenido({ ...actaVacia(), comentario: '   ' })).toBe(false)
+  })
+})
+
+describe('anulación', () => {
+  const anulada = (a: Partial<ActaDeposito> = {}): ActaDeposito =>
+    acta({ anulada_at: '2026-08-19T10:00:00Z', anulada_por: 'brian@twf.uy', ...a })
+
+  it('un acta anulada no aparece en el historial del contenedor', () => {
+    const todas = [
+      acta({ id: 'viva' }),
+      anulada({ id: 'muerta' }),
+    ]
+    expect(actasDe(todas, 'A8025', 'EMCU1818703').map(a => a.id)).toEqual(['viva'])
+  })
+
+  it('ultimaActa ignora las anuladas', () => {
+    // La anulada es MÁS NUEVA: si no se filtrara, sería la que se muestra.
+    const todas = [
+      acta({ id: 'viva', created_at: '2026-08-18T10:00:00Z' }),
+      anulada({ id: 'muerta', created_at: '2026-08-19T10:00:00Z' }),
+    ]
+    expect(ultimaActa(todas, 'A8025', 'EMCU1818703')?.id).toBe('viva')
+  })
+
+  it('si están todas anuladas no hay última', () => {
+    expect(ultimaActa([anulada()], 'A8025', 'EMCU1818703')).toBeNull()
+  })
+
+  it('estaAnulada distingue por la fecha, no por el autor', () => {
+    expect(estaAnulada(acta())).toBe(false)
+    expect(estaAnulada(anulada())).toBe(true)
+    // Sin fecha no está anulada aunque tenga autor (fila a medio escribir).
+    expect(estaAnulada(acta({ anulada_por: 'alguien' }))).toBe(false)
   })
 })

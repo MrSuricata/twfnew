@@ -60,6 +60,10 @@ export interface ActaDeposito {
   comentario: string
   usuario?: string | null
   created_at?: string | null
+  /** Anulada por error. Se ANULA, no se borra: el acta puede hacer falta en un
+   *  reclamo meses después, así que la fila queda con quién y cuándo. */
+  anulada_at?: string | null
+  anulada_por?: string | null
 }
 
 /** Lo que se está editando en pantalla antes de guardarse. */
@@ -105,12 +109,19 @@ export function resumenActa(acta: ActaDeposito): string {
   return 'Sin novedades'
 }
 
-/** Actas de un contenedor de una carga, de la más nueva a la más vieja. */
+/** ¿El acta fue anulada? Manda la FECHA: una fila con autor pero sin fecha
+ *  está a medio escribir y no cuenta como anulada. */
+export function estaAnulada(acta: ActaDeposito): boolean {
+  return !!txt(acta?.anulada_at)
+}
+
+/** Actas VIGENTES de un contenedor de una carga, de la más nueva a la más
+ *  vieja. Las anuladas no salen: no se muestran ni alimentan el informe. */
 export function actasDe(actas: ActaDeposito[], ref: string, contenedor: string): ActaDeposito[] {
   const r = norm(ref)
   const c = norm(contenedor)
   return (actas || [])
-    .filter(a => norm(a.ref) === r && norm(a.contenedor) === c)
+    .filter(a => !estaAnulada(a) && norm(a.ref) === r && norm(a.contenedor) === c)
     .sort((a, b) => {
       const ka = txt(a.created_at) || txt(a.fecha)
       const kb = txt(b.created_at) || txt(b.fecha)

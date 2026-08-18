@@ -21,7 +21,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Camera, MagnifyingGlass, Warehouse, SpinnerGap, CheckCircle, ArrowSquareOut,
-  ClipboardText, CaretDown, CaretRight, Warning, Cube,
+  ClipboardText, CaretDown, CaretRight, Warning, Cube, Trash,
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import { Card, CardContent } from '@/components/ui/card'
@@ -30,7 +30,7 @@ import { Textarea } from '@/components/ui/textarea'
 import type { DbShipment } from '@/lib/operationsTypes'
 import type { OriginPhoto } from '@/lib/quotationTypes'
 import { processPhoto } from '@/lib/imageUtils'
-import { saveOriginPhoto, fetchDepositoActas, saveDepositoActa } from '@/lib/dataClient'
+import { saveOriginPhoto, fetchDepositoActas, saveDepositoActa, anularDepositoActa } from '@/lib/dataClient'
 import { clasificarSeleccion, avisoDescartes, subirEnTandas, MAX_FOTOS_POR_LOTE } from '@/lib/subirFotos'
 import { cargasEnDeposito, filtrarCargas, etiquetaCuando, type CargaEnDeposito } from '@/lib/enDeposito'
 import {
@@ -70,6 +70,9 @@ export default function DepositoPanel({
   const [borrador, setBorrador] = useState<BorradorActa>(actaVacia)
   const [guardando, setGuardando] = useState(false)
   const [historialAbierto, setHistorialAbierto] = useState<string | null>(null)
+  /** Acta que se está por anular (confirmación en dos toques: en el celular
+   *  un borrado a un toque se dispara solo). */
+  const [porAnular, setPorAnular] = useState<string | null>(null)
 
   const inputRef = useRef<HTMLInputElement>(null)
   const objetivo = useRef<{ carga: CargaEnDeposito; cntr: string } | null>(null)
@@ -206,6 +209,19 @@ export default function DepositoPanel({
     }
   }
 
+  const anular = async (acta: ActaDeposito) => {
+    if (!acta.id) return
+    try {
+      await anularDepositoActa(acta.id)
+      // Se saca de memoria en vez de re-traer todo: la pantalla es de campo.
+      setActas(prev => prev.filter(a => a.id !== acta.id))
+      setPorAnular(null)
+      toast.success('Acta anulada', { description: 'No cuenta más para el informe.' })
+    } catch (err) {
+      toast.error('No se pudo anular el acta', { description: (err as Error)?.message })
+    }
+  }
+
   // ── Render ─────────────────────────────────────────────────────────
   const bloqueContenedor = (carga: CargaEnDeposito, cntr: string) => {
     const clave = claveBloque(carga.ref, cntr)
@@ -246,12 +262,42 @@ export default function DepositoPanel({
         )}
 
         {verHistorial && (
-          <div className="space-y-1 border-l-2 border-border pl-2">
+          <div className="space-y-1.5 border-l-2 border-border pl-2">
             {previas.map(a => (
-              <p key={a.id} className={`text-[11px] ${hayNovedades(a) ? 'text-amber-700' : 'text-muted-foreground'}`}>
-                <b>{fmtDateDMY(a.fecha)}</b> · {resumenActa(a)}
-                {a.usuario && <span className="text-muted-foreground/70"> · {a.usuario}</span>}
-              </p>
+              <div key={a.id} className="flex items-start gap-2">
+                <p className={`flex-1 text-[11px] ${hayNovedades(a) ? 'text-amber-700' : 'text-muted-foreground'}`}>
+                  <b>{fmtDateDMY(a.fecha)}</b> · {resumenActa(a)}
+                  {a.usuario && <span className="text-muted-foreground/70"> · {a.usuario}</span>}
+                </p>
+                {porAnular === a.id ? (
+                  <span className="flex items-center gap-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => anular(a)}
+                      className="h-7 px-2 rounded-md bg-destructive text-destructive-foreground text-[11px] font-semibold"
+                    >
+                      Anular
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPorAnular(null)}
+                      className="h-7 px-2 rounded-md border border-border text-[11px]"
+                    >
+                      No
+                    </button>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setPorAnular(a.id || null)}
+                    className="p-1 rounded-md text-muted-foreground/60 hover:text-destructive hover:bg-destructive/10 shrink-0"
+                    title="Anular esta acta (se cargó por error)"
+                    aria-label={`Anular el acta del ${fmtDateDMY(a.fecha)}`}
+                  >
+                    <Trash size={13} />
+                  </button>
+                )}
+              </div>
             ))}
           </div>
         )}
