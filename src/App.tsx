@@ -32,7 +32,12 @@ import NotFoundPage from './components/NotFoundPage'
 
 type View = 'public' | 'admin-login' | 'admin-dashboard' | 'client-login' | 'client-portal' | 'partner-login' | 'depot-dashboard' | 'transport-dashboard' | 'terms' | 'privacy' | 'not-found'
 
-const KNOWN_PATHS = new Set(['/', '/admin', '/portal', '/depot', '/transport', '/partner', '/terminos', '/privacidad'])
+const KNOWN_PATHS = new Set(['/', '/admin', '/portal', '/depot', '/transport', '/partner', '/terminos', '/privacidad', '/mirendimiento'])
+
+/** Página PERSONAL de rendimiento: no está linkeada desde ningún lado (pedido
+ *  de Brian 18/08: "que tenga que ponerlo yo para verlo"). Se entra tipeando la
+ *  ruta; adentro muestra los datos del usuario logueado, no los de otro. */
+export const RENDIMIENTO_PATH = '/mirendimiento'
 
 // Client accounts are managed server-side via CLIENTS_JSON env var.
 // No hardcoded client data in client bundle.
@@ -76,7 +81,7 @@ function saveToStorage(key: string, data: unknown) {
 function getInitialView(): View {
   const path = window.location.pathname.toLowerCase()
   const portalsEnabled = getBrand().capabilities.portals
-  if (path === '/admin') return 'admin-login'
+  if (path === '/admin' || path === RENDIMIENTO_PATH) return 'admin-login'
   if (portalsEnabled) {
     if (path === '/portal') return 'client-login'
     if (path === '/depot' || path === '/transport' || path === '/partner') return 'partner-login'
@@ -274,7 +279,7 @@ function App() {
     verifySession().then(result => {
       if (result.valid) {
         const path = window.location.pathname.toLowerCase()
-        if (result.role === 'admin' && path === '/admin') {
+        if (result.role === 'admin' && (path === '/admin' || path === RENDIMIENTO_PATH)) {
           setIsAdminLoggedIn(true)
           setCurrentView('admin-dashboard')
         } else if (result.role === 'client' && path === '/portal') {
@@ -918,7 +923,10 @@ function App() {
       'privacy': '/privacidad',
     }
     const targetPath = pathMap[view] || '/'
-    if (window.location.pathname !== targetPath) {
+    // La ruta personal de rendimiento es un /admin con una pestaña oculta: no
+    // hay que reescribirla, si no se pierde al entrar y al refrescar.
+    const enRendimiento = window.location.pathname.toLowerCase() === RENDIMIENTO_PATH
+    if (window.location.pathname !== targetPath && !(enRendimiento && targetPath === '/admin')) {
       window.history.pushState({}, '', targetPath)
     }
   }, [])
@@ -927,7 +935,7 @@ function App() {
   useEffect(() => {
     const handlePopState = () => {
       const path = window.location.pathname.toLowerCase()
-      if (path === '/admin') {
+      if (path === '/admin' || path === RENDIMIENTO_PATH) {
         setCurrentView(isAdminLoggedIn ? 'admin-dashboard' : 'admin-login')
       } else if (path === '/portal' && getBrand().capabilities.portals) {
         setCurrentView(clientEmail ? 'client-portal' : 'client-login')

@@ -13,7 +13,8 @@
     { "source": "/depot", "destination": "/index.html" },
     { "source": "/transport", "destination": "/index.html" },
     { "source": "/terminos", "destination": "/index.html" },
-    { "source": "/privacidad", "destination": "/index.html" }
+    { "source": "/privacidad", "destination": "/index.html" },
+    { "source": "/mirendimiento", "destination": "/index.html" }
   ],
   "headers": [
     {

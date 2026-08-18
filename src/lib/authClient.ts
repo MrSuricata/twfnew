@@ -57,6 +57,15 @@ export function getAdminName(): string {
   return String(p?.name || p?.user || '')
 }
 
+/** Identidad de LOGIN (el campo `user` del token, en general el email). Es la
+ *  que el server estampa en `by` de ref_checks y en el audit log — o sea, la
+ *  que hay que comparar para saber si un paso lo marcó uno mismo. Ojo: NO es
+ *  getAdminName(), que devuelve el nombre visible y no matchea. */
+export function getAdminUser(): string {
+  const p = decodeTokenPayload()
+  return String(p?.user || '')
+}
+
 /** Pestaña de inicio del usuario logueado (admin_users.home_area, viaja en el
  *  JWT). '' = usar la default de la marca. Sobrevive el F5 igual que el nivel:
  *  se lee del token guardado, sin fetch extra. */
