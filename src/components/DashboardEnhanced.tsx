@@ -37,6 +37,7 @@ import TeamManager from './TeamManager'
 import HelpGuide from './HelpGuide'
 
 import TodayDashboard from './TodayDashboard'
+import MiRendimientoPanel from './MiRendimientoPanel'
 import SeguimientosBoard from './SeguimientosBoard'
 import AgendaCalendar from './agenda/AgendaCalendar'
 import { mergeFclShipments } from '@/lib/operationsTypes'
@@ -153,10 +154,15 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
   // Validada contra las pestañas reales — un valor inválido (o 'equipo' sin
   // ser owner) caería en un dashboard en blanco.
   const [activeTab, setActiveTab] = useState(() => {
+    if (typeof window !== 'undefined' && window.location.pathname.toLowerCase() === '/mirendimiento' && ops) {
+      return 'rendimiento'
+    }
     const brandDefault = ops ? 'hoy' : 'contenido'
     const area = getAdminHomeArea()
     if (!area || !ops) return brandDefault
-    const validas = new Set(['hoy', 'seguimientos', 'agenda', 'analytics', 'operaciones', 'checks', 'trucks', 'transportes', 'quotes', 'billing', 'pagos', 'contenido', 'clients', 'partners'])
+    // 'rendimiento' es válida pero NO tiene TabsTrigger: es la página personal
+    // a la que se entra tipeando /mirendimiento (no se ve en la barra).
+    const validas = new Set(['hoy', 'seguimientos', 'agenda', 'analytics', 'operaciones', 'checks', 'trucks', 'transportes', 'quotes', 'billing', 'pagos', 'contenido', 'clients', 'partners', 'rendimiento'])
     if (area === 'equipo' && getAdminLevel() === 'owner') return 'equipo'
     return validas.has(area) ? area : brandDefault
   })
@@ -505,6 +511,15 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
               onOpenDetail={onOpenDetail}
               clients={clients}
               onOpenTab={setActiveTab}
+            />
+          </TabsContent>
+
+          <TabsContent value="rendimiento">
+            <MiRendimientoPanel
+              dbShipments={dbShipments}
+              reports={reports}
+              originPhotos={originPhotos}
+              onOpenDetail={onOpenDetail}
             />
           </TabsContent>
 

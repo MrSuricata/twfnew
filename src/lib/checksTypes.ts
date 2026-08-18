@@ -36,6 +36,8 @@ export type CheckStepKey =
   // Cierre: lo confirma la naviera, no nosotros
   | 'liberado'
   // Avisos por contenedor (se marcan desde HOY)
+  | 'aviso_traslado'
+  | 'visita_deposito'
   | 'aviso_salida'
   | 'cruce_frontera'
   | 'arribo_fiscal'
@@ -49,6 +51,10 @@ export interface CheckStepDef {
   /** Paso de CIERRE: no es un check de la lista sino el botón que saca la
    *  carga del tablero. Se marca cuando la línea confirma la liberación. */
   cierre?: boolean
+  /** Paso PERSONAL (página /mirendimiento): tampoco va a la pestaña Checks ni
+   *  al progreso documentario. A diferencia de los avisos, es nivel CARGA —
+   *  se fue al depósito por la operativa, no "por el contenedor 2 de 3". */
+  personal?: boolean
 }
 
 /** Todos los pasos conocidos del jsonb `steps`: los 4 checks documentarios
@@ -60,6 +66,8 @@ export const CHECK_STEPS: CheckStepDef[] = [
   { key: 'docs_deposito', label: 'Docs depósito' },
   { key: 'pagos_ok', label: 'Pagos OK' },
   { key: 'liberado', label: 'Liberado', cierre: true },
+  { key: 'aviso_traslado', label: 'Avisar traslado del CNTR al depósito', aviso: true },
+  { key: 'visita_deposito', label: 'Estuve en el depósito por esta carga', personal: true },
   { key: 'aviso_salida', label: 'Avisar salida en el día de carga', aviso: true },
   { key: 'cruce_frontera', label: 'Avisar cruce de frontera', aviso: true },
   { key: 'arribo_fiscal', label: 'Avisar arribo a fiscal', aviso: true },
@@ -87,7 +95,7 @@ export interface RefCheckStep {
 /** Los 3 pasos que son POR CONTENEDOR (eventos que ocurren por contenedor:
  *  salida, cruce de frontera, arribo a fiscal). El resto es nivel-ref. */
 export const AVISO_STEP_KEYS: ReadonlySet<CheckStepKey> = new Set<CheckStepKey>([
-  'aviso_salida', 'cruce_frontera', 'arribo_fiscal',
+  'aviso_traslado', 'aviso_salida', 'cruce_frontera', 'arribo_fiscal',
 ])
 export function isAvisoStep(key: CheckStepKey): boolean {
   return AVISO_STEP_KEYS.has(key)
@@ -112,7 +120,7 @@ export function normalizeRef(ref: string | null | undefined): string {
  *  marcan desde HOY). La operativa ya no condiciona pasos — el parámetro se
  *  conserva por compatibilidad de firma con los callers. */
 export function stepsForOperativa(_operativa: string | null | undefined): CheckStepDef[] {
-  return CHECK_STEPS.filter(s => !s.aviso && !s.cierre)
+  return CHECK_STEPS.filter(s => !s.aviso && !s.cierre && !s.personal)
 }
 
 /**
