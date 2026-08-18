@@ -30,7 +30,7 @@ export interface FaltanteInput {
   widget: 'text' | 'date' | 'number' | 'select' | 'datalist'
   opciones?: { value: string; label: string }[]
   /** Fuente de sugerencias para 'datalist' (las provee el componente). */
-  sugerencias?: 'transportes' | 'agentes' | 'depositos'
+  sugerencias?: 'transportes' | 'agentes' | 'depositos' | 'lineas'
   placeholder?: string
 }
 
@@ -42,6 +42,7 @@ export const FALTANTE_INPUTS: Partial<Record<keyof CargaCampos, FaltanteInput>> 
   pais: { widget: 'select', opciones: (EDITABLE_FIELDS.pais?.options ?? []).filter(o => o.value !== '') },
   eta: { widget: 'date' },
   buque: { widget: 'text', placeholder: 'BUQUE VIAJE' },
+  linea: { widget: 'datalist', sugerencias: 'lineas', placeholder: 'MAERSK, ONE, HAPAG…' },
   docNumber: { widget: 'text', placeholder: 'BL / booking' },
   cntr: { widget: 'text', placeholder: 'MSKU1234567' },
   pkgs: { widget: 'number', placeholder: 'bultos' },
@@ -145,7 +146,7 @@ export function buildFaltantePatch(
     // Misma regla que el panel: el texto libre se canonicaliza contra el
     // catálogo ('peretti' → 'BICI PERETTI S.A.') para no crear variantes.
     valor = canonicalizeCliente(texto, clientes ?? [])
-  } else if (campo === 'buque' || campo === 'deposito' || campo === 'transporte' || campo === 'fiscal') {
+  } else if (campo === 'buque' || campo === 'linea' || campo === 'deposito' || campo === 'transporte' || campo === 'fiscal') {
     valor = texto.toUpperCase()
   }
 
