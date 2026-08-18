@@ -18,12 +18,20 @@
  *    Las otras tres (visita, aviso de traslado, aviso de salida) son pasos de
  *    ref_checks con fecha y usuario.
  *
- * 3. La visita a depósito cuenta como CONFIRMADA cuando hay fotos de Uruguay
- *    (evidencia dura) y como DECLARADA cuando solo está el tilde. El parte
- *    muestra las dos por separado: mezclarlas sería exactamente el tipo de
- *    número que no aguanta que lo revisen.
+ * 3. LAS FOTOS NO PRUEBAN LA VISITA (corrección de Brian, 18/08). Puede haber
+ *    fotos sin que él haya ido: las manda el depósito. Así que la visita es
+ *    SOLO el tilde, y las fotos son una señal aparte — que la carga quedó
+ *    documentada, venga de donde venga. Contarlas como visita inflaba
+ *    exactamente el número que la página existe para defender.
+ *    Y al revés: si hay INFORME, hay fotos, porque van adentro del informe
+ *    (Brian 18/08). Un informe subido sin galería no es una carga sin fotos.
  *
- * 4. AUTORÍA. Lo marcado con la identidad de OTRA persona no cuenta como
+ * 4. EL INFORME SE MIDE SOBRE LAS VISITAS, no sobre el total: el informe
+ *    operativo sale de haber ido. Pedir informe de una operativa donde no
+ *    fue no es un pendiente, es una métrica mal planteada. Un informe SIN
+ *    visita se marca aparte (o falta el tilde, o el informe no corresponde).
+ *
+ * 5. AUTORÍA. Lo marcado con la identidad de OTRA persona no cuenta como
  *    propio. Lo marcado en la época del login compartido ('admin') o traído
  *    del import de la planilla ('planilla') no identifica a nadie: eso SÍ
  *    cuenta, porque "no atribuible" no es lo mismo que "de otro". De acá en
@@ -65,7 +73,10 @@ export interface FilaRendimiento {
   /** Contenedores de la carga: los avisos son por contenedor. */
   cntrs: string[]
   visita: boolean
+  /** La carga quedó documentada: hay fotos subidas O informe (que las lleva). */
   fotos: boolean
+  /** Hay fotos en la galería (no solo dentro del informe). */
+  fotosSubidas: boolean
   /** Avisado en TODOS los contenedores. */
   avisoTraslado: boolean
   /** Avisado en algunos, no en todos. */
@@ -73,19 +84,24 @@ export interface FilaRendimiento {
   avisoSalida: boolean
   avisoSalidaParcial: boolean
   informe: boolean
-  /** La visita tiene respaldo de fotos, no solo el tilde. */
-  visitaConfirmada: boolean
+  /** Informe subido sin haber marcado la visita: o falta el tilde, o el
+   *  informe no corresponde. Se muestra, no se corrige solo. */
+  informeSinVisita: boolean
 }
 
 export interface ResumenRendimiento {
   filas: FilaRendimiento[]
   total: number
   visitas: number
-  visitasConfirmadas: number
   fotos: number
   traslados: number
   salidas: number
   informes: number
+  /** Informes de operativas a las que SÍ fue — el denominador honesto del
+   *  informe operativo es la visita, no el total. */
+  informesDeVisitadas: number
+  /** Fui pero no hice el informe: el pendiente real. */
+  visitasSinInforme: number
   /** Operativas sin ninguna de las cinco señales — lo que quedó sin tocar. */
   sinNada: number
 }
@@ -195,16 +211,20 @@ export function buildRendimiento(args: {
 
     const steps = args.checksByRef.get(norm) || {}
     const cntrList = parseCntr(txt(c.cntr))
-    const fotos = args.refsConFotos.has(norm)
     // La visita es nivel CARGA (no por contenedor): se fue al depósito por la
-    // operativa. El tilde de otra persona no cuenta como propio.
-    const tildeVisita = !!steps.visita_deposito?.done && esAutorPropio(steps.visita_deposito?.by, identidades)
-    const visita = tildeVisita || fotos
+    // operativa. SOLO el tilde, y solo si lo marcó uno mismo: las fotos pueden
+    // venir del depósito, así que no prueban nada (Brian 18/08).
+    const visita = !!steps.visita_deposito?.done && esAutorPropio(steps.visita_deposito?.by, identidades)
 
     // Los avisos son POR CONTENEDOR: el `done` de arriba significa "alguno
     // avisado". Cuenta como hecho solo si están TODOS los contenedores.
     const traslado = agregadoPropio(steps.aviso_traslado, cntrList, identidades)
     const salida = agregadoPropio(steps.aviso_salida, cntrList, identidades)
+    const informeOk = args.refsConInforme.has(norm)
+    // Las fotos van DENTRO del informe: si el informe se mandó, la carga quedó
+    // documentada aunque la galería esté vacía (Brian 18/08).
+    const fotosSubidas = args.refsConFotos.has(norm)
+    const fotos = fotosSubidas || informeOk
 
     filas.push({
       ref: c.ref,
@@ -215,13 +235,13 @@ export function buildRendimiento(args: {
       cntrs: cntrList,
       visita,
       fotos,
+      fotosSubidas,
       avisoTraslado: traslado.done > 0 && traslado.done === traslado.total,
       avisoTrasladoParcial: traslado.done > 0 && traslado.done < traslado.total,
       avisoSalida: salida.done > 0 && salida.done === salida.total,
       avisoSalidaParcial: salida.done > 0 && salida.done < salida.total,
-      informe: args.refsConInforme.has(norm),
-      // Confirmada = hay fotos. Declarada = solo el tilde.
-      visitaConfirmada: fotos,
+      informe: informeOk,
+      informeSinVisita: informeOk && !visita,
     })
   }
 
@@ -238,13 +258,67 @@ export function buildRendimiento(args: {
     filas,
     total: filas.length,
     visitas: cuenta(f => f.visita),
-    visitasConfirmadas: cuenta(f => f.visitaConfirmada),
     fotos: cuenta(f => f.fotos),
     traslados: cuenta(f => f.avisoTraslado),
     salidas: cuenta(f => f.avisoSalida),
     informes: cuenta(f => f.informe),
+    informesDeVisitadas: cuenta(f => f.visita && f.informe),
+    visitasSinInforme: cuenta(f => f.visita && !f.informe),
     sinNada: cuenta(f => !f.visita && !f.fotos && !f.avisoTraslado && !f.avisoSalida && !f.informe),
   }
+}
+
+/** Una fila del resumen mensual. */
+export interface MesRendimiento {
+  /** 'YYYY-MM' */
+  mes: string
+  total: number
+  visitas: number
+  fotos: number
+  traslados: number
+  salidas: number
+  informesDeVisitadas: number
+}
+
+/** Últimos N meses hacia atrás desde `hastaMes` ('YYYY-MM'), del más nuevo al
+ *  más viejo. Sin Date-math sobre strings: se arma con el calendario. */
+export function ultimosMeses(hastaMes: string, n: number): string[] {
+  const [y, m] = hastaMes.split('-').map(Number)
+  if (!y || !m) return []
+  const out: string[] = []
+  for (let i = 0; i < n; i++) {
+    const d = new Date(y, m - 1 - i, 1)
+    out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`)
+  }
+  return out
+}
+
+/**
+ * El mismo parte, mes a mes — para ver cómo viene la cosa y no solo la semana.
+ *
+ * Reusa buildRendimiento por mes completo: una sola definición de "qué cuenta",
+ * así el número del mes y el de la semana nunca se contradicen.
+ */
+export function resumenMensual(
+  args: Omit<Parameters<typeof buildRendimiento>[0], 'desde' | 'hasta'> & { meses: string[] },
+): MesRendimiento[] {
+  return args.meses.map(mes => {
+    const [y, m] = mes.split('-').map(Number)
+    const desde = `${mes}-01`
+    // Día 0 del mes siguiente = último día de este mes (sin tabla de 28/30/31).
+    const fin = new Date(y, m, 0)
+    const hasta = `${mes}-${String(fin.getDate()).padStart(2, '0')}`
+    const r = buildRendimiento({ ...args, desde, hasta })
+    return {
+      mes,
+      total: r.total,
+      visitas: r.visitas,
+      fotos: r.fotos,
+      traslados: r.traslados,
+      salidas: r.salidas,
+      informesDeVisitadas: r.informesDeVisitadas,
+    }
+  })
 }
 
 /** Depósitos visitados en el período, con las refs de cada uno. */
@@ -268,10 +342,12 @@ export function textoParte(r: ResumenRendimiento, desde: string, hasta: string):
   const deps = depositosVisitados(r)
   const lineas = [
     `Parte de operativas ${dmy(desde)} al ${dmy(hasta)} — ${r.total} operativas por depósito`,
-    `• Fui al depósito: ${frac(r.visitasConfirmadas)} confirmadas con fotos${r.visitas > r.visitasConfirmadas ? ` (+${r.visitas - r.visitasConfirmadas} declaradas)` : ''}`,
+    `• Fui al depósito: ${frac(r.visitas)}`,
     `• Traslado avisado al cliente: ${frac(r.traslados)}`,
     `• Salida avisada: ${frac(r.salidas)}`,
-    `• Informe operativo: ${frac(r.informes)}`,
+    // El informe sale de haber ido: el denominador honesto son las visitas.
+    `• Informe operativo: ${r.informesDeVisitadas}/${r.visitas} de las que fui`,
+    `• Fotos de la carga: ${frac(r.fotos)} (propias o del depósito)`,
   ]
   if (deps.length) lineas.push(`• Depósitos: ${deps.map(d => `${d.deposito} (${d.refs.length})`).join(' · ')}`)
   // Pendiente = le falta CUALQUIERA de las cinco señales. Listar solo las de
