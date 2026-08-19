@@ -101,9 +101,21 @@ export interface FilaRendimiento {
   informeSinVisita: boolean
 }
 
+/** ¿Esta fila es un trasiego que YA ocurrió esta semana? Solo esas cuentan en
+ *  el denominador. Una carga que llegó y todavía no tiene salida coordinada es
+ *  trabajo por venir, no trabajo que uno dejó de hacer: meterla en el
+ *  denominador convierte "no pasó todavía" en "no fuiste" (Brian 18/08). */
+export function esTrasiegoDeLaSemana(f: FilaRendimiento): boolean {
+  return f.fechaEs === 'salida'
+}
+
 export interface ResumenRendimiento {
+  /** TODAS las filas, para la tabla: las pendientes también se muestran. */
   filas: FilaRendimiento[]
+  /** Denominador: solo los trasiegos de la semana (los que ya salieron). */
   total: number
+  /** Cuántas llegaron pero todavía no tienen salida coordinada. */
+  pendientesDeCoordinar: number
   visitas: number
   fotos: number
   traslados: number
@@ -294,10 +306,17 @@ export function buildRendimiento(args: {
     return a.cntr.localeCompare(b.cntr)
   })
 
-  const cuenta = (f: (x: FilaRendimiento) => boolean): number => filas.filter(f).length
+  // Las fracciones se calculan SOLO sobre los trasiegos de la semana. Las
+  // llegadas sin salida coordinada se muestran igual (hay que ir a mirarlas)
+  // pero aparte: si contaran, el parte diría "0 de 9" cuando 4 todavía no
+  // habían ocurrido, y ese número es justo el que la página existe para
+  // defender.
+  const reales = filas.filter(esTrasiegoDeLaSemana)
+  const cuenta = (f: (x: FilaRendimiento) => boolean): number => reales.filter(f).length
   return {
     filas,
-    total: filas.length,
+    total: reales.length,
+    pendientesDeCoordinar: filas.length - reales.length,
     visitas: cuenta(f => f.visita),
     fotos: cuenta(f => f.fotos),
     traslados: cuenta(f => f.avisoTraslado),
@@ -364,6 +383,9 @@ export function resumenMensual(
 
 /** Depósitos visitados en el período, con las refs de cada uno. */
 export function depositosVisitados(r: ResumenRendimiento): { deposito: string; refs: string[] }[] {
+  // Va sobre TODAS las filas, no solo los trasiegos de la semana: si uno fue
+  // al depósito por una carga que todavía no tiene salida, fue igual. Es una
+  // lista, no una fracción, así que no hay riesgo de pasarse del 100%.
   // Con una fila por contenedor, una misma ref aparece varias veces: la lista
   // de refs del depósito se deduplica para no decir "fui 2 veces a PLANIR por
   // A8025" cuando fue una sola carga con dos contenedores.
@@ -387,7 +409,7 @@ export function textoParte(r: ResumenRendimiento, desde: string, hasta: string):
   const frac = (n: number) => `${n}/${r.total}`
   const deps = depositosVisitados(r)
   const lineas = [
-    `Parte de operativas ${dmy(desde)} al ${dmy(hasta)} — ${r.total} operativas por depósito`,
+    `Parte de operativas ${dmy(desde)} al ${dmy(hasta)} — ${r.total} trasiegos por depósito`,
     `• Fui al depósito: ${frac(r.visitas)}`,
     `• Traslado avisado al cliente: ${frac(r.traslados)}`,
     `• Salida avisada: ${frac(r.salidas)}`,
@@ -398,9 +420,16 @@ export function textoParte(r: ResumenRendimiento, desde: string, hasta: string):
   if (deps.length) lineas.push(`• Depósitos: ${deps.map(d => `${d.deposito} (${d.refs.length})`).join(' · ')}`)
   // Pendiente = le falta CUALQUIERA de las cinco señales. Listar solo las de
   // los avisos dejaba afuera operativas sin visita, sin fotos y sin informe.
-  const faltan = r.filas.filter(f => !f.visita || !f.fotos || !f.avisoTraslado || !f.avisoSalida || !f.informe)
+  const faltan = r.filas.filter(esTrasiegoDeLaSemana)
+    .filter(f => !f.visita || !f.fotos || !f.avisoTraslado || !f.avisoSalida || !f.informe)
   if (faltan.length) {
     lineas.push(`• Pendientes: ${faltan.slice(0, 6).map(f => f.ref).join(', ')}${faltan.length > 6 ? ` y ${faltan.length - 6} más` : ''}`)
+  }
+  // Las llegadas sin salida coordinada se nombran APARTE: no son trabajo sin
+  // hacer, y meterlas en las fracciones convertía "todavía no pasó" en "no fuiste".
+  if (r.pendientesDeCoordinar > 0) {
+    const n = r.pendientesDeCoordinar
+    lineas.push(`• Además ${n} llegada${n === 1 ? '' : 's'} sin salida coordinada (no cuentan)`)
   }
   return lineas.join('\n')
 }

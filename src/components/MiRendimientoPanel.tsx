@@ -290,11 +290,23 @@ export default function MiRendimientoPanel({ dbShipments, reports = [], originPh
                 <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
                   Operativa por operativa
                 </h2>
-                {resumen.sinNada > 0 && (
-                  <span className="text-xs text-amber-700 dark:text-amber-400 font-semibold">
-                    {resumen.sinNada} sin ninguna señal
-                  </span>
-                )}
+                <span className="flex items-center gap-3">
+                  {/* Las llegadas sin salida coordinada se muestran pero NO
+                      cuentan: son trabajo por venir, no trabajo sin hacer. */}
+                  {resumen.pendientesDeCoordinar > 0 && (
+                    <span
+                      className="text-xs text-muted-foreground"
+                      title="Llegaron pero todavía no tienen salida coordinada: se muestran en gris y no entran en los totales"
+                    >
+                      {resumen.pendientesDeCoordinar} sin salida coordinada (no cuentan)
+                    </span>
+                  )}
+                  {resumen.sinNada > 0 && (
+                    <span className="text-xs text-amber-700 dark:text-amber-400 font-semibold">
+                      {resumen.sinNada} sin ninguna señal
+                    </span>
+                  )}
+                </span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
