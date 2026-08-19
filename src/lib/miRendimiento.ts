@@ -75,6 +75,10 @@ export interface FilaRendimiento {
   operativa: string
   /** Fecha que ordena la fila: la salida si está, si no la llegada. */
   fecha: string
+  /** QUÉ es esa fecha. Sin esto la pantalla muestra una llegada con la misma
+   *  cara que una salida y se lee como "sale hoy" (Brian 18/08, caso A7958:
+   *  llegó el 18 y todavía no tiene salida coordinada). */
+  fechaEs: 'salida' | 'llegada'
   /** El contenedor de ESTA fila. '' = la carga no tiene contenedor cargado. */
   cntr: string
   /** TODOS los contenedores de la ref. Hace falta para escribir el mapa
@@ -148,19 +152,24 @@ export function esOperativaDeposito(c: CargaRendimiento): boolean {
  *  reales ('CONFIRMAR', '#N/A') que son truthy — sin este guard la carga se
  *  caía del parte en silencio, justo la que está parada en depósito. */
 export function fechaDeOperativa(c: CargaRendimiento, cntr?: string): string {
+  return fechaConTipo(c, cntr).fecha
+}
+
+/** La fecha Y de dónde salió: la salida manda, la llegada es el respaldo. */
+export function fechaConTipo(c: CargaRendimiento, cntr?: string): { fecha: string; es: 'salida' | 'llegada' } {
   // Si el contenedor tiene su propia fila en Operativas, MANDA la de él: es la
   // fecha de SU camión. Recién si no está se cae a la de la carga.
   const op = cntr
     ? (c.operativas || []).find(o => txt(o.cntr).toUpperCase() === txt(cntr).toUpperCase())
     : undefined
   const salidaOp = txt(op?.salida)
-  if (salidaOp && parseLocalDate(salidaOp)) return salidaOp
+  if (salidaOp && parseLocalDate(salidaOp)) return { fecha: salidaOp, es: 'salida' }
   const etaOp = txt(op?.eta)
-  if (op && etaOp) return etaOp
+  if (op && etaOp) return { fecha: etaOp, es: 'llegada' }
 
   const salida = txt(c.salida)
-  if (salida && parseLocalDate(salida)) return salida
-  return txt(c.eta)
+  if (salida && parseLocalDate(salida)) return { fecha: salida, es: 'salida' }
+  return { fecha: txt(c.eta), es: 'llegada' }
 }
 
 const enRango = (iso: string, desde: string, hasta: string): boolean => {
@@ -228,7 +237,7 @@ export function buildRendimiento(args: {
       if (vistas.has(claveFila)) continue
       // El rango se evalúa CON LA FECHA DEL CONTENEDOR: dos contenedores de la
       // misma carga pueden caer en semanas distintas.
-      const fecha = fechaDeOperativa(c, cntr)
+      const { fecha, es: fechaEs } = fechaConTipo(c, cntr)
       if (!enRango(fecha, args.desde, args.hasta)) continue
       vistas.add(claveFila)
       // La visita es POR CONTENEDOR y solo el tilde: las fotos pueden venir
@@ -260,6 +269,7 @@ export function buildRendimiento(args: {
         deposito: txt(c.deposito) || '—',
         operativa: txt(c.operativa).toUpperCase(),
         fecha,
+        fechaEs,
         cntr,
         cntrs: cntrList,
         visita,

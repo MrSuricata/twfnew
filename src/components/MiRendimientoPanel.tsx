@@ -450,8 +450,23 @@ function Fila({ f, onToggle, onOpenDetail }: {
         {f.cntr || <span className="italic">sin cntr</span>}
       </td>
       <td className="py-2 pr-2 text-muted-foreground hidden sm:table-cell">{f.deposito}</td>
+      {/* La fecha puede ser la SALIDA o, si todavía no está coordinada, la
+          LLEGADA. Mostrarlas iguales hacía leer "sale hoy" una carga que
+          recién llegaba (Brian 18/08, A7958). */}
       <td className="py-2 pr-2 text-muted-foreground tabular-nums hidden md:table-cell">
-        {f.fecha ? fmtDateDMY(f.fecha) : '—'}
+        {f.fecha ? (
+          <span
+            className={f.fechaEs === 'llegada' ? 'italic text-muted-foreground/70' : ''}
+            title={f.fechaEs === 'llegada'
+              ? 'Llegada: esta carga todavía no tiene salida coordinada'
+              : 'Salida del depósito'}
+          >
+            {fmtDateDMY(f.fecha)}
+            <span className="ml-1 text-[10px] uppercase tracking-wide">
+              {f.fechaEs === 'llegada' ? 'lleg.' : 'sal.'}
+            </span>
+          </span>
+        ) : '—'}
       </td>
       <td className="py-2 px-1 text-center">
         {/* El tilde NUNCA se bloquea. Antes se deshabilitaba cuando la carga

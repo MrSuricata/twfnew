@@ -245,6 +245,27 @@ describe('buildRendimiento — las cinco señales por operativa', () => {
     expect(r.filas[0].fecha).toBe('2026-08-20')
   })
 
+  it('dice si la fecha es la salida o la llegada', () => {
+    // Caso A7958 (Brian 18/08): "por que me aparece si no sale hoy". Llego el
+    // 18 y todavia no tiene salida coordinada; la columna mostraba la llegada
+    // con la misma cara que una salida.
+    const conSalida = build([carga({ ref: 'CON', cntr: 'X', salida: '2026-08-20' })])
+    expect(conSalida.filas[0].fechaEs).toBe('salida')
+
+    const sinSalida = build([carga({
+      ref: 'A7958', cntr: 'TEMU1789917', salida: '', eta: '2026-08-24',
+      operativas: [{ cntr: 'TEMU1789917', salida: '', eta: '2026-08-18' }],
+    })])
+    expect(sinSalida.filas[0].fecha).toBe('2026-08-18')
+    expect(sinSalida.filas[0].fechaEs).toBe('llegada')
+  })
+
+  it("la SALIDA de texto ('CONFIRMAR') cuenta como llegada, no como salida", () => {
+    const r = build([carga({ ref: 'A1', cntr: 'X', salida: 'CONFIRMAR', eta: '2026-08-19' })])
+    expect(r.filas[0].fecha).toBe('2026-08-19')
+    expect(r.filas[0].fechaEs).toBe('llegada')
+  })
+
   it('el informe cuenta solo para SU contenedor', () => {
     // Antes el informe era por ref y se mostraba en las dos filas: no había
     // forma de decir "de este hice informe y del otro no" (Brian 18/08).
