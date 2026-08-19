@@ -32,9 +32,9 @@ import type { OriginPhoto } from '@/lib/quotationTypes'
 import { processPhoto } from '@/lib/imageUtils'
 import { saveOriginPhoto, fetchDepositoActas, saveDepositoActa, anularDepositoActa } from '@/lib/dataClient'
 import { clasificarSeleccion, avisoDescartes, subirEnTandas, MAX_FOTOS_POR_LOTE } from '@/lib/subirFotos'
-import { cargasEnDeposito, filtrarCargas, etiquetaCuando, type CargaEnDeposito } from '@/lib/enDeposito'
+import { cargasEnDeposito, filtrarCargas, etiquetaCuando, type CargaEnDeposito, type BloqueCntr } from '@/lib/enDeposito'
 import {
-  CHECKS_ACTA, contenedoresDeCarga, actasDe, ultimaActa, actaVacia, tieneContenido,
+  CHECKS_ACTA, actasDe, ultimaActa, actaVacia, tieneContenido,
   resumenActa, hayNovedades, type ActaDeposito, type BorradorActa,
 } from '@/lib/actasDeposito'
 import { normalizeRef } from '@/lib/checksTypes'
@@ -84,6 +84,11 @@ export default function DepositoPanel({
         ref: s.ref, cliente: s.cliente, deposito: s.deposito, operativa: s.operativa,
         cntr: s.contenedor, eta: s.eta, salida: s.salida, pais: s.dest_country,
         mode: s.mode, archived: s.archived,
+        // Fechas POR CONTENEDOR: sin esto, el trasiego de HOY de una carga
+        // cuyo otro contenedor salió ayer quedaba invisible (A8025, 19/08).
+        operativas: (s.operativas || []).map(o => ({
+          cntr: String(o.CNTR_OP || ''), salida: o.SALIDA, eta: o.ETA_OP,
+        })),
       })),
       hoy,
     ),
@@ -223,7 +228,8 @@ export default function DepositoPanel({
   }
 
   // ── Render ─────────────────────────────────────────────────────────
-  const bloqueContenedor = (carga: CargaEnDeposito, cntr: string) => {
+  const bloqueContenedor = (carga: CargaEnDeposito, bloque: BloqueCntr) => {
+    const cntr = bloque.cntr
     const clave = claveBloque(carga.ref, cntr)
     const ocupado = subiendo === clave
     const fotos = fotosPorBloque.get(clave) || 0
@@ -237,6 +243,21 @@ export default function DepositoPanel({
         <div className="flex items-center gap-1.5 flex-wrap">
           <Cube size={14} className="text-muted-foreground shrink-0" weight="duotone" />
           <span className="font-mono text-xs font-semibold">{cntr || 'Toda la carga'}</span>
+          {/* CADA contenedor sale su propio día: el badge es del bloque, no de
+              la carga (A8025: EMCU ayer, EGSU hoy). */}
+          {bloque.cuando && (
+            <span
+              className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                bloque.cuando === 'hoy'
+                  ? 'bg-emerald-500/15 text-emerald-700'
+                  : bloque.cuando === 'futura'
+                    ? 'bg-blue-500/15 text-blue-700'
+                    : 'bg-muted text-muted-foreground'
+              }`}
+            >
+              {etiquetaCuando(bloque.dias as number)}
+            </span>
+          )}
           {fotos > 0 && (
             <span className="inline-flex items-center gap-1 text-[11px] text-emerald-700">
               <CheckCircle size={11} weight="fill" />{fotos} foto{fotos > 1 ? 's' : ''}
@@ -429,7 +450,7 @@ export default function DepositoPanel({
           )}
         </div>
 
-        {contenedoresDeCarga(carga.cntr).map(cntr => bloqueContenedor(carga, cntr))}
+        {carga.bloques.map(b => bloqueContenedor(carga, b))}
       </CardContent>
     </Card>
   )

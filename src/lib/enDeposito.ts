@@ -18,6 +18,7 @@
  */
 
 import { esOperativaDeposito, fechaDeOperativa, type CargaRendimiento } from './miRendimiento'
+import { parseCntr } from './cntrUtils'
 import { parseLocalDate } from './shipmentTypes'
 
 /** Días hacia atrás: las fotos suelen subirse al otro día. */
@@ -27,17 +28,32 @@ export const DIAS_ADELANTE = 7
 
 export type Cuando = 'hoy' | 'futura' | 'pasada'
 
+/** Un contenedor de la carga, con SU fecha. La carga entera no tiene "una"
+ *  fecha: cada contenedor sale en su propio camión y su propio día (A8025:
+ *  el EMCU salió el 18 y el EGSU el 19 — con una sola fecha, el trasiego de
+ *  HOY quedaba invisible, Brian 19/08). */
+export interface BloqueCntr {
+  cntr: string
+  fecha: string
+  /** null = sin fecha usable para este contenedor. */
+  dias: number | null
+  cuando: Cuando | null
+}
+
 export interface CargaEnDeposito {
   ref: string
   cliente: string
   deposito: string
   operativa: string
   cntr: string
-  /** La fecha que la ubica en el tiempo (salida real, si no ETA). */
+  /** La fecha MÁS RELEVANTE entre sus contenedores: hoy le gana a todo,
+   *  después lo que viene (más cerca primero), después lo que pasó. */
   fecha: string
   /** 0 = hoy · >0 = por venir · <0 = ya pasó. */
   dias: number
   cuando: Cuando
+  /** Todos los contenedores con su propia fecha (para el badge por bloque). */
+  bloques: BloqueCntr[]
 }
 
 const txt = (v: unknown): string => String(v ?? '').trim()
@@ -65,24 +81,47 @@ export function cargasEnDeposito(
   const atras = opts.atras ?? DIAS_ATRAS
   const adelante = opts.adelante ?? DIAS_ADELANTE
 
+  const cuandoDe = (d: number): Cuando => (d === 0 ? 'hoy' : d > 0 ? 'futura' : 'pasada')
+
   const out: CargaEnDeposito[] = []
   for (const c of cargas || []) {
     if (!esOperativaDeposito(c)) continue
-    const fecha = fechaDeOperativa(c)
-    // Sin fecha usable no se puede ubicar en la ventana: afuera. Es el único
+
+    // UNA FECHA POR CONTENEDOR: la de su fila en Operativas; sin fila propia,
+    // la de la carga. La tarjeta entra a la ventana si ALGUNO de sus
+    // contenedores cae adentro.
+    const lista = parseCntr(txt(c.cntr))
+    const cntrs = lista.length > 0 ? lista : ['']
+    const bloques: BloqueCntr[] = cntrs.map(cntr => {
+      const fecha = fechaDeOperativa(c, cntr || undefined)
+      const dias = diffDias(hoy, fecha)
+      return { cntr, fecha, dias, cuando: dias === null ? null : cuandoDe(dias) }
+    })
+
+    const enVentana = bloques.filter(b => b.dias !== null && b.dias >= -atras && b.dias <= adelante) as (BloqueCntr & { dias: number })[]
+    // Sin ningún contenedor ubicable en la ventana: afuera. Es el único
     // descarte silencioso, y es inevitable — no hay dónde ponerla.
-    const dias = diffDias(hoy, fecha)
-    if (dias === null) continue
-    if (dias < -atras || dias > adelante) continue
+    if (enVentana.length === 0) continue
+
+    // La tarjeta toma la fecha MÁS RELEVANTE: hoy > la futura más próxima >
+    // la pasada más reciente. Así el trasiego de HOY sube arriba aunque otro
+    // contenedor de la misma carga haya salido ayer.
+    const mejor = enVentana.sort((a, b) => {
+      const r = (d: number) => (d === 0 ? 0 : d > 0 ? 1 : 2)
+      if (r(a.dias) !== r(b.dias)) return r(a.dias) - r(b.dias)
+      return r(a.dias) === 2 ? b.dias - a.dias : a.dias - b.dias
+    })[0]
+
     out.push({
       ref: txt(c.ref),
       cliente: txt(c.cliente),
       deposito: txt(c.deposito),
       operativa: txt(c.operativa),
       cntr: txt(c.cntr),
-      fecha,
-      dias,
-      cuando: dias === 0 ? 'hoy' : dias > 0 ? 'futura' : 'pasada',
+      fecha: mejor.fecha,
+      dias: mejor.dias,
+      cuando: cuandoDe(mejor.dias),
+      bloques,
     })
   }
 
