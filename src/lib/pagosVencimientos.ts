@@ -173,18 +173,30 @@ export function costoDevDefault(dev: string | null | undefined): number | null {
   return COSTO_DEV_DEFAULT[up(dev)] ?? null
 }
 
+/** ¿El AGENTE es Repremar? (campo agente, no confundir con esLineaRepremar,
+ *  que mira la LÍNEA para derivar la forma de pago). */
+export function esAgenteRepremar(agente: string | null | undefined): boolean {
+  return up(agente).includes('REPREMAR')
+}
+
 /**
  * A quién se le paga cada rubro.
  *
- * Flete y locales van al AGENTE, no a la línea: el carrier puede ser Maersk y
- * la factura venir de Repremar, Craft o Trans-China, que son los que venden el
- * espacio (verificado contra el mail, 12/08/2026). Sin agente cargado se cae en
- * la línea, que es lo que había antes.
+ * Flete y locales van a la LÍNEA marítima, salvo UNA excepción: si el agente
+ * es REPREMAR, se le paga a Repremar sin importar la línea (regla de Brian,
+ * 19/08/2026). La versión anterior (12/08) pagaba a CUALQUIER agente cargado
+ * —Craft, Trans-China…— y estaba mal: a esos no se les paga a ellos, se les
+ * paga directo a la línea.
+ *
+ * Sin línea cargada se cae en el agente: mejor un acreedor probable que un
+ * ítem mudo en SIN ACREEDOR.
  */
 export function empresaRubro(rubro: PagoRubro, s: Pick<DbShipment, 'linea' | 'terminal' | 'dev' | 'agente'>): string {
   if (rubro === 'devolucion') return (s.dev || '').trim()
   if (rubro === 'terminal') return (s.terminal || '').trim()
-  return ((s.agente || '').trim() || (s.linea || '').trim())
+  const agente = (s.agente || '').trim()
+  if (esAgenteRepremar(agente)) return agente
+  return ((s.linea || '').trim() || agente)
 }
 
 /** Etiqueta de los ítems cuyo acreedor todavía no se cargó. */
