@@ -27,7 +27,9 @@ const build = (
     // con fotos viejas sin contenedor asignado.
     fotosPorCntr: new Set(fotos.filter(f => f.includes('|'))),
     refsConFotosSinCntr: new Set(fotos.filter(f => !f.includes('|'))),
-    refsConInforme: new Set(informes),
+    // Igual que las fotos: con '|' es `REF|CNTR`, sin '|' es informe sin cntr.
+    informesPorCntr: new Set(informes.filter(i => i.includes('|'))),
+    refsConInformeSinCntr: new Set(informes.filter(i => !i.includes('|'))),
     desde: '2026-08-17', hasta: '2026-08-23',
     identidades,
   })
@@ -209,6 +211,64 @@ describe('buildRendimiento — las cinco señales por operativa', () => {
     expect(r.visitas).toBe(2)
   })
 
+  it('cada contenedor usa SU fecha de salida, no la de la carga', () => {
+    // Caso real A8025 (Brian 18/08): el EMCU sale el 18 y el EGSU el 19, pero
+    // las dos filas mostraban 18/08 porque la fecha salía del nivel carga.
+    const a8025 = carga({
+      ref: 'A8025', cntr: 'EGSU0310260, EMCU1818703', salida: '2026-08-18',
+      operativas: [
+        { cntr: 'EGSU0310260', salida: '2026-08-19' },
+        { cntr: 'EMCU1818703', salida: '2026-08-18' },
+      ],
+    })
+    const r = build([a8025])
+    expect(r.filas.find(f => f.cntr === 'EGSU0310260')!.fecha).toBe('2026-08-19')
+    expect(r.filas.find(f => f.cntr === 'EMCU1818703')!.fecha).toBe('2026-08-18')
+  })
+
+  it('el contenedor que sale fuera de la semana no entra', () => {
+    // El rango se evalúa con la fecha DEL CONTENEDOR: uno puede caer en esta
+    // semana y el otro en la que viene.
+    const a = carga({
+      ref: 'A8025', cntr: 'UNO, DOS', salida: '2026-08-18',
+      operativas: [
+        { cntr: 'UNO', salida: '2026-08-18' },
+        { cntr: 'DOS', salida: '2026-09-15' },
+      ],
+    })
+    const r = build([a])
+    expect(r.filas.map(f => f.cntr)).toEqual(['UNO'])
+  })
+
+  it('sin fila propia en Operativas cae a la fecha de la carga', () => {
+    const r = build([carga({ ref: 'A1', cntr: 'SOLO', salida: '2026-08-20', operativas: [] })])
+    expect(r.filas[0].fecha).toBe('2026-08-20')
+  })
+
+  it('el informe cuenta solo para SU contenedor', () => {
+    // Antes el informe era por ref y se mostraba en las dos filas: no había
+    // forma de decir "de este hice informe y del otro no" (Brian 18/08).
+    const dos = carga({ ref: 'A8025', cntr: 'EGSU0310260, EMCU1818703' })
+    const r = build([dos], {}, [], ['A8025|EMCU1818703'])
+    expect(r.filas.find(f => f.cntr === 'EMCU1818703')!.informe).toBe(true)
+    expect(r.filas.find(f => f.cntr === 'EGSU0310260')!.informe).toBe(false)
+    expect(r.informes).toBe(1)
+  })
+
+  it('el informe viejo sin contenedor cuenta para todos los de la ref', () => {
+    const dos = carga({ ref: 'A8025', cntr: 'EGSU0310260, EMCU1818703' })
+    const r = build([dos], {}, [], ['A8025'])
+    expect(r.filas.every(f => f.informe)).toBe(true)
+  })
+
+  it('el informe de un contenedor no le da "fotos" al otro', () => {
+    // fotos = fotosSubidas || informe. Con el informe por ref, el contenedor
+    // sin nada aparecía documentado por arrastre.
+    const dos = carga({ ref: 'A8025', cntr: 'EGSU0310260, EMCU1818703' })
+    const r = build([dos], {}, [], ['A8025|EMCU1818703'])
+    expect(r.filas.find(f => f.cntr === 'EGSU0310260')!.fotos).toBe(false)
+  })
+
   it('la carga sin contenedor cargado da una sola fila', () => {
     const r = build([carga({ ref: 'A9000', cntr: '' })])
     expect(r.filas).toHaveLength(1)
@@ -318,7 +378,9 @@ describe('resumenMensual — cómo viene mes a mes', () => {
       checksByRef: new Map(Object.entries(checks)),
       fotosPorCntr: new Set<string>(),
       refsConFotosSinCntr: new Set<string>(),
-      refsConInforme: new Set(informes),
+      // Igual que las fotos: con '|' es `REF|CNTR`, sin '|' es informe sin cntr.
+    informesPorCntr: new Set(informes.filter(i => i.includes('|'))),
+    refsConInformeSinCntr: new Set(informes.filter(i => !i.includes('|'))),
       meses: ['2026-08', '2026-07'],
     })
 
