@@ -103,7 +103,12 @@ export function resolveRecord(
     return cntrKey ? { ...byIndex, CNTR_OP: cntrs[i] } : byIndex
   }
 
-  // New container: synthetic blank (CNTR_OP set so future edits match by number)
+  // New container: synthetic blank (CNTR_OP set so future edits match by number).
+  // Con UN solo contenedor, sus bultos/kg/m3 SON los totales de la carga:
+  // sembrarlos evita cargar los mismos numeros dos veces (caso A8045, 19/08 —
+  // la fila nacia en 0 y habia que retipear 463/4484/68 a mano abajo). Con
+  // varios contenedores no se puede adivinar el desglose: quedan en 0.
+  const unico = cntrs.length === 1
   return {
     REF: op.ref,
     TLX: '',
@@ -114,9 +119,9 @@ export function resolveRecord(
     LIBRE: op.libre || '',
     OPERATIVA: op.operativa || '',
     CNTR_OP: cntrs[i] || '',
-    PKGS: 0,
-    KG: 0,
-    M3: 0,
+    PKGS: unico ? (op.pkgs || 0) : 0,
+    KG: unico ? (op.kg || 0) : 0,
+    M3: unico ? (op.m3 || 0) : 0,
     DESCRIPCION: '',
     FISCAL: op.fiscal || '',
     DESCARGA: '',

@@ -105,7 +105,10 @@ export function buildFaltantePatch(
     if (operativas && operativas.length > 0) {
       const arr = operativas.map((o, i) => ({ ...o, CNTR_OP: lista[i] ?? String(o.CNTR_OP ?? '') }))
       for (let i = operativas.length; i < lista.length; i++) {
-        arr.push({ ...operativas[0], CNTR_OP: lista[i] })
+        // El clon hereda deposito/operativa/fechas del primero, pero NO sus
+        // bultos/kg/m3: el rollup SUMA el array, asi que clonarlos duplicaria
+        // el total de la carga con cada contenedor agregado.
+        arr.push({ ...operativas[0], CNTR_OP: lista[i], PKGS: 0, KG: 0, M3: 0 })
       }
       // La columna se calcula EXACTAMENTE como el rollup (cliente y server) para
       // que el valor optimista no difiera del que persiste el server.

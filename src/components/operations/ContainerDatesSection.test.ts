@@ -78,6 +78,43 @@ describe('resolveRecord — CNTR_OP-based matching', () => {
 
 // ── buildNextOperativas — field preservation ───────────────────────────────
 
+describe('la fila nueva hereda los totales cuando el contenedor es único (caso A8045)', () => {
+  const conTotales = (cntr: string): UnifiedOperation =>
+    ({ ...op(cntr), pkgs: 463, kg: 4484, m3: 68 } as UnifiedOperation)
+
+  it('un solo contenedor: bultos/kg/m3 nacen con los totales de la carga', () => {
+    // A8045 (19/08): la carga tenía 463/4484/68 arriba y la fila del FANU
+    // nacía en 0 — había que retipear los tres números a mano abajo.
+    const r = resolveRecord(['FANU1858496'], [], 0, conTotales('FANU1858496'))
+    expect(r.PKGS).toBe(463)
+    expect(r.KG).toBe(4484)
+    expect(r.M3).toBe(68)
+  })
+
+  it('con DOS contenedores no se adivina el desglose: nacen en 0', () => {
+    // Sembrar los totales en cada uno haría que el rollup (que SUMA) infle el
+    // total de la carga al doble.
+    const cntrs = ['AAAA1111111', 'BBBB2222222']
+    for (const i of [0, 1]) {
+      const r = resolveRecord(cntrs, [], i, conTotales(cntrs.join(', ')))
+      expect(r.PKGS).toBe(0)
+      expect(r.KG).toBe(0)
+      expect(r.M3).toBe(0)
+    }
+  })
+
+  it('carga sin totales: la fila nace en 0 como siempre', () => {
+    const r = resolveRecord(['FANU1858496'], [], 0, op('FANU1858496'))
+    expect(r.PKGS).toBe(0)
+  })
+
+  it('una operativa EXISTENTE no se pisa con los totales', () => {
+    const existente = record({ CNTR_OP: 'FANU1858496', PKGS: 100 })
+    const r = resolveRecord(['FANU1858496'], [existente], 0, conTotales('FANU1858496'))
+    expect(r.PKGS).toBe(100)
+  })
+})
+
 describe('buildNextOperativas — editing one container preserves sibling fields', () => {
   it('editing SALIDA on container 1 does NOT blank DESCARGA/DEV on container 0', () => {
     const cntrs = ['AAAA1111111', 'BBBB2222222']
