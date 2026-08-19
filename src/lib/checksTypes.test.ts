@@ -15,8 +15,7 @@ import {
   type RefCheckStep,
   type RefCheckSteps,
   estaLiberada,
-  puedeLiberarse,
-} from './checksTypes'
+  puedeLiberarse, esPasoPorContenedor, type CheckStepKey } from './checksTypes'
 import type { UnifiedOperation } from './operationsTypes'
 
 // 03/07/2026 — fecha fija para que los tests no dependan del reloj.
@@ -333,5 +332,26 @@ describe('estaLiberada / puedeLiberarse', () => {
     // Si la línea confirmó, la carga está liberada aunque falte marcar un paso.
     // puedeLiberarse gobierna el botón; estaLiberada refleja lo que pasó.
     expect(estaLiberada({ liberado: { done: true } })).toBe(true)
+  })
+})
+
+describe('esPasoPorContenedor — qué se guarda por contenedor', () => {
+  it('los avisos van por contenedor', () => {
+    for (const k of ['aviso_traslado', 'aviso_salida', 'cruce_frontera', 'arribo_fiscal'] as CheckStepKey[]) {
+      expect(esPasoPorContenedor(k)).toBe(true)
+    }
+  })
+
+  it('la VISITA también, aunque no sea un aviso', () => {
+    // El bug: se leía por contenedor pero se guardaba a nivel ref, así que
+    // marcar un contenedor encendía todos los de la carga (A8025, 18/08).
+    expect(esPasoPorContenedor('visita_deposito')).toBe(true)
+    expect(isAvisoStep('visita_deposito')).toBe(false)
+  })
+
+  it('los checks documentarios NO van por contenedor', () => {
+    for (const k of ['bl_entregado', 'carta_entregada', 'docs_transporte', 'docs_deposito', 'pagos_ok'] as CheckStepKey[]) {
+      expect(esPasoPorContenedor(k)).toBe(false)
+    }
   })
 })
