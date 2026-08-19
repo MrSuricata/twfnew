@@ -92,6 +92,68 @@ describe('cargasEnDeposito', () => {
   })
 })
 
+describe('fechas por contenedor (caso A8025, 19/08)', () => {
+  const a8025 = (): CargaRendimiento => carga({
+    ref: 'A8025', cntr: 'EGSU0310260, EMCU1818703',
+    salida: '2026-08-18',   // rollup: la salida más temprana (la del EMCU)
+    operativas: [
+      { cntr: 'EGSU0310260', salida: '2026-08-19' },
+      { cntr: 'EMCU1818703', salida: '2026-08-18' },
+    ],
+  })
+
+  it('el trasiego de HOY manda aunque el otro contenedor salió ayer', () => {
+    // Con una sola fecha por carga, A8025 aparecía como "Ayer" y el trasiego
+    // de HOY del EGSU era invisible.
+    const hoy = '2026-08-19'
+    const l = cargasEnDeposito([a8025()], hoy)
+    expect(l).toHaveLength(1)
+    expect(l[0].cuando).toBe('hoy')
+    expect(l[0].fecha).toBe('2026-08-19')
+  })
+
+  it('cada bloque lleva su propia fecha', () => {
+    const l = cargasEnDeposito([a8025()], '2026-08-19')
+    const por = Object.fromEntries(l[0].bloques.map(b => [b.cntr, b.cuando]))
+    expect(por['EGSU0310260']).toBe('hoy')
+    expect(por['EMCU1818703']).toBe('pasada')
+  })
+
+  it('entra a la ventana si ALGÚN contenedor cae adentro', () => {
+    // El EMCU salió hace 10 días (fuera de la ventana de 3), pero el EGSU
+    // sale mañana: la carga tiene que aparecer igual.
+    const c = carga({
+      ref: 'A9100', cntr: 'UNO, DOS', salida: '2026-08-09',
+      operativas: [
+        { cntr: 'UNO', salida: '2026-08-09' },
+        { cntr: 'DOS', salida: '2026-08-20' },
+      ],
+    })
+    const l = cargasEnDeposito([c], '2026-08-19')
+    expect(l).toHaveLength(1)
+    expect(l[0].cuando).toBe('futura')
+    // El bloque viejo se muestra igual (con su badge), aunque no ubique a la carga.
+    expect(l[0].bloques.find(b => b.cntr === 'UNO')?.cuando).toBe('pasada')
+  })
+
+  it('con todos los contenedores fuera de ventana, la carga no aparece', () => {
+    const c = carga({
+      ref: 'A9200', cntr: 'UNO, DOS', salida: '2026-07-01',
+      operativas: [
+        { cntr: 'UNO', salida: '2026-07-01' },
+        { cntr: 'DOS', salida: '2026-07-05' },
+      ],
+    })
+    expect(cargasEnDeposito([c], '2026-08-19')).toEqual([])
+  })
+
+  it('sin fila propia en Operativas cae a la fecha de la carga (como antes)', () => {
+    const l = cargasEnDeposito([carga({ cntr: 'SOLO1234567', salida: HOY, operativas: [] })], HOY)
+    expect(l).toHaveLength(1)
+    expect(l[0].bloques[0].cuando).toBe('hoy')
+  })
+})
+
 describe('filtrarCargas', () => {
   const lista = cargasEnDeposito([
     carga({ ref: 'A7938', cliente: 'TOMASELLI', deposito: 'GODILCO', cntr: 'CSLU6176200' }),
