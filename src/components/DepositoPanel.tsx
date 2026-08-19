@@ -118,17 +118,68 @@ export default function DepositoPanel({
   }, [originPhotos])
 
   // ── Fotos ──────────────────────────────────────────────────────────
+  // El destino se guarda TAMBIÉN fuera de React (sessionStorage): mientras la
+  // galería está abierta el navegador puede descartar la página (celulares con
+  // poca memoria) y el ref se pierde — las fotos volvían a un destino que ya
+  // no existía y el handler retornaba EN SILENCIO (caso A8025/EGSU, Brian
+  // 19/08 parado en PLANIR: "aprieto ok y no hace nada").
+  const OBJETIVO_KEY = 'deposito-objetivo'
   const abrirCamara = (carga: CargaEnDeposito, cntr: string) => {
     objetivo.current = { carga, cntr }
+    try { sessionStorage.setItem(OBJETIVO_KEY, JSON.stringify({ ref: carga.ref, cntr })) } catch { /* best-effort */ }
     inputRef.current?.click()
   }
+
+  // Si al montar quedó un destino huérfano, la página se recargó con la
+  // galería abierta: las fotos de ese intento se perdieron ANTES de llegar
+  // acá. Decirlo — el silencio parece la app rota.
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem(OBJETIVO_KEY)) {
+        sessionStorage.removeItem(OBJETIVO_KEY)
+        toast.warning('La página se recargó mientras elegías fotos', {
+          description: 'Ese intento se perdió. Tocá Fotos de nuevo y volvé a elegirlas.',
+          duration: 8000,
+        })
+      }
+    } catch { /* sin sessionStorage no hay aviso, nada más */ }
+    // Solo al montar: es el detector del intento anterior.
+  }, [])  // eslint-disable-line react-hooks/exhaustive-deps
 
   const alElegirFotos = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
     e.target.value = ''
-    const obj = objetivo.current
+    let obj = objetivo.current
     objetivo.current = null
-    if (files.length === 0 || !obj) return
+    if (!obj) {
+      // El ref se perdió (remonte con la galería abierta, o un change doble).
+      // Recuperar el destino guardado — consumirlo de una: si el evento vino
+      // doble, el segundo no debe subir todo de nuevo.
+      try {
+        const crudo = sessionStorage.getItem(OBJETIVO_KEY)
+        if (crudo) {
+          sessionStorage.removeItem(OBJETIVO_KEY)
+          const { ref, cntr } = JSON.parse(crudo) as { ref: string; cntr: string }
+          const carga = lista.find(c => c.ref === ref)
+          if (carga) obj = { carga, cntr }
+        }
+      } catch { /* se cae al aviso de abajo */ }
+    } else {
+      try { sessionStorage.removeItem(OBJETIVO_KEY) } catch { /* best-effort */ }
+    }
+    // Regla del repo: NADA de retornos mudos. Cada salida dice qué pasó.
+    if (files.length === 0) {
+      toast.error('No llegó ninguna foto del selector', {
+        description: 'Probá de nuevo. Si sacás con la cámara, sacá la foto y confirmala antes de volver.',
+      })
+      return
+    }
+    if (!obj) {
+      toast.error('No sé a qué contenedor van esas fotos', {
+        description: 'Tocá el botón Fotos del contenedor y volvé a elegirlas.',
+      })
+      return
+    }
     const { carga, cntr } = obj
 
     const sel = clasificarSeleccion(files)
@@ -142,6 +193,7 @@ export default function DepositoPanel({
     const clave = claveBloque(carga.ref, cntr)
     setSubiendo(clave)
     setProgreso({ hechas: 0, total: sel.aceptadas.length })
+    try {
     const lote = Date.now()
     const { ok, errores } = await subirEnTandas(
       sel.aceptadas,
@@ -167,7 +219,6 @@ export default function DepositoPanel({
     )
 
     if (ok.length > 0) onUpdateOriginPhotos?.([...ok, ...originPhotos])
-    setSubiendo(null)
 
     if (errores.length > 0) {
       console.error('EN DEPÓSITO — fotos que fallaron:', errores)
@@ -178,6 +229,12 @@ export default function DepositoPanel({
       toast.success(`${ok.length} foto${ok.length > 1 ? 's' : ''} en ${carga.ref}`, {
         description: cntr || carga.cliente || undefined,
       })
+    }
+    } catch (err) {
+      console.error('EN DEPÓSITO — subida falló:', err)
+      toast.error('Falló la subida', { description: (err as Error)?.message || 'error inesperado' })
+    } finally {
+      setSubiendo(null)
     }
   }
 
