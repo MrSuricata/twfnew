@@ -72,9 +72,15 @@ describe('fechaDeOperativa', () => {
     expect(fechaDeOperativa(carga({ salida: '#N/A' }))).toBe('2026-08-12')
   })
 
-  it('la carga con SALIDA a confirmar igual entra al parte', () => {
+  it('la carga con SALIDA a confirmar SE MUESTRA, pero no cuenta', () => {
+    // Sigue apareciendo (es la que hay que ir a mirar, correccion de Brian del
+    // 18/07), pero como su salida no esta coordinada no entra en el
+    // denominador: todavia no es un trasiego que uno dejo de hacer.
     const r = build([carga({ ref: 'A8100', salida: 'CONFIRMAR', eta: '2026-08-19' })])
-    expect(r.total).toBe(1)
+    expect(r.filas).toHaveLength(1)
+    expect(r.filas[0].fechaEs).toBe('llegada')
+    expect(r.total).toBe(0)
+    expect(r.pendientesDeCoordinar).toBe(1)
   })
 })
 
@@ -245,6 +251,47 @@ describe('buildRendimiento — las cinco señales por operativa', () => {
     expect(r.filas[0].fecha).toBe('2026-08-20')
   })
 
+  it('la llegada sin salida coordinada NO entra en el denominador', () => {
+    // Brian eligio esto (18/08): "fui a 0 de 5 trasiegos que hubo" se defiende;
+    // "0 de 9" mezcla trasiegos reales con cosas que todavia no pasaron.
+    const r = build([
+      carga({ ref: 'SALIO', cntr: 'A', salida: '2026-08-18' }),
+      carga({ ref: 'LLEGO', cntr: 'B', salida: '', eta: '2026-08-19' }),
+    ])
+    expect(r.filas).toHaveLength(2)          // se muestran las dos
+    expect(r.total).toBe(1)                  // pero solo una cuenta
+    expect(r.pendientesDeCoordinar).toBe(1)
+  })
+
+  it('lo hecho en una pendiente no infla el numerador', () => {
+    // Si contara, se podria terminar con 2/1: un numero imposible que rompe
+    // la confianza en toda la pagina.
+    const r = build([
+      carga({ ref: 'SALIO', cntr: 'A', salida: '2026-08-18' }),
+      carga({ ref: 'LLEGO', cntr: 'B', salida: '', eta: '2026-08-19' }),
+    ], {
+      SALIO: { visita_deposito: hecho() },
+      LLEGO: { visita_deposito: hecho() },
+    })
+    expect(r.visitas).toBe(1)
+    expect(r.total).toBe(1)
+  })
+
+  it('sin pendientes el numero es cero y no aparece', () => {
+    const r = build([carga({ ref: 'A', cntr: 'X', salida: '2026-08-18' })])
+    expect(r.pendientesDeCoordinar).toBe(0)
+  })
+
+  it('el parte nombra las pendientes aparte, sin mezclarlas', () => {
+    const r = build([
+      carga({ ref: 'SALIO', cntr: 'A', salida: '2026-08-18' }),
+      carga({ ref: 'LLEGO', cntr: 'B', salida: '', eta: '2026-08-19' }),
+    ])
+    const t = textoParte(r, '2026-08-17', '2026-08-23')
+    expect(t).toContain('1 trasiegos por depósito')
+    expect(t).toContain('1 llegada sin salida coordinada (no cuentan)')
+  })
+
   it('dice si la fecha es la salida o la llegada', () => {
     // Caso A7958 (Brian 18/08): "por que me aparece si no sale hoy". Llego el
     // 18 y todavia no tiene salida coordinada; la columna mostraba la llegada
@@ -359,7 +406,7 @@ describe('textoParte — muestra lo hecho Y lo que falta', () => {
       ['A7938'],
     )
     const t = textoParte(r, '2026-08-17', '2026-08-23')
-    expect(t).toContain('2 operativas por depósito')
+    expect(t).toContain('2 trasiegos por depósito')
     expect(t).toContain('Fui al depósito: 1/2')
     expect(t).toContain('Traslado avisado al cliente: 1/2')
     // Lo pendiente NO se esconde
