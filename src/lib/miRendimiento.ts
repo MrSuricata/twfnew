@@ -60,6 +60,11 @@ export interface CargaRendimiento {
   pais?: string | null
   mode?: string | null
   archived?: boolean
+  /** Fechas POR CONTENEDOR (planilla Operativas). Cada contenedor sale su
+   *  propio día: sin esto, los dos contenedores de una carga mostraban la
+   *  misma fecha y podían caer en la semana equivocada (A8025: el EGSU sale el
+   *  19 y el EMCU el 18 — Brian 18/08). */
+  operativas?: { cntr: string; salida?: string | null; eta?: string | null }[] | null
 }
 
 /** Una operativa con sus cinco señales. */
@@ -142,7 +147,17 @@ export function esOperativaDeposito(c: CargaRendimiento): boolean {
  *  verdad, si no la llegada. OJO: la columna SALIDA trae valores de texto
  *  reales ('CONFIRMAR', '#N/A') que son truthy — sin este guard la carga se
  *  caía del parte en silencio, justo la que está parada en depósito. */
-export function fechaDeOperativa(c: CargaRendimiento): string {
+export function fechaDeOperativa(c: CargaRendimiento, cntr?: string): string {
+  // Si el contenedor tiene su propia fila en Operativas, MANDA la de él: es la
+  // fecha de SU camión. Recién si no está se cae a la de la carga.
+  const op = cntr
+    ? (c.operativas || []).find(o => txt(o.cntr).toUpperCase() === txt(cntr).toUpperCase())
+    : undefined
+  const salidaOp = txt(op?.salida)
+  if (salidaOp && parseLocalDate(salidaOp)) return salidaOp
+  const etaOp = txt(op?.eta)
+  if (op && etaOp) return etaOp
+
   const salida = txt(c.salida)
   if (salida && parseLocalDate(salida)) return salida
   return txt(c.eta)
@@ -176,7 +191,11 @@ export function buildRendimiento(args: {
    *  se etiquetaran). No se sabe de cuál son, así que cuentan para todos los
    *  contenedores de esa ref: es lo único honesto que se puede afirmar. */
   refsConFotosSinCntr: Set<string>
-  refsConInforme: Set<string>
+  /** Claves `REF|CNTR` con informe subido: el informe es de UN contenedor. */
+  informesPorCntr: Set<string>
+  /** Refs con informe SIN contenedor asignado (los de antes de poder
+   *  elegirlo). Cuentan para todos los contenedores de esa ref. */
+  refsConInformeSinCntr: Set<string>
   desde: string
   hasta: string
   /** Cómo se llama uno en los datos: identidad de login (el `by` que estampa
@@ -192,9 +211,6 @@ export function buildRendimiento(args: {
 
   for (const c of args.cargas || []) {
     if (!esOperativaDeposito(c)) continue
-    const fecha = fechaDeOperativa(c)
-    if (!enRango(fecha, args.desde, args.hasta)) continue
-
     const norm = normalizeRef(c.ref)
     const steps = args.checksByRef.get(norm) || {}
     const cntrList = parseCntr(txt(c.cntr))
@@ -210,6 +226,10 @@ export function buildRendimiento(args: {
       // Una misma ref+cntr puede venir más de una vez (cache legacy + DB): sin
       // dedupe el denominador se infla solo y React repite la key.
       if (vistas.has(claveFila)) continue
+      // El rango se evalúa CON LA FECHA DEL CONTENEDOR: dos contenedores de la
+      // misma carga pueden caer en semanas distintas.
+      const fecha = fechaDeOperativa(c, cntr)
+      if (!enRango(fecha, args.desde, args.hasta)) continue
       vistas.add(claveFila)
       // La visita es POR CONTENEDOR y solo el tilde: las fotos pueden venir
       // del depósito, así que no prueban nada (Brian 18/08). avisoForCntr cae
@@ -225,10 +245,10 @@ export function buildRendimiento(args: {
       const avisoTraslado = !!trasladoC && esAutorPropio(trasladoC.by, identidades)
       const avisoSalida = !!salidaC && esAutorPropio(salidaC.by, identidades)
 
-      // El informe se sube por REF, no por contenedor: se muestra en todas las
-      // filas de la carga. Es una aproximación conocida — cuando el informe
-      // pase a guardarse por contenedor, esto se afina.
-      const informeOk = args.refsConInforme.has(norm)
+      // El informe es de SU contenedor. Los viejos, subidos antes de poder
+      // elegirlo, no tienen contenedor: cuentan para todos los de la ref —
+      // mismo criterio que las fotos.
+      const informeOk = args.informesPorCntr.has(`${norm}|${cntr}`) || args.refsConInformeSinCntr.has(norm)
       // Las fotos van DENTRO del informe: si el informe se mandó, la carga
       // quedó documentada aunque la galería esté vacía (Brian 18/08).
       const fotosSubidas = args.fotosPorCntr.has(`${norm}|${cntr}`) || args.refsConFotosSinCntr.has(norm)

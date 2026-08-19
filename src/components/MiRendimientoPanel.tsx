@@ -99,13 +99,19 @@ export default function MiRendimientoPanel({ dbShipments, reports = [], originPh
     return { fotosPorCntr: porCntr, refsConFotosSinCntr: sinCntr }
   }, [originPhotos, identidades])
 
-  const refsConInforme = useMemo(() => {
-    const s = new Set<string>()
+  // El informe es de UN contenedor (desde que se puede elegir al subirlo). Los
+  // viejos no lo tienen: cuentan para todos los de la ref, igual que las fotos.
+  const { informesPorCntr, refsConInformeSinCntr } = useMemo(() => {
+    const porCntr = new Set<string>()
+    const sinCntr = new Set<string>()
     for (const r of reports) {
       if (!r.shipmentRef || !esAutorPropio(r.createdBy, identidades)) continue
-      s.add(normalizeRef(r.shipmentRef))
+      const ref = normalizeRef(r.shipmentRef)
+      const cntr = String(r.containerNumber || '').trim().toUpperCase()
+      if (cntr) porCntr.add(`${ref}|${cntr}`)
+      else sinCntr.add(ref)
     }
-    return s
+    return { informesPorCntr: porCntr, refsConInformeSinCntr: sinCntr }
   }, [reports, identidades])
 
   // Lo que define QUÉ se cuenta, una sola vez: la semana y el resumen mensual
@@ -115,9 +121,13 @@ export default function MiRendimientoPanel({ dbShipments, reports = [], originPh
       ref: s.ref, cliente: s.cliente, deposito: s.deposito, operativa: s.operativa,
       cntr: s.contenedor, eta: s.eta, salida: s.salida, pais: s.dest_country,
       mode: s.mode, archived: s.archived,
+      // Fechas por contenedor: cada uno sale su propio día.
+      operativas: (s.operativas || []).map(o => ({
+        cntr: String(o.CNTR_OP || ''), salida: o.SALIDA, eta: o.ETA_OP,
+      })),
     })),
-    checksByRef, fotosPorCntr, refsConFotosSinCntr, refsConInforme, identidades,
-  }), [dbShipments, checksByRef, fotosPorCntr, refsConFotosSinCntr, refsConInforme, identidades])
+    checksByRef, fotosPorCntr, refsConFotosSinCntr, informesPorCntr, refsConInformeSinCntr, identidades,
+  }), [dbShipments, checksByRef, fotosPorCntr, refsConFotosSinCntr, informesPorCntr, refsConInformeSinCntr, identidades])
 
   const resumen = useMemo(
     () => buildRendimiento({ ...comun, desde, hasta }),
