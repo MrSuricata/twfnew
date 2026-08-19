@@ -47,6 +47,21 @@ export function mergePhotoSubset(all: OriginPhoto[], shownSubset: OriginPhoto[],
   return [...updatedSubset, ...all.filter(p => !shownIds.has(p.id))]
 }
 
+/** Contenedor de una foto/informe, normalizado. '' = sin asignar. */
+export const cntrDe = (x: { containerNumber?: string }): string =>
+  String(x.containerNumber || '').trim().toUpperCase()
+
+/**
+ * Filtra por contenedor. `cntr` '' significa SIN ASIGNAR, no "todos": el
+ * diálogo muestra un contenedor por vez para que lo que se ve sea exactamente
+ * lo que se va a subir ahí (Brian 18/08: "que sea más identificable y claro
+ * cuando se sube a un contenedor u otro").
+ */
+export function delContenedor<T extends { containerNumber?: string }>(items: T[], cntr: string): T[] {
+  const c = String(cntr || '').trim().toUpperCase()
+  return items.filter(x => cntrDe(x) === c)
+}
+
 /** Informes de una operación, más recientes primero (criterio del dialog viejo). */
 export function reportsForRef(reports: OperativeReport[], ref: string): OperativeReport[] {
   return reports.filter(r => r.shipmentRef === ref).sort((a, b) => b.createdAt - a.createdAt)
@@ -91,10 +106,14 @@ export default function OperationMediaSection({
   const [uploadingReport, setUploadingReport] = useState(false)
   /** Contenedor al que se le adjudica lo que se suba. '' = toda la carga.
    *  Con un solo contenedor arranca en ese: no tiene sentido preguntar. */
-  const [cntrSel, setCntrSel] = useState(() => (containers.length === 1 ? containers[0] : ''))
+  /** Contenedor que se está viendo Y al que se sube. Arranca en el primero:
+   *  dejar "sin asignar" por defecto es como se llenó la base de fotos que
+   *  después no se sabía de cuál contenedor eran. */
+  const [cntrSel, setCntrSel] = useState(() => containers[0] || '')
   const [busyReportId, setBusyReportId] = useState<string | null>(null)
 
-  const opReports = reportsForRef(reports, shipmentRef)
+  const opReportsTodos = reportsForRef(reports, shipmentRef)
+  const opReports = containers.length > 1 ? delContenedor(opReportsTodos, cntrSel) : opReportsTodos
   const canEditPhotos = !!onUpdateOriginPhotos
   const canEditReports = !!onUpdateReports
 
@@ -243,40 +262,55 @@ export default function OperationMediaSection({
           lo que se sube queda a nivel carga y después no hay forma de saber de
           cuál era (pedido de Brian 18/08). Es OPCIONAL: "Toda la carga" sigue
           siendo una respuesta válida. */}
-      {containers.length > 1 && (
-        <div className="flex flex-wrap items-center gap-1.5 mb-3">
-          <span className="text-[10px] uppercase tracking-wide text-muted-foreground mr-0.5">
-            Adjudicar a
-          </span>
-          <button
-            type="button"
-            onClick={() => setCntrSel('')}
-            aria-pressed={cntrSel === ''}
-            className={`h-7 px-2.5 rounded-full text-[11px] font-medium border transition-colors ${
-              cntrSel === ''
-                ? 'border-primary/40 bg-primary/10 text-foreground'
-                : 'border-border text-muted-foreground hover:bg-muted/60'
-            }`}
-          >
-            Toda la carga
-          </button>
-          {containers.map(c => (
-            <button
-              key={c}
-              type="button"
-              onClick={() => setCntrSel(c)}
-              aria-pressed={cntrSel === c}
-              className={`h-7 px-2.5 rounded-full font-mono text-[11px] font-medium border transition-colors ${
-                cntrSel === c
-                  ? 'border-primary/40 bg-primary/10 text-foreground'
-                  : 'border-border text-muted-foreground hover:bg-muted/60'
-              }`}
-            >
-              {c}
-            </button>
-          ))}
-        </div>
-      )}
+      {containers.length > 1 && (() => {
+        // El selector FILTRA todo el diálogo, no es un modo invisible: lo que
+        // se ve es exactamente lo que se va a subir ahí. Antes los chips
+        // decidían el destino y la galería seguía mostrando todo mezclado, así
+        // que no se entendía a cuál iba cada cosa (Brian 18/08).
+        const opciones = [...containers, '']
+        const cuenta = (c: string) =>
+          delContenedor(originPhotos.filter(p => p.shipmentRef === shipmentRef), c).length +
+          delContenedor(reports.filter(r => r.shipmentRef === shipmentRef), c).length
+        return (
+          <div className="mb-3">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[10px] uppercase tracking-wide text-muted-foreground mr-0.5">
+                Contenedor
+              </span>
+              {opciones.map(c => {
+                const activo = cntrSel === c
+                const n = cuenta(c)
+                if (c === '' && n === 0) return null   // "sin asignar" vacío: no ensucia
+                return (
+                  <button
+                    key={c || 'sin'}
+                    type="button"
+                    onClick={() => setCntrSel(c)}
+                    aria-pressed={activo}
+                    className={`h-7 px-2.5 rounded-full text-[11px] font-medium border transition-colors ${
+                      c ? 'font-mono' : ''
+                    } ${
+                      activo
+                        ? 'border-primary bg-primary/10 text-foreground'
+                        : 'border-border text-muted-foreground hover:bg-muted/60'
+                    }`}
+                  >
+                    {c || 'Sin asignar'}
+                    {n > 0 && <span className="ml-1 opacity-60">{n}</span>}
+                  </button>
+                )
+              })}
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-1.5">
+              Viendo y subiendo a{' '}
+              <b className={cntrSel ? 'font-mono text-foreground' : 'text-foreground'}>
+                {cntrSel || 'sin asignar'}
+              </b>
+              .
+            </p>
+          </div>
+        )
+      })()}
       {containers.length === 1 && (
         <p className="text-[10px] text-muted-foreground mb-3">
           Lo que subas se adjudica a <span className="font-mono">{containers[0]}</span>.
@@ -291,7 +325,9 @@ export default function OperationMediaSection({
 
       <div className="space-y-4">
         {STAGES.map(({ stage, label }) => {
-          const stagePhotos = photosForStage(originPhotos, shipmentRef, stage)
+          const stagePhotos = containers.length > 1
+            ? delContenedor(photosForStage(originPhotos, shipmentRef, stage), cntrSel)
+            : photosForStage(originPhotos, shipmentRef, stage)
           const inputRef = stage === 'origen' ? photoInputOrigen : photoInputUruguay
           const uploading = uploadingStage === stage
           return (

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { photosForStage, mergePhotoSubset, reportsForRef } from './OperationMediaSection'
+import { photosForStage, mergePhotoSubset, reportsForRef, delContenedor } from './OperationMediaSection'
 import type { OriginPhoto, OperativeReport } from '@/lib/quotationTypes'
 
 const photo = (over: Partial<OriginPhoto>): OriginPhoto => ({
@@ -60,5 +60,29 @@ describe('reportsForRef', () => {
       report({ id: 'r3', createdAt: 20, shipmentRef: 'A7595' }),
     ]
     expect(reportsForRef(reports, 'A7581').map(r => r.id)).toEqual(['r2', 'r1'])
+  })
+})
+
+describe('delContenedor — el diálogo muestra un contenedor por vez', () => {
+  const f = (id: string, cntr?: string) => ({ id, containerNumber: cntr } as { id: string; containerNumber?: string })
+
+  it('trae solo lo de ese contenedor', () => {
+    const l = [f('a', 'EMCU1818703'), f('b', 'EGSU0310260'), f('c', 'EMCU1818703')]
+    expect(delContenedor(l, 'EMCU1818703').map(x => x.id)).toEqual(['a', 'c'])
+  })
+
+  it("'' es SIN ASIGNAR, no 'todos'", () => {
+    // Si '' devolviera todo, subir estando en "sin asignar" mostraría fotos de
+    // otros contenedores y volvería a confundir de cuál es cada cosa.
+    const l = [f('sin'), f('con', 'EMCU1818703'), f('vacio', '  ')]
+    expect(delContenedor(l, '').map(x => x.id)).toEqual(['sin', 'vacio'])
+  })
+
+  it('ignora mayúsculas y espacios de los dos lados', () => {
+    expect(delContenedor([f('a', ' emcu1818703 ')], 'EMCU1818703')).toHaveLength(1)
+  })
+
+  it('sin coincidencias devuelve vacío', () => {
+    expect(delContenedor([f('a', 'X')], 'Y')).toEqual([])
   })
 })
