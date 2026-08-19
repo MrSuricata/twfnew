@@ -44,6 +44,21 @@ describe('buildFaltantePatch — arma el patch de un campo faltante', () => {
     expect(dos.patch.contenedor).toBe('MSKU1111111, TCLU2222222')
   })
 
+  it('el segundo contenedor clonado NO arrastra los kilos del primero', () => {
+    // El clon copiaba operativas[0] ENTERO, bultos/kg/m3 incluidos — y como el
+    // rollup SUMA el array, agregar un contenedor duplicaba el total de la
+    // carga (misma familia que el caso A8045).
+    const dos = buildFaltantePatch('cntr', 'MSKU1111111 / TCLU2222222',
+      [rec({ CNTR_OP: '', PKGS: 463, KG: 4484, M3: 68 })])
+    if (!dos.ok) throw new Error('esperaba ok')
+    const arr = dos.patch.operativas as OperativasRecord[]
+    expect(arr[0].PKGS).toBe(463)      // el primero conserva lo suyo
+    expect(arr[1].PKGS).toBe(0)        // el clon nace vacío
+    expect(arr[1].KG).toBe(0)
+    expect(arr[1].M3).toBe(0)
+    expect(arr[1].DEPOSITO).toBe(arr[0].DEPOSITO)  // lo demás sí se hereda
+  })
+
   it('peso/bultos/volumen con UN contenedor también van al array (el rollup no los pisa)', () => {
     const r = buildFaltantePatch('kg', '8399,75', [rec()])
     if (!r.ok) throw new Error('esperaba ok')
