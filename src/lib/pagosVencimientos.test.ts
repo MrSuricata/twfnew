@@ -230,17 +230,35 @@ describe('costos default por terminal/devolución (17/07)', () => {
 })
 
 describe('empresaRubro — a quién se le paga', () => {
-  it('flete y locales van al AGENTE, que es quien factura', () => {
-    // Repremar vende espacio de Maersk: el carrier es Maersk pero se le paga a
-    // Repremar (verificado en el mail, caso A8036).
+  it('con agente REPREMAR se le paga a Repremar, sin importar la línea', () => {
+    // Regla de Brian (19/08): Repremar cobra flete y locales de sus cargas
+    // aunque el carrier sea Maersk o cualquier otro.
     const s = base({ linea: 'MAERSK', agente: 'REPREMAR' })
     expect(empresaRubro('flete', s)).toBe('REPREMAR')
     expect(empresaRubro('locales', s)).toBe('REPREMAR')
   })
 
+  it('con cualquier OTRO agente se paga directo a la LÍNEA', () => {
+    // La regla del 12/08 (pagar al agente cargado, ej. Craft) estaba mal:
+    // salvo Repremar, la factura de flete/locales es de la línea.
+    const s = base({ linea: 'MSC', agente: 'CRAFT' })
+    expect(empresaRubro('flete', s)).toBe('MSC')
+    expect(empresaRubro('locales', s)).toBe('MSC')
+  })
+
+  it('agente Repremar con variantes del nombre también gana', () => {
+    const s = base({ linea: 'HAPAG', agente: 'Repremar Shipping' })
+    expect(empresaRubro('flete', s)).toBe('Repremar Shipping')
+  })
+
   it('sin agente cargado cae en la línea', () => {
     const s = base({ linea: 'ONE', agente: '' })
     expect(empresaRubro('flete', s)).toBe('ONE')
+  })
+
+  it('sin línea cargada cae en el agente (mejor que SIN ACREEDOR)', () => {
+    const s = base({ linea: '', agente: 'CRAFT' })
+    expect(empresaRubro('flete', s)).toBe('CRAFT')
   })
 
   it('terminal se le paga a la terminal, no al agente', () => {
