@@ -63,6 +63,7 @@ const STAGES: { stage: PhotoLocation; label: string }[] = [
 
 export default function OperationMediaSection({
   shipmentRef,
+  containers = [],
   originPhotos,
   reports,
   onUpdateOriginPhotos,
@@ -70,6 +71,10 @@ export default function OperationMediaSection({
   hideHeader,
 }: {
   shipmentRef: string
+  /** Contenedores de la carga. Con 2 o más aparece el selector "de qué
+   *  contenedor es esto"; con exactamente 1, lo subido se etiqueta solo con
+   *  ese. Vacío = la carga no tiene contenedores cargados. */
+  containers?: string[]
   originPhotos: OriginPhoto[]
   reports: OperativeReport[]
   onUpdateOriginPhotos?: (photos: OriginPhoto[]) => void
@@ -84,6 +89,9 @@ export default function OperationMediaSection({
   const [uploadingStage, setUploadingStage] = useState<PhotoLocation | null>(null)
   const [uploadProgress, setUploadProgress] = useState({ current: 0, total: 0 })
   const [uploadingReport, setUploadingReport] = useState(false)
+  /** Contenedor al que se le adjudica lo que se suba. '' = toda la carga.
+   *  Con un solo contenedor arranca en ese: no tiene sentido preguntar. */
+  const [cntrSel, setCntrSel] = useState(() => (containers.length === 1 ? containers[0] : ''))
   const [busyReportId, setBusyReportId] = useState<string | null>(null)
 
   const opReports = reportsForRef(reports, shipmentRef)
@@ -118,6 +126,7 @@ export default function OperationMediaSection({
         const photo: OriginPhoto = {
           id: `photo-${lote}-${i}`,
           shipmentRef,
+          containerNumber: cntrSel || undefined,
           photoType: stage,
           fileName: file.name,
           fileType: file.type,
@@ -172,6 +181,7 @@ export default function OperationMediaSection({
       const report: OperativeReport = {
         id: `rpt-${Date.now()}`,
         shipmentRef,
+        containerNumber: cntrSel || undefined,
         title: file.name.replace(/\.pdf$/i, ''),
         content: '',
         fileName: file.name,
@@ -228,6 +238,51 @@ export default function OperationMediaSection({
 
   return (
     <section>
+      {/* Selector de contenedor: la carga puede tener varios y cada uno se
+          trasiega por separado, en su propio camión y su propio día. Sin esto,
+          lo que se sube queda a nivel carga y después no hay forma de saber de
+          cuál era (pedido de Brian 18/08). Es OPCIONAL: "Toda la carga" sigue
+          siendo una respuesta válida. */}
+      {containers.length > 1 && (
+        <div className="flex flex-wrap items-center gap-1.5 mb-3">
+          <span className="text-[10px] uppercase tracking-wide text-muted-foreground mr-0.5">
+            Adjudicar a
+          </span>
+          <button
+            type="button"
+            onClick={() => setCntrSel('')}
+            aria-pressed={cntrSel === ''}
+            className={`h-7 px-2.5 rounded-full text-[11px] font-medium border transition-colors ${
+              cntrSel === ''
+                ? 'border-primary/40 bg-primary/10 text-foreground'
+                : 'border-border text-muted-foreground hover:bg-muted/60'
+            }`}
+          >
+            Toda la carga
+          </button>
+          {containers.map(c => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => setCntrSel(c)}
+              aria-pressed={cntrSel === c}
+              className={`h-7 px-2.5 rounded-full font-mono text-[11px] font-medium border transition-colors ${
+                cntrSel === c
+                  ? 'border-primary/40 bg-primary/10 text-foreground'
+                  : 'border-border text-muted-foreground hover:bg-muted/60'
+              }`}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+      )}
+      {containers.length === 1 && (
+        <p className="text-[10px] text-muted-foreground mb-3">
+          Lo que subas se adjudica a <span className="font-mono">{containers[0]}</span>.
+        </p>
+      )}
+
       {!hideHeader && (
         <h4 className="text-[10px] uppercase tracking-wide text-muted-foreground mb-2 pb-1 border-b">
           Fotos e informes
