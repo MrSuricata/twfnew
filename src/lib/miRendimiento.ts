@@ -70,7 +70,10 @@ export interface FilaRendimiento {
   operativa: string
   /** Fecha que ordena la fila: la salida si está, si no la llegada. */
   fecha: string
-  /** Contenedores de la carga: los avisos son por contenedor. */
+  /** El contenedor de ESTA fila. '' = la carga no tiene contenedor cargado. */
+  cntr: string
+  /** TODOS los contenedores de la ref. Hace falta para escribir el mapa
+   *  completo del paso sin pisar lo marcado en los otros contenedores. */
   cntrs: string[]
   visita: boolean
   /** La carga quedó documentada: hay fotos subidas O informe (que las lleva). */
@@ -156,24 +159,6 @@ const enRango = (iso: string, desde: string, hasta: string): boolean => {
 }
 
 /**
- * Avisos POR CONTENEDOR contados como propios: un contenedor suma solo si lo
- * avisó uno mismo. Sin lista de contenedores (LCL, carga sin CNTR cargado) el
- * paso vale como uno solo, a nivel ref.
- */
-function agregadoPropio(step: RefCheckStep | undefined, cntrList: string[], identidades: string[]): { done: number; total: number } {
-  if (cntrList.length === 0) {
-    const ok = !!step?.done && esAutorPropio(step?.by, identidades)
-    return { done: ok ? 1 : 0, total: 1 }
-  }
-  let done = 0
-  for (const c of cntrList) {
-    const eff = avisoForCntr(step, c)
-    if (eff && esAutorPropio(eff.by, identidades)) done++
-  }
-  return { done, total: cntrList.length }
-}
-
-/**
  * Arma el parte del período.
  *
  * @param cargas    todas las cargas (se filtran acá adentro)
@@ -185,7 +170,12 @@ function agregadoPropio(step: RefCheckStep | undefined, cntrList: string[], iden
 export function buildRendimiento(args: {
   cargas: CargaRendimiento[]
   checksByRef: Map<string, RefCheckSteps>
-  refsConFotos: Set<string>
+  /** Claves `REF|CNTR` con fotos de Uruguay: la foto es de UN contenedor. */
+  fotosPorCntr: Set<string>
+  /** Refs con fotos de Uruguay SIN contenedor asignado (las de antes de que
+   *  se etiquetaran). No se sabe de cuál son, así que cuentan para todos los
+   *  contenedores de esa ref: es lo único honesto que se puede afirmar. */
+  refsConFotosSinCntr: Set<string>
   refsConInforme: Set<string>
   desde: string
   hasta: string
@@ -206,43 +196,63 @@ export function buildRendimiento(args: {
     if (!enRango(fecha, args.desde, args.hasta)) continue
 
     const norm = normalizeRef(c.ref)
-    if (vistas.has(norm)) continue
-    vistas.add(norm)
-
     const steps = args.checksByRef.get(norm) || {}
     const cntrList = parseCntr(txt(c.cntr))
-    // La visita es nivel CARGA (no por contenedor): se fue al depósito por la
-    // operativa. SOLO el tilde, y solo si lo marcó uno mismo: las fotos pueden
-    // venir del depósito, así que no prueban nada (Brian 18/08).
-    const visita = !!steps.visita_deposito?.done && esAutorPropio(steps.visita_deposito?.by, identidades)
+    // UNA FILA POR CONTENEDOR (Brian 18/08): cada contenedor de una carga sale
+    // en su propio camión y su propio día, así que se puede haber ido a uno y
+    // al otro no. Con una fila por ref no había forma de decirlo.
+    // Sin contenedor cargado queda una sola fila con '' — la carga existe
+    // igual y hay que poder marcarla.
+    const filasCntr = cntrList.length > 0 ? cntrList : ['']
 
-    // Los avisos son POR CONTENEDOR: el `done` de arriba significa "alguno
-    // avisado". Cuenta como hecho solo si están TODOS los contenedores.
-    const traslado = agregadoPropio(steps.aviso_traslado, cntrList, identidades)
-    const salida = agregadoPropio(steps.aviso_salida, cntrList, identidades)
-    const informeOk = args.refsConInforme.has(norm)
-    // Las fotos van DENTRO del informe: si el informe se mandó, la carga quedó
-    // documentada aunque la galería esté vacía (Brian 18/08).
-    const fotosSubidas = args.refsConFotos.has(norm)
-    const fotos = fotosSubidas || informeOk
+    for (const cntr of filasCntr) {
+      const claveFila = `${norm}|${cntr}`
+      // Una misma ref+cntr puede venir más de una vez (cache legacy + DB): sin
+      // dedupe el denominador se infla solo y React repite la key.
+      if (vistas.has(claveFila)) continue
+      vistas.add(claveFila)
+      // La visita es POR CONTENEDOR y solo el tilde: las fotos pueden venir
+      // del depósito, así que no prueban nada (Brian 18/08). avisoForCntr cae
+      // al flag de nivel ref cuando no hay mapa por contenedor, así que lo
+      // marcado antes de este cambio sigue contando en todos los contenedores.
+      const visitaCntr = avisoForCntr(steps.visita_deposito, cntr)
+      const visita = !!visitaCntr && esAutorPropio(visitaCntr.by, identidades)
 
-    filas.push({
-      ref: c.ref,
-      cliente: txt(c.cliente) || '—',
-      deposito: txt(c.deposito) || '—',
-      operativa: txt(c.operativa).toUpperCase(),
-      fecha,
-      cntrs: cntrList,
-      visita,
-      fotos,
-      fotosSubidas,
-      avisoTraslado: traslado.done > 0 && traslado.done === traslado.total,
-      avisoTrasladoParcial: traslado.done > 0 && traslado.done < traslado.total,
-      avisoSalida: salida.done > 0 && salida.done === salida.total,
-      avisoSalidaParcial: salida.done > 0 && salida.done < salida.total,
-      informe: informeOk,
-      informeSinVisita: informeOk && !visita,
-    })
+      // Los avisos también son de ESTE contenedor: ya no hay "parcial", porque
+      // la fila es un contenedor y no un agregado de varios.
+      const trasladoC = avisoForCntr(steps.aviso_traslado, cntr)
+      const salidaC = avisoForCntr(steps.aviso_salida, cntr)
+      const avisoTraslado = !!trasladoC && esAutorPropio(trasladoC.by, identidades)
+      const avisoSalida = !!salidaC && esAutorPropio(salidaC.by, identidades)
+
+      // El informe se sube por REF, no por contenedor: se muestra en todas las
+      // filas de la carga. Es una aproximación conocida — cuando el informe
+      // pase a guardarse por contenedor, esto se afina.
+      const informeOk = args.refsConInforme.has(norm)
+      // Las fotos van DENTRO del informe: si el informe se mandó, la carga
+      // quedó documentada aunque la galería esté vacía (Brian 18/08).
+      const fotosSubidas = args.fotosPorCntr.has(`${norm}|${cntr}`) || args.refsConFotosSinCntr.has(norm)
+      const fotos = fotosSubidas || informeOk
+
+      filas.push({
+        ref: c.ref,
+        cliente: txt(c.cliente) || '—',
+        deposito: txt(c.deposito) || '—',
+        operativa: txt(c.operativa).toUpperCase(),
+        fecha,
+        cntr,
+        cntrs: cntrList,
+        visita,
+        fotos,
+        fotosSubidas,
+        avisoTraslado,
+        avisoTrasladoParcial: false,
+        avisoSalida,
+        avisoSalidaParcial: false,
+        informe: informeOk,
+        informeSinVisita: informeOk && !visita,
+      })
+    }
   }
 
   // Más reciente arriba; sin fecha al final.
@@ -250,7 +260,8 @@ export function buildRendimiento(args: {
     if (!a.fecha) return 1
     if (!b.fecha) return -1
     if (a.fecha !== b.fecha) return a.fecha < b.fecha ? 1 : -1
-    return a.ref.localeCompare(b.ref)
+    if (a.ref !== b.ref) return a.ref.localeCompare(b.ref)
+    return a.cntr.localeCompare(b.cntr)
   })
 
   const cuenta = (f: (x: FilaRendimiento) => boolean): number => filas.filter(f).length
@@ -323,14 +334,19 @@ export function resumenMensual(
 
 /** Depósitos visitados en el período, con las refs de cada uno. */
 export function depositosVisitados(r: ResumenRendimiento): { deposito: string; refs: string[] }[] {
-  const m = new Map<string, string[]>()
+  // Con una fila por contenedor, una misma ref aparece varias veces: la lista
+  // de refs del depósito se deduplica para no decir "fui 2 veces a PLANIR por
+  // A8025" cuando fue una sola carga con dos contenedores.
+  const m = new Map<string, Set<string>>()
   for (const f of r.filas) {
     if (!f.visita) continue
     const d = f.deposito || '—'
-    m.set(d, [...(m.get(d) || []), f.ref])
+    const set = m.get(d) || new Set<string>()
+    set.add(f.ref)
+    m.set(d, set)
   }
   return [...m.entries()]
-    .map(([deposito, refs]) => ({ deposito, refs }))
+    .map(([deposito, refs]) => ({ deposito, refs: [...refs] }))
     .sort((a, b) => b.refs.length - a.refs.length)
 }
 

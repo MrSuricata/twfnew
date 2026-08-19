@@ -23,7 +23,10 @@ const build = (
   buildRendimiento({
     cargas,
     checksByRef: new Map(Object.entries(checks)),
-    refsConFotos: new Set(fotos),
+    // Una entrada con '|' es `REF|CNTR` (foto etiquetada); sin '|' es una ref
+    // con fotos viejas sin contenedor asignado.
+    fotosPorCntr: new Set(fotos.filter(f => f.includes('|'))),
+    refsConFotosSinCntr: new Set(fotos.filter(f => !f.includes('|'))),
     refsConInforme: new Set(informes),
     desde: '2026-08-17', hasta: '2026-08-23',
     identidades,
@@ -175,19 +178,56 @@ describe('buildRendimiento — las cinco señales por operativa', () => {
     expect(r.filas.map(f => f.ref)).toEqual(['A', 'B'])
   })
 
-  it('el aviso cuenta hecho solo con TODOS los contenedores', () => {
-    const dos = carga({ ref: 'A8068', cntr: 'CSLU6176200, MSCU7654321' })
-    const parcial = build([dos], { A8068: { aviso_salida: avisoCntrs({ CSLU6176200: 'admin' }) } })
-    expect(parcial.filas[0].avisoSalida).toBe(false)
-    expect(parcial.filas[0].avisoSalidaParcial).toBe(true)
-    expect(parcial.salidas).toBe(0)
+  it('una carga de dos contenedores da DOS filas, una por contenedor', () => {
+    // Cada contenedor sale en su propio camión y su propio día: se puede haber
+    // ido a uno y al otro no (Brian 18/08).
+    const dos = carga({ ref: 'A8025', cntr: 'EGSU0310260, EMCU1818703' })
+    const r = build([dos])
+    expect(r.filas).toHaveLength(2)
+    expect(r.filas.map(f => f.cntr)).toEqual(['EGSU0310260', 'EMCU1818703'])
+    expect(r.total).toBe(2)
+  })
 
-    const todos = build([dos], {
-      A8068: { aviso_salida: avisoCntrs({ CSLU6176200: 'admin', MSCU7654321: 'admin' }) },
-    })
-    expect(todos.filas[0].avisoSalida).toBe(true)
-    expect(todos.filas[0].avisoSalidaParcial).toBe(false)
-    expect(todos.salidas).toBe(1)
+  it('el aviso de un contenedor no arrastra al otro', () => {
+    const dos = carga({ ref: 'A8068', cntr: 'CSLU6176200, MSCU7654321' })
+    const r = build([dos], { A8068: { aviso_salida: avisoCntrs({ CSLU6176200: 'admin' }) } })
+    const avisado = r.filas.find(f => f.cntr === 'CSLU6176200')!
+    const pendiente = r.filas.find(f => f.cntr === 'MSCU7654321')!
+    expect(avisado.avisoSalida).toBe(true)
+    expect(pendiente.avisoSalida).toBe(false)
+    // El denominador ahora son contenedores: 1 de 2.
+    expect(r.salidas).toBe(1)
+    expect(r.total).toBe(2)
+  })
+
+  it('la visita marcada antes del cambio (nivel ref) sigue contando en todos', () => {
+    // Sin mapa `cntrs`, avisoForCntr cae al flag de la ref: el historial de
+    // tildes viejos no se pierde al pasar a filas por contenedor.
+    const dos = carga({ ref: 'A8025', cntr: 'EGSU0310260, EMCU1818703' })
+    const r = build([dos], { A8025: { visita_deposito: { done: true, date: '2026-08-18', by: 'admin' } } })
+    expect(r.filas.every(f => f.visita)).toBe(true)
+    expect(r.visitas).toBe(2)
+  })
+
+  it('la carga sin contenedor cargado da una sola fila', () => {
+    const r = build([carga({ ref: 'A9000', cntr: '' })])
+    expect(r.filas).toHaveLength(1)
+    expect(r.filas[0].cntr).toBe('')
+  })
+
+  it('la foto etiquetada cuenta solo para SU contenedor', () => {
+    const dos = carga({ ref: 'A8025', cntr: 'EGSU0310260, EMCU1818703' })
+    const r = build([dos], {}, ['A8025|EMCU1818703'])
+    expect(r.filas.find(f => f.cntr === 'EMCU1818703')!.fotosSubidas).toBe(true)
+    expect(r.filas.find(f => f.cntr === 'EGSU0310260')!.fotosSubidas).toBe(false)
+  })
+
+  it('la foto vieja SIN contenedor cuenta para todos los de la ref', () => {
+    // No se sabe de cuál es: afirmar que es de uno seria inventar, y esconderla
+    // seria perder la señal.
+    const dos = carga({ ref: 'A8025', cntr: 'EGSU0310260, EMCU1818703' })
+    const r = build([dos], {}, ['A8025'])
+    expect(r.filas.every(f => f.fotosSubidas)).toBe(true)
   })
 
   it('el contenedor que avisó otra persona no me lo cuento', () => {
@@ -195,8 +235,9 @@ describe('buildRendimiento — las cinco señales por operativa', () => {
     const r = build([dos], {
       A8068: { aviso_salida: avisoCntrs({ CSLU6176200: 'bridvanovich@twf.uy', MSCU7654321: 'jdornheim@mediterraneacarghas.com.ar' }) },
     }, [], [], ['bridvanovich@twf.uy'])
-    expect(r.filas[0].avisoSalida).toBe(false)
-    expect(r.filas[0].avisoSalidaParcial).toBe(true)
+    expect(r.filas.find(f => f.cntr === 'CSLU6176200')!.avisoSalida).toBe(true)
+    expect(r.filas.find(f => f.cntr === 'MSCU7654321')!.avisoSalida).toBe(false)
+    expect(r.salidas).toBe(1)
   })
 
   it('la visita tildada por otro no cuenta como mía', () => {
@@ -275,7 +316,8 @@ describe('resumenMensual — cómo viene mes a mes', () => {
     resumenMensual({
       cargas,
       checksByRef: new Map(Object.entries(checks)),
-      refsConFotos: new Set<string>(),
+      fotosPorCntr: new Set<string>(),
+      refsConFotosSinCntr: new Set<string>(),
       refsConInforme: new Set(informes),
       meses: ['2026-08', '2026-07'],
     })
