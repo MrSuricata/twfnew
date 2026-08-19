@@ -101,6 +101,25 @@ export function isAvisoStep(key: CheckStepKey): boolean {
   return AVISO_STEP_KEYS.has(key)
 }
 
+/**
+ * Pasos que se GUARDAN por contenedor: los avisos + la visita al depósito.
+ *
+ * No es lo mismo que `isAvisoStep`: la visita no es un aviso al cliente (no va
+ * a la pestaña Checks ni al progreso documentario, por eso es `personal`), pero
+ * SÍ ocurre por contenedor — cada uno se trasiega en su propio camión y su
+ * propio día, y se puede haber ido a uno y al otro no.
+ *
+ * Existe porque faltaba justo eso: /mirendimiento pasó a LEER la visita por
+ * contenedor pero la seguía ESCRIBIENDO a nivel ref, así que marcar uno
+ * encendía los dos (Brian 18/08, A8025).
+ */
+export const POR_CONTENEDOR_KEYS: ReadonlySet<CheckStepKey> =
+  new Set<CheckStepKey>([...AVISO_STEP_KEYS, 'visita_deposito'])
+
+export function esPasoPorContenedor(key: CheckStepKey): boolean {
+  return POR_CONTENEDOR_KEYS.has(key)
+}
+
 export type RefCheckSteps = Partial<Record<CheckStepKey, RefCheckStep>>
 
 /** Fila de la tabla ref_checks tal como la devuelve la API. */

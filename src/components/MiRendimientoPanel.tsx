@@ -25,7 +25,7 @@ import {
 } from '@/lib/miRendimiento'
 import { fetchRefChecks, saveRefCheckSteps, saveRefCheckCntrs } from '@/lib/dataClient'
 import {
-  normalizeRef, mergeChecksSteps, isAvisoStep, avisoForCntr,
+  normalizeRef, mergeChecksSteps, esPasoPorContenedor, avisoForCntr,
   type CheckStepKey, type RefCheckSteps,
 } from '@/lib/checksTypes'
 import { getAdminName, getAdminUser } from '@/lib/authClient'
@@ -158,7 +158,7 @@ export default function MiRendimientoPanel({ dbShipments, reports = [], originPh
     const marcar = !activo
     const ctx = { date: hoyIso(), by: getAdminName() }
 
-    const porContenedor = isAvisoStep(key) && cntrs.length > 0
+    const porContenedor = esPasoPorContenedor(key) && cntrs.length > 0
     let optimista: RefCheckSteps
     let guardar: () => Promise<RefCheckSteps>
 
