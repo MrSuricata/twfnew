@@ -199,6 +199,28 @@ export function empresaRubro(rubro: PagoRubro, s: Pick<DbShipment, 'linea' | 'te
   return ((s.linea || '').trim() || agente)
 }
 
+/**
+ * Orden de la lista "sin datos de pago": por ETA ascendente — la carga que ya
+ * llegó (o llega primero) va ARRIBA, porque su pago vence primero y es la que
+ * urge cargar para la previsión de finanzas (Brian 20/08). Sin ETA parseable
+ * van al final: no se les puede derivar vencimiento hasta cargar la ETA.
+ */
+export function ordenarSinDatos<T extends Pick<DbShipment, 'ref' | 'eta'>>(list: T[]): T[] {
+  const clave = (s: T): string | null => {
+    const e = String(s.eta || '').trim()
+    return /^\d{4}-\d{2}-\d{2}$/.test(e) ? e : null
+  }
+  return [...list].sort((a, b) => {
+    const ka = clave(a)
+    const kb = clave(b)
+    if (ka === null && kb === null) return String(a.ref).localeCompare(String(b.ref))
+    if (ka === null) return 1
+    if (kb === null) return -1
+    if (ka !== kb) return ka < kb ? -1 : 1
+    return String(a.ref).localeCompare(String(b.ref))
+  })
+}
+
 /** Etiqueta de los ítems cuyo acreedor todavía no se cargó. */
 export const SIN_ACREEDOR = 'SIN ACREEDOR'
 
