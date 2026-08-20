@@ -299,12 +299,45 @@ describe('buildRendimiento — las cinco señales por operativa', () => {
     const conSalida = build([carga({ ref: 'CON', cntr: 'X', salida: '2026-08-20' })])
     expect(conSalida.filas[0].fechaEs).toBe('salida')
 
+    // OJO: la primera versión de este test esperaba 18/08 — fijaba el BUG.
+    // ETA_OP es una copia sin mantener; la llegada es de la CARGA (todos los
+    // contenedores llegan en el mismo buque), así que manda eta = 24/08.
     const sinSalida = build([carga({
       ref: 'A7958', cntr: 'TEMU1789917', salida: '', eta: '2026-08-24',
       operativas: [{ cntr: 'TEMU1789917', salida: '', eta: '2026-08-18' }],
-    })])
-    expect(sinSalida.filas[0].fecha).toBe('2026-08-18')
-    expect(sinSalida.filas[0].fechaEs).toBe('llegada')
+    })], {}, [], [], undefined)
+    expect(sinSalida.filas).toHaveLength(0)   // 24/08 cae FUERA de la semana 17–23
+    const semanaQueViene = buildRendimiento({
+      cargas: [carga({
+        ref: 'A7958', cntr: 'TEMU1789917', salida: '', eta: '2026-08-24',
+        operativas: [{ cntr: 'TEMU1789917', salida: '', eta: '2026-08-18' }],
+      })],
+      checksByRef: new Map(), fotosPorCntr: new Set(), refsConFotosSinCntr: new Set(),
+      informesPorCntr: new Set(), refsConInformeSinCntr: new Set(),
+      desde: '2026-08-24', hasta: '2026-08-30',
+    })
+    expect(semanaQueViene.filas[0].fecha).toBe('2026-08-24')
+    expect(semanaQueViene.filas[0].fechaEs).toBe('llegada')
+  })
+
+  it('con fila propia sin fechas NO se roba la salida del hermano', () => {
+    // c.salida es el rollup: la salida más temprana de TODOS los contenedores.
+    // El contenedor sin fechas propias caía ahí y mostraba el camión del otro.
+    const r = buildRendimiento({
+      cargas: [carga({
+        ref: 'A1', cntr: 'CON, SIN', salida: '2026-08-18', eta: '2026-08-20',
+        operativas: [
+          { cntr: 'CON', salida: '2026-08-18' },
+          { cntr: 'SIN', salida: '', eta: '' },
+        ],
+      })],
+      checksByRef: new Map(), fotosPorCntr: new Set(), refsConFotosSinCntr: new Set(),
+      informesPorCntr: new Set(), refsConInformeSinCntr: new Set(),
+      desde: '2026-08-17', hasta: '2026-08-23',
+    })
+    const sin = r.filas.find(f => f.cntr === 'SIN')!
+    expect(sin.fechaEs).toBe('llegada')
+    expect(sin.fecha).toBe('2026-08-20')
   })
 
   it("la SALIDA de texto ('CONFIRMAR') cuenta como llegada, no como salida", () => {

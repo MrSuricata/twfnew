@@ -176,8 +176,16 @@ export function fechaConTipo(c: CargaRendimiento, cntr?: string): { fecha: strin
     : undefined
   const salidaOp = txt(op?.salida)
   if (salidaOp && parseLocalDate(salidaOp)) return { fecha: salidaOp, es: 'salida' }
-  const etaOp = txt(op?.eta)
-  if (op && etaOp) return { fecha: etaOp, es: 'llegada' }
+  if (op) {
+    // La SALIDA es del contenedor (cada uno sale en su camión), pero la
+    // LLEGADA es de la CARGA: llegan todos en el mismo buque. ETA_OP es una
+    // copia que quedó sin mantener (261 cargas activas divergentes al 20/08 —
+    // caso A7958: ETA_OP decía 18/08 con la ETA real en 24/08): manda la ETA
+    // de la carga, y la copia solo si la carga no tiene.
+    // Con fila propia tampoco se cae a c.salida: esa es el rollup (la salida
+    // más temprana de los HERMANOS) — mostraría el camión de otro contenedor.
+    return { fecha: txt(c.eta) || txt(op.eta), es: 'llegada' }
+  }
 
   const salida = txt(c.salida)
   if (salida && parseLocalDate(salida)) return { fecha: salida, es: 'salida' }
