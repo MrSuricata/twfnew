@@ -35,7 +35,7 @@ import { faltantesUrgentes, resumenFaltantes, FALTANTES_DIAS_COORDINACION, type 
 import { buildFaltantePatch, columnaDeCampo, FALTANTE_INPUTS } from '@/lib/faltantesEdit'
 import {
   esCargaSinDatosPago, montosUrgentes, formaPagoEfectiva, parseMontoUY,
-  MONTO_KEYS, type PagoRubro,
+  paisDePago, agruparPorPais, MONTO_KEYS, type PagoRubro,
 } from '@/lib/pagosVencimientos'
 import type { CatalogClient } from '@/lib/clientCatalog'
 import type { ShipmentDocument, OperativeReport, OriginPhoto } from '@/lib/quotationTypes'
@@ -334,6 +334,14 @@ export default function TodayDashboard({
     () => montosUrgentes(dbShipments || [], todayIso(), FALTANTES_DIAS_COORDINACION),
     [dbShipments],
   )
+  // Mismo filtro por país que Pagos → Sin datos (Brian 20/08): completar de a
+  // un país. Deriva de paisDePago, así los chips de acá y los de Pagos nunca
+  // pueden decir cosas distintas.
+  const [montosPais, setMontosPais] = useState<string | null>(null)
+  const montosVisibles = useMemo(
+    () => (montosPais === null ? montosCard : montosCard.filter(s => paisDePago(s) === montosPais)),
+    [montosCard, montosPais],
+  )
 
   // Carga inicial en curso y todavía sin nada que mostrar → estado "Cargando"
   // en vez del empty state ("Día tranquilo"), para no dar un falso "no hay nada
@@ -534,12 +542,44 @@ export default function TodayDashboard({
             )}
             {cardTab === 'montos' && (
               <div className="space-y-1">
+                {montosCard.length > 1 && (
+                  <div className="flex flex-wrap items-center gap-1.5 pb-2">
+                    <button
+                      type="button"
+                      onClick={() => setMontosPais(null)}
+                      aria-pressed={montosPais === null}
+                      className={`h-7 px-2.5 rounded-full text-xs font-semibold transition-colors ${
+                        montosPais === null ? 'bg-amber-600 text-white' : 'bg-background/60 text-muted-foreground border border-border hover:bg-amber-500/10'
+                      }`}
+                    >
+                      Todas <span className="opacity-70">{montosCard.length}</span>
+                    </button>
+                    {agruparPorPais(montosCard).map(g => (
+                      <button
+                        key={g.pais}
+                        type="button"
+                        onClick={() => setMontosPais(prev => (prev === g.pais ? null : g.pais))}
+                        aria-pressed={montosPais === g.pais}
+                        className={`h-7 px-2.5 rounded-full text-xs font-semibold transition-colors ${
+                          montosPais === g.pais ? 'bg-amber-600 text-white' : 'bg-background/60 text-muted-foreground border border-border hover:bg-amber-500/10'
+                        }`}
+                      >
+                        {g.pais} <span className="opacity-70">{g.n}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {montosCard.length === 0 && (
                   <p className="px-2.5 py-3 text-xs text-muted-foreground">
                     🎉 Todo lo que llega estos días tiene montos cargados.
                   </p>
                 )}
-                {montosCard.map(s => (
+                {montosCard.length > 0 && montosVisibles.length === 0 && (
+                  <p className="px-2.5 py-3 text-xs text-muted-foreground">
+                    Nada de {montosPais} en la ventana — probá otro chip.
+                  </p>
+                )}
+                {montosVisibles.map(s => (
                   <MontosUrgenteRow key={s.id} s={s} onPatchShipment={onPatchShipment} onOpenDetail={onOpenDetail} />
                 ))}
                 {sinMontos > montosCard.length && (
