@@ -45,7 +45,7 @@ import {
   SIN_ACREEDOR,
   ordenarPagos,
   type OrdenPagoCampo,
-  type OrdenPagoDir, ordenarSinDatos, formaPagoEfectiva } from '@/lib/pagosVencimientos'
+  type OrdenPagoDir, ordenarSinDatos, formaPagoEfectiva, paisDePago, agruparPorPais } from '@/lib/pagosVencimientos'
 import { fmtMoneyUY } from '@/lib/fichaFacturacionPdf'
 import { fmtDateDMY } from '@/lib/format'
 import { exportToCSV } from '@/lib/exportUtils'
@@ -139,6 +139,8 @@ export default function PagosManagement({ dbShipments = [], onPatchShipment, onO
   const [editS, setEditS] = useState<DbShipment | null>(null)
   const [draft, setDraft] = useState<MontosDraft>({ devolucion: '', terminal: '', locales: '', flete: '', formaPago: '' })
 
+  // Filtro por país de "sin datos" (Brian 20/08): completar de a un país.
+  const [paisFiltro, setPaisFiltro] = useState<string | null>(null)
   const { items, sinDatos } = useMemo(() => {
     const r = buildPagoItems(dbShipments, hoy)
     // La que llega primero arriba: su pago vence primero y es la que urge
@@ -638,6 +640,33 @@ export default function PagosManagement({ dbShipments = [], onPatchShipment, onO
       {subTab === 'sin_datos' && (
         <Card>
           <CardContent className="p-0 overflow-x-auto max-h-[65vh] overflow-y-auto">
+            {sinDatos.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5 px-3 pt-3 pb-1">
+                <button
+                  type="button"
+                  onClick={() => setPaisFiltro(null)}
+                  aria-pressed={paisFiltro === null}
+                  className={`h-7 px-2.5 rounded-full text-xs font-semibold border transition-colors ${
+                    paisFiltro === null ? 'bg-primary text-primary-foreground border-primary' : 'text-muted-foreground border-border hover:bg-muted'
+                  }`}
+                >
+                  Todas <span className="opacity-70">{sinDatos.length}</span>
+                </button>
+                {agruparPorPais(sinDatos).map(g => (
+                  <button
+                    key={g.pais}
+                    type="button"
+                    onClick={() => setPaisFiltro(prev => (prev === g.pais ? null : g.pais))}
+                    aria-pressed={paisFiltro === g.pais}
+                    className={`h-7 px-2.5 rounded-full text-xs font-semibold border transition-colors ${
+                      paisFiltro === g.pais ? 'bg-primary text-primary-foreground border-primary' : 'text-muted-foreground border-border hover:bg-muted'
+                    }`}
+                  >
+                    {g.pais} <span className="opacity-70">{g.n}</span>
+                  </button>
+                ))}
+              </div>
+            )}
             {sinDatos.length === 0 ? (
               <div className="py-16 text-center text-sm text-muted-foreground">
                 🎉 Todas las cargas vigentes tienen datos de pago.
@@ -655,7 +684,7 @@ export default function PagosManagement({ dbShipments = [], onPatchShipment, onO
                   </tr>
                 </thead>
                 <tbody className="divide-y">
-                  {sinDatos.map(s => (
+                  {(paisFiltro === null ? sinDatos : sinDatos.filter(x => paisDePago(x) === paisFiltro)).map(s => (
                     <tr key={s.id} className="hover:bg-muted/40 transition-colors">
                       <td className="px-3 py-2 font-medium whitespace-nowrap"><RefCell it={{ id: s.id, ref: s.ref }} onOpenDetail={onOpenDetail} /></td>
                       <td className="px-3 py-2 max-w-[240px] truncate" title={s.cliente}>{s.cliente || '—'}</td>

@@ -221,6 +221,43 @@ export function ordenarSinDatos<T extends Pick<DbShipment, 'ref' | 'eta'>>(list:
   })
 }
 
+/** País para filtrar la lista "sin datos": el chip agrupa por destino.
+ *  Vacío u OTRO = 'SIN PAÍS' (Chile nunca llega acá: queda afuera de Pagos). */
+export function paisDePago(s: Pick<DbShipment, 'dest_country'>): string {
+  const p = up(s.dest_country)
+  return p && p !== 'OTRO' ? p : 'SIN PAÍS'
+}
+
+/** Chips del filtro por país: cada país con su cuenta, el más cargado primero.
+ *  Orden estable (alfabético a igual cuenta) para que los chips no bailen. */
+export function agruparPorPais(list: Pick<DbShipment, 'dest_country'>[]): { pais: string; n: number }[] {
+  const m = new Map<string, number>()
+  for (const s of list || []) {
+    const p = paisDePago(s)
+    m.set(p, (m.get(p) || 0) + 1)
+  }
+  return [...m.entries()]
+    .map(([pais, n]) => ({ pais, n }))
+    .sort((a, b) => (a.n !== b.n ? b.n - a.n : a.pais.localeCompare(b.pais)))
+}
+
+/**
+ * La tajada URGENTE de "sin datos de pago" para la card de HOY: cargas sin
+ * montos que llegan dentro de `dias` (o ya llegaron — el tope de 60 días para
+ * atrás lo pone esCargaSinDatosPago). MISMO criterio que la pestaña Pagos,
+ * derivado de la misma regla: dos vistas, un solo número posible.
+ * (Decisión de Brian 20/08, que revisa la del 18/08 de no mostrar montos en
+ * HOY: ahora van en una sub-pestaña propia, no como campos de cada fila.)
+ */
+export function montosUrgentes(dbShipments: DbShipment[], hoyISO: string, dias: number): DbShipment[] {
+  const filtradas = (dbShipments || []).filter(s => {
+    if (!esCargaSinDatosPago(s, hoyISO)) return false
+    const d = diffDaysISO(hoyISO, String(s.eta || ''))
+    return d !== null && d <= dias
+  })
+  return ordenarSinDatos(filtradas)
+}
+
 /** Etiqueta de los ítems cuyo acreedor todavía no se cargó. */
 export const SIN_ACREEDOR = 'SIN ACREEDOR'
 

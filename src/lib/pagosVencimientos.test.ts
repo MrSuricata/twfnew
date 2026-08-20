@@ -3,7 +3,7 @@ import {
   addDaysISO, diffDaysISO, esLineaOne, esLineaRepremar, deriveFormaPago,
   normalizeFormaPago, formaPagoEfectiva, venceRubro, buildPagoItems, corteHasta, kpisPagos,
   costoTerminalDefault, costoDevDefault, empresaRubro, agruparPorAcreedor, SIN_ACREEDOR,
-  ordenarPagos, ordenarSinDatos, type PagoItem,
+  ordenarPagos, ordenarSinDatos, paisDePago, agruparPorPais, montosUrgentes, type PagoItem,
 } from './pagosVencimientos'
 import type { DbShipment } from './operationsTypes'
 
@@ -250,6 +250,49 @@ describe('ordenarSinDatos — la que llega primero, arriba', () => {
     const l = ordenarSinDatos(orig)
     expect(l.map(x => x.ref)).toEqual(['A', 'B'])
     expect(orig.map(x => x.ref)).toEqual(['B', 'A'])
+  })
+})
+
+describe('filtro por país de "sin datos" (Brian 20/08)', () => {
+  it('paisDePago: UY/AR tal cual; vacío u OTRO = SIN PAÍS', () => {
+    expect(paisDePago({ dest_country: 'UY' } as DbShipment)).toBe('UY')
+    expect(paisDePago({ dest_country: 'ar' } as DbShipment)).toBe('AR')
+    expect(paisDePago({ dest_country: '' } as DbShipment)).toBe('SIN PAÍS')
+    expect(paisDePago({ dest_country: 'OTRO' } as DbShipment)).toBe('SIN PAÍS')
+  })
+
+  it('agruparPorPais: el más cargado primero, alfabético a igual cuenta', () => {
+    const g = agruparPorPais([
+      { dest_country: 'UY' }, { dest_country: 'UY' }, { dest_country: 'AR' },
+      { dest_country: '' },
+    ] as DbShipment[])
+    expect(g[0]).toEqual({ pais: 'UY', n: 2 })
+    expect(g.slice(1)).toEqual([{ pais: 'AR', n: 1 }, { pais: 'SIN PAÍS', n: 1 }])
+  })
+})
+
+describe('montosUrgentes — la tajada de HOY, mismo criterio que Pagos', () => {
+  const hoy = '2026-08-20'
+  const sd = (ref: string, eta: string, extra: Partial<DbShipment> = {}): DbShipment =>
+    base({ id: ref, ref, eta, monto_flete: null, monto_locales: null, monto_terminal: null, monto_devolucion: null, ...extra })
+
+  it('entra lo que llega dentro de la ventana (y lo ya llegado), ordenado por ETA', () => {
+    const l = montosUrgentes([
+      sd('LEJOS', '2026-09-15'),        // llega en 26 días: afuera
+      sd('PRONTO', '2026-08-24'),       // en 4 días: adentro
+      sd('LLEGO', '2026-08-10'),        // ya llegó: adentro y primero
+    ], hoy, 7)
+    expect(l.map(x => x.ref)).toEqual(['LLEGO', 'PRONTO'])
+  })
+
+  it('lo que YA tiene algún monto no aparece (no es "sin datos")', () => {
+    const l = montosUrgentes([sd('CON', '2026-08-24', { monto_flete: 100 })], hoy, 7)
+    expect(l).toEqual([])
+  })
+
+  it('Chile queda afuera, como en toda la pestaña Pagos', () => {
+    const l = montosUrgentes([sd('CL', '2026-08-24', { dest_country: 'CL' })], hoy, 7)
+    expect(l).toEqual([])
   })
 })
 

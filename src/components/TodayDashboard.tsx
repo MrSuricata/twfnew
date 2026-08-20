@@ -33,7 +33,10 @@ import ContainerQuickEdit from './operations/ContainerQuickEdit'
 import { deriveKnownTransportes, deriveKnownValues, DEPOSITOS_UY, type DbShipment } from '@/lib/operationsTypes'
 import { faltantesUrgentes, resumenFaltantes, FALTANTES_DIAS_COORDINACION, type FaltanteUrgente, type CampoFaltante } from '@/lib/datosFaltantes'
 import { buildFaltantePatch, columnaDeCampo, FALTANTE_INPUTS } from '@/lib/faltantesEdit'
-import { esCargaSinDatosPago } from '@/lib/pagosVencimientos'
+import {
+  esCargaSinDatosPago, montosUrgentes, formaPagoEfectiva, parseMontoUY,
+  MONTO_KEYS, type PagoRubro,
+} from '@/lib/pagosVencimientos'
 import type { CatalogClient } from '@/lib/clientCatalog'
 import type { ShipmentDocument, OperativeReport, OriginPhoto } from '@/lib/quotationTypes'
 import type { Truck as TruckType, TruckLoad } from '@/lib/truckTypes'
@@ -322,6 +325,16 @@ export default function TodayDashboard({
     return (dbShipments || []).filter(s => esCargaSinDatosPago(s, hoyIso)).length
   }, [dbShipments])
 
+  // Sub-pestaña de la card de incompletos (Brian 20/08, revisa la decisión del
+  // 18/08 de no mostrar montos acá): los montos van en una vista PROPIA — no
+  // como campos de cada fila operativa — y solo la tajada urgente: sin montos
+  // Y llegando dentro de la ventana de la card. Mismo criterio que Pagos.
+  const [cardTab, setCardTab] = useState<'datos' | 'montos'>('datos')
+  const montosCard = useMemo(
+    () => montosUrgentes(dbShipments || [], todayIso(), FALTANTES_DIAS_COORDINACION),
+    [dbShipments],
+  )
+
   // Carga inicial en curso y todavía sin nada que mostrar → estado "Cargando"
   // en vez del empty state ("Día tranquilo"), para no dar un falso "no hay nada
   // hoy" mientras el banner de sincronizando sigue activo. Con datos ya
@@ -472,9 +485,27 @@ export default function TodayDashboard({
                 {incompletas.length}
               </span>
             </div>
+            <div className="flex items-center gap-1.5 mb-2">
+              {([['datos', `Datos · ${incompletas.length}`], ['montos', `Montos · ${montosCard.length}`]] as const).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setCardTab(id)}
+                  aria-pressed={cardTab === id}
+                  className={`h-7 px-3 rounded-full text-xs font-bold transition-colors ${
+                    cardTab === id ? 'bg-amber-600 text-white' : 'bg-background/60 text-muted-foreground border border-border hover:bg-amber-500/10'
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             <p className="text-xs text-muted-foreground mb-2.5">
-              Llegan dentro de {FALTANTES_DIAS_COORDINACION} días (o ya llegaron sin salida) y les faltan campos según su etapa — tocá una carga y completá los campos acá mismo.
+              {cardTab === 'datos'
+                ? `Llegan dentro de ${FALTANTES_DIAS_COORDINACION} días (o ya llegaron sin salida) y les faltan campos según su etapa — tocá una carga y completá los campos acá mismo.`
+                : `Sin ningún monto cargado y llegando dentro de ${FALTANTES_DIAS_COORDINACION} días (o ya llegadas): la plata que vence primero. Vacío = sin dato · 0 = ya pagado.`}
             </p>
+            {cardTab === 'datos' && (
             <div className="flex flex-wrap items-center gap-1.5 mb-3">
               {DESTINOS_FILTRO.map(d => {
                 const n = incompletasPorDestino[d.id] || 0
@@ -499,23 +530,33 @@ export default function TodayDashboard({
                   </button>
                 )
               })}
-              {sinMontos > 0 && (
-                // Flete y locales NO van como campo de cada fila (Brian 18/08):
-                // son 60 de 76 cargas y taparían lo operativo, y Pagos ya tiene
-                // el criterio fino (sin Chile, sin LCL, sin ETA vieja de 60d).
-                // Un solo lugar para el dato, un solo criterio.
-                <button
-                  type="button"
-                  onClick={() => onOpenTab?.('pagos')}
-                  className="ml-auto inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-xs font-semibold text-muted-foreground border border-dashed border-border hover:bg-muted transition-colors"
-                  title="Cargas sin flete ni locales cargados — se completan en la pestaña Pagos"
-                >
-                  <Coins size={13} weight="bold" />
-                  {sinMontos} sin montos
-                  <CaretRight size={11} weight="bold" />
-                </button>
-              )}
             </div>
+            )}
+            {cardTab === 'montos' && (
+              <div className="space-y-1">
+                {montosCard.length === 0 && (
+                  <p className="px-2.5 py-3 text-xs text-muted-foreground">
+                    🎉 Todo lo que llega estos días tiene montos cargados.
+                  </p>
+                )}
+                {montosCard.map(s => (
+                  <MontosUrgenteRow key={s.id} s={s} onPatchShipment={onPatchShipment} onOpenDetail={onOpenDetail} />
+                ))}
+                {sinMontos > montosCard.length && (
+                  <button
+                    type="button"
+                    onClick={() => onOpenTab?.('pagos')}
+                    className="mt-1 inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-xs font-semibold text-muted-foreground border border-dashed border-border hover:bg-muted transition-colors"
+                    title="El resto no llega todavía: está en Pagos → Sin datos, ordenado por llegada"
+                  >
+                    <Coins size={13} weight="bold" />
+                    Ver las {sinMontos} en Pagos
+                    <CaretRight size={11} weight="bold" />
+                  </button>
+                )}
+              </div>
+            )}
+            {cardTab === 'datos' && (
             <div className="space-y-1">
               {incompletas.length === 0 && (
                 <p className="px-2.5 py-3 text-xs text-muted-foreground">
@@ -548,6 +589,7 @@ export default function TodayDashboard({
                 </p>
               )}
             </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -981,6 +1023,89 @@ function AvisoChip({ aviso, label, onToggle }: { aviso?: RefCheckStep; label: st
       <Check size={11} weight="bold" className={done ? 'opacity-100' : 'opacity-50'} />
       Aviso
     </span>
+  )
+}
+
+// ─── Fila de la sub-pestaña Montos (card de incompletos) ─────────────────
+// Borrador local + UN botón Guardar: si cada campo guardara al salir, la fila
+// desaparecería al primer blur (con un solo monto la carga ya no es "sin
+// datos") y quedarían tres campos sin cargar. Vacío = no guardar ese rubro.
+const RUBRO_LABEL: { rubro: PagoRubro; label: string }[] = [
+  { rubro: 'flete', label: 'Flete' },
+  { rubro: 'locales', label: 'Locales' },
+  { rubro: 'terminal', label: 'Terminal' },
+  { rubro: 'devolucion', label: 'Devolución' },
+]
+
+function MontosUrgenteRow({ s, onPatchShipment, onOpenDetail }: {
+  s: DbShipment
+  onPatchShipment?: (id: string, fields: Record<string, unknown>) => void
+  onOpenDetail?: (ref: string) => void
+}) {
+  const [draft, setDraft] = useState<Record<PagoRubro, string>>({ flete: '', locales: '', terminal: '', devolucion: '' })
+  const fp = formaPagoEfectiva(s)
+  const algo = RUBRO_LABEL.some(r => draft[r.rubro].trim() !== '')
+
+  const guardar = () => {
+    if (!onPatchShipment || !algo) return
+    const fields: Record<string, unknown> = {}
+    const partes: string[] = []
+    for (const { rubro, label } of RUBRO_LABEL) {
+      const t = draft[rubro].trim()
+      if (t === '') continue
+      const n = parseMontoUY(t)
+      if (!isFinite(n) || n < 0) {
+        toast.error(`${label}: "${t}" no es un monto válido`)
+        return
+      }
+      fields[MONTO_KEYS[rubro]] = n
+      partes.push(`${label} ${n}`)
+    }
+    onPatchShipment(String(s.id), fields)
+    toast.success(`${s.ref} — montos cargados`, { description: partes.join(' · ') })
+  }
+
+  return (
+    <div className="rounded-lg border border-border/70 bg-background/60 px-2.5 py-2">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+        <button
+          type="button"
+          onClick={() => onOpenDetail?.(s.ref)}
+          className="font-bold text-sm hover:underline"
+        >
+          {s.ref}
+        </button>
+        <span className="text-xs text-muted-foreground truncate max-w-[180px]" title={s.cliente}>{s.cliente || '—'}</span>
+        <span className="text-xs text-muted-foreground whitespace-nowrap">ETA {fmtDateDMY(s.eta) || '—'}</span>
+        <span className={`text-[11px] whitespace-nowrap ${fp.value === 'al arribo' ? 'text-amber-700 font-semibold' : 'text-muted-foreground'}`}>
+          {fp.value}
+        </span>
+      </div>
+      <div className="mt-1.5 flex flex-wrap items-end gap-2">
+        {RUBRO_LABEL.map(({ rubro, label }) => (
+          <label key={rubro} className="flex flex-col gap-0.5">
+            <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</span>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={draft[rubro]}
+              onChange={e => setDraft(d => ({ ...d, [rubro]: e.target.value }))}
+              onKeyDown={e => { if (e.key === 'Enter') guardar() }}
+              placeholder="—"
+              className="h-8 w-24 rounded-md border border-border bg-background px-2 text-sm text-right tabular-nums focus:outline-none focus:ring-1 focus:ring-amber-500"
+            />
+          </label>
+        ))}
+        <button
+          type="button"
+          disabled={!algo || !onPatchShipment}
+          onClick={guardar}
+          className="h-8 px-3 rounded-md bg-amber-600 text-white text-xs font-semibold hover:opacity-90 disabled:opacity-40 transition-opacity"
+        >
+          Guardar
+        </button>
+      </div>
+    </div>
   )
 }
 
