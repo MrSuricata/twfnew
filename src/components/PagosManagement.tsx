@@ -45,8 +45,7 @@ import {
   SIN_ACREEDOR,
   ordenarPagos,
   type OrdenPagoCampo,
-  type OrdenPagoDir,
-} from '@/lib/pagosVencimientos'
+  type OrdenPagoDir, ordenarSinDatos, formaPagoEfectiva } from '@/lib/pagosVencimientos'
 import { fmtMoneyUY } from '@/lib/fichaFacturacionPdf'
 import { fmtDateDMY } from '@/lib/format'
 import { exportToCSV } from '@/lib/exportUtils'
@@ -140,7 +139,12 @@ export default function PagosManagement({ dbShipments = [], onPatchShipment, onO
   const [editS, setEditS] = useState<DbShipment | null>(null)
   const [draft, setDraft] = useState<MontosDraft>({ devolucion: '', terminal: '', locales: '', flete: '', formaPago: '' })
 
-  const { items, sinDatos } = useMemo(() => buildPagoItems(dbShipments, hoy), [dbShipments, hoy])
+  const { items, sinDatos } = useMemo(() => {
+    const r = buildPagoItems(dbShipments, hoy)
+    // La que llega primero arriba: su pago vence primero y es la que urge
+    // cargar para la previsión (Brian 20/08).
+    return { items: r.items, sinDatos: ordenarSinDatos(r.sinDatos) }
+  }, [dbShipments, hoy])
   const kpis = useMemo(() => kpisPagos(items), [items])
   const corte = useMemo(() => corteHasta(items, fechaCorte), [items, fechaCorte])
 
@@ -645,7 +649,8 @@ export default function PagosManagement({ dbShipments = [], onPatchShipment, onO
                     <th className="px-3 py-2 text-left">Ref</th>
                     <th className="px-3 py-2 text-left">Cliente</th>
                     <th className="px-3 py-2 text-left">Naviera</th>
-                    <th className="px-3 py-2 text-left">ETA MVD</th>
+                    <th className="px-3 py-2 text-left" title="La más próxima arriba: su pago vence primero">ETA MVD ↑</th>
+                    <th className="px-3 py-2 text-left">Forma de pago</th>
                     <th className="px-3 py-2 text-right">Acciones</th>
                   </tr>
                 </thead>
@@ -655,7 +660,19 @@ export default function PagosManagement({ dbShipments = [], onPatchShipment, onO
                       <td className="px-3 py-2 font-medium whitespace-nowrap"><RefCell it={{ id: s.id, ref: s.ref }} onOpenDetail={onOpenDetail} /></td>
                       <td className="px-3 py-2 max-w-[240px] truncate" title={s.cliente}>{s.cliente || '—'}</td>
                       <td className="px-3 py-2 whitespace-nowrap">{s.linea || '—'}</td>
-                      <td className="px-3 py-2 whitespace-nowrap">{fmtDateDMY(s.eta)}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">{fmtDateDMY(s.eta) || '—'}</td>
+                      {/* El "cómo se paga" ya se puede saber sin montos: sale de
+                          la naviera (o del override). Es la mitad de la previsión. */}
+                      <td className="px-3 py-2 whitespace-nowrap text-xs">
+                        {(() => {
+                          const fp = formaPagoEfectiva(s)
+                          return (
+                            <span className={fp.value === 'al arribo' ? 'text-amber-700 font-medium' : 'text-muted-foreground'}>
+                              {fp.value}{fp.overridden ? ' *' : ''}
+                            </span>
+                          )
+                        })()}
+                      </td>
                       <td className="px-3 py-2 text-right whitespace-nowrap">
                         <Button variant="outline" size="sm" className="h-7" onClick={() => openEditor(s)}>
                           <PencilSimple size={15} className="mr-1" />

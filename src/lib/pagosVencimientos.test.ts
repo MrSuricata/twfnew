@@ -3,7 +3,7 @@ import {
   addDaysISO, diffDaysISO, esLineaOne, esLineaRepremar, deriveFormaPago,
   normalizeFormaPago, formaPagoEfectiva, venceRubro, buildPagoItems, corteHasta, kpisPagos,
   costoTerminalDefault, costoDevDefault, empresaRubro, agruparPorAcreedor, SIN_ACREEDOR,
-  ordenarPagos, type PagoItem,
+  ordenarPagos, ordenarSinDatos, type PagoItem,
 } from './pagosVencimientos'
 import type { DbShipment } from './operationsTypes'
 
@@ -226,6 +226,30 @@ describe('costos default por terminal/devolución (17/07)', () => {
     expect(costoDevDefault('stl')).toBe(205)
     expect(costoDevDefault('MPS')).toBe(189)
     expect(costoDevDefault('MURCHISON')).toBeNull()
+  })
+})
+
+describe('ordenarSinDatos — la que llega primero, arriba', () => {
+  const c = (ref: string, eta: string) => ({ ref, eta } as DbShipment)
+
+  it('ordena por ETA ascendente: lo llegado y lo próximo primero', () => {
+    // La cola de "cargar montos" para la previsión: la carga que ya llegó
+    // tiene el pago venciendo YA — no puede quedar enterrada por orden de ref.
+    const l = ordenarSinDatos([c('A3', '2026-09-01'), c('A1', '2026-07-20'), c('A2', '2026-08-24')])
+    expect(l.map(x => x.ref)).toEqual(['A1', 'A2', 'A3'])
+  })
+
+  it('sin ETA parseable van al final (no se les puede derivar vencimiento)', () => {
+    const l = ordenarSinDatos([c('SIN', ''), c('TXT', 'CONFIRMAR'), c('CON', '2026-08-24')])
+    expect(l[0].ref).toBe('CON')
+    expect(l.slice(1).map(x => x.ref).sort()).toEqual(['SIN', 'TXT'])
+  })
+
+  it('a igual ETA desempata por ref, y no muta la lista original', () => {
+    const orig = [c('B', '2026-08-24'), c('A', '2026-08-24')]
+    const l = ordenarSinDatos(orig)
+    expect(l.map(x => x.ref)).toEqual(['A', 'B'])
+    expect(orig.map(x => x.ref)).toEqual(['B', 'A'])
   })
 })
 
