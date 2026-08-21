@@ -110,6 +110,15 @@ const SECTIONS: { title: string; tone: SectionTone; fields: { key: keyof Unified
     fields: [
       { key: 'descripcion', label: 'Descripción', wide: true },
       { key: 'tipo', label: 'Tipo' },
+      // Bultos/Kg/M³ a nivel CARGA: solo se muestran cuando NO hay contenedores
+      // (ver filtro en el render). Con contenedores los edita la sección
+      // "Salidas y arribos por contenedor" y el rollup suma — tenerlos en los
+      // dos lados haría pelear las dos escrituras. Sin contenedores no había
+      // NINGÚN lugar donde tipearlos (Nico, 20/08: cargas de BsAs/San Antonio
+      // sin CNTR — la card de HOY tampoco las agarra porque es solo-Uruguay).
+      { key: 'pkgs', label: 'Bultos', kind: 'number' },
+      { key: 'kg', label: 'Kg', kind: 'number' },
+      { key: 'm3', label: 'M³', kind: 'number' },
     ],
   },
   {
@@ -582,9 +591,13 @@ export default function OperationDetailPanel({
           {/* Secciones de campos — cada una un card con su identidad de color,
               campos como cuadros grandes (mismo patrón que "Datos clave") */}
           {SECTIONS.map(sec => {
-            const fields = (sec.title === 'Fechas' && hidePerContainerDates)
+            let fields = (sec.title === 'Fechas' && hidePerContainerDates)
               ? sec.fields.filter(f => f.key !== 'salida' && f.key !== 'etaFisc')
               : sec.fields
+            // Con contenedores, los números viven por contenedor (abajo).
+            if (sec.title === 'Carga' && cntrs.length > 0) {
+              fields = fields.filter(f => f.key !== 'pkgs' && f.key !== 'kg' && f.key !== 'm3')
+            }
             const tone = SECTION_TONES[sec.tone]
             return (
             <section key={sec.title} className={`rounded-lg border p-3 ${tone.card}`}>
