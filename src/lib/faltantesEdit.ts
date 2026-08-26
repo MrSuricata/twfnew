@@ -30,7 +30,7 @@ export interface FaltanteInput {
   widget: 'text' | 'date' | 'number' | 'select' | 'datalist'
   opciones?: { value: string; label: string }[]
   /** Fuente de sugerencias para 'datalist' (las provee el componente). */
-  sugerencias?: 'transportes' | 'agentes' | 'depositos' | 'lineas'
+  sugerencias?: 'transportes' | 'agentes' | 'depositos' | 'lineas' | 'terminales'
   placeholder?: string
 }
 
@@ -53,6 +53,9 @@ export const FALTANTE_INPUTS: Partial<Record<keyof CargaCampos, FaltanteInput>> 
   operativa: { widget: 'select', opciones: OPERATIVA_OPCIONES.map(v => ({ value: v, label: v })) },
   transporte: { widget: 'datalist', sugerencias: 'transportes', placeholder: 'transporte' },
   fiscal: { widget: 'text', placeholder: 'destino fiscal' },
+  // Terminal de llegada: hoy son dos en plaza. Datalist, no select — si algún
+  // día llega una tercera, se tipea igual.
+  terminal: { widget: 'datalist', sugerencias: 'terminales', placeholder: 'TCP / MONTECON' },
 }
 
 /** Columna real de `shipments` detrás de un campo faltante (para mostrar el
