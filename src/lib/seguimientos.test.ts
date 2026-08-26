@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { colaSeguimientos, grupoDestino, textoUpdate, nombreBuqueBase, type CargaSeguimiento } from './seguimientos'
+import {
+  colaSeguimientos, grupoDestino, textoUpdate, nombreBuqueBase,
+  SEGUIMIENTO_ETA_VENCIDA_DIAS, type CargaSeguimiento,
+} from './seguimientos'
 
 const HOY = new Date(2026, 7, 13) // jueves 13/08/2026
 
@@ -25,8 +28,10 @@ describe('colaSeguimientos — quién hay que actualizar hoy', () => {
     expect(alDia).toBe(1)
   })
 
-  it('la carga que YA llegó a su puerto sale de la cola (ETA pasada)', () => {
-    const llegada = carga({ eta: '2026-08-12' })
+  it('la carga que YA llegó a su puerto sale de la cola (ETA pasada + señal de llegada)', () => {
+    // La llegada REAL la marca un hecho (salida/descarga/fiscal), no la fecha
+    // sola — ver el describe "¿llegó?" para el caso sin señales.
+    const llegada = carga({ eta: '2026-08-12', salida: '2026-08-13' })
     expect(colaSeguimientos([llegada], HOY).pendientes).toHaveLength(0)
     expect(colaSeguimientos([llegada], HOY).alDia).toBe(0)
   })
@@ -90,6 +95,54 @@ describe('colaSeguimientos — quién hay que actualizar hoy', () => {
     expect(pendientes.map(p => p.carga.ref)).toEqual([
       'NUNCA-CERCA', 'NUNCA-LEJOS', 'FRESCA-ATRASADA', 'VENCIDA-7',
     ])
+  })
+})
+
+describe('colaSeguimientos — "¿llegó?" (ETA vencida sin señales de llegada, 26/08)', () => {
+  // Caso SAN FRANCISCA: el buque omitió Montevideo, nadie corrigió la ETA y
+  // la carga desaparecía de la cola justo cuando el cliente más necesitaba
+  // el update (A8045: 9 días sin seguimiento y la cola no la pedía).
+  const omitida = (c: Partial<CargaSeguimiento> = {}) =>
+    carga({ ref: 'A8045', eta: '2026-08-11', seguimiento: '2026-08-04', ...c })
+
+  it('ETA vencida sin salida/descarga/fiscal queda en la cola marcada', () => {
+    const { pendientes } = colaSeguimientos([omitida()], HOY)
+    expect(pendientes).toHaveLength(1)
+    expect(pendientes[0].etaVencidaDias).toBe(2)
+    expect(pendientes[0].dias).toBe(9)
+  })
+
+  it('cualquier señal de llegada real la saca: salida, descarga o fiscal', () => {
+    expect(colaSeguimientos([omitida({ salida: '2026-08-12' })], HOY).pendientes).toHaveLength(0)
+    expect(colaSeguimientos([omitida({ descarga: '2026-08-11' })], HOY).pendientes).toHaveLength(0)
+    expect(colaSeguimientos([omitida({ etaFiscal: '2026-08-15' })], HOY).pendientes).toHaveLength(0)
+  })
+
+  it('con seguimiento fresco espera su turno (no nagea: el equipo tiene días para cargar la salida)', () => {
+    const { pendientes, alDia } = colaSeguimientos([omitida({ seguimiento: '2026-08-10' })], HOY)
+    expect(pendientes).toHaveLength(0)
+    expect(alDia).toBe(1)
+  })
+
+  it('pasado el tope de días es deuda vieja: sale sola de la cola', () => {
+    const dia = (n: number) => `2026-08-${String(13 - n).padStart(2, '0')}`
+    const enTope = colaSeguimientos([omitida({ eta: dia(SEGUIMIENTO_ETA_VENCIDA_DIAS) })], HOY)
+    expect(enTope.pendientes).toHaveLength(1)
+    const pasada = colaSeguimientos([omitida({ eta: dia(SEGUIMIENTO_ETA_VENCIDA_DIAS + 1) })], HOY)
+    expect(pasada.pendientes).toHaveLength(0)
+  })
+
+  it('las "¿llegó?" van ARRIBA de todo — son estado roto, no un mail más', () => {
+    const { pendientes } = colaSeguimientos([
+      carga({ ref: 'NUNCA', seguimiento: '' }),
+      omitida({ ref: 'OMITIDA' }),
+    ], HOY)
+    expect(pendientes.map(p => p.carga.ref)).toEqual(['OMITIDA', 'NUNCA'])
+  })
+
+  it('la carga en viaje normal no trae la marca', () => {
+    const { pendientes } = colaSeguimientos([carga()], HOY)
+    expect(pendientes[0].etaVencidaDias).toBeUndefined()
   })
 })
 

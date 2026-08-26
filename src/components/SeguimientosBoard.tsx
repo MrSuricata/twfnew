@@ -11,7 +11,7 @@ import { toast } from 'sonner'
 import { Card, CardContent } from '@/components/ui/card'
 import { CheckCircle, PaperPlaneTilt, CaretDown, CaretRight, Boat, ClockCounterClockwise, Copy, MapPin, Checks, ArrowSquareOut, ArrowsLeftRight } from '@phosphor-icons/react'
 import type { DbShipment } from '@/lib/operationsTypes'
-import { dbShipmentToOperation } from '@/lib/operationsTypes'
+import { dbShipmentToOperation, buildPerContainerPatch } from '@/lib/operationsTypes'
 import { groupByVoyage, buildEtaShiftPatch } from '@/lib/vesselGroups'
 import {
   colaSeguimientos, grupoDestino, ORDEN_GRUPOS, textoUpdate, nombreBuqueBase,
@@ -71,6 +71,7 @@ export default function SeguimientosBoard({ dbShipments, onPatchShipment, onOpen
       dbId: s.id, ref: s.ref, cliente: s.cliente, buque: s.buque, etd: s.etd, eta: s.eta,
       linea: s.linea, docNumber: s.doc_number, cntr: s.contenedor,
       seguimiento: s.seguimiento, pais: s.dest_country, mode: s.mode, archived: s.archived,
+      salida: s.salida, descarga: s.descarga, etaFiscal: s.eta_fiscal,
     })), [dbShipments])
 
   const cola = useMemo(() => colaSeguimientos(cargas, hoy), [cargas, hoy])
@@ -310,6 +311,26 @@ export default function SeguimientosBoard({ dbShipments, onPatchShipment, onOpen
     return deshacer
   }
 
+  /** "¿Llegó?" → confirmar la llegada: estampa la DESCARGA con la ETA (el día
+   *  que el buque efectivamente atracó según lo previsto) y la carga sale de
+   *  la cola por el HECHO, no por el calendario. Con Deshacer que la limpia. */
+  const marcarLlegada = (f: FilaSeguimiento) => {
+    const c = f.carga
+    if (!c.dbId || !onPatchShipment) return
+    const dbId = c.dbId
+    const eta = (c.eta || '').trim()
+    if (!ISO_RE.test(eta)) { toast.error(`${c.ref} — sin ETA válida para estampar la descarga`); return }
+    const arma = (valor: string) => {
+      const viva = filaViva(dbId)
+      return buildPerContainerPatch({ operativas: viva?.operativas ?? undefined }, 'descarga', valor)
+    }
+    onPatchShipment(dbId, arma(eta))
+    toast.success(`${c.ref} — llegada confirmada`, {
+      description: `Descarga ${fmtDateDMY(eta)} — sale de la cola de seguimientos.`,
+      action: { label: 'Deshacer', onClick: () => onPatchShipment(dbId, arma('')) },
+    })
+  }
+
   /** Marca TODA la tanda del buque como enviada (un toast, un deshacer). */
   const marcarEnviadoGrupo = (buque: string, filas: FilaSeguimiento[]) => {
     const deshacedores = filas.map(f => marcarEnviado(f, true)).filter((d): d is () => void => !!d)
@@ -390,6 +411,14 @@ export default function SeguimientosBoard({ dbShipments, onPatchShipment, onOpen
           }`}>
             {f.dias === null ? 'NUNCA' : `HACE ${f.dias}D`}
           </span>
+          {f.etaVencidaDias !== undefined && (
+            <span
+              className="inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-500/10 text-red-700 dark:text-red-300 shrink-0"
+              title={`La ETA (${fmtDateDMY((c.eta || '').trim())}) pasó hace ${f.etaVencidaDias === 0 ? 'hoy' : `${f.etaVencidaDias} día${f.etaVencidaDias === 1 ? '' : 's'}`} y la carga no muestra señales de llegada (sin salida, descarga ni fiscal). Si el buque llegó, marcá LLEGÓ; si se corrió u omitió puerto, corregí la ETA y mandá el update.`}
+            >
+              ¿LLEGÓ? ETA vencida
+            </span>
+          )}
           <button
             type="button"
             onClick={() => onOpenDetail?.(c.dbId || c.ref)}
@@ -470,6 +499,17 @@ export default function SeguimientosBoard({ dbShipments, onPatchShipment, onOpen
             <ClockCounterClockwise size={16} />
             {abierto === c.ref ? <CaretDown size={10} className="inline ml-0.5" /> : <CaretRight size={10} className="inline ml-0.5" />}
           </button>
+          {f.etaVencidaDias !== undefined && (
+            <button
+              type="button"
+              disabled={!editable || !c.dbId}
+              onClick={() => marcarLlegada(f)}
+              title="El buque efectivamente llegó: estampa la descarga con la fecha de la ETA y la saca de la cola"
+              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-emerald-600/50 text-emerald-700 dark:text-emerald-400 text-xs font-semibold hover:bg-emerald-500/10 disabled:opacity-50 transition-colors shrink-0"
+            >
+              <CheckCircle size={14} weight="fill" /> Llegó
+            </button>
+          )}
           <button
             type="button"
             disabled={!editable || !c.dbId}
