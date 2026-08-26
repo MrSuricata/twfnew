@@ -9,7 +9,10 @@
  * Entra a la cola una carga que:
  *  - no está archivada,
  *  - viaja en buque (FCL o LCL — aéreo/terrestre no tienen seguimiento semanal),
- *  - su ETA está vacía o es HOY o futura (si ya pasó, llegó: afuera),
+ *  - su ETA está vacía, es HOY o futura — o quedó VENCIDA sin señales de
+ *    llegada real (salida/descarga/fiscal vacías): esas siguen en la cola
+ *    marcadas "¿llegó?" unos días, porque un buque atrasado u omitido que
+ *    nadie corrigió no es una llegada (caso SAN FRANCISCA 26/08),
  *  - está realmente EN VIAJE o por llegar: embarcada (ETD pasado, no más de
  *    120 días — ningún viaje marítimo dura más) o con ETA dentro de 21 días.
  *    Sin este corte, las cargas viejas sin fechas parseables quedaban "en
@@ -44,12 +47,20 @@ export interface CargaSeguimiento {
   pais?: string | null
   mode?: string | null
   archived?: boolean
+  /** Señales de llegada REAL (cualquiera cargada = el buque efectivamente
+   *  llegó): fecha de salida del depósito, de descarga, o de arribo fiscal. */
+  salida?: string | null
+  descarga?: string | null
+  etaFiscal?: string | null
 }
 
 export interface FilaSeguimiento {
   carga: CargaSeguimiento
   /** Días desde el último seguimiento. null = nunca se envió. */
   dias: number | null
+  /** Días que la ETA lleva VENCIDA sin señales de llegada — el caso "¿llegó?"
+   *  (buque atrasado u omitido que nadie corrigió). Ausente en cargas en viaje. */
+  etaVencidaDias?: number
 }
 
 export interface ColaSeguimientos {
@@ -66,6 +77,9 @@ const MS_DIA = 86_400_000
 export const SEGUIMIENTO_ETA_PROX_DIAS = 21
 /** Embarque más viejo que esto = dato muerto, no un viaje en curso. */
 export const SEGUIMIENTO_ETD_MAX_DIAS = 120
+/** ETA vencida SIN señales de llegada: la carga queda en la cola marcada
+ *  "¿llegó?" hasta este tope de días (después es deuda vieja, no trabajo). */
+export const SEGUIMIENTO_ETA_VENCIDA_DIAS = 10
 
 const medianoche = (d: Date): Date => new Date(d.getFullYear(), d.getMonth(), d.getDate())
 
@@ -80,13 +94,28 @@ export function colaSeguimientos(cargas: CargaSeguimiento[], hoy: Date): ColaSeg
   const pendientes: FilaSeguimiento[] = []
   let alDia = 0
 
+  const lleno = (s: string | null | undefined): boolean => Boolean(String(s || '').trim())
+
   for (const c of cargas) {
     if (c.archived) continue
     if (!esMaritima(c.mode)) continue
 
-    // Ya llegó a su puerto → no se avisa más.
+    // Ya llegó a su puerto → no se avisa más. Pero la llegada REAL la marcan
+    // los HECHOS (salida / descarga / fiscal cargadas), no el calendario: una
+    // ETA que quedó en el pasado sin ninguna de esas señales puede ser un
+    // buque atrasado u omitido que nadie corrigió — caso SAN FRANCISCA
+    // (26/08): omitió Montevideo y sus cargas desaparecían de la cola justo
+    // cuando el cliente más necesitaba el update. Esas quedan marcadas
+    // "¿llegó?" por unos días: o se confirma la llegada o se corrige la ETA.
     const eta = parseLocalDate(String(c.eta || '').trim())
-    if (eta && medianoche(eta).getTime() < h.getTime()) continue
+    const llegadaReal = lleno(c.salida) || lleno(c.descarga) || lleno(c.etaFiscal)
+    let etaVencidaDias: number | undefined
+    if (eta && medianoche(eta).getTime() < h.getTime()) {
+      if (llegadaReal) continue
+      const pasados = Math.floor((h.getTime() - medianoche(eta).getTime()) / MS_DIA)
+      if (pasados > SEGUIMIENTO_ETA_VENCIDA_DIAS) continue
+      etaVencidaDias = pasados
+    }
 
     // En viaje de verdad: embarcada (ETD pasado y no fósil) o llegando dentro
     // de SEGUIMIENTO_ETA_PROX_DIAS. Cargas en origen lejano o sin fechas
@@ -100,15 +129,20 @@ export function colaSeguimientos(cargas: CargaSeguimiento[], hoy: Date): ColaSeg
 
     const seg = parseSegDate(String(c.seguimiento || ''))
     if (!seg) {
-      pendientes.push({ carga: c, dias: null })
+      pendientes.push({ carga: c, dias: null, ...(etaVencidaDias !== undefined ? { etaVencidaDias } : {}) })
       continue
     }
     const dias = Math.floor((h.getTime() - medianoche(seg).getTime()) / MS_DIA)
-    if (dias >= SEGUIMIENTO_DIAS) pendientes.push({ carga: c, dias })
+    if (dias >= SEGUIMIENTO_DIAS) pendientes.push({ carga: c, dias, ...(etaVencidaDias !== undefined ? { etaVencidaDias } : {}) })
     else alDia++
   }
 
   pendientes.sort((a, b) => {
+    // Las "¿llegó?" (ETA vencida sin resolver) van ARRIBA de todo: no son un
+    // mail más, son un estado roto que hay que destrabar primero.
+    const va = a.etaVencidaDias !== undefined ? 0 : 1
+    const vb = b.etaVencidaDias !== undefined ? 0 : 1
+    if (va !== vb) return va - vb
     // nunca-enviadas primero, después por atraso descendente
     const da = a.dias === null ? Number.POSITIVE_INFINITY : a.dias
     const db = b.dias === null ? Number.POSITIVE_INFINITY : b.dias
