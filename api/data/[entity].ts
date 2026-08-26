@@ -148,6 +148,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return handleRefNotas(req, res, db, payload)
       case 'deposito-actas':
         return handleDepositoActas(req, res, db, payload)
+      case 'montecon-agenda':
+        return handleMonteconAgenda(req, res, db, payload)
       default:
         return res.status(404).json({ error: `Unknown entity: ${entity}` })
     }
@@ -2568,6 +2570,57 @@ async function handleDepositoActas(req: VercelRequest, res: VercelResponse, db: 
     if (error) throw error
     logAudit(db, payload, 'anular', 'deposito_acta', previa.ref, { contenedor: previa.contenedor, id })
     return res.status(200).json({ anulada: true })
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' })
+}
+
+// ── Agenda de retiros MONTECON ───────────────────────────────────────
+// GET    /api/data/montecon-agenda           → todas las filas
+// POST   /api/data/montecon-agenda           → {ref, eta} agendar/re-agendar
+//                                              (upsert: pisa el snapshot)
+// DELETE /api/data/montecon-agenda?ref=A8045 → desagendar
+// Guarda la ETA CONTRA la que se agendo el retiro: la pantalla deriva
+// "reagendar" cuando la ETA actual difiere (Brian 22/08, turnos escasos).
+
+async function handleMonteconAgenda(req: VercelRequest, res: VercelResponse, db: any, payload: TokenPayload | null) {
+  if (req.method === 'GET') {
+    const { data, error } = await db.from('montecon_agenda').select('*').limit(2000)
+    if (error) throw error
+    const allowed = await allowedRefsForPayload(db, payload)
+    return res.status(200).json({ agenda: filterByAllowedRef(data || [], allowed, (r: any) => r.ref) })
+  }
+
+  if (req.method === 'POST') {
+    const v = validate(z.object({
+      ref: z.string().min(1).max(40),
+      eta: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    }), req.body)
+    if (!v.ok) return res.status(400).json({ error: v.error })
+    const ref = v.data.ref.trim().toUpperCase()
+    const allowed = await allowedRefsForPayload(db, payload)
+    if (allowed && !allowed.has(refOf(ref))) return res.status(404).json({ error: 'Carga no encontrada' })
+    const row = {
+      ref,
+      eta_agendada: v.data.eta,
+      usuario: auditUser(payload as { user?: string; name?: string } | null),
+      updated_at: new Date().toISOString(),
+    }
+    const { error } = await db.from('montecon_agenda').upsert(row, { onConflict: 'ref' })
+    if (error) throw error
+    logAudit(db, payload, 'agendar montecon', 'montecon_agenda', ref, { eta: v.data.eta })
+    return res.status(200).json({ saved: true })
+  }
+
+  if (req.method === 'DELETE') {
+    const ref = (req.query.ref as string || '').trim().toUpperCase()
+    if (!ref) return res.status(400).json({ error: 'ref query parameter required' })
+    const allowed = await allowedRefsForPayload(db, payload)
+    if (allowed && !allowed.has(refOf(ref))) return res.status(404).json({ error: 'Carga no encontrada' })
+    const { error } = await db.from('montecon_agenda').delete().eq('ref', ref)
+    if (error) throw error
+    logAudit(db, payload, 'desagendar montecon', 'montecon_agenda', ref)
+    return res.status(200).json({ deleted: true })
   }
 
   return res.status(405).json({ error: 'Method not allowed' })
