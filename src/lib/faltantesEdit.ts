@@ -30,9 +30,14 @@ export interface FaltanteInput {
   widget: 'text' | 'date' | 'number' | 'select' | 'datalist'
   opciones?: { value: string; label: string }[]
   /** Fuente de sugerencias para 'datalist' (las provee el componente). */
-  sugerencias?: 'transportes' | 'agentes' | 'depositos' | 'lineas' | 'terminales'
+  sugerencias?: 'transportes' | 'agentes' | 'depositos' | 'lineas' | 'terminales' | 'devoluciones'
   placeholder?: string
 }
+
+/** Lugares de devolución del vacío más usados en plaza (medido en la DB:
+ *  STL 188 · MPS 70 · TCP 25 · MURCHISON 11 · MONTECON 3). Datalist, no
+ *  select: BSAS/EXOLGAN y compañía se tipean igual. */
+export const DEVOLUCIONES_PLAZA = ['STL', 'MPS', 'TCP', 'MONTECON', 'MURCHISON']
 
 /** Mismas opciones de operativa que el alta (NewShipmentDialog). */
 export const OPERATIVA_OPCIONES = ['TRASIEGO', 'CONTENEDOR', 'CARGA A PISO']
@@ -56,6 +61,7 @@ export const FALTANTE_INPUTS: Partial<Record<keyof CargaCampos, FaltanteInput>> 
   // Terminal de llegada: hoy son dos en plaza. Datalist, no select — si algún
   // día llega una tercera, se tipea igual.
   terminal: { widget: 'datalist', sugerencias: 'terminales', placeholder: 'TCP / MONTECON' },
+  dev: { widget: 'datalist', sugerencias: 'devoluciones', placeholder: 'STL / MPS / TCP…' },
 }
 
 /** Columna real de `shipments` detrás de un campo faltante (para mostrar el
@@ -152,7 +158,8 @@ export function buildFaltantePatch(
     // Misma regla que el panel: el texto libre se canonicaliza contra el
     // catálogo ('peretti' → 'BICI PERETTI S.A.') para no crear variantes.
     valor = canonicalizeCliente(texto, clientes ?? [])
-  } else if (campo === 'buque' || campo === 'linea' || campo === 'deposito' || campo === 'transporte' || campo === 'fiscal') {
+  } else if (campo === 'buque' || campo === 'linea' || campo === 'deposito' || campo === 'transporte' || campo === 'fiscal' || campo === 'dev') {
+    // dev en MAYÚSCULAS: empresaRubro/costoDevDefault comparan contra STL/MPS.
     valor = texto.toUpperCase()
   }
 
