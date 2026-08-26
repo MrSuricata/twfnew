@@ -1011,3 +1011,35 @@ export async function anularDepositoActa(id: string): Promise<void> {
     throw new Error(err.error || `HTTP ${res.status}`)
   }
 }
+
+// ─── Agenda de retiros MONTECON ──────────────────────────────────────
+
+/** Todas las filas de agenda (ref → ETA contra la que se agendó). */
+export async function fetchMonteconAgenda(): Promise<{ ref: string; eta_agendada: string }[]> {
+  const res = await authFetch('/api/data/montecon-agenda')
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const data = await res.json()
+  return data.agenda || []
+}
+
+/** Agendar (o RE-agendar) el retiro: guarda la ETA actual como snapshot. */
+export async function agendarMontecon(ref: string, eta: string): Promise<void> {
+  const res = await authFetch('/api/data/montecon-agenda', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ref, eta }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
+}
+
+/** Quitar la agenda de una ref. */
+export async function desagendarMontecon(ref: string): Promise<void> {
+  const res = await authFetch(`/api/data/montecon-agenda?ref=${encodeURIComponent(ref)}`, { method: 'DELETE' })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
+}

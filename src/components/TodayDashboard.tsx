@@ -17,6 +17,7 @@ import {
   CircleNotch,
   Check,
   Coins,
+  Anchor,
 } from '@phosphor-icons/react'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
 import {
@@ -56,6 +57,8 @@ import { subscribeTrucksLive } from '@/lib/realtimeBus'
 import { RefNotaLine, useRefNotas } from './RefNotaLine'
 import { getAdminName } from '@/lib/authClient'
 import { fmtDateDMY } from '@/lib/format'
+import { cargasMontecon, type AgendaRow, type CargaMontecon } from '@/lib/monteconAgenda'
+import { fetchMonteconAgenda, agendarMontecon, desagendarMontecon } from '@/lib/dataClient'
 import { fmtDMY } from '@/lib/salidaCheck'
 import { isSinTelex } from '@/lib/telexCheck'
 
@@ -321,6 +324,58 @@ export default function TodayDashboard({
   // (esCargaSinDatosPago: FCL viva, sin Chile, ETA no más vieja de 60 días).
   // Va como contador que lleva a Pagos, no como campo de cada fila: son 60 de
   // 76 cargas y taparían lo operativo, y el criterio tiene que ser UNO solo.
+  // ── Agenda MONTECON (Brian 22/08): turnos de retiro escasos. La fila
+  // guarda la ETA contra la que se agendó; si la ETA actual difiere, el
+  // estado deriva a "reagendar" — sin cron, sin acordarse de nada.
+  const [agendaMontecon, setAgendaMontecon] = useState<AgendaRow[]>([])
+  useEffect(() => {
+    fetchMonteconAgenda().then(setAgendaMontecon).catch(() => { /* card muestra sin agenda */ })
+  }, [])
+  const montecon = useMemo(
+    () => cargasMontecon(
+      (dbShipments || []).map(s => ({
+        dbId: s.id, ref: s.ref, cliente: s.cliente, terminal: s.terminal,
+        contenedor: s.contenedor, eta: s.eta, mode: s.mode, archived: s.archived,
+      })),
+      agendaMontecon,
+      todayIso(),
+    ),
+    [dbShipments, agendaMontecon],
+  )
+  const monteconReagendar = montecon.filter(c => c.estado === 'reagendar').length
+
+  const agendarRetiro = async (c: CargaMontecon) => {
+    try {
+      await agendarMontecon(c.ref, c.eta)
+      setAgendaMontecon(prev => [...prev.filter(r => r.ref.trim().toUpperCase() !== c.ref.toUpperCase()), { ref: c.ref, eta_agendada: c.eta }])
+      toast.success(`${c.ref} — retiro agendado contra ETA ${fmtDateDMY(c.eta)}`, {
+        description: 'Si la ETA se mueve, esta card te lo va a marcar en rojo.',
+      })
+    } catch (err) {
+      toast.error('No se pudo agendar', { description: (err as Error)?.message })
+    }
+  }
+
+  const quitarAgenda = async (c: CargaMontecon) => {
+    const anterior = c.etaAgendada
+    try {
+      await desagendarMontecon(c.ref)
+      setAgendaMontecon(prev => prev.filter(r => r.ref.trim().toUpperCase() !== c.ref.toUpperCase()))
+      toast.success(`${c.ref} — agenda quitada`, {
+        action: anterior ? {
+          label: 'Deshacer',
+          onClick: () => {
+            agendarMontecon(c.ref, anterior)
+              .then(() => setAgendaMontecon(prev => [...prev, { ref: c.ref, eta_agendada: anterior }]))
+              .catch(() => toast.error('No se pudo restaurar la agenda'))
+          },
+        } : undefined,
+      })
+    } catch (err) {
+      toast.error('No se pudo quitar la agenda', { description: (err as Error)?.message })
+    }
+  }
+
   const sinMontos = useMemo(() => {
     const hoyIso = todayIso()
     return (dbShipments || []).filter(s => esCargaSinDatosPago(s, hoyIso)).length
@@ -479,6 +534,172 @@ export default function TodayDashboard({
         </Card>
       )}
 
+      {/* ── Cargas que llegan a MONTECON (Brian 22/08: primera de las tres,
+          los turnos de retiro son escasos y el reagendado no puede esperar) */}
+      {montecon.length > 0 && (
+        <Card className="accent-top overflow-hidden bg-sky-500/[0.04] border-sky-500/25" style={{ ['--bar-color' as any]: 'rgb(14 165 233)' }}>
+          <CardContent className="pt-5 pb-4">
+            <div className="flex items-center gap-2.5 mb-1">
+              <div className="p-1.5 bg-sky-500/10 rounded-md">
+                <Anchor size={18} weight="fill" className="text-sky-600" />
+              </div>
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-sky-700">
+                Cargas que llegan a MONTECON
+              </h2>
+              {monteconReagendar > 0 && (
+                <span className="inline-flex items-center gap-1 text-xs font-bold text-red-700 bg-red-500/10 border border-red-500/30 rounded-full px-2 py-0.5">
+                  {monteconReagendar} para reagendar
+                </span>
+              )}
+              <span className="ml-auto inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-full bg-sky-500 text-white text-xs font-bold">
+                {montecon.length}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground mb-2.5">
+              Turnos de retiro: agendá contra la ETA. Si el buque se corre, la fila se pone en rojo sola — reagendá y listo.
+            </p>
+            <div className="space-y-1">
+              {montecon.map(c => (
+                <div
+                  key={c.dbId || c.ref}
+                  className={`rounded-lg border px-2.5 py-2 ${
+                    c.estado === 'reagendar'
+                      ? 'border-red-500/40 bg-red-500/[0.06]'
+                      : 'border-border/60 bg-background/50'
+                  }`}
+                >
+                  <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                    <button type="button" onClick={() => onOpenDetail?.(c.ref)} className="font-bold text-sm hover:underline">
+                      {c.ref}
+                    </button>
+                    <span className="text-xs text-muted-foreground truncate max-w-[160px]" title={c.cliente}>{c.cliente || '—'}</span>
+                    {c.cntr && <span className="font-mono text-[11px] text-muted-foreground">{c.cntr}</span>}
+                    <span className="text-xs whitespace-nowrap">
+                      ETA <b>{fmtDateDMY(c.eta)}</b>
+                      <span className="text-muted-foreground"> · {c.dias === 0 ? 'hoy' : c.dias > 0 ? `en ${c.dias}d` : `llegó hace ${-c.dias}d`}</span>
+                    </span>
+                    <span className="ml-auto flex items-center gap-1.5">
+                      {c.estado === 'sin_agendar' && (
+                        <button
+                          type="button"
+                          onClick={() => agendarRetiro(c)}
+                          className="h-7 px-3 rounded-full border border-sky-500/40 text-xs font-semibold text-sky-700 hover:bg-sky-500/10 transition-colors"
+                        >
+                          Agendada
+                        </button>
+                      )}
+                      {c.estado === 'agendada' && (
+                        <button
+                          type="button"
+                          onClick={() => quitarAgenda(c)}
+                          title="Agendada contra esta ETA — click para quitar"
+                          className="h-7 px-3 rounded-full bg-emerald-600 text-white text-xs font-bold inline-flex items-center gap-1 hover:opacity-90 transition-opacity"
+                        >
+                          <CheckCircle size={13} weight="fill" /> Agendada
+                        </button>
+                      )}
+                      {c.estado === 'reagendar' && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => agendarRetiro(c)}
+                            className="h-7 px-3 rounded-full bg-red-600 text-white text-xs font-bold hover:opacity-90 transition-opacity"
+                          >
+                            Volver a agendar
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => quitarAgenda(c)}
+                            className="h-7 px-2.5 rounded-full border border-border text-xs text-muted-foreground hover:bg-muted transition-colors"
+                          >
+                            Quitar
+                          </button>
+                        </>
+                      )}
+                    </span>
+                  </div>
+                  {c.estado === 'reagendar' && (
+                    <p className="mt-1 text-xs font-semibold text-red-700">
+                      Se modificó la fecha de arribo — estaba agendada para {fmtDateDMY(c.etaAgendada)}, ahora la ETA es {fmtDateDMY(c.eta)}.
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Llegan sin liberar ───────────────────────────── */}
+      {snapshot.sinLiberar.length === 0 && (
+        /* Estado feliz explícito (pedido Brian 13/08): que se VEA que el
+           trabajo de liberación está al día, no solo la ausencia de alerta. */
+        <div className="flex items-center gap-2.5 rounded-lg border border-emerald-500/25 bg-emerald-500/[0.05] px-4 py-2.5">
+          <CheckCircle size={18} weight="fill" className="text-emerald-600 dark:text-emerald-400 shrink-0" />
+          <p className="text-sm text-emerald-700 dark:text-emerald-400">
+            <b>¡Felicitaciones!</b> Todas tus cargas de los próximos 10 días están liberadas.
+          </p>
+        </div>
+      )}
+      {snapshot.sinLiberar.length > 0 && (
+        <Card className="accent-top overflow-hidden bg-amber-500/[0.04] border-amber-500/25" style={{ ['--bar-color' as any]: 'rgb(245 158 11)' }}>
+          <CardContent className="pt-5 pb-4">
+            <div className="flex items-center gap-2.5 mb-1">
+              <div className="p-1.5 bg-amber-500/10 rounded-md">
+                <LockKey size={18} weight="fill" className="text-amber-600 dark:text-amber-400" />
+              </div>
+              <h2 className="text-sm font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
+                Llegan sin liberar
+              </h2>
+              <span className="ml-auto inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-full bg-amber-500 text-white text-xs font-bold">
+                {snapshot.sinLiberar.length}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground mb-3">
+              Llegan dentro de 10 días y la naviera todavía no confirmó la liberación — sin eso el contenedor no se retira.
+            </p>
+            <div className="space-y-1">
+              {snapshot.sinLiberar.map(a => (
+                <div key={a.shipment.REF} className="rounded-md hover:bg-amber-500/10 transition-colors pb-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const op = (a.shipment.operativas ?? [])[0]
+                      if (op) openOpMatch({ shipment: a.shipment, op })
+                      else openShipment(a.shipment)
+                    }}
+                    className="w-full flex items-center gap-2.5 px-2.5 pt-2 pb-0.5 text-left"
+                  >
+                    <span className="font-mono text-sm font-semibold shrink-0 min-w-[64px]">{a.shipment.REF}</span>
+                    <span className="text-sm text-foreground/85 truncate flex-1 min-w-0">{a.shipment.CLIENTE || '—'}</span>
+                    {a.shipment.BUQUE && (
+                      <span className="hidden md:inline text-xs text-muted-foreground truncate max-w-[160px]">{a.shipment.BUQUE}</span>
+                    )}
+                    <span className={`text-xs font-semibold shrink-0 ${
+                      a.severity === 'vencido' ? 'text-destructive'
+                        : a.severity === 'urgente' ? 'text-amber-600 dark:text-amber-400'
+                        : 'text-muted-foreground'
+                    }`}>
+                      {a.diasParaLlegar < 0
+                        ? `llegó hace ${-a.diasParaLlegar}d`
+                        : a.diasParaLlegar === 0 ? 'llega hoy'
+                        : `en ${a.diasParaLlegar}d`}
+                    </span>
+                  </button>
+                  {/* Bitácora de gestiones: la última nota ES el estado del
+                      reclamo; verde = gestionada hoy, ámbar = quedó de antes. */}
+                  <RefNotaLine
+                    refCarga={a.shipment.REF}
+                    nota={notas.get(normalizeRef(a.shipment.REF))}
+                    onAgregar={agregarNota}
+                  />
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* ── Llegan con datos incompletos ─────────────────── */}
       {incompletasTodas.length > 0 && (
         <Card className="accent-top overflow-hidden bg-amber-500/[0.04] border-amber-500/25" style={{ ['--bar-color' as any]: 'rgb(245 158 11)' }}>
@@ -631,76 +852,6 @@ export default function TodayDashboard({
               )}
             </div>
             )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* ── Llegan sin liberar ───────────────────────────── */}
-      {snapshot.sinLiberar.length === 0 && (
-        /* Estado feliz explícito (pedido Brian 13/08): que se VEA que el
-           trabajo de liberación está al día, no solo la ausencia de alerta. */
-        <div className="flex items-center gap-2.5 rounded-lg border border-emerald-500/25 bg-emerald-500/[0.05] px-4 py-2.5">
-          <CheckCircle size={18} weight="fill" className="text-emerald-600 dark:text-emerald-400 shrink-0" />
-          <p className="text-sm text-emerald-700 dark:text-emerald-400">
-            <b>¡Felicitaciones!</b> Todas tus cargas de los próximos 10 días están liberadas.
-          </p>
-        </div>
-      )}
-      {snapshot.sinLiberar.length > 0 && (
-        <Card className="accent-top overflow-hidden bg-amber-500/[0.04] border-amber-500/25" style={{ ['--bar-color' as any]: 'rgb(245 158 11)' }}>
-          <CardContent className="pt-5 pb-4">
-            <div className="flex items-center gap-2.5 mb-1">
-              <div className="p-1.5 bg-amber-500/10 rounded-md">
-                <LockKey size={18} weight="fill" className="text-amber-600 dark:text-amber-400" />
-              </div>
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
-                Llegan sin liberar
-              </h2>
-              <span className="ml-auto inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-full bg-amber-500 text-white text-xs font-bold">
-                {snapshot.sinLiberar.length}
-              </span>
-            </div>
-            <p className="text-xs text-muted-foreground mb-3">
-              Llegan dentro de 10 días y la naviera todavía no confirmó la liberación — sin eso el contenedor no se retira.
-            </p>
-            <div className="space-y-1">
-              {snapshot.sinLiberar.map(a => (
-                <div key={a.shipment.REF} className="rounded-md hover:bg-amber-500/10 transition-colors pb-1.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const op = (a.shipment.operativas ?? [])[0]
-                      if (op) openOpMatch({ shipment: a.shipment, op })
-                      else openShipment(a.shipment)
-                    }}
-                    className="w-full flex items-center gap-2.5 px-2.5 pt-2 pb-0.5 text-left"
-                  >
-                    <span className="font-mono text-sm font-semibold shrink-0 min-w-[64px]">{a.shipment.REF}</span>
-                    <span className="text-sm text-foreground/85 truncate flex-1 min-w-0">{a.shipment.CLIENTE || '—'}</span>
-                    {a.shipment.BUQUE && (
-                      <span className="hidden md:inline text-xs text-muted-foreground truncate max-w-[160px]">{a.shipment.BUQUE}</span>
-                    )}
-                    <span className={`text-xs font-semibold shrink-0 ${
-                      a.severity === 'vencido' ? 'text-destructive'
-                        : a.severity === 'urgente' ? 'text-amber-600 dark:text-amber-400'
-                        : 'text-muted-foreground'
-                    }`}>
-                      {a.diasParaLlegar < 0
-                        ? `llegó hace ${-a.diasParaLlegar}d`
-                        : a.diasParaLlegar === 0 ? 'llega hoy'
-                        : `en ${a.diasParaLlegar}d`}
-                    </span>
-                  </button>
-                  {/* Bitácora de gestiones: la última nota ES el estado del
-                      reclamo; verde = gestionada hoy, ámbar = quedó de antes. */}
-                  <RefNotaLine
-                    refCarga={a.shipment.REF}
-                    nota={notas.get(normalizeRef(a.shipment.REF))}
-                    onAgregar={agregarNota}
-                  />
-                </div>
-              ))}
-            </div>
           </CardContent>
         </Card>
       )}
