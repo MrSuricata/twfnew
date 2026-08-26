@@ -418,6 +418,73 @@ describe('buildRendimiento — las cinco señales por operativa', () => {
   })
 })
 
+describe('la visita se mide por DÍA (Brian 26/08)', () => {
+  // "Si hubo 3 días de la semana con operativas y fui los 3, fui 3 de 3 —
+  // no importa si vi 10 de 20 operativas". Un día con varios trasiegos es
+  // UNA ida al depósito.
+  const tresEnDosDias = [
+    carga({ ref: 'A1', cntr: 'C1', salida: '2026-08-18' }),
+    carga({ ref: 'A2', cntr: 'C2', salida: '2026-08-18' }),
+    carga({ ref: 'A3', cntr: 'C3', salida: '2026-08-20' }),
+  ]
+
+  it('fui los dos días = 2/2, aunque haya marcado FUI en 2 de 3 operativas', () => {
+    const r = build(tresEnDosDias, {
+      A1: { visita_deposito: avisoCntrs({ C1: 'admin' }) },
+      A3: { visita_deposito: avisoCntrs({ C3: 'admin' }) },
+    })
+    expect(r.total).toBe(3)
+    expect(r.diasConOperativa).toBe(2)
+    expect(r.diasVisitados).toBe(2)
+    expect(r.visitas).toBe(2) // el tilde por operativa sigue para el informe
+  })
+
+  it('un día sin ir resta el día entero, no las operativas', () => {
+    const r = build(tresEnDosDias, {
+      A1: { visita_deposito: avisoCntrs({ C1: 'admin' }) },
+    })
+    expect(r.diasConOperativa).toBe(2)
+    expect(r.diasVisitados).toBe(1)
+  })
+
+  it('las llegadas sin salida coordinada no crean día (todavía no pasó)', () => {
+    const r = build([
+      carga({ ref: 'A1', cntr: 'C1', salida: '2026-08-18' }),
+      carga({ ref: 'A4', cntr: 'C4', salida: '', eta: '2026-08-21' }),
+    ])
+    expect(r.diasConOperativa).toBe(1)
+  })
+
+  it("'2026-8-20' y '2026-08-20' son el MISMO día", () => {
+    const r = build([
+      carga({ ref: 'A1', cntr: 'C1', salida: '2026-8-20' }),
+      carga({ ref: 'A2', cntr: 'C2', salida: '2026-08-20' }),
+    ])
+    expect(r.diasConOperativa).toBe(1)
+  })
+
+  it('el parte de texto habla en días', () => {
+    const r = build(tresEnDosDias, {
+      A1: { visita_deposito: avisoCntrs({ C1: 'admin' }) },
+    })
+    expect(textoParte(r, '2026-08-17', '2026-08-23')).toContain('Fui al depósito: 1/2 días con operativa')
+  })
+
+  it('el resumen mensual trae la misma medición por día', () => {
+    const m = resumenMensual({
+      cargas: tresEnDosDias,
+      checksByRef: new Map(Object.entries({ A1: { visita_deposito: avisoCntrs({ C1: 'admin' }) } })),
+      fotosPorCntr: new Set<string>(),
+      refsConFotosSinCntr: new Set<string>(),
+      informesPorCntr: new Set<string>(),
+      refsConInformeSinCntr: new Set<string>(),
+      meses: ['2026-08'],
+    })
+    expect(m[0].diasConOperativa).toBe(2)
+    expect(m[0].diasVisitados).toBe(1)
+  })
+})
+
 describe('depositosVisitados', () => {
   it('agrupa las visitas por depósito, el más visitado primero', () => {
     const r = build(
@@ -440,7 +507,9 @@ describe('textoParte — muestra lo hecho Y lo que falta', () => {
     )
     const t = textoParte(r, '2026-08-17', '2026-08-23')
     expect(t).toContain('2 trasiegos por depósito')
-    expect(t).toContain('Fui al depósito: 1/2')
+    // Las dos operativas salieron el mismo día → la visita es 1/1 DÍAS
+    // (Brian 26/08); los avisos siguen siendo por operativa.
+    expect(t).toContain('Fui al depósito: 1/1 días con operativa')
     expect(t).toContain('Traslado avisado al cliente: 1/2')
     // Lo pendiente NO se esconde
     expect(t).toContain('Pendientes: A7938, A8000')
