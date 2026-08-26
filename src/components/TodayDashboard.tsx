@@ -355,12 +355,25 @@ export default function TodayDashboard({
     })
   }
 
-  const agendarRetiro = async (c: CargaMontecon) => {
+  // El botón AGENDADA pide la fecha del TURNO conseguido (Brian 26/08: "que te
+  // diga para qué fecha agendaste") — el draft por ref abre el date picker
+  // inline, arrancando en la ETA (el turno suele ser ese día o el siguiente).
+  const [turnoDraft, setTurnoDraft] = useState<Record<string, string>>({})
+  const cerrarTurnoDraft = (ref: string) =>
+    setTurnoDraft(d => { const n = { ...d }; delete n[ref]; return n })
+
+  const agendarRetiro = async (c: CargaMontecon, fechaRetiro: string) => {
+    const anio = Number(String(fechaRetiro).slice(0, 4))
+    if (!fechaRetiro || anio < 2015 || anio > 2100) {
+      toast.error('Elegí la fecha del turno de retiro')
+      return
+    }
     try {
-      await agendarMontecon(c.ref, c.eta)
-      setAgendaMontecon(prev => [...prev.filter(r => r.ref.trim().toUpperCase() !== c.ref.toUpperCase()), { ref: c.ref, eta_agendada: c.eta }])
-      toast.success(`${c.ref} — retiro agendado contra ETA ${fmtDateDMY(c.eta)}`, {
-        description: 'Si la ETA se mueve, esta card te lo va a marcar en rojo.',
+      await agendarMontecon(c.ref, c.eta, fechaRetiro)
+      setAgendaMontecon(prev => [...prev.filter(r => r.ref.trim().toUpperCase() !== c.ref.toUpperCase()), { ref: c.ref, eta_agendada: c.eta, fecha_retiro: fechaRetiro }])
+      cerrarTurnoDraft(c.ref)
+      toast.success(`${c.ref} — turno de retiro para el ${fmtDateDMY(fechaRetiro)}`, {
+        description: `Agendado contra ETA ${fmtDateDMY(c.eta)} — si la ETA se mueve, esta card te lo marca en rojo.`,
       })
     } catch (err) {
       toast.error('No se pudo agendar', { description: (err as Error)?.message })
@@ -369,6 +382,7 @@ export default function TodayDashboard({
 
   const quitarAgenda = async (c: CargaMontecon) => {
     const anterior = c.etaAgendada
+    const turnoAnterior = c.fechaRetiro
     try {
       await desagendarMontecon(c.ref)
       setAgendaMontecon(prev => prev.filter(r => r.ref.trim().toUpperCase() !== c.ref.toUpperCase()))
@@ -376,8 +390,8 @@ export default function TodayDashboard({
         action: anterior ? {
           label: 'Deshacer',
           onClick: () => {
-            agendarMontecon(c.ref, anterior)
-              .then(() => setAgendaMontecon(prev => [...prev, { ref: c.ref, eta_agendada: anterior }]))
+            agendarMontecon(c.ref, anterior, turnoAnterior || undefined)
+              .then(() => setAgendaMontecon(prev => [...prev, { ref: c.ref, eta_agendada: anterior, fecha_retiro: turnoAnterior || null }]))
               .catch(() => toast.error('No se pudo restaurar la agenda'))
           },
         } : undefined,
@@ -650,10 +664,42 @@ export default function TodayDashboard({
                       </span>
                     )}
                     <span className="ml-auto flex items-center gap-1.5">
-                      {c.estado === 'sin_agendar' && (
+                      {(c.estado === 'sin_agendar' || c.estado === 'reagendar') && turnoDraft[c.ref] !== undefined && (
+                        <span className="flex items-center gap-1">
+                          <input
+                            type="date"
+                            autoFocus
+                            value={turnoDraft[c.ref]}
+                            onChange={e => setTurnoDraft(d => ({ ...d, [c.ref]: e.target.value }))}
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') agendarRetiro(c, turnoDraft[c.ref])
+                              if (e.key === 'Escape') cerrarTurnoDraft(c.ref)
+                            }}
+                            title="¿Para qué fecha conseguiste el turno de retiro?"
+                            className="h-7 rounded-md border border-sky-500/40 bg-background px-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-sky-500/50"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => agendarRetiro(c, turnoDraft[c.ref])}
+                            className="h-7 px-2.5 rounded-full bg-sky-600 text-white text-xs font-bold hover:opacity-90 transition-opacity"
+                          >
+                            OK
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => cerrarTurnoDraft(c.ref)}
+                            aria-label="Cancelar"
+                            className="h-7 px-2 rounded-full border border-border text-xs text-muted-foreground hover:bg-muted transition-colors"
+                          >
+                            ✕
+                          </button>
+                        </span>
+                      )}
+                      {c.estado === 'sin_agendar' && turnoDraft[c.ref] === undefined && (
                         <button
                           type="button"
-                          onClick={() => agendarRetiro(c)}
+                          onClick={() => setTurnoDraft(d => ({ ...d, [c.ref]: c.eta }))}
+                          title="Conseguiste turno: cargá para qué fecha"
                           className="h-7 px-3 rounded-full border border-sky-500/40 text-xs font-semibold text-sky-700 hover:bg-sky-500/10 transition-colors"
                         >
                           Agendada
@@ -663,17 +709,17 @@ export default function TodayDashboard({
                         <button
                           type="button"
                           onClick={() => quitarAgenda(c)}
-                          title="Agendada contra esta ETA — click para quitar"
+                          title={`${c.fechaRetiro ? `Turno de retiro para el ${fmtDateDMY(c.fechaRetiro)}, ` : ''}agendada contra ETA ${fmtDateDMY(c.etaAgendada)} — click para quitar`}
                           className="h-7 px-3 rounded-full bg-emerald-600 text-white text-xs font-bold inline-flex items-center gap-1 hover:opacity-90 transition-opacity"
                         >
-                          <CheckCircle size={13} weight="fill" /> Agendada
+                          <CheckCircle size={13} weight="fill" /> Agendada{c.fechaRetiro ? ` · ${fmtDateDMY(c.fechaRetiro)}` : ''}
                         </button>
                       )}
-                      {c.estado === 'reagendar' && (
+                      {c.estado === 'reagendar' && turnoDraft[c.ref] === undefined && (
                         <>
                           <button
                             type="button"
-                            onClick={() => agendarRetiro(c)}
+                            onClick={() => setTurnoDraft(d => ({ ...d, [c.ref]: c.eta }))}
                             className="h-7 px-3 rounded-full bg-red-600 text-white text-xs font-bold hover:opacity-90 transition-opacity"
                           >
                             Volver a agendar
@@ -721,6 +767,7 @@ export default function TodayDashboard({
                   {c.estado === 'reagendar' && (
                     <p className="mt-1 text-xs font-semibold text-red-700">
                       Se modificó la fecha de arribo — estaba agendada para {fmtDateDMY(c.etaAgendada)}, ahora la ETA es {fmtDateDMY(c.eta)}.
+                      {c.fechaRetiro ? ` Tenías turno para el ${fmtDateDMY(c.fechaRetiro)} — conseguí uno nuevo.` : ''}
                     </p>
                   )}
                   {c.estado === 'retirado' && (

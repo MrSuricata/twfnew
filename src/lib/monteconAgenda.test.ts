@@ -89,6 +89,18 @@ describe('cargasMontecon — quién entra y cómo se ordena', () => {
     expect(l[0].etaAgendada).toBe('2026-08-24')
   })
 
+  it('la fecha del TURNO conseguido viaja a la fila (Brian 26/08)', () => {
+    const l = cargasMontecon([carga({ eta: '2026-08-24' })],
+      [{ ref: 'A8045', eta_agendada: '2026-08-24', fecha_retiro: '2026-08-25' }], HOY)
+    expect(l[0].estado).toBe('agendada')
+    expect(l[0].fechaRetiro).toBe('2026-08-25')
+    // Y sigue disponible cuando la ETA se corre (para decir "tenías turno el X").
+    const movida = cargasMontecon([carga({ eta: '2026-08-27' })],
+      [{ ref: 'A8045', eta_agendada: '2026-08-24', fecha_retiro: '2026-08-25' }], HOY)
+    expect(movida[0].estado).toBe('reagendar')
+    expect(movida[0].fechaRetiro).toBe('2026-08-25')
+  })
+
   it('el matcheo de agenda ignora mayúsculas y espacios en la ref', () => {
     const l = cargasMontecon([carga({ ref: 'A8045' })],
       [agenda(' a8045 ', '2026-08-24')], HOY)

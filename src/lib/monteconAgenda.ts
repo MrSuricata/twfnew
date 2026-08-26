@@ -29,6 +29,9 @@ export type EstadoAgenda = 'sin_agendar' | 'agendada' | 'reagendar' | 'retirar' 
 export interface AgendaRow {
   ref: string
   eta_agendada: string
+  /** Fecha del TURNO de retiro conseguido (Brian 26/08: "para qué fecha
+   *  agendaste" — queda a la vista en la fila). ISO YYYY-MM-DD. */
+  fecha_retiro?: string | null
   usuario?: string | null
   updated_at?: string | null
   retirado_at?: string | null
@@ -50,6 +53,8 @@ export interface CargaMontecon {
   estado: EstadoAgenda
   /** ETA contra la que se agendó (solo con agenda). */
   etaAgendada: string
+  /** Fecha del turno de retiro conseguido ('' si no se cargó). */
+  fechaRetiro: string
   /** Día del retiro (YYYY-MM-DD, solo estado 'retirado'). */
   retiradoEl: string
 }
@@ -136,6 +141,7 @@ export function cargasMontecon(
         dias: diffDias(hoy, eta) ?? 0,
         estado: 'retirado',
         etaAgendada: txt(a.eta_agendada),
+        fechaRetiro: txt(a.fecha_retiro),
         retiradoEl,
       })
       continue
@@ -164,6 +170,7 @@ export function cargasMontecon(
       dias,
       estado,
       etaAgendada: txt(a?.eta_agendada),
+      fechaRetiro: txt(a?.fecha_retiro),
       retiradoEl: '',
     })
   }
