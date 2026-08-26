@@ -58,7 +58,7 @@ import { RefNotaLine, useRefNotas } from './RefNotaLine'
 import { getAdminName } from '@/lib/authClient'
 import { fmtDateDMY } from '@/lib/format'
 import { cargasMontecon, type AgendaRow, type CargaMontecon } from '@/lib/monteconAgenda'
-import { fetchMonteconAgenda, agendarMontecon, desagendarMontecon } from '@/lib/dataClient'
+import { fetchMonteconAgenda, agendarMontecon, desagendarMontecon, marcarMontecon } from '@/lib/dataClient'
 import { fmtDMY } from '@/lib/salidaCheck'
 import { isSinTelex } from '@/lib/telexCheck'
 
@@ -343,6 +343,17 @@ export default function TodayDashboard({
     [dbShipments, agendaMontecon],
   )
   const monteconReagendar = montecon.filter(c => c.estado === 'reagendar').length
+  const monteconAvisar = montecon.filter(c => c.estado === 'retirado').length
+
+  // Upsert local de una fila de agenda (el server ya guardó): preserva la ETA
+  // agendada si existía — pisarla haría "reagendar" fantasma al deshacer.
+  const upsertAgendaLocal = (ref: string, patch: Partial<AgendaRow>) => {
+    setAgendaMontecon(prev => {
+      const key = ref.trim().toUpperCase()
+      const base = prev.find(r => r.ref.trim().toUpperCase() === key) ?? { ref, eta_agendada: '' }
+      return [...prev.filter(r => r.ref.trim().toUpperCase() !== key), { ...base, ...patch }]
+    })
+  }
 
   const agendarRetiro = async (c: CargaMontecon) => {
     try {
@@ -373,6 +384,49 @@ export default function TodayDashboard({
       })
     } catch (err) {
       toast.error('No se pudo quitar la agenda', { description: (err as Error)?.message })
+    }
+  }
+
+  // Ciclo post-retiro (Brian 26/08): RETIRADO deja la fila abajo recordando
+  // avisar al cliente del traslado a depósito; AVISADO la saca de la card.
+  const marcarRetirado = async (c: CargaMontecon) => {
+    try {
+      await marcarMontecon(c.ref, 'retirado', true)
+      upsertAgendaLocal(c.ref, { retirado_at: new Date().toISOString() })
+      toast.success(`${c.ref} — contenedor retirado de Montecon`, {
+        description: 'Queda abajo en la card hasta que avises al cliente que ya está en depósito.',
+      })
+    } catch (err) {
+      toast.error('No se pudo marcar el retiro', { description: (err as Error)?.message })
+    }
+  }
+
+  const deshacerRetirado = async (c: CargaMontecon) => {
+    try {
+      await marcarMontecon(c.ref, 'retirado', false)
+      upsertAgendaLocal(c.ref, { retirado_at: null })
+      toast.success(`${c.ref} — retiro desmarcado`)
+    } catch (err) {
+      toast.error('No se pudo deshacer el retiro', { description: (err as Error)?.message })
+    }
+  }
+
+  const marcarAvisado = async (c: CargaMontecon) => {
+    try {
+      await marcarMontecon(c.ref, 'avisado', true)
+      upsertAgendaLocal(c.ref, { avisado_at: new Date().toISOString() })
+      toast.success(`${c.ref} — cliente avisado, ciclo cerrado`, {
+        action: {
+          label: 'Deshacer',
+          onClick: () => {
+            marcarMontecon(c.ref, 'avisado', false)
+              .then(() => upsertAgendaLocal(c.ref, { avisado_at: null }))
+              .catch(() => toast.error('No se pudo deshacer el aviso'))
+          },
+        },
+      })
+    } catch (err) {
+      toast.error('No se pudo marcar el aviso', { description: (err as Error)?.message })
     }
   }
 
@@ -551,12 +605,17 @@ export default function TodayDashboard({
                   {monteconReagendar} para reagendar
                 </span>
               )}
+              {monteconAvisar > 0 && (
+                <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-700 bg-amber-500/10 border border-amber-500/30 rounded-full px-2 py-0.5">
+                  {monteconAvisar} avisar cliente
+                </span>
+              )}
               <span className="ml-auto inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-full bg-sky-500 text-white text-xs font-bold">
                 {montecon.length}
               </span>
             </div>
             <p className="text-xs text-muted-foreground mb-2.5">
-              Turnos de retiro: agendá contra la ETA. Si el buque se corre, la fila se pone en rojo sola — reagendá y listo.
+              Turnos de retiro: agendá contra la ETA — si el buque se corre, la fila se pone en rojo sola. Cuando el contenedor sale, marcá RETIRADO: queda abajo hasta que avises al cliente que ya está en depósito.
             </p>
             <div className="space-y-1">
               {montecon.map(c => (
@@ -565,7 +624,9 @@ export default function TodayDashboard({
                   className={`rounded-lg border px-2.5 py-2 ${
                     c.estado === 'reagendar'
                       ? 'border-red-500/40 bg-red-500/[0.06]'
-                      : 'border-border/60 bg-background/50'
+                      : c.estado === 'retirado'
+                        ? 'border-amber-500/40 bg-amber-500/[0.06]'
+                        : 'border-border/60 bg-background/50'
                   }`}
                 >
                   <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
@@ -574,10 +635,12 @@ export default function TodayDashboard({
                     </button>
                     <span className="text-xs text-muted-foreground truncate max-w-[160px]" title={c.cliente}>{c.cliente || '—'}</span>
                     {c.cntr && <span className="font-mono text-[11px] text-muted-foreground">{c.cntr}</span>}
-                    <span className="text-xs whitespace-nowrap">
-                      ETA <b>{fmtDateDMY(c.eta)}</b>
-                      <span className="text-muted-foreground"> · {c.dias === 0 ? 'hoy' : c.dias > 0 ? `en ${c.dias}d` : `llegó hace ${-c.dias}d`}</span>
-                    </span>
+                    {c.eta && (
+                      <span className="text-xs whitespace-nowrap">
+                        ETA <b>{fmtDateDMY(c.eta)}</b>
+                        <span className="text-muted-foreground"> · {c.dias === 0 ? 'hoy' : c.dias > 0 ? `en ${c.dias}d` : `llegó hace ${-c.dias}d`}</span>
+                      </span>
+                    )}
                     <span className="ml-auto flex items-center gap-1.5">
                       {c.estado === 'sin_agendar' && (
                         <button
@@ -616,11 +679,45 @@ export default function TodayDashboard({
                           </button>
                         </>
                       )}
+                      {c.estado !== 'retirado' && c.dias <= 0 && (
+                        <button
+                          type="button"
+                          onClick={() => marcarRetirado(c)}
+                          title="El contenedor ya salió de Montecon hacia el depósito"
+                          className="h-7 px-3 rounded-full border border-amber-500/50 text-xs font-semibold text-amber-700 hover:bg-amber-500/10 transition-colors"
+                        >
+                          Retirado
+                        </button>
+                      )}
+                      {c.estado === 'retirado' && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => marcarAvisado(c)}
+                            title="Ya le avisé al cliente — sacar de la card"
+                            className="h-7 px-3 rounded-full bg-emerald-600 text-white text-xs font-bold inline-flex items-center gap-1 hover:opacity-90 transition-opacity"
+                          >
+                            <CheckCircle size={13} weight="fill" /> Avisado
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => deshacerRetirado(c)}
+                            className="h-7 px-2.5 rounded-full border border-border text-xs text-muted-foreground hover:bg-muted transition-colors"
+                          >
+                            Deshacer
+                          </button>
+                        </>
+                      )}
                     </span>
                   </div>
                   {c.estado === 'reagendar' && (
                     <p className="mt-1 text-xs font-semibold text-red-700">
                       Se modificó la fecha de arribo — estaba agendada para {fmtDateDMY(c.etaAgendada)}, ahora la ETA es {fmtDateDMY(c.eta)}.
+                    </p>
+                  )}
+                  {c.estado === 'retirado' && (
+                    <p className="mt-1 text-xs font-semibold text-amber-700">
+                      Retirado el {fmtDateDMY(c.retiradoEl)} — avisale al cliente que el contenedor ya se trasladó al depósito y marcá AVISADO.
                     </p>
                   )}
                 </div>

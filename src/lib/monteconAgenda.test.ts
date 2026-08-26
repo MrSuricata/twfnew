@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   cargasMontecon, estadoAgenda, MONTECON_DIAS_ADELANTE, MONTECON_DIAS_ATRAS,
+  RETIRADO_DIAS_RECORDATORIO,
   type CargaMonteconInput, type AgendaRow,
 } from './monteconAgenda'
 
@@ -90,5 +91,56 @@ describe('cargasMontecon — quién entra y cómo se ordena', () => {
     const l = cargasMontecon([carga({ ref: 'A8045' })],
       [agenda(' a8045 ', '2026-08-24')], HOY)
     expect(l[0].estado).toBe('agendada')
+  })
+})
+
+describe('cargasMontecon — ciclo retirado → avisado (Brian 26/08)', () => {
+  const retirada = (ref: string, retiradoAt: string, extra: Partial<AgendaRow> = {}): AgendaRow =>
+    ({ ref, eta_agendada: '2026-08-20', retirado_at: retiradoAt, ...extra })
+
+  it('retirada queda con estado retirado, al FONDO, con el día del retiro', () => {
+    const l = cargasMontecon([
+      carga({ ref: 'RET', eta: '2026-08-20' }),
+      carga({ ref: 'NUEVA', eta: '2026-08-24' }),
+    ], [retirada('RET', '2026-08-21T14:00:00.000Z')], HOY)
+    expect(l.map(c => c.ref + ':' + c.estado)).toEqual(['NUEVA:sin_agendar', 'RET:retirado'])
+    expect(l[1].retiradoEl).toBe('2026-08-21')
+  })
+
+  it('retirada ignora la ventana de ETA — el recordatorio no depende del buque', () => {
+    // ETA de hace 3 semanas (fuera de ventana): sin retiro no aparecería.
+    const l = cargasMontecon([carga({ eta: '2026-08-01' })],
+      [retirada('A8045', '2026-08-21T14:00:00.000Z')], HOY)
+    expect(l).toHaveLength(1)
+    expect(l[0].estado).toBe('retirado')
+  })
+
+  it('sin AVISADO desaparece recién pasado el tope de días', () => {
+    const dia = (n: number) => `2026-08-${String(22 - n).padStart(2, '0')}T12:00:00.000Z`
+    const enTope = cargasMontecon([carga()], [retirada('A8045', dia(RETIRADO_DIAS_RECORDATORIO))], HOY)
+    expect(enTope).toHaveLength(1)
+    const pasada = cargasMontecon([carga()], [retirada('A8045', dia(RETIRADO_DIAS_RECORDATORIO + 1))], HOY)
+    expect(pasada).toEqual([])
+  })
+
+  it('AVISADO cierra el ciclo: sale de la card', () => {
+    const l = cargasMontecon([carga()],
+      [retirada('A8045', '2026-08-21T14:00:00.000Z', { avisado_at: '2026-08-22T10:00:00.000Z' })], HOY)
+    expect(l).toEqual([])
+  })
+
+  it('un retiro de anoche estampado "mañana" en UTC no se esconde', () => {
+    // Retiro 21:30 de Montevideo = 00:30 UTC del día siguiente a HOY.
+    const l = cargasMontecon([carga()], [retirada('A8045', '2026-08-23T00:30:00.000Z')], HOY)
+    expect(l).toHaveLength(1)
+    expect(l[0].estado).toBe('retirado')
+  })
+
+  it('retiro directo sin agenda previa (eta_agendada vacía) funciona igual', () => {
+    const l = cargasMontecon([carga({ eta: '2026-08-20' })],
+      [{ ref: 'A8045', eta_agendada: '', retirado_at: '2026-08-22T12:00:00.000Z' }], HOY)
+    expect(l).toHaveLength(1)
+    expect(l[0].estado).toBe('retirado')
+    expect(l[0].etaAgendada).toBe('')
   })
 })

@@ -1014,12 +1014,29 @@ export async function anularDepositoActa(id: string): Promise<void> {
 
 // ─── Agenda de retiros MONTECON ──────────────────────────────────────
 
-/** Todas las filas de agenda (ref → ETA contra la que se agendó). */
-export async function fetchMonteconAgenda(): Promise<{ ref: string; eta_agendada: string }[]> {
+/** Todas las filas de agenda (ref → ETA agendada + marcas retirado/avisado). */
+export async function fetchMonteconAgenda(): Promise<import('./monteconAgenda').AgendaRow[]> {
   const res = await authFetch('/api/data/montecon-agenda')
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const data = await res.json()
   return data.agenda || []
+}
+
+/** Marcar o desmarcar RETIRADO / AVISADO de una ref (ciclo post-agenda). */
+export async function marcarMontecon(
+  ref: string,
+  campo: 'retirado' | 'avisado',
+  on: boolean,
+): Promise<void> {
+  const res = await authFetch('/api/data/montecon-agenda', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(on ? { ref, marcar: campo } : { ref, desmarcar: campo }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
 }
 
 /** Agendar (o RE-agendar) el retiro: guarda la ETA actual como snapshot. */

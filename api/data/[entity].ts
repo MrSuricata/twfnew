@@ -2592,19 +2592,50 @@ async function handleMonteconAgenda(req: VercelRequest, res: VercelResponse, db:
   }
 
   if (req.method === 'POST') {
+    // Tres verbos en uno: {eta} agenda · {marcar} estampa retirado/avisado ·
+    // {desmarcar} lo deshace. Exactamente uno por request.
     const v = validate(z.object({
       ref: z.string().min(1).max(40),
-      eta: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-    }), req.body)
+      eta: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      marcar: z.enum(['retirado', 'avisado']).optional(),
+      desmarcar: z.enum(['retirado', 'avisado']).optional(),
+    }).refine(d => [d.eta, d.marcar, d.desmarcar].filter(x => x !== undefined).length === 1,
+      { message: 'Mandá eta, marcar o desmarcar (uno solo)' }), req.body)
     if (!v.ok) return res.status(400).json({ error: v.error })
     const ref = v.data.ref.trim().toUpperCase()
     const allowed = await allowedRefsForPayload(db, payload)
     if (allowed && !allowed.has(refOf(ref))) return res.status(404).json({ error: 'Carga no encontrada' })
+    const usuario = auditUser(payload as { user?: string; name?: string } | null)
+    const nowIso = new Date().toISOString()
+
+    if (v.data.marcar || v.data.desmarcar) {
+      const campo = v.data.marcar || v.data.desmarcar
+      const marcando = Boolean(v.data.marcar)
+      const patch: Record<string, unknown> = {
+        [`${campo}_at`]: marcando ? nowIso : null,
+        [`${campo}_por`]: marcando ? usuario : null,
+        updated_at: nowIso,
+      }
+      const { data: upd, error } = await db.from('montecon_agenda')
+        .update(patch).eq('ref', ref).select('ref')
+      if (error) throw error
+      if (!upd?.length) {
+        // Se puede marcar RETIRADO sin haber agendado antes (retiro directo):
+        // nace la fila con eta_agendada vacía. Desmarcar sin fila no existe.
+        if (!marcando) return res.status(404).json({ error: 'Esa carga no tiene agenda de Montecon' })
+        const { error: insErr } = await db.from('montecon_agenda')
+          .insert({ ref, eta_agendada: '', usuario, ...patch })
+        if (insErr) throw insErr
+      }
+      logAudit(db, payload, `${marcando ? 'marcar' : 'desmarcar'} ${campo} montecon`, 'montecon_agenda', ref)
+      return res.status(200).json({ saved: true })
+    }
+
     const row = {
       ref,
       eta_agendada: v.data.eta,
-      usuario: auditUser(payload as { user?: string; name?: string } | null),
-      updated_at: new Date().toISOString(),
+      usuario,
+      updated_at: nowIso,
     }
     const { error } = await db.from('montecon_agenda').upsert(row, { onConflict: 'ref' })
     if (error) throw error
