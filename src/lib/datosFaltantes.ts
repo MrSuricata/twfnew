@@ -39,6 +39,8 @@ export interface CargaCampos {
   operativa?: string | null
   transporte?: string | null
   fiscal?: string | null
+  /** Terminal de llegada MVD (TCP/MONTECON): define el vencimiento del pago. */
+  terminal?: string | null
   salida?: string | null
 }
 
@@ -49,7 +51,10 @@ export interface CampoFaltante {
 
 /** Ventanas de exigencia (días antes de la llegada). */
 export const FALTANTES_DIAS_CHECKS = 14
-export const FALTANTES_DIAS_COORDINACION = 7
+// 7 → 14 (Brian 22/08): "poneme las que llegan los próximos 14 días". La
+// ventana de coordinación pasa a coincidir con la de checks — todo lo que
+// llega en dos semanas pide sus datos completos de una.
+export const FALTANTES_DIAS_COORDINACION = 14
 
 const MS_DIA = 86_400_000
 const medianoche = (d: Date): Date => new Date(d.getFullYear(), d.getMonth(), d.getDate())
@@ -93,6 +98,13 @@ export function datosFaltantes(c: CargaCampos, hoy: Date): CampoFaltante[] {
     if (cero(c.kg)) falta('kg', 'Kg')
     if (cero(c.m3)) falta('m3', 'M³')
     if (vacio(c.agente)) falta('agente', 'Agente')
+    // Terminal de llegada (Brian 22/08: "es importante saberla"): define el
+    // vencimiento del pago (MONTECON = ETA − 5 días, se paga ANTES de que el
+    // buque llegue) y la agenda de retiros. Solo FCL que toca Montevideo:
+    // las cargas por Chile van directo a San Antonio, sin terminal MVD.
+    if (m === 'fcl' && String(c.pais || '').trim().toUpperCase() !== 'CL' && vacio(c.terminal)) {
+      falta('terminal', 'Terminal')
+    }
   }
 
   // Coordinación (solo por Uruguay): con el buque encima hay que saber a qué

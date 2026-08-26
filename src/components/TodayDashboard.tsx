@@ -291,7 +291,8 @@ export default function TodayDashboard({
           eta: s.eta, etd: s.etd, buque: s.buque, linea: s.linea, docNumber: s.doc_number,
           cntr: s.contenedor,
           pkgs: s.pkgs, kg: s.kg, m3: s.m3, agente: s.agente, deposito: s.deposito,
-          operativa: s.operativa, transporte: s.transporte, fiscal: s.fiscal, salida: s.salida,
+          operativa: s.operativa, transporte: s.transporte, fiscal: s.fiscal,
+          terminal: s.terminal, salida: s.salida,
         })),
       hoy,
     )
@@ -1313,6 +1314,7 @@ function CampoFaltanteInput({ campo, etiqueta, dbRow, onPatchShipment, transport
     : spec.sugerencias === 'agentes' ? agentes
     : spec.sugerencias === 'lineas' ? lineas
     : spec.sugerencias === 'depositos' ? DEPOSITOS_UY
+    : spec.sugerencias === 'terminales' ? ['TCP', 'MONTECON']
     : []
 
   return (
