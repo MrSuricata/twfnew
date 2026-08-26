@@ -9,6 +9,7 @@
  *   Siempre (activa)      → Cliente · País destino · ETA
  *   Embarcada (ETD pasó)  → Buque · Línea · BL · Contenedor (solo FCL)
  *   Llega en ≤14 días     → Bultos · Kg · M³ · Agente (quién factura)
+ *                            + Terminal y Devolución (FCL por MVD)
  *   Llega en ≤7 / llegó   → Depósito · Operativa · Transporte · Fiscal
  *                            (coordinación: solo cargas por Uruguay)
  *
@@ -41,6 +42,9 @@ export interface CargaCampos {
   fiscal?: string | null
   /** Terminal de llegada MVD (TCP/MONTECON): define el vencimiento del pago. */
   terminal?: string | null
+  /** Terminal/depósito de DEVOLUCIÓN del vacío (STL/MPS/TCP…): Pagos saca de
+   *  acá a QUIÉN se le paga la devolución y su costo default. */
+  dev?: string | null
   salida?: string | null
 }
 
@@ -102,8 +106,11 @@ export function datosFaltantes(c: CargaCampos, hoy: Date): CampoFaltante[] {
     // vencimiento del pago (MONTECON = ETA − 5 días, se paga ANTES de que el
     // buque llegue) y la agenda de retiros. Solo FCL que toca Montevideo:
     // las cargas por Chile van directo a San Antonio, sin terminal MVD.
-    if (m === 'fcl' && String(c.pais || '').trim().toUpperCase() !== 'CL' && vacio(c.terminal)) {
-      falta('terminal', 'Terminal')
+    if (m === 'fcl' && String(c.pais || '').trim().toUpperCase() !== 'CL') {
+      if (vacio(c.terminal)) falta('terminal', 'Terminal')
+      // Devolución del vacío (Brian 26/08): sin ella Pagos no sabe a quién
+      // se le paga la devolución ni puede derivar su costo default (STL/MPS).
+      if (vacio(c.dev)) falta('dev', 'Devolución')
     }
   }
 

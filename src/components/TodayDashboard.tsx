@@ -33,7 +33,7 @@ import ShipmentDetailsDialog from './ShipmentDetailsDialog'
 import ContainerQuickEdit from './operations/ContainerQuickEdit'
 import { deriveKnownTransportes, deriveKnownValues, DEPOSITOS_UY, type DbShipment } from '@/lib/operationsTypes'
 import { faltantesUrgentes, resumenFaltantes, FALTANTES_DIAS_COORDINACION, type FaltanteUrgente, type CampoFaltante } from '@/lib/datosFaltantes'
-import { buildFaltantePatch, columnaDeCampo, FALTANTE_INPUTS } from '@/lib/faltantesEdit'
+import { buildFaltantePatch, columnaDeCampo, FALTANTE_INPUTS, DEVOLUCIONES_PLAZA } from '@/lib/faltantesEdit'
 import {
   esCargaSinDatosPago, montosUrgentes, formaPagoEfectiva, parseMontoUY,
   paisDePago, agruparPorPais, MONTO_KEYS, type PagoRubro,
@@ -295,7 +295,7 @@ export default function TodayDashboard({
           cntr: s.contenedor,
           pkgs: s.pkgs, kg: s.kg, m3: s.m3, agente: s.agente, deposito: s.deposito,
           operativa: s.operativa, transporte: s.transporte, fiscal: s.fiscal,
-          terminal: s.terminal, salida: s.salida,
+          terminal: s.terminal, dev: s.dev, salida: s.salida,
         })),
       hoy,
     )
@@ -1563,6 +1563,7 @@ function CampoFaltanteInput({ campo, etiqueta, dbRow, onPatchShipment, transport
     : spec.sugerencias === 'lineas' ? lineas
     : spec.sugerencias === 'depositos' ? DEPOSITOS_UY
     : spec.sugerencias === 'terminales' ? ['TCP', 'MONTECON']
+    : spec.sugerencias === 'devoluciones' ? DEVOLUCIONES_PLAZA
     : []
 
   return (
