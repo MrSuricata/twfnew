@@ -170,6 +170,7 @@ export interface DbShipment {
   kg: number
   m3: number
   doc_number: string
+  hbl?: string
   origin: string
   etd: string
   eta: string
@@ -266,7 +267,8 @@ export interface UnifiedOperation {
   libre: string
   operativa: string
   cntr: string
-  docNumber: string              // BL / MAWB-HAWB / CRT
+  docNumber: string              // BL / MAWB-HAWB / CRT (master)
+  hbl: string                    // House BL (fila rápida de la ficha, Brian 22/08)
   buque: string
   linea: string
   camion: string
@@ -307,7 +309,7 @@ const num = (v: unknown): number => {
 
 const EMPTY = {
   clientRef: '', shipper: '', agente: '', incoterm: '', origin: '', paisOrigen: '', etd: '',
-  buque: '', linea: '', camion: '', docNumber: '', destPort: '', despacho: '',
+  buque: '', linea: '', camion: '', docNumber: '', hbl: '', destPort: '', despacho: '',
   dischargePort: '', pais: '', noApilable: false, oog: false, imo: false,
   seguimiento: '', seguro: false, certi: false, impresa: false,
   archived: false, desconsol: '', entregaPlanta: false,
@@ -331,6 +333,7 @@ function fclToOperation(s: ParsedShipment, operatorId: string | null, uid: strin
     operatorId,
     cliente: s.CLIENTE || firstWith('CLIENTE_OP'),
     docNumber: s.MBL || '',     // SG nuevo: booking
+    hbl: '',                    // la planilla no lo trae; se carga en la web
     etd: s.ETD || '',
     buque: s.BUQUE || '',
     linea: s.LINEA || '',
@@ -522,6 +525,7 @@ export function dbShipmentToOperation(s: DbShipment): UnifiedOperation {
     operativa: s.operativa || '',
     cntr: s.contenedor || '',
     docNumber: s.doc_number || '',
+    hbl: s.hbl || '',
     buque: s.buque || '',
     linea: s.linea || '',
     camion: s.camion || '',
@@ -769,6 +773,7 @@ export const EDITABLE_FIELDS: Partial<Record<keyof UnifiedOperation, EditableFie
   paisOrigen: { col: 'origin_country', type: 'text' },
   dischargePort: { col: 'discharge_port', type: 'text' },
   docNumber: { col: 'doc_number', type: 'text' },
+  hbl: { col: 'hbl', type: 'text' },
   deposito: { col: 'deposito', type: 'text' },
   etd: { col: 'etd', type: 'text' },
   eta: { col: 'eta', type: 'text' },

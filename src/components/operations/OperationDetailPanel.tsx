@@ -65,7 +65,7 @@ const SECTIONS: { title: string; tone: SectionTone; fields: { key: keyof Unified
       // dateDisplay: se MUESTRAN dd/MM/yyyy (fmtDateDMY, display only) — el valor
       // guardado sigue en ISO y la edición no cambia.
       { key: 'etd', label: 'ETD', dateDisplay: true },
-      { key: 'eta', label: 'ETA', dateDisplay: true },
+      // 'eta' vive en la fila rápida de arriba (Brian 22/08).
       { key: 'salida', label: 'Salida', dateDisplay: true },
       { key: 'etaFisc', label: 'ETA fiscal', dateDisplay: true },
       // LIBRE se movió a "Datos clave de la carga" (ViabilityBlock): es dato de
@@ -88,8 +88,7 @@ const SECTIONS: { title: string; tone: SectionTone; fields: { key: keyof Unified
     title: 'Documental',
     tone: 'violet',
     fields: [
-      { key: 'docNumber', label: 'BL / MAWB / CRT' },
-      { key: 'buque', label: 'Buque' },
+      // MBL/HBL y Buque viven en la fila rápida de arriba (Brian 22/08).
       { key: 'linea', label: 'Línea' },
     ],
   },
@@ -442,7 +441,7 @@ export default function OperationDetailPanel({
               </button>
             )}
           </SheetTitle>
-          <SheetDescription className="text-left">{op.cliente || '—'}</SheetDescription>
+          <SheetDescription className="text-left text-primary font-semibold">{op.cliente || '—'}</SheetDescription>
           <div className="flex items-center gap-1.5 flex-wrap pb-1">
             <Badge variant="outline" className="h-5 text-[9px]">{op.tipo || MODALITY_LABELS[op.mode]}</Badge>
             {op.pais && <Badge variant="outline" className="h-5 text-[9px]">{PAIS_LABEL[op.pais] || op.pais}</Badge>}
@@ -491,6 +490,22 @@ export default function OperationDetailPanel({
           </div>
 
           {/* Bloque de viabilidad */}
+          {/* Fila rápida (Brian 22/08): lo que se necesita ver al ABRIR la
+              ficha, antes de scrollear — MBL/HBL/Buque/Terminal/ETA. Los
+              campos se movieron desde Documental/Fechas/Datos clave: un solo
+              editor por dato. El commit de terminal conserva la
+              materialización del costo default (MONTECON 618 / TCP 507,16). */}
+          <div className="rounded-lg border border-primary/25 bg-primary/[0.04] p-3">
+            <h4 className="text-[10px] uppercase tracking-wide font-semibold mb-2 text-primary">Datos rápidos</h4>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+              <FieldRow label="MBL" op={op} fieldKey="docNumber" onCommit={commit} />
+              <FieldRow label="HBL" op={op} fieldKey="hbl" onCommit={commit} />
+              <FieldRow label="Buque" op={op} fieldKey="buque" onCommit={commit} />
+              <FieldRow label="Terminal" op={op} fieldKey="terminal" onCommit={commit} />
+              <FieldRow label="ETA Montevideo" op={op} fieldKey="eta" kind="date" dateDisplay onCommit={commit} />
+            </div>
+          </div>
+
           <ViabilityBlock
             op={op}
             editable={op.source === 'db' && !!op.dbId && !op.readOnly}
