@@ -393,7 +393,7 @@ export default function TodayDashboard({
     try {
       await marcarMontecon(c.ref, 'retirado', true)
       upsertAgendaLocal(c.ref, { retirado_at: new Date().toISOString() })
-      toast.success(`${c.ref} — contenedor retirado de Montecon`, {
+      toast.success(`${c.ref} — contenedor retirado de ${c.terminal}`, {
         description: 'Queda abajo en la card hasta que avises al cliente que ya está en depósito.',
       })
     } catch (err) {
@@ -588,8 +588,9 @@ export default function TodayDashboard({
         </Card>
       )}
 
-      {/* ── Cargas que llegan a MONTECON (Brian 22/08: primera de las tres,
-          los turnos de retiro son escasos y el reagendado no puede esperar) */}
+      {/* ── Retiros de terminal (Brian 22/08 Montecon + 26/08 TCP): primera de
+          las cards — turnos escasos en Montecon, y en ambas terminales el
+          retiro termina con el aviso al cliente del traslado a depósito */}
       {montecon.length > 0 && (
         <Card className="accent-top overflow-hidden bg-sky-500/[0.04] border-sky-500/25" style={{ ['--bar-color' as any]: 'rgb(14 165 233)' }}>
           <CardContent className="pt-5 pb-4">
@@ -598,7 +599,7 @@ export default function TodayDashboard({
                 <Anchor size={18} weight="fill" className="text-sky-600" />
               </div>
               <h2 className="text-sm font-semibold uppercase tracking-wide text-sky-700">
-                Cargas que llegan a MONTECON
+                Retiros de terminal — Montecon y TCP
               </h2>
               {monteconReagendar > 0 && (
                 <span className="inline-flex items-center gap-1 text-xs font-bold text-red-700 bg-red-500/10 border border-red-500/30 rounded-full px-2 py-0.5">
@@ -615,7 +616,7 @@ export default function TodayDashboard({
               </span>
             </div>
             <p className="text-xs text-muted-foreground mb-2.5">
-              Turnos de retiro: agendá contra la ETA — si el buque se corre, la fila se pone en rojo sola. Cuando el contenedor sale, marcá RETIRADO: queda abajo hasta que avises al cliente que ya está en depósito.
+              MONTECON: agendá el turno contra la ETA — si el buque se corre, la fila se pone en rojo sola. TCP: sin turnos, las filas aparecen al llegar el buque. En ambas, cuando el contenedor sale marcá RETIRADO: queda abajo hasta que avises al cliente que ya está en depósito.
             </p>
             <div className="space-y-1">
               {montecon.map(c => (
@@ -633,6 +634,13 @@ export default function TodayDashboard({
                     <button type="button" onClick={() => onOpenDetail?.(c.ref)} className="font-bold text-sm hover:underline">
                       {c.ref}
                     </button>
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${
+                      c.terminal === 'MONTECON'
+                        ? 'bg-sky-500/10 text-sky-700 dark:text-sky-300'
+                        : 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-300'
+                    }`}>
+                      {c.terminal}
+                    </span>
                     <span className="text-xs text-muted-foreground truncate max-w-[160px]" title={c.cliente}>{c.cliente || '—'}</span>
                     {c.cntr && <span className="font-mono text-[11px] text-muted-foreground">{c.cntr}</span>}
                     {c.eta && (

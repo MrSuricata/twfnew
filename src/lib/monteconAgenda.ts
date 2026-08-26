@@ -15,11 +15,16 @@
  * Cierre del ciclo (Brian 26/08): RETIRADO → la fila baja al final de la card
  * como recordatorio de avisar al cliente que el contenedor ya está en depósito
  * → AVISADO → recién ahí sale de la pantalla.
+ *
+ * TCP (Brian 26/08, segunda vuelta): en TCP también hay que retirar el
+ * contenedor cuando llega el buque y avisar al cliente — pero SIN turnos, así
+ * que nada de agenda/reagenda. Sus filas recién aparecen cuando el buque llegó,
+ * en estado 'retirar', y siguen el mismo ciclo RETIRADO → AVISADO.
  */
 
 import { parseLocalDate } from './shipmentTypes'
 
-export type EstadoAgenda = 'sin_agendar' | 'agendada' | 'reagendar' | 'retirado'
+export type EstadoAgenda = 'sin_agendar' | 'agendada' | 'reagendar' | 'retirar' | 'retirado'
 
 export interface AgendaRow {
   ref: string
@@ -37,6 +42,8 @@ export interface CargaMontecon {
   ref: string
   cliente: string
   cntr: string
+  /** MONTECON = ciclo con agenda de turnos · TCP = retiro directo sin agenda. */
+  terminal: 'MONTECON' | 'TCP'
   eta: string
   /** 0 = llega hoy · >0 = por llegar · <0 = ya llegó (retiro pendiente). */
   dias: number
@@ -86,10 +93,11 @@ export interface CargaMonteconInput {
 }
 
 /**
- * Las cargas FCL que llegan (o acaban de llegar) a MONTECON, con su estado de
- * agenda. Orden: primero las que hay que RE-agendar (el fuego), después por
- * llegada, y al FONDO las retiradas pendientes de avisar al cliente. Una fila
- * de agenda de una carga fuera de ventana queda inocua.
+ * Las cargas FCL a retirar de terminal: MONTECON (con su estado de agenda de
+ * turnos) y TCP (sin turnos — entran recién al llegar el buque, en 'retirar').
+ * Orden: reagendar (el fuego) → TCP llegadas por retirar → sin agendar →
+ * agendadas → al FONDO las retiradas pendientes de avisar al cliente. Una
+ * fila de agenda de una carga fuera de ventana queda inocua.
  */
 export function cargasMontecon(
   cargas: CargaMonteconInput[],
@@ -102,7 +110,10 @@ export function cargasMontecon(
   const out: CargaMontecon[] = []
   for (const c of cargas || []) {
     if (c.archived || txt(c.mode).toLowerCase() !== 'fcl') continue
-    if (!txt(c.terminal).toUpperCase().includes('MONTECON')) continue
+    const term = txt(c.terminal).toUpperCase()
+    const terminal: CargaMontecon['terminal'] | null =
+      term.includes('MONTECON') ? 'MONTECON' : term.includes('TCP') ? 'TCP' : null
+    if (!terminal) continue
     const a = porRef.get(txt(c.ref).toUpperCase())
     if (a?.avisado_at) continue // ciclo cerrado: retirado y cliente avisado
     const eta = txt(c.eta)
@@ -120,6 +131,7 @@ export function cargasMontecon(
         ref: txt(c.ref),
         cliente: txt(c.cliente),
         cntr: txt(c.contenedor),
+        terminal,
         eta,
         dias: diffDias(hoy, eta) ?? 0,
         estado: 'retirado',
@@ -131,22 +143,33 @@ export function cargasMontecon(
 
     const dias = diffDias(hoy, eta)
     if (dias === null) continue
-    if (dias < -MONTECON_DIAS_ATRAS || dias > MONTECON_DIAS_ADELANTE) continue
+    let estado: EstadoAgenda
+    if (terminal === 'MONTECON') {
+      if (dias < -MONTECON_DIAS_ATRAS || dias > MONTECON_DIAS_ADELANTE) continue
+      estado = estadoAgenda(eta, a)
+    } else {
+      // TCP no maneja turnos (Brian 26/08): la fila recién aparece cuando el
+      // buque llegó y hay contenedor para retirar. El ciclo es directo:
+      // RETIRADO → avisar al cliente el traslado a depósito → AVISADO.
+      if (dias > 0 || dias < -MONTECON_DIAS_ATRAS) continue
+      estado = 'retirar'
+    }
     out.push({
       dbId: txt(c.dbId),
       ref: txt(c.ref),
       cliente: txt(c.cliente),
       cntr: txt(c.contenedor),
+      terminal,
       eta,
       dias,
-      estado: estadoAgenda(eta, a),
+      estado,
       etaAgendada: txt(a?.eta_agendada),
       retiradoEl: '',
     })
   }
 
   const rango = (e: EstadoAgenda) =>
-    e === 'reagendar' ? 0 : e === 'sin_agendar' ? 1 : e === 'agendada' ? 2 : 3
+    e === 'reagendar' ? 0 : e === 'retirar' ? 1 : e === 'sin_agendar' ? 2 : e === 'agendada' ? 3 : 4
   return out.sort((a, b) => {
     if (rango(a.estado) !== rango(b.estado)) return rango(a.estado) - rango(b.estado)
     if (a.dias !== b.dias) return a.dias - b.dias
