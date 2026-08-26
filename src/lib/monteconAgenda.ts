@@ -11,17 +11,25 @@
  * estado deriva a "reagendar" solo — el aviso aparece en cuanto alguien
  * actualiza la ETA en cualquier parte de la app (Seguimientos, ficha, donde
  * sea), sin que nadie tenga que acordarse de avisar.
+ *
+ * Cierre del ciclo (Brian 26/08): RETIRADO → la fila baja al final de la card
+ * como recordatorio de avisar al cliente que el contenedor ya está en depósito
+ * → AVISADO → recién ahí sale de la pantalla.
  */
 
 import { parseLocalDate } from './shipmentTypes'
 
-export type EstadoAgenda = 'sin_agendar' | 'agendada' | 'reagendar'
+export type EstadoAgenda = 'sin_agendar' | 'agendada' | 'reagendar' | 'retirado'
 
 export interface AgendaRow {
   ref: string
   eta_agendada: string
   usuario?: string | null
   updated_at?: string | null
+  retirado_at?: string | null
+  retirado_por?: string | null
+  avisado_at?: string | null
+  avisado_por?: string | null
 }
 
 export interface CargaMontecon {
@@ -35,12 +43,18 @@ export interface CargaMontecon {
   estado: EstadoAgenda
   /** ETA contra la que se agendó (solo con agenda). */
   etaAgendada: string
+  /** Día del retiro (YYYY-MM-DD, solo estado 'retirado'). */
+  retiradoEl: string
 }
 
 /** Ventana: ya llegadas hace poco (el retiro es DESPUÉS del arribo) + las que
  *  vienen en las próximas dos semanas — el plazo real para pelear un turno. */
 export const MONTECON_DIAS_ATRAS = 5
 export const MONTECON_DIAS_ADELANTE = 14
+
+/** Retirado sin AVISADO: recordatorio visible "un par de días" (Brian 26/08).
+ *  Tope de higiene por si nunca lo marcan — lo normal es que salga al avisar. */
+export const RETIRADO_DIAS_RECORDATORIO = 5
 
 const txt = (v: unknown): string => String(v ?? '').trim()
 const MS_DIA = 86_400_000
@@ -74,7 +88,8 @@ export interface CargaMonteconInput {
 /**
  * Las cargas FCL que llegan (o acaban de llegar) a MONTECON, con su estado de
  * agenda. Orden: primero las que hay que RE-agendar (el fuego), después por
- * llegada. Una fila de agenda de una carga fuera de ventana queda inocua.
+ * llegada, y al FONDO las retiradas pendientes de avisar al cliente. Una fila
+ * de agenda de una carga fuera de ventana queda inocua.
  */
 export function cargasMontecon(
   cargas: CargaMonteconInput[],
@@ -88,11 +103,35 @@ export function cargasMontecon(
   for (const c of cargas || []) {
     if (c.archived || txt(c.mode).toLowerCase() !== 'fcl') continue
     if (!txt(c.terminal).toUpperCase().includes('MONTECON')) continue
+    const a = porRef.get(txt(c.ref).toUpperCase())
+    if (a?.avisado_at) continue // ciclo cerrado: retirado y cliente avisado
     const eta = txt(c.eta)
+
+    if (a?.retirado_at) {
+      // Retirado: la ETA ya no manda (el contenedor está en depósito). Queda
+      // abajo como recordatorio de avisar al cliente hasta que marquen AVISADO.
+      // El timestamp es UTC: un retiro de anoche puede "ser mañana" en UTC, por
+      // eso solo se filtra por viejo, nunca por futuro.
+      const retiradoEl = txt(a.retirado_at).slice(0, 10)
+      const diasRetiro = diffDias(retiradoEl, hoy)
+      if (diasRetiro === null || diasRetiro > RETIRADO_DIAS_RECORDATORIO) continue
+      out.push({
+        dbId: txt(c.dbId),
+        ref: txt(c.ref),
+        cliente: txt(c.cliente),
+        cntr: txt(c.contenedor),
+        eta,
+        dias: diffDias(hoy, eta) ?? 0,
+        estado: 'retirado',
+        etaAgendada: txt(a.eta_agendada),
+        retiradoEl,
+      })
+      continue
+    }
+
     const dias = diffDias(hoy, eta)
     if (dias === null) continue
     if (dias < -MONTECON_DIAS_ATRAS || dias > MONTECON_DIAS_ADELANTE) continue
-    const a = porRef.get(txt(c.ref).toUpperCase())
     out.push({
       dbId: txt(c.dbId),
       ref: txt(c.ref),
@@ -102,10 +141,12 @@ export function cargasMontecon(
       dias,
       estado: estadoAgenda(eta, a),
       etaAgendada: txt(a?.eta_agendada),
+      retiradoEl: '',
     })
   }
 
-  const rango = (e: EstadoAgenda) => (e === 'reagendar' ? 0 : e === 'sin_agendar' ? 1 : 2)
+  const rango = (e: EstadoAgenda) =>
+    e === 'reagendar' ? 0 : e === 'sin_agendar' ? 1 : e === 'agendada' ? 2 : 3
   return out.sort((a, b) => {
     if (rango(a.estado) !== rango(b.estado)) return rango(a.estado) - rango(b.estado)
     if (a.dias !== b.dias) return a.dias - b.dias
