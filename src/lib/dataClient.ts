@@ -1039,12 +1039,13 @@ export async function marcarMontecon(
   }
 }
 
-/** Agendar (o RE-agendar) el retiro: guarda la ETA actual como snapshot. */
-export async function agendarMontecon(ref: string, eta: string): Promise<void> {
+/** Agendar (o RE-agendar) el retiro: guarda la ETA actual como snapshot y,
+ *  si se pasa, la fecha del TURNO conseguido. */
+export async function agendarMontecon(ref: string, eta: string, fechaRetiro?: string): Promise<void> {
   const res = await authFetch('/api/data/montecon-agenda', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ref, eta }),
+    body: JSON.stringify(fechaRetiro ? { ref, eta, fecha_retiro: fechaRetiro } : { ref, eta }),
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))

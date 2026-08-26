@@ -2597,6 +2597,8 @@ async function handleMonteconAgenda(req: VercelRequest, res: VercelResponse, db:
     const v = validate(z.object({
       ref: z.string().min(1).max(40),
       eta: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      /** Fecha del TURNO conseguido — solo acompaña a `eta` (verbo agendar). */
+      fecha_retiro: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
       marcar: z.enum(['retirado', 'avisado']).optional(),
       desmarcar: z.enum(['retirado', 'avisado']).optional(),
     }).refine(d => [d.eta, d.marcar, d.desmarcar].filter(x => x !== undefined).length === 1,
@@ -2634,12 +2636,15 @@ async function handleMonteconAgenda(req: VercelRequest, res: VercelResponse, db:
     const row = {
       ref,
       eta_agendada: v.data.eta,
+      // Sin turno nuevo se limpia: un turno viejo de otra agendada confunde más
+      // que la ausencia del dato.
+      fecha_retiro: v.data.fecha_retiro ?? null,
       usuario,
       updated_at: nowIso,
     }
     const { error } = await db.from('montecon_agenda').upsert(row, { onConflict: 'ref' })
     if (error) throw error
-    logAudit(db, payload, 'agendar montecon', 'montecon_agenda', ref, { eta: v.data.eta })
+    logAudit(db, payload, 'agendar montecon', 'montecon_agenda', ref, { eta: v.data.eta, fecha_retiro: v.data.fecha_retiro ?? null })
     return res.status(200).json({ saved: true })
   }
 
