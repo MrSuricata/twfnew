@@ -262,7 +262,7 @@ export default function ViabilityBlock({
             Faltaba en la ficha (reclamo Brian 17/07, caso A7971): existía en el
             modelo y la grilla pero no había dónde cargarla. Define también el
             vencimiento del pago de terminal (MONTECON = ETA − 5). */}
-        <StatBox label="Terminal (llegada)" value={op.terminal} kind="combo" options={terminalOptions} upper catalogo editable={editable} onCommit={v => onCommit('terminal', v)} />
+        {/* Terminal (llegada) se mudó a la fila rápida de la ficha (Brian 22/08). */}
       </div>
 
       {/* Checks documentarios — abajo de LIBRE/"Devuelve en" (pedido 16/07). */}

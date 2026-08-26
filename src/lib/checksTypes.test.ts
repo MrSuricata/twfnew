@@ -26,7 +26,7 @@ const mkOp = (over: Partial<UnifiedOperation> = {}): UnifiedOperation => ({
   readOnly: false, operatorId: null, cliente: 'PERETTI', shipper: '', agente: '',
   incoterm: '', tlx: '', deposito: 'GODILCO', origin: '', paisOrigen: '', etd: '', eta: '2026-07-10',
   salida: '', etaFisc: '', libre: '2026-07-20', operativa: 'TRASIEGO', cntr: '',
-  docNumber: '', buque: '', linea: '', camion: '', pkgs: 0, kg: 0, m3: 0,
+  docNumber: '', hbl: '', buque: '', linea: '', camion: '', pkgs: 0, kg: 0, m3: 0,
   descripcion: '', fiscal: '', dischargePort: 'MONTEVIDEO', pais: 'UY', destPort: '',
   descarga: '', desconsol: '', entregaPlanta: false, dev: '', despacho: '',
   tipo: '40HC', terminal: '', n: 1, wood: false, noApilable: false, oog: false,
