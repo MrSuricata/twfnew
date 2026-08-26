@@ -260,7 +260,13 @@ export default function MiRendimientoPanel({ dbShipments, reports = [], originPh
       ) : (
         <>
           <div className="grid grid-cols-2 md:grid-cols-5 gap-2.5">
-            <Metrica icon={<Warehouse size={16} weight="fill" />} label="Fui al depósito" n={resumen.visitas} total={resumen.total} pct={pct(resumen.visitas)} />
+            {/* La visita se mide por DÍA (Brian 26/08): un día con cinco
+                trasiegos es UNA ida al depósito — fui los días que hubo
+                operativa, no importa cuántas operativas hubo cada día. */}
+            <Metrica icon={<Warehouse size={16} weight="fill" />} label="Fui al depósito"
+              n={resumen.diasVisitados} total={resumen.diasConOperativa}
+              pct={resumen.diasConOperativa > 0 ? Math.round((resumen.diasVisitados / resumen.diasConOperativa) * 100) : 0}
+              nota="días con operativa" />
             <Metrica icon={<Camera size={16} weight="fill" />} label="Fotos de la carga" n={resumen.fotos} total={resumen.total} pct={pct(resumen.fotos)}
               nota="propias o del depósito" />
             <Metrica icon={<ArrowsLeftRight size={16} weight="fill" />} label="Avisé traslado" n={resumen.traslados} total={resumen.total} pct={pct(resumen.traslados)} />
@@ -371,7 +377,7 @@ function MesesPanel({ meses }: { meses: MesRendimiento[] }) {
               <tr className="text-[10px] uppercase tracking-wide text-muted-foreground border-b border-border">
                 <th className="text-left font-semibold pb-2 pr-2">Mes</th>
                 <th className="text-right font-semibold pb-2 px-2">Operativas</th>
-                <th className="text-right font-semibold pb-2 px-2">Fui</th>
+                <th className="text-right font-semibold pb-2 px-2" title="Días que fuiste sobre días que hubo operativa">Fui (días)</th>
                 <th className="text-right font-semibold pb-2 px-2">Traslado</th>
                 <th className="text-right font-semibold pb-2 px-2">Salida</th>
                 <th className="text-right font-semibold pb-2 px-2" title="Informes sobre las operativas a las que fuiste">Informe</th>
@@ -383,7 +389,8 @@ function MesesPanel({ meses }: { meses: MesRendimiento[] }) {
                 <tr key={m.mes} className="border-b border-border/50 last:border-0">
                   <td className="py-2 pr-2 font-medium whitespace-nowrap">{nombre(m.mes)}</td>
                   <td className="py-2 px-2 text-right tabular-nums text-muted-foreground">{m.total}</td>
-                  <CeldaMes n={m.visitas} total={m.total} />
+                  {/* FUI por día, misma definición que la tarjeta de la semana. */}
+                  <CeldaMes n={m.diasVisitados} total={m.diasConOperativa} />
                   <CeldaMes n={m.traslados} total={m.total} />
                   <CeldaMes n={m.salidas} total={m.total} />
                   {/* Denominador = visitas, igual que la tarjeta de arriba. */}

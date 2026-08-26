@@ -37,6 +37,15 @@
  *    cuenta, porque "no atribuible" no es lo mismo que "de otro". De acá en
  *    más cada marca lleva la identidad real, así que el número se limpia solo.
  *
+ * 6. LA VISITA SE MIDE POR DÍA, no por operativa (corrección de Brian, 26/08):
+ *    "si hubo 3 días de la semana con operativas y fui los 3, fui 3 de 3 —
+ *    no importa si vi 10 de 20 operativas". Un día con cinco trasiegos es UNA
+ *    ida al depósito: medir por operativa castigaba los días cargados. El
+ *    tilde FUI sigue siendo por contenedor (sirve para el informe, que sale
+ *    de haber ido a ESA operativa), pero la fracción de arriba es días
+ *    visitados / días con operativa. CONTENEDOR (retiro directo) ya queda
+ *    afuera del parte entero: ahí no hay depósito al que ir.
+ *
  * Pura y testeable: no toca red ni React.
  */
 
@@ -116,6 +125,13 @@ export interface ResumenRendimiento {
   total: number
   /** Cuántas llegaron pero todavía no tienen salida coordinada. */
   pendientesDeCoordinar: number
+  /** Días distintos del período con al menos una operativa de depósito —
+   *  el denominador de la visita (decisión 6). */
+  diasConOperativa: number
+  /** Días en los que fue (FUI marcado en al menos una operativa del día). */
+  diasVisitados: number
+  /** Operativas con FUI marcado (por contenedor) — alimenta el informe, la
+   *  fracción de visitas de la pantalla es diasVisitados/diasConOperativa. */
   visitas: number
   fotos: number
   traslados: number
@@ -321,10 +337,29 @@ export function buildRendimiento(args: {
   // defender.
   const reales = filas.filter(esTrasiegoDeLaSemana)
   const cuenta = (f: (x: FilaRendimiento) => boolean): number => reales.filter(f).length
+
+  // La visita por DÍA (decisión 6): un día con cinco trasiegos es UNA ida al
+  // depósito. La clave se normaliza por calendario ('2026-8-20' y '2026-08-20'
+  // son el mismo día — comparadas como texto no lo eran).
+  const claveDia = (iso: string): string => {
+    const d = parseLocalDate(iso)
+    return d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` : ''
+  }
+  const diasOperativa = new Set<string>()
+  const diasFui = new Set<string>()
+  for (const f of reales) {
+    const dia = claveDia(f.fecha)
+    if (!dia) continue
+    diasOperativa.add(dia)
+    if (f.visita) diasFui.add(dia)
+  }
+
   return {
     filas,
     total: reales.length,
     pendientesDeCoordinar: filas.length - reales.length,
+    diasConOperativa: diasOperativa.size,
+    diasVisitados: diasFui.size,
     visitas: cuenta(f => f.visita),
     fotos: cuenta(f => f.fotos),
     traslados: cuenta(f => f.avisoTraslado),
@@ -341,6 +376,9 @@ export interface MesRendimiento {
   /** 'YYYY-MM' */
   mes: string
   total: number
+  /** FUI por día, misma definición que la semana (decisión 6). */
+  diasConOperativa: number
+  diasVisitados: number
   visitas: number
   fotos: number
   traslados: number
@@ -380,6 +418,8 @@ export function resumenMensual(
     return {
       mes,
       total: r.total,
+      diasConOperativa: r.diasConOperativa,
+      diasVisitados: r.diasVisitados,
       visitas: r.visitas,
       fotos: r.fotos,
       traslados: r.traslados,
@@ -418,7 +458,8 @@ export function textoParte(r: ResumenRendimiento, desde: string, hasta: string):
   const deps = depositosVisitados(r)
   const lineas = [
     `Parte de operativas ${dmy(desde)} al ${dmy(hasta)} — ${r.total} trasiegos por depósito`,
-    `• Fui al depósito: ${frac(r.visitas)}`,
+    // La visita se mide por DÍA (decisión 6): fui los días que hubo operativa.
+    `• Fui al depósito: ${r.diasVisitados}/${r.diasConOperativa} días con operativa`,
     `• Traslado avisado al cliente: ${frac(r.traslados)}`,
     `• Salida avisada: ${frac(r.salidas)}`,
     // El informe sale de haber ido: el denominador honesto son las visitas.
