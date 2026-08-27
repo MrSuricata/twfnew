@@ -113,7 +113,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       case 'shipments-cache':
         return handleShipmentsCache(req, res, db)
       case 'partner-users':
-        return handlePartnerUsers(req, res, db)
+        return handlePartnerUsers(req, res, db, payload)
       case 'trucks':
         return handleTrucks(req, res, db, payload)
       case 'truck-loads':
@@ -487,10 +487,16 @@ async function handleClients(req: VercelRequest, res: VercelResponse, db: any) {
 // Accesos con contraseña por cliente del catálogo (reemplaza el OTP).
 // GET ?clientId= (o todos) · POST {clientId, email, name?, password} ·
 // PATCH ?id= {active|password|name} · DELETE ?id=.
-// Gate: cualquier admin (mismo criterio que 'clients'). El login vive en
-// api/auth/admin-login.ts (type:'client').
+// Gate de LECTURA: cualquier admin. Gate de MUTACIÓN: SOLO OWNER — crear o
+// resetear un acceso de cliente equivale a entrar al portal de ese cliente,
+// y eso anularía el gate owner-only de impersonate (hallazgo auditoría
+// 26/08: un admin acotado podía auto-emitirse acceso a cualquier cartera).
+// El login vive en api/auth/admin-login.ts (type:'client').
 
 async function handleClientUsers(req: VercelRequest, res: VercelResponse, db: any, payload: TokenPayload | null) {
+  if (req.method !== 'GET' && !isOwner(payload)) {
+    return res.status(403).json({ error: 'Solo el owner puede crear o modificar accesos de clientes' })
+  }
   if (req.method === 'GET') {
     let q = db.from('client_users')
       .select('id, client_id, email, name, active, created_at, last_login') // nunca password_hash
@@ -1024,36 +1030,42 @@ async function handleShipmentsCache(req: VercelRequest, res: VercelResponse, db:
 async function handlePartnerShipments(req: VercelRequest, res: VercelResponse, db: any, payload: any) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
 
-  // Tras el flip (FCL_SOURCE_OF_TRUTH='db') la web es master de las FCL: viven en
-  // la tabla `shipments` (source='fcl') y el shipments_cache quedó CONGELADO en el
-  // cutover (sync.ts y tracking.ts ya no lo reescriben). Leer el cache acá le
-  // mostraría a depósito/transporte el depósito/salida/transporte VIEJO (o cargas
-  // reasignadas al partner equivocado). Se lee la fuente viva y se mapea al mismo
-  // shape ParsedShipment que ya consume el filtro (operativas[] con claves MAYÚSCULA).
-  let allShipments: any[]
-  let syncedAt: string | null
-  if (process.env.FCL_SOURCE_OF_TRUTH === 'db') {
-    const { data: rows, error } = await db.from('shipments')
-      .select('ref,cliente,etd,eta,contenedor,n_cntr,doc_number,linea,buque,terminal,tipo,libre,operativas,archived')
-      .eq('source', 'fcl')
-      .limit(5000)
-    if (error) throw error
-    allShipments = (rows || [])
-      .filter((r: any) => !r.archived)
-      .map((r: any) => ({
-        REF: r.ref || '', CLIENTE: r.cliente || '', ETD: r.etd || '', ETA: r.eta || '',
-        CNTR: r.contenedor || '', N: r.n_cntr || '', MBL: r.doc_number || '',
-        LINEA: r.linea || '', BUQUE: r.buque || '', TERMINAL: r.terminal || '', TIPO: r.tipo || '',
-        LIBRE_HASTA: r.libre || '',
-        operativas: Array.isArray(r.operativas) ? r.operativas : [],
-      }))
-    syncedAt = new Date().toISOString()
-  } else {
-    const { data, error } = await db.from('shipments_cache').select('*').eq('id', 1).single()
-    if (error && error.code !== 'PGRST116') throw error
-    allShipments = data?.data || []
-    syncedAt = data?.synced_at || null
-  }
+  // La web es master desde el flip (16/06): SIEMPRE se lee la tabla `shipments`.
+  // Auditoría 26/08 — dos agujeros cerrados:
+  //  1. `.eq('source','fcl')` solo traía las horneadas del cutover: las cargas
+  //     nuevas (source='web'/'import') eran INVISIBLES para depósito/transporte.
+  //     Ahora entra todo lo no-espejo.
+  //  2. El filtro dependía de operativas[]: una carga con las columnas planas
+  //     cargadas pero sin el array quedaba afuera — se sintetiza 1 operativa
+  //     desde las columnas (mismo criterio que dbFclToParsedShipment).
+  // El fallback al shipments_cache (congelado en el cutover) se ELIMINÓ: servir
+  // datos podridos en silencio es peor que fallar.
+  const { data: rows, error } = await db.from('shipments')
+    .select('ref,cliente,etd,eta,contenedor,n_cntr,doc_number,linea,buque,terminal,tipo,libre,operativas,archived,deposito,transporte,salida,eta_fiscal,operativa,fiscal,descarga,dev,pkgs,kg,m3,observacion')
+    .neq('source', 'sheet')
+    .eq('archived', false)
+    .limit(5000)
+  if (error) throw error
+  const allShipments = (rows || []).map((r: any) => {
+    const ops = Array.isArray(r.operativas) && r.operativas.length
+      ? r.operativas
+      : ((r.deposito || r.transporte || r.salida || r.eta_fiscal || r.operativa)
+          ? [{
+              DEPOSITO: r.deposito || '', TRANSPORTE: r.transporte || '', SALIDA: r.salida || '',
+              ETA_FISC: r.eta_fiscal || '', OPERATIVA: r.operativa || '', CNTR_OP: r.contenedor || '',
+              PKGS: r.pkgs || 0, KG: r.kg || 0, M3: r.m3 || 0, DESCRIPCION: r.observacion || '',
+              FISCAL: r.fiscal || '', DESCARGA: r.descarga || '', DEV: r.dev || '', LIBRE: r.libre || '',
+            }]
+          : [])
+    return {
+      REF: r.ref || '', CLIENTE: r.cliente || '', ETD: r.etd || '', ETA: r.eta || '',
+      CNTR: r.contenedor || '', N: r.n_cntr || '', MBL: r.doc_number || '',
+      LINEA: r.linea || '', BUQUE: r.buque || '', TERMINAL: r.terminal || '', TIPO: r.tipo || '',
+      LIBRE_HASTA: r.libre || '',
+      operativas: ops,
+    }
+  })
+  const syncedAt = new Date().toISOString()
   // Support both legacy (depotName/transportName) and new (filterValue) JWT payloads.
   const rawFilter: string = payload.filterValue || payload.depotName || payload.transportName || ''
   const filterValueUpper = rawFilter.trim().toUpperCase()
@@ -1088,7 +1100,13 @@ async function handlePartnerShipments(req: VercelRequest, res: VercelResponse, d
 
 // ── Partner Users (admin CRUD) ──────────────────────────────────────
 
-async function handlePartnerUsers(req: VercelRequest, res: VercelResponse, db: any) {
+async function handlePartnerUsers(req: VercelRequest, res: VercelResponse, db: any, payload: TokenPayload | null = null) {
+  // Mutaciones SOLO OWNER (auditoría 26/08): un acceso de partner con
+  // filter_value arbitrario es una ventana a las cargas de ese depósito o
+  // transporte — un admin acotado no puede fabricarse esa ventana.
+  if (req.method !== 'GET' && !isOwner(payload)) {
+    return res.status(403).json({ error: 'Solo el owner puede crear o modificar accesos de partners' })
+  }
   if (req.method === 'GET') {
     const { data, error } = await db.from('partner_users').select('*').order('created_at', { ascending: false }).limit(500)
     if (error) throw error
@@ -1968,6 +1986,18 @@ async function handleShipments(req: VercelRequest, res: VercelResponse, db: any,
     const id = req.query.id as string
     if (!id) return res.status(400).json({ error: 'id required' })
 
+    // Scoping por cliente ANTES de cualquier ruta del PATCH: renameRef y
+    // ?fcl=1 retornaban antes del check y un admin acotado podía renombrar
+    // o editar cargas fuera de su cartera (hallazgo auditoría 26/08). Fuera
+    // del patrón → 404, indistinguible de inexistente.
+    const allowedPatch = await allowedRefsForPayload(db, payload)
+    if (allowedPatch) {
+      const { data: target } = await db.from('shipments').select('ref').eq('id', id).maybeSingle()
+      if (!target || !allowedPatch.has(refOf(target.ref))) {
+        return res.status(404).json({ error: 'Carga no encontrada' })
+      }
+    }
+
     // Renombrar la REF (flip Etapa 4): flujo aparte con PIN 0000 + cascada atómica
     // (RPC rename_shipment_ref: shipments + truck_loads/origin_photos/documents/
     // reports/notification_tasks/shipment_billing/operator_assignments en una sola
@@ -2015,17 +2045,7 @@ async function handleShipments(req: VercelRequest, res: VercelResponse, db: any,
       return res.status(200).json({ updated: true, webEdits: merged })
     }
 
-    // Scoping por cliente: el GET filtra lo que un admin acotado VE, pero el
-    // PATCH aceptaba cualquier id (hallazgo revisión 12/08). Mismo patrón que
-    // ref-checks POST: fuera del patrón → 404, indistinguible de inexistente.
-    const allowedPatch = await allowedRefsForPayload(db, payload)
-    if (allowedPatch) {
-      const { data: target } = await db.from('shipments').select('ref').eq('id', id).maybeSingle()
-      if (!target || !allowedPatch.has(refOf(target.ref))) {
-        return res.status(404).json({ error: 'Carga no encontrada' })
-      }
-    }
-
+    // (El scoping por cliente ya corrió arriba, antes de renameRef/?fcl=1.)
     const updates: Record<string, unknown> = {}
     for (const [k, v] of Object.entries(body)) {
       if (SHIPMENT_COLS.has(k)) updates[k] = v

@@ -2,63 +2,43 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { authenticateRequest, type ClientPayload } from '../_lib/jwt.js'
 import { handleCors } from '../_lib/cors.js'
 import { getSupabase } from '../_lib/supabase.js'
-import { performServerSync, matchesClientePattern } from '../_lib/csvParser.js'
+import { matchesClientePattern } from '../_lib/csvParser.js'
 
 // ─── Client Reports API ─────────────────────────────────────────────
 // GET  /api/client/reports              → list reports for client's shipments (metadata only)
 // GET  /api/client/reports?id=xxx       → single report WITH file_data (for download)
 // ─────────────────────────────────────────────────────────────────────
 
-/** Get all shipment REFs for a client, trying Supabase cache first, then Google Sheets live */
+/** REFs del cliente desde la TABLA (la web es master desde el flip 16/06 —
+ *  el cache de la planilla dejaba afuera todas las cargas nuevas). */
 async function getClientShipmentRefs(db: any, pattern: string): Promise<Set<string>> {
-  // Try 1: Supabase cache
   try {
-    const { data: cache } = await db.from('shipments_cache').select('data').eq('id', 1).single()
-    if (cache?.data && cache.data.length > 0) {
-      const refs = new Set<string>(
-        cache.data
-          .filter((s: any) => matchesClientePattern(s.CLIENTE, pattern))
-          .map((s: any) => s.REF)
-      )
-      if (refs.size > 0) return refs
-    }
+    const { data } = await db
+      .from('shipments')
+      .select('ref, cliente')
+      .eq('archived', false)
+      .neq('source', 'sheet')
+      .limit(5000)
+    return new Set<string>(
+      (data || [])
+        .filter((s: any) => matchesClientePattern(String(s.cliente || ''), pattern))
+        .map((s: any) => String(s.ref))
+    )
   } catch (err) {
-    console.warn('[client/reports] Supabase cache read failed:', err)
+    console.warn('[client/reports] shipments read failed:', err)
+    return new Set()
   }
-
-  // Try 2: Live Google Sheets (if cache is empty or doesn't have client's data)
-  const sheetsUrl = process.env.GOOGLE_SHEETS_CSV_URL
-  if (sheetsUrl) {
-    try {
-      const allShipments = await performServerSync(sheetsUrl)
-
-      // Also update the cache for next time
-      try {
-        await db
-          .from('shipments_cache')
-          .upsert({ id: 1, data: allShipments, synced_at: new Date().toISOString() }, { onConflict: 'id' })
-      } catch {}
-
-      return new Set<string>(
-        allShipments
-          .filter((s: any) => matchesClientePattern(s.CLIENTE, pattern))
-          .map((s: any) => s.REF)
-      )
-    } catch (sheetsErr) {
-      console.warn('[client/reports] Google Sheets fallback failed:', sheetsErr)
-    }
-  }
-
-  return new Set()
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handleCors(req, res)) return
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
 
-  // Require client OR admin auth
+  // Solo cliente o admin. Los tokens de PARTNER (depot/transport) NO pasan:
+  // son cuentas de empresas externas y este endpoint, sin este gate, les
+  // devolvía los informes de TODOS los clientes (hallazgo auditoría 26/08).
   const payload = authenticateRequest(req.headers.authorization)
-  if (!payload) {
+  if (!payload || (payload.role !== 'client' && payload.role !== 'admin')) {
     return res.status(401).json({ error: 'Authentication required' })
   }
 

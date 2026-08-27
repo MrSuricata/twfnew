@@ -204,7 +204,10 @@ export default function ShipmentDetailsDialog({
           </div>
         </DialogHeader>
 
-        <Tabs defaultValue={clientView ? "tracking" : "general"} className="flex flex-col flex-1 overflow-hidden gap-0">
+        {/* partnerView arranca en Operativa: su TabsList no tiene "tracking"
+            (quedaba sin pestaña activa) y la Operativa es lo que el partner
+            vino a ver (auditoría 26/08). */}
+        <Tabs defaultValue={partnerView ? "operativa" : clientView ? "tracking" : "general"} className="flex flex-col flex-1 overflow-hidden gap-0">
           <TabsList className="tabs-list-underline">
             {partnerView ? (
               <>
@@ -932,7 +935,9 @@ export default function ShipmentDetailsDialog({
                 rows={3}
                 placeholder="MSCU1234567, MSCU2345678, ..."
               />
-              {editedShipment.containers.length > 0 && (
+              {/* partner-shipments no trae `containers` — sin el guard, abrir
+                  la pestaña General desde el portal partner crasheaba. */}
+              {(editedShipment.containers || []).length > 0 && (
                 <div
                   className="mt-2 grid gap-2"
                   style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}
@@ -987,8 +992,10 @@ export default function ShipmentDetailsDialog({
             </div>
           </TabsContent>
 
-          {/* Admin Operativa tab — shows editable logistics + operativas data */}
-          {!clientView && (
+          {/* Admin/partner Operativa tab — logistics + operativas data. El
+              partner llega con clientView=true, así que el gate lo incluye
+              explícitamente (antes su pestaña Operativa quedaba VACÍA). */}
+          {(!clientView || partnerView) && (
             <TabsContent value="operativa" className="space-y-4 mt-4">
               {/* Editable logistics fields */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
