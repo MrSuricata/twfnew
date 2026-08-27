@@ -129,7 +129,12 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
     fetchClientData()
   }, [clientEmail])
 
-  const currentClient = clients?.find(c => c.email === clientEmail)
+  // Solo buscar en el catálogo cuando HAY email: con el email vacío del
+  // impersonate (clientes sin email de contacto), `find(email === '')`
+  // matcheaba al primer cliente sin email del catálogo y el portal saludaba
+  // con el nombre de OTRO cliente (bug Brian 27/08: Balsamo decía CENA HNOS).
+  // Sin match, el nombre visible sale de clientName (viene del token).
+  const currentClient = clientEmail ? clients?.find(c => c.email === clientEmail) : undefined
   const brand = useBrand()
 
   // Use server data if available, fallback to props
