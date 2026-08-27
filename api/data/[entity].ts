@@ -209,7 +209,13 @@ async function handleQuotes(req: VercelRequest, res: VercelResponse, db: any) {
 
 async function handleDocuments(req: VercelRequest, res: VercelResponse, db: any, payload: TokenPayload | null = null) {
   if (req.method === 'GET') {
-    let query = db.from('documents').select('*').order('uploaded_at', { ascending: false }).limit(500)
+    // Select explícito (higiene de egress, incidente 27/08): `data` va a
+    // propósito — hoy la tabla está vacía y la UI descarga desde este campo.
+    // Si algún día los documentos pesan, separar como reports (bulk sin data
+    // + descarga por ?id=).
+    let query = db.from('documents')
+      .select('id, shipment_ref, name, type, uploaded_at, uploaded_by, url, data')
+      .order('uploaded_at', { ascending: false }).limit(500)
     const shipmentRef = req.query.shipmentRef as string
     if (shipmentRef) query = query.eq('shipment_ref', shipmentRef)
     const { data, error } = await query
@@ -292,8 +298,14 @@ async function handleReports(req: VercelRequest, res: VercelResponse, db: any, p
       })
     }
 
-    // Bulk list — fetch all then strip file_data in response (robust even if schema changes)
-    let query = db.from('reports').select('*').order('created_at_ts', { ascending: false }).limit(500)
+    // Bulk list — el SELECT excluye file_data EN LA QUERY, no solo en la
+    // respuesta: con select('*') los 14 PDFs (28,7 MB) viajaban DB→function en
+    // CADA apertura de la app — ~344 MB/hora de egress de Supabase y statement
+    // timeouts con el plan restringido (incidente 27/08). El PDF individual
+    // sigue bajando por ?id=.
+    let query = db.from('reports')
+      .select('id, shipment_ref, container_number, title, content, file_name, file_type, created_at_ts, created_by')
+      .order('created_at_ts', { ascending: false }).limit(500)
     const shipmentRef = req.query.shipmentRef as string
     if (shipmentRef) query = query.eq('shipment_ref', shipmentRef)
     const { data, error } = await query
@@ -872,14 +884,28 @@ async function handleOriginPhotos(req: VercelRequest, res: VercelResponse, db: a
     // metadata + signed URL—, así que 3000 pesa poco. Igual se avisa cuando
     // se corta, para no repetir el truncado mudo.
     const TOPE_LISTADO = 3000
+    // thumbnail_data queda FUERA del select principal (3,3 MB por listado que
+    // viajaban DB→function al pedo: todas las fotos migradas usan la URL
+    // firmada). Solo se trae para las legacy sin migrar, en una 2ª query.
     let query = db.from('origin_photos')
-      .select('id, shipment_ref, container_number, caption, photo_type, file_name, file_type, thumbnail_data, storage_path, thumb_path, created_at_ts, created_by')
+      .select('id, shipment_ref, container_number, caption, photo_type, file_name, file_type, storage_path, thumb_path, created_at_ts, created_by')
       .order('created_at_ts', { ascending: false })
       .limit(TOPE_LISTADO)
     const shipmentRef = req.query.shipmentRef as string
     if (shipmentRef) query = query.eq('shipment_ref', shipmentRef)
     const { data, error } = await query
     if (error) throw error
+    // Fallback legacy: miniaturas base64 SOLO de las no migradas del listado.
+    const sinMigrar = (data || []).filter((p: { storage_path: string | null }) => !p.storage_path).map((p: { id: string }) => p.id)
+    const thumbsLegacy = new Map<string, string>()
+    if (sinMigrar.length > 0) {
+      const { data: legacy } = await db.from('origin_photos')
+        .select('id, thumbnail_data').in('id', sinMigrar)
+      for (const l of legacy || []) thumbsLegacy.set(l.id, l.thumbnail_data || '')
+    }
+    for (const p of (data || []) as { id: string; thumbnail_data?: string | null }[]) {
+      p.thumbnail_data = thumbsLegacy.get(p.id) || null
+    }
     const thumbPaths = (data || []).map((p: { thumb_path: string | null }) => p.thumb_path).filter(Boolean)
     const signed = await signPhotoUrls(db, thumbPaths, THUMB_TTL)
     const photos = (data || []).map((p: { id: string; shipment_ref: string; container_number: string | null; caption: string | null; photo_type: string | null; file_name: string; file_type: string; thumb_path: string | null; storage_path: string | null; thumbnail_data: string | null; created_at_ts: number; created_by: string }) => ({
