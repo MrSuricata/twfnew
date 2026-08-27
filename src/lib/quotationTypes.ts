@@ -52,6 +52,11 @@ export interface ClientAccount {
   direccion?: string
   /** Otras formas en que el cliente aparece escrito en las cargas, separadas por coma. */
   aliases?: string
+  // ── Digest lunes/jueves (spec 2026-08-27) ──
+  /** Recibe el mail automático con el estado de sus cargas vía Montevideo. */
+  digestActive?: boolean
+  /** Destinatarios del digest separados por coma; vacío = usa el email principal. */
+  digestEmails?: string
 }
 
 /** Usuario del portal de clientes (tabla client_users) — email + contraseña. */
