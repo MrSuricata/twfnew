@@ -67,8 +67,11 @@ export interface ColaSeguimientos {
   /** Las que hay que enviar hoy, ordenadas: nunca-enviadas primero, después
    *  las más atrasadas; a igualdad, la ETA más próxima arriba. */
   pendientes: FilaSeguimiento[]
-  /** Cargas en viaje con seguimiento fresco (< 7 días). */
-  alDia: number
+  /** Cargas en viaje con seguimiento fresco (< 7 días), como FILAS con las
+   *  mismas acciones que las pendientes (Brian 27/08, caso A7995: Nico labura
+   *  proactivo y necesita verlas/tocarlas sin ir al modal de Operaciones).
+   *  Ordenadas: más próximas a vencer primero; a igualdad, ETA más próxima. */
+  alDia: FilaSeguimiento[]
 }
 
 const MS_DIA = 86_400_000
@@ -92,7 +95,7 @@ const esMaritima = (mode: string | null | undefined): boolean => {
 export function colaSeguimientos(cargas: CargaSeguimiento[], hoy: Date): ColaSeguimientos {
   const h = medianoche(hoy)
   const pendientes: FilaSeguimiento[] = []
-  let alDia = 0
+  const alDia: FilaSeguimiento[] = []
 
   const lleno = (s: string | null | undefined): boolean => Boolean(String(s || '').trim())
 
@@ -134,7 +137,7 @@ export function colaSeguimientos(cargas: CargaSeguimiento[], hoy: Date): ColaSeg
     }
     const dias = Math.floor((h.getTime() - medianoche(seg).getTime()) / MS_DIA)
     if (dias >= SEGUIMIENTO_DIAS) pendientes.push({ carga: c, dias, ...(etaVencidaDias !== undefined ? { etaVencidaDias } : {}) })
-    else alDia++
+    else alDia.push({ carga: c, dias, ...(etaVencidaDias !== undefined ? { etaVencidaDias } : {}) })
   }
 
   pendientes.sort((a, b) => {
@@ -148,6 +151,17 @@ export function colaSeguimientos(cargas: CargaSeguimiento[], hoy: Date): ColaSeg
     const db = b.dias === null ? Number.POSITIVE_INFINITY : b.dias
     if (da !== db) return db - da
     // empate → la que llega antes, arriba (sin ETA al final del empate)
+    const ta = parseLocalDate(String(a.carga.eta || ''))?.getTime() ?? Number.POSITIVE_INFINITY
+    const tb = parseLocalDate(String(b.carga.eta || ''))?.getTime() ?? Number.POSITIVE_INFINITY
+    if (ta !== tb) return ta - tb
+    return a.carga.ref.localeCompare(b.carga.ref)
+  })
+
+  alDia.sort((a, b) => {
+    // Más próximas a VENCER primero (dias desc); a igualdad, la que llega antes.
+    const da = a.dias ?? 0
+    const db = b.dias ?? 0
+    if (da !== db) return db - da
     const ta = parseLocalDate(String(a.carga.eta || ''))?.getTime() ?? Number.POSITIVE_INFINITY
     const tb = parseLocalDate(String(b.carga.eta || ''))?.getTime() ?? Number.POSITIVE_INFINITY
     if (ta !== tb) return ta - tb

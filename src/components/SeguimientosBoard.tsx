@@ -9,9 +9,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Card, CardContent } from '@/components/ui/card'
-import { CheckCircle, PaperPlaneTilt, CaretDown, CaretRight, Boat, ClockCounterClockwise, Copy, MapPin, Checks, ArrowSquareOut, ArrowsLeftRight } from '@phosphor-icons/react'
+import { CheckCircle, PaperPlaneTilt, CaretDown, CaretRight, Boat, ClockCounterClockwise, Copy, MapPin, Checks, ArrowSquareOut, ArrowsLeftRight, CalendarBlank } from '@phosphor-icons/react'
 import type { DbShipment } from '@/lib/operationsTypes'
-import { dbShipmentToOperation, buildPerContainerPatch } from '@/lib/operationsTypes'
+import { dbShipmentToOperation, buildPerContainerPatch, SEGUIMIENTO_DIAS } from '@/lib/operationsTypes'
 import { groupByVoyage, buildEtaShiftPatch } from '@/lib/vesselGroups'
 import {
   colaSeguimientos, grupoDestino, ORDEN_GRUPOS, textoUpdate, nombreBuqueBase,
@@ -112,6 +112,11 @@ export default function SeguimientosBoard({ dbShipments, onPatchShipment, onOpen
   // a la original, la ref sale del set (el mail no debe decir "se actualiza"
   // por un cambio que se deshizo). Ambos se resetean al cambiar el día.
   const [etaCambiadas, setEtaCambiadas] = useState<Set<string>>(new Set())
+  // Sección "Al día" plegada por defecto (Brian 27/08: verlas y poder tocarlas
+  // sin ir al modal, pero sin ensuciar la cola de trabajo).
+  const [alDiaAbierto, setAlDiaAbierto] = useState(false)
+  // Ref de la fila con el selector "enviado otro día" abierto.
+  const [fechaAbierta, setFechaAbierta] = useState<string | null>(null)
   const etaOriginalesRef = useRef<Record<string, string>>({})
   const diaRef = useRef(hoyKey)
   if (diaRef.current !== hoyKey) {
@@ -287,12 +292,12 @@ export default function SeguimientosBoard({ dbShipments, onPatchShipment, onOpen
     })
   }
 
-  const marcarEnviado = (f: FilaSeguimiento, silencioso = false): (() => void) | null => {
+  const marcarEnviado = (f: FilaSeguimiento, silencioso = false, fecha = hoyIso()): (() => void) | null => {
     const c = f.carga
     if (!c.dbId || !onPatchShipment) return null
+    if (!ISO_RE.test(fecha)) { toast.error(`Fecha inválida: ${fecha}`); return null }
     const dbId = c.dbId
     const anterior = c.seguimiento || ''
-    const fecha = hoyIso()
     onPatchShipment(dbId, { seguimiento: fecha })
     logSeguimiento({ ref: c.ref, tipo: 'enviado', fecha, etaNueva: c.eta || '', buque: c.buque || '' })
     invalidarHistorial(c.ref)
@@ -303,8 +308,11 @@ export default function SeguimientosBoard({ dbShipments, onPatchShipment, onOpen
       invalidarHistorial(c.ref)
     }
     if (!silencioso) {
+      // Con fecha pasada (ej: "lo mandé ayer") el plazo restante se achica.
+      const transcurridos = Math.max(0, Math.floor((new Date(hoyIso()).getTime() - new Date(fecha).getTime()) / 86_400_000))
+      const vuelve = Math.max(0, SEGUIMIENTO_DIAS - transcurridos)
       toast.success(`${c.ref} — seguimiento enviado ${fmtDateDMY(fecha)}`, {
-        description: 'Vuelve a la cola en 7 días.',
+        description: vuelve === 0 ? 'Ya está vencido con esa fecha — queda en la cola.' : `Vuelve a la cola en ${vuelve} día${vuelve === 1 ? '' : 's'}.`,
         action: { label: 'Deshacer', onClick: deshacer },
       })
     }
@@ -406,10 +414,17 @@ export default function SeguimientosBoard({ dbShipments, onPatchShipment, onOpen
     return (
       <div key={c.ref} className="py-1.5">
         <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1.5">
-          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${
-            f.dias === null ? 'bg-destructive/10 text-destructive' : 'bg-amber-500/10 text-amber-600'
-          }`}>
-            {f.dias === null ? 'NUNCA' : `HACE ${f.dias}D`}
+          <span
+            className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${
+              f.dias === null ? 'bg-destructive/10 text-destructive'
+                : f.dias < SEGUIMIENTO_DIAS ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+                : 'bg-amber-500/10 text-amber-600'
+            }`}
+            title={f.dias !== null && f.dias < SEGUIMIENTO_DIAS
+              ? `Al día — vuelve a la cola en ${SEGUIMIENTO_DIAS - f.dias} día${SEGUIMIENTO_DIAS - f.dias === 1 ? '' : 's'}`
+              : undefined}
+          >
+            {f.dias === null ? 'NUNCA' : f.dias === 0 ? 'HOY' : `HACE ${f.dias}D`}
           </span>
           {f.etaVencidaDias !== undefined && (
             <span
@@ -518,6 +533,30 @@ export default function SeguimientosBoard({ dbShipments, onPatchShipment, onOpen
           >
             <PaperPlaneTilt size={14} weight="fill" /> Enviado hoy
           </button>
+          <button
+            type="button"
+            disabled={!editable || !c.dbId}
+            onClick={() => setFechaAbierta(prev => prev === c.ref ? null : c.ref)}
+            className="p-1.5 rounded-md text-muted-foreground hover:bg-muted disabled:opacity-50 transition-colors shrink-0"
+            title="Enviado otro día — elegí la fecha y la estampa"
+            aria-label={`Estampar seguimiento de ${c.ref} con otra fecha`}
+          >
+            <CalendarBlank size={16} />
+          </button>
+          {fechaAbierta === c.ref && (
+            <input
+              type="date"
+              autoFocus
+              max={hoyIso()}
+              onChange={e => {
+                if (!e.target.value) return
+                marcarEnviado(f, false, e.target.value)
+                setFechaAbierta(null)
+              }}
+              onBlur={() => setFechaAbierta(null)}
+              className="h-8 rounded-md border border-input bg-background px-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 shrink-0"
+            />
+          )}
         </div>
         {abierto === c.ref && (
           <div className="mt-2 ml-1 pl-3 border-l-2 border-border text-xs text-muted-foreground space-y-1">
@@ -563,8 +602,8 @@ export default function SeguimientosBoard({ dbShipments, onPatchShipment, onOpen
           <h1 className="text-2xl font-bold tracking-tight">Seguimientos</h1>
           <p className="text-sm text-muted-foreground">
             {totalDia > 0
-              ? <><b className="text-foreground">{enviadosHoy} de {totalDia}</b> enviados hoy · {cola.alDia} al día</>
-              : <>{cola.alDia} cargas en viaje, todas al día</>}
+              ? <><b className="text-foreground">{enviadosHoy} de {totalDia}</b> enviados hoy · {cola.alDia.length} al día</>
+              : <>{cola.alDia.length} cargas en viaje, todas al día</>}
           </p>
         </div>
         {totalDia > 0 && (
@@ -678,6 +717,32 @@ export default function SeguimientosBoard({ dbShipments, onPatchShipment, onOpen
               )}
             </div>
           ))}
+
+          {/* ── Al día: visibles y operables sin ir al modal (Brian 27/08) ── */}
+          {cola.alDia.length > 0 && (
+            <div className="space-y-3">
+              <button
+                type="button"
+                onClick={() => setAlDiaAbierto(v => !v)}
+                className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground transition-colors"
+                aria-expanded={alDiaAbierto}
+              >
+                {alDiaAbierto ? <CaretDown size={14} /> : <CaretRight size={14} />}
+                <CheckCircle size={15} weight="fill" className="text-emerald-600" />
+                Al día ({cola.alDia.length})
+                <span className="font-normal normal-case tracking-normal">— próximas a vencer primero</span>
+              </button>
+              {alDiaAbierto && (
+                <Card className="overflow-hidden">
+                  <CardContent className="pt-2 pb-2.5">
+                    <div className="divide-y divide-border/60">
+                      {cola.alDia.map(f => filaRow(f, true))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="historial" className="mt-4">
