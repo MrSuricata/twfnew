@@ -6,6 +6,8 @@ import { sendMail } from '../_lib/mail.js'
 import { welcomeClientEmail, welcomePartnerEmail, resolveEmailBrand } from '../_lib/emailTemplates.js'
 import { hashPassword } from '../_lib/password.js'
 import { matchesClientePattern } from '../_lib/csvParser.js'
+import { buildClientDigest } from '../_lib/clientDigest.js'
+import { CLIENT_SHIPMENT_COLS } from '../_lib/clientShipments.js'
 import {
   validate,
   QuoteRowSchema,
@@ -102,6 +104,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return handleReports(req, res, db, payload)
       case 'clients':
         return handleClients(req, res, db)
+      case 'client-digest':
+        return handleClientDigest(req, res, db)
       case 'client-users':
         return handleClientUsers(req, res, db, payload)
       case 'settings':
@@ -394,6 +398,28 @@ async function handleReports(req: VercelRequest, res: VercelResponse, db: any, p
   return res.status(405).json({ error: 'Method not allowed' })
 }
 
+// ── Client digest (workflow n8n "MED - Aviso Clientes") ─────────────
+// Solo lectura. Devuelve por cliente digest_active sus cargas activas vía
+// Montevideo con shape seguro + estado. La lógica vive en _lib/clientDigest.
+
+async function handleClientDigest(req: VercelRequest, res: VercelResponse, db: any) {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
+  const { data: clients, error } = await db
+    .from('clients')
+    .select('id, name, company, email, aliases, cliente_pattern, digest_active, digest_emails')
+    .eq('digest_active', true)
+  if (error) throw error
+  if (!clients?.length) return res.status(200).json({ generatedAt: new Date().toISOString(), clients: [] })
+  const { data: rows, error: e2 } = await db
+    .from('shipments')
+    .select(CLIENT_SHIPMENT_COLS)
+    .eq('archived', false)
+    .neq('source', 'sheet')
+  if (e2) throw e2
+  const hoyISO = new Date().toISOString().slice(0, 10) // corre 09:00 UY = 12:00 UTC, mismo día
+  return res.status(200).json(buildClientDigest(clients, rows || [], hoyISO))
+}
+
 // ── Clients ─────────────────────────────────────────────────────────
 
 async function handleClients(req: VercelRequest, res: VercelResponse, db: any) {
@@ -417,6 +443,8 @@ async function handleClients(req: VercelRequest, res: VercelResponse, db: any) {
       pais: c.pais || '',
       direccion: c.direccion || '',
       aliases: c.aliases || '',
+      digestActive: !!c.digest_active,
+      digestEmails: c.digest_emails || '',
     }))
     return res.status(200).json({ clients })
   }
@@ -436,6 +464,13 @@ async function handleClients(req: VercelRequest, res: VercelResponse, db: any) {
       pais: c.pais ?? '',
       direccion: c.direccion ?? '',
       aliases: c.aliases ?? '',
+      // Spread condicional: un POST de una UI vieja sin estos campos NO resetea lo guardado
+      ...(c.digestActive !== undefined || c.digest_active !== undefined
+        ? { digest_active: c.digestActive ?? c.digest_active ?? false }
+        : {}),
+      ...(c.digestEmails !== undefined || c.digest_emails !== undefined
+        ? { digest_emails: (c.digestEmails ?? c.digest_emails ?? '').trim() }
+        : {}),
     }))
 
     // Detect brand-new clients (by email) BEFORE the upsert so we can

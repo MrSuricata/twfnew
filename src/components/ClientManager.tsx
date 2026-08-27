@@ -83,6 +83,8 @@ interface ClientForm {
   email: string
   aliases: string
   clientePattern: string
+  digestActive: boolean
+  digestEmails: string
 }
 
 const EMPTY_FORM: ClientForm = {
@@ -94,6 +96,8 @@ const EMPTY_FORM: ClientForm = {
   email: '',
   aliases: '',
   clientePattern: '',
+  digestActive: false,
+  digestEmails: '',
 }
 
 const PAISES_SUGERIDOS = ['AR', 'UY', 'BR', 'PY', 'CL', 'CN', 'US']
@@ -214,6 +218,8 @@ export default function ClientManager({ clients, onUpdateClients, shipments = []
       email: client.email || '',
       aliases: client.aliases || '',
       clientePattern: client.clientePattern || '',
+      digestActive: client.digestActive ?? false,
+      digestEmails: client.digestEmails || '',
     })
     // Si el patrón guardado difiere del derivado, alguien lo tocó a mano →
     // no lo pisamos al editar nombre/aliases.
@@ -274,6 +280,8 @@ export default function ClientManager({ clients, onUpdateClients, shipments = []
         email,
         aliases: form.aliases.split(',').map(a => a.trim()).filter(Boolean).join(', '),
         clientePattern,
+        digestActive: form.digestActive,
+        digestEmails: form.digestEmails.split(',').map(e => e.trim()).filter(Boolean).join(', '),
       }
       let updated: ClientAccount[]
       if (editingId) {
@@ -481,7 +489,10 @@ export default function ClientManager({ clients, onUpdateClients, shipments = []
                     return (
                       <TableRow key={client.id}>
                         <TableCell>
-                          <div className="font-medium">{client.name}</div>
+                          <div className="font-medium">
+                            {client.name}
+                            {client.digestActive && <span className="ml-1.5" title="Recibe el digest lunes/jueves">📬</span>}
+                          </div>
                           <div className="text-xs text-muted-foreground">
                             {[client.razonSocial, client.email].filter(Boolean).join(' · ') || '—'}
                           </div>
@@ -645,6 +656,32 @@ export default function ClientManager({ clients, onUpdateClients, shipments = []
                 Otras formas en que aparece escrito en las cargas, separadas por coma.
               </p>
             </div>
+
+            {/* Digest lunes/jueves (spec 2026-08-27) */}
+            <div className="flex items-center justify-between rounded-lg border p-3">
+              <div className="space-y-0.5 pr-3">
+                <Label htmlFor="client-digest-active">📬 Digest lunes/jueves</Label>
+                <p className="text-xs text-muted-foreground">
+                  Mail automático con el estado de sus cargas vía Montevideo
+                </p>
+              </div>
+              <Switch
+                id="client-digest-active"
+                checked={form.digestActive}
+                onCheckedChange={v => setForm(prev => ({ ...prev, digestActive: v }))}
+              />
+            </div>
+            {form.digestActive && (
+              <div className="space-y-1.5">
+                <Label htmlFor="client-digest-emails">Emails para el digest</Label>
+                <Input
+                  id="client-digest-emails"
+                  value={form.digestEmails}
+                  onChange={e => setForm(prev => ({ ...prev, digestEmails: e.target.value }))}
+                  placeholder="Separados por coma — si queda vacío usa el email principal"
+                />
+              </div>
+            )}
 
             {/* Avanzado: patrón de matcheo (se autocompleta desde nombre+aliases) */}
             <button

@@ -289,6 +289,8 @@ export async function fetchClients(): Promise<ClientAccount[]> {
     pais: c.pais ?? '',
     direccion: c.direccion ?? '',
     aliases: c.aliases ?? '',
+    digestActive: !!c.digestActive,
+    digestEmails: c.digestEmails ?? '',
   }))
 }
 
