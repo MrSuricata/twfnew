@@ -141,11 +141,11 @@ describe('datosFaltantes — exigencia por etapa', () => {
 
   it('a 14 días de llegar exige checks + terminal + devolución + coordinación', () => {
     // Desde el 22/08 la coordinación también es a 14 días, y terminal entra
-    // en la ventana de checks (devolución desde el 26/08): la lista completa
-    // para una carga vacía.
+    // en la ventana de checks (devolución y descripción desde el 26/08): la
+    // lista completa para una carga vacía.
     const f = datosFaltantes(carga({ eta: '2026-08-31' }), HOY)
     expect(f.map(x => x.campo)).toEqual(
-      ['buque', 'linea', 'docNumber', 'cntr', 'pkgs', 'kg', 'm3', 'agente', 'terminal', 'dev',
+      ['buque', 'linea', 'docNumber', 'cntr', 'pkgs', 'kg', 'm3', 'descripcion', 'agente', 'terminal', 'dev',
        'deposito', 'operativa', 'transporte', 'fiscal'])
   })
 
@@ -180,6 +180,7 @@ describe('datosFaltantes — exigencia por etapa', () => {
       docNumber: 'MAEU123', cntr: 'MSKU1234567', pkgs: 10, kg: 5000, m3: 20,
       agente: 'REPREMAR', deposito: 'GODILCO', operativa: 'TRASIEGO',
       transporte: 'TRANSCAL', fiscal: 'RAFAELA', terminal: 'TCP', dev: 'STL',
+      descripcion: 'BICICLETAS',
     })
     expect(datosFaltantes(completa, HOY)).toEqual([])
   })
@@ -209,7 +210,7 @@ describe('faltantesUrgentes — la tarjeta de HOY', () => {
         eta: '2026-08-18', etd: '2026-07-10', buque: 'X 1W', linea: 'ONE', docNumber: 'B',
         cntr: 'MSKU1234567', pkgs: 1, kg: 1, m3: 1, agente: 'REPREMAR',
         deposito: 'GODILCO', operativa: 'TRASIEGO', transporte: 'TRANSCAL', fiscal: 'RAFAELA',
-        terminal: 'MONTECON', dev: 'MPS',
+        terminal: 'MONTECON', dev: 'MPS', descripcion: 'BICICLETAS',
       }), ref: 'OK',
     }
     expect(faltantesUrgentes([completa], HOY)).toEqual([])
@@ -219,7 +220,32 @@ describe('faltantesUrgentes — la tarjeta de HOY', () => {
 describe('resumenFaltantes', () => {
   it('arma la lista legible', () => {
     const f = datosFaltantes(carga({ eta: '2026-08-31' }), HOY)
-    expect(resumenFaltantes(f)).toBe('Buque, Línea, BL, Contenedor, Bultos, Kg, M³, Agente, Terminal, Devolución, Depósito, Operativa, Transporte, Fiscal')
+    expect(resumenFaltantes(f)).toBe('Buque, Línea, BL, Contenedor, Bultos, Kg, M³, Descripción, Agente, Terminal, Devolución, Depósito, Operativa, Transporte, Fiscal')
+  })
+})
+
+describe('descripción como faltante (Brian 26/08: "me están quedando vacíos")', () => {
+  const hoy = new Date(2026, 7, 26)
+  const base = carga({
+    eta: '2026-09-05', etd: '2026-08-01', buque: 'B', linea: 'MSC', docNumber: 'MBL',
+    cntr: 'ABCD1234567', pkgs: 1, kg: 1, m3: 1, agente: 'AG', terminal: 'TCP', dev: 'STL',
+    deposito: 'GODILCO', operativa: 'TRASIEGO', transporte: 'T', fiscal: 'F',
+  })
+
+  it('en ventana de checks sin descripción: la pide (FCL y LCL, todos los países)', () => {
+    expect(datosFaltantes({ ...base, descripcion: '' }, hoy).map(x => x.campo)).toContain('descripcion')
+    expect(datosFaltantes({ ...base, mode: 'lcl', cntr: '', descripcion: '' }, hoy).map(x => x.campo)).toContain('descripcion')
+    expect(datosFaltantes({ ...base, pais: 'CL', descripcion: '' }, hoy).map(x => x.campo)).toContain('descripcion')
+  })
+
+  it('con descripción cargada no molesta', () => {
+    const f = datosFaltantes({ ...base, descripcion: 'MOTOPARTES' }, hoy)
+    expect(f.map(x => x.campo)).not.toContain('descripcion')
+  })
+
+  it('lejos de la llegada todavía no se pide', () => {
+    const f = datosFaltantes(carga({ eta: '2026-11-20', descripcion: '' }), hoy)
+    expect(f.map(x => x.campo)).not.toContain('descripcion')
   })
 })
 
