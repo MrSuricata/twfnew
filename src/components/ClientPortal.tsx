@@ -54,12 +54,15 @@ import { downloadClientStatusPdf } from '@/lib/clientStatusPdf'
 interface ClientPortalProps {
   onLogout: () => void
   clientEmail: string
+  /** Nombre visible que viene del token — fallback cuando el catálogo no
+   *  matchea por email (impersonate de clientes sin email de contacto). */
+  clientName?: string
   shipments?: ParsedShipment[]
   clients?: ClientAccount[]
   reports?: OperativeReport[]
 }
 
-export default function ClientPortal({ onLogout, clientEmail, shipments = [], clients = [], reports = [] }: ClientPortalProps) {
+export default function ClientPortal({ onLogout, clientEmail, clientName = '', shipments = [], clients = [], reports = [] }: ClientPortalProps) {
   const [activeTab, setActiveTab] = useState('active')
   const [selectedShipment, setSelectedShipment] = useState<ParsedShipment | null>(null)
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false)
@@ -315,7 +318,7 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
               <BrandLogo variant="nav" className="h-8 w-auto" />
               <div className="border-l border-primary-foreground/20 pl-2">
                 <div className="text-xl font-bold">Portal de Cliente</div>
-                <div className="text-xs opacity-80">{currentClient?.company || currentClient?.name}</div>
+                <div className="text-xs opacity-80">{currentClient?.company || currentClient?.name || clientName}</div>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -449,7 +452,7 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2">Mis Cargas</h1>
           <p className="text-muted-foreground">
-            Bienvenido/a, {currentClient?.name}
+            {(currentClient?.name || clientName) ? `Bienvenido/a, ${currentClient?.name || clientName}` : 'Bienvenido/a'}
           </p>
         </div>
 

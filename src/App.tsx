@@ -108,6 +108,13 @@ function App() {
   )
   const [isAdminLoggedIn, setIsAdminLoggedIn] = useState(false)
   const [clientEmail, setClientEmail] = useState<string>('')
+  // La sesión de cliente vale por el TOKEN, no por el email: los clientes del
+  // catálogo pueden no tener email de contacto y el impersonate firma token
+  // con email vacío — el guard `&& clientEmail` del render los mandaba a la
+  // landing con la URL en /portal (bug Brian 27/08).
+  const [clientLogged, setClientLogged] = useState(false)
+  // Nombre visible cuando el catálogo no matchea por email (impersonate sin email).
+  const [clientName, setClientName] = useState<string>('')
   const [partnerData, setPartnerData] = useState<{ role: string; name: string; filterValue: string } | null>(null)
   const [partnerShipments, setPartnerShipments] = useState<ParsedShipment[]>([])
   const [language, setLanguage] = useState<Language>(() => getStoredLanguage())
@@ -300,6 +307,8 @@ function App() {
           setCurrentView('admin-dashboard')
         } else if (result.role === 'client' && path === '/portal') {
           setClientEmail(result.data?.email || '')
+          setClientName(String(result.data?.company || result.data?.name || ''))
+          setClientLogged(true)
           setCurrentView('client-portal')
         } else if (result.role === 'depot' && (path === '/depot' || path === '/partner')) {
           setPartnerData({ role: 'depot', name: result.data?.name || '', filterValue: result.data?.filterValue || '' })
@@ -955,7 +964,7 @@ function App() {
       if (path === '/admin' || path === RENDIMIENTO_PATH || path === DEPOSITO_PATH) {
         setCurrentView(isAdminLoggedIn ? 'admin-dashboard' : 'admin-login')
       } else if (path === '/portal' && getBrand().capabilities.portals) {
-        setCurrentView(clientEmail ? 'client-portal' : 'client-login')
+        setCurrentView(clientLogged ? 'client-portal' : 'client-login')
       } else if (path === '/terminos') {
         setCurrentView('terms')
       } else if (path === '/privacidad') {
@@ -970,7 +979,7 @@ function App() {
     }
     window.addEventListener('popstate', handlePopState)
     return () => window.removeEventListener('popstate', handlePopState)
-  }, [isAdminLoggedIn, clientEmail])
+  }, [isAdminLoggedIn, clientLogged])
 
   const handleAdminLogin = () => {
     setIsAdminLoggedIn(true)
@@ -989,12 +998,15 @@ function App() {
 
   const handleClientLogin = (email: string) => {
     setClientEmail(email)
+    setClientLogged(true)
     navigateTo('client-portal')
   }
 
   const handleClientLogout = () => {
     clearAuth()
     setClientEmail('')
+    setClientName('')
+    setClientLogged(false)
     navigateTo('public')
   }
 
@@ -1166,10 +1178,11 @@ function App() {
     )
   }
 
-  if (currentView === 'client-portal' && clientEmail) {
+  if (currentView === 'client-portal' && clientLogged) {
     return (
       <ClientPortal
         clientEmail={clientEmail}
+        clientName={clientName}
         onLogout={handleClientLogout}
         clients={clients}
         reports={reports}
