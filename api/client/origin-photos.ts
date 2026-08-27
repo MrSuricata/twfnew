@@ -35,8 +35,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (handleCors(req, res)) return
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
 
+  // Solo cliente o admin — los tokens de PARTNER (depot/transport) no pasan:
+  // sin este gate, una empresa externa veía las fotos de TODOS los clientes
+  // (hallazgo auditoría 26/08).
   const payload = authenticateRequest(req.headers.authorization)
-  if (!payload) {
+  if (!payload || (payload.role !== 'client' && payload.role !== 'admin')) {
     return res.status(401).json({ error: 'Authentication required' })
   }
 
