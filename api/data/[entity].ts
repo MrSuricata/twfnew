@@ -443,6 +443,8 @@ async function handleClients(req: VercelRequest, res: VercelResponse, db: any) {
       pais: c.pais || '',
       direccion: c.direccion || '',
       aliases: c.aliases || '',
+      digestActive: !!c.digest_active,
+      digestEmails: c.digest_emails || '',
     }))
     return res.status(200).json({ clients })
   }
@@ -462,6 +464,13 @@ async function handleClients(req: VercelRequest, res: VercelResponse, db: any) {
       pais: c.pais ?? '',
       direccion: c.direccion ?? '',
       aliases: c.aliases ?? '',
+      // Spread condicional: un POST de una UI vieja sin estos campos NO resetea lo guardado
+      ...(c.digestActive !== undefined || c.digest_active !== undefined
+        ? { digest_active: c.digestActive ?? c.digest_active ?? false }
+        : {}),
+      ...(c.digestEmails !== undefined || c.digest_emails !== undefined
+        ? { digest_emails: (c.digestEmails ?? c.digest_emails ?? '').trim() }
+        : {}),
     }))
 
     // Detect brand-new clients (by email) BEFORE the upsert so we can

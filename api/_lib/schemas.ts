@@ -64,6 +64,10 @@ export const ClientRowSchema = z.object({
     (s) => s.split(',').map(t => t.trim()).every(t => t.length >= 4),
     { message: 'cada cliente del patrón (separado por coma) debe tener al menos 4 caracteres' }
   ).optional().or(z.literal('')),
+  digestActive: z.boolean().optional(),
+  digest_active: z.boolean().optional(),
+  digestEmails: optTrimmed(1000),
+  digest_emails: optTrimmed(1000),
 })
 
 /** Settings upsert (PUT) */
