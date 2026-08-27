@@ -3,7 +3,8 @@ import {
   addDaysISO, diffDaysISO, esLineaOne, esLineaRepremar, deriveFormaPago,
   normalizeFormaPago, formaPagoEfectiva, venceRubro, buildPagoItems, corteHasta, kpisPagos,
   costoTerminalDefault, costoDevDefault, empresaRubro, agruparPorAcreedor, SIN_ACREEDOR,
-  ordenarPagos, ordenarSinDatos, paisDePago, agruparPorPais, montosUrgentes, type PagoItem,
+  ordenarPagos, ordenarSinDatos, paisDePago, agruparPorPais, montosUrgentes,
+  montoEstimadoDesdeInput, montoPagadoDesdeInput, type PagoItem,
 } from './pagosVencimientos'
 import type { DbShipment } from './operationsTypes'
 
@@ -98,6 +99,63 @@ describe('venceRubro — matriz de reglas', () => {
   it('sin ETA → null en todos los rubros', () => {
     expect(venceRubro('flete', '', 'programado', 'TCP')).toBeNull()
     expect(venceRubro('devolucion', undefined, 'al arribo', '')).toBeNull()
+  })
+})
+
+describe('el 0 nunca se supone (Brian 26/08)', () => {
+  it('editor de estimados: vacío = sin dato', () => {
+    expect(montoEstimadoDesdeInput('', null)).toEqual({ valor: null, ceroConvertido: false })
+    expect(montoEstimadoDesdeInput('  ', 500)).toEqual({ valor: null, ceroConvertido: false })
+  })
+
+  it('editor de estimados: un 0 TIPEADO no marca pagado — queda sin dato, con aviso', () => {
+    expect(montoEstimadoDesdeInput('0', null)).toEqual({ valor: null, ceroConvertido: true })
+    expect(montoEstimadoDesdeInput('0,00', 500)).toEqual({ valor: null, ceroConvertido: true })
+  })
+
+  it('editor de estimados: el 0 legacy de la SG se conserva si no se toca', () => {
+    // El draft arranca con '0' porque el valor guardado ES 0 (pagado histórico):
+    // guardarlo sin tocarlo no debe des-marcar el pagado.
+    expect(montoEstimadoDesdeInput('0', 0)).toEqual({ valor: 0, ceroConvertido: false })
+  })
+
+  it('editor de estimados: montos normales pasan tal cual', () => {
+    expect(montoEstimadoDesdeInput('1.234,56', null)).toEqual({ valor: 1234.56, ceroConvertido: false })
+  })
+
+  it('monto pagado real: vacío = no informado · 0 tipeado = 0 real (bonificado)', () => {
+    expect(montoPagadoDesdeInput('')).toBeNull()
+    expect(montoPagadoDesdeInput('0')).toBe(0)
+    expect(montoPagadoDesdeInput('1.250,50')).toBe(1250.5)
+  })
+})
+
+describe('monto pagado real vs estimado (Brian 26/08)', () => {
+  it('el pago estampado trae el monto real y el estimado queda intacto', () => {
+    const { items } = buildPagoItems([base({
+      monto_flete: 1200,
+      pago_flete_at: '2026-07-20T14:00:00Z',
+      pago_flete_by: 'brian',
+      pago_flete_monto: 1250.5,
+    })], '2026-07-25')
+    const flete = items.find(i => i.rubro === 'flete')!
+    expect(flete.estado).toBe('pagado')
+    expect(flete.monto).toBe(1200)          // estimado: NO se pisa al pagar
+    expect(flete.montoPagado).toBe(1250.5)  // lo que finalmente salió
+  })
+
+  it('pendiente: sin monto pagado (es la previsión pura)', () => {
+    const { items } = buildPagoItems([base({ monto_flete: 900 })], '2026-07-25')
+    const flete = items.find(i => i.rubro === 'flete')!
+    expect(flete.estado).toBe('pendiente')
+    expect(flete.montoPagado).toBeNull()
+  })
+
+  it('legacy: monto 0 sin pago_at sigue contando como pagado, sin monto real', () => {
+    const { items } = buildPagoItems([base({ monto_terminal: 0 })], '2026-07-25')
+    const term = items.find(i => i.rubro === 'terminal')!
+    expect(term.estado).toBe('pagado')
+    expect(term.montoPagado).toBeNull()
   })
 })
 
@@ -407,7 +465,7 @@ describe('agruparPorAcreedor', () => {
 describe('ordenarPagos — la tabla se ordena, los totales no se tocan', () => {
   const it_ = (over: Partial<PagoItem>): PagoItem => ({
     id: over.ref || 'x', ref: 'A1', cliente: 'PERETTI', docNumber: '', contenedor: '',
-    linea: 'ONE', terminal: 'TCP', empresa: 'ONE', rubro: 'flete', monto: 100,
+    linea: 'ONE', terminal: 'TCP', empresa: 'ONE', rubro: 'flete', monto: 100, montoPagado: null,
     eta: '2026-07-10', vence: '2026-08-14', dias: 5, pagadoAt: null, pagadoBy: '',
     formaPago: 'cuenta corriente', formaPagoOverride: false, estado: 'pendiente',
     ...over,

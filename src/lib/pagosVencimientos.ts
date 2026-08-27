@@ -9,8 +9,14 @@
 //   TERMINAL   · MONTECON                     → ETA − 5 días
 //              · TCP / resto                  → ETA
 //   DEVOLUCIÓN · siempre                      → ETA
-// Convención de montos: null = sin datos · 0 = ya pagado (regla histórica de la
-// SG) · >0 = pendiente, salvo pago_*_at estampado.
+// Convención de montos (revisada por Brian 26/08):
+//   monto_*        = monto ESTIMADO del rubro — la previsión de "qué plata
+//                    necesito". null = sin datos · >0 = previsto. NUNCA se pisa
+//                    al pagar. (0 = pagado sobrevive SOLO como legacy de la SG:
+//                    lo cargado antes de esta revisión; el flujo nuevo no
+//                    escribe ceros.)
+//   pago_*_at/_by  = el HECHO del pago: cuándo y quién.
+//   pago_*_monto   = lo que FINALMENTE se pagó (puede diferir del estimado).
 import type { DbShipment } from './operationsTypes'
 
 export type PagoRubro = 'devolucion' | 'terminal' | 'locales' | 'flete'
@@ -34,6 +40,10 @@ export const PAGO_AT_KEYS = {
 export const PAGO_BY_KEYS = {
   devolucion: 'pago_devolucion_by', terminal: 'pago_terminal_by',
   locales: 'pago_locales_by', flete: 'pago_flete_by',
+} as const satisfies Record<PagoRubro, keyof DbShipment>
+export const PAGO_MONTO_KEYS = {
+  devolucion: 'pago_devolucion_monto', terminal: 'pago_terminal_monto',
+  locales: 'pago_locales_monto', flete: 'pago_flete_monto',
 } as const satisfies Record<PagoRubro, keyof DbShipment>
 
 export const FLETE_CTA_CTE_DIAS = 35
@@ -119,7 +129,11 @@ export interface PagoItem {
   /** A quién se le paga este rubro: flete/locales → naviera · terminal → terminal · devolución → DEV. */
   empresa: string
   rubro: PagoRubro
+  /** Monto ESTIMADO del rubro (la previsión). */
   monto: number
+  /** Monto FINALMENTE pagado (solo pagados por el flujo nuevo; null en los
+   *  legacy). Para mostrar plata pagada usá montoPagado ?? monto. */
+  montoPagado: number | null
   /** Llegada de la carga (ISO). El vencimiento se DERIVA de acá, pero Brian
    *  ordena por la llegada: es la fecha con la que piensa la semana. */
   eta: string | null
@@ -151,6 +165,34 @@ export function parseMontoUY(s: string): number {
 }
 /** Número → valor de input (coma decimal); null = campo vacío (sin datos). */
 export const montoToInput = (n: number | null): string => (n === null ? '' : String(n).replace('.', ','))
+
+/**
+ * Qué guardar cuando se edita un monto ESTIMADO (Brian 26/08: "no se debe
+ * suponer"): vacío = sin dato (null). Un 0 TIPEADO tampoco existe como
+ * estimado — la regla legacy lo leería como "pagado" en silencio, así que se
+ * guarda como sin dato y se avisa (el pago se registra con el botón Pagado).
+ * Única excepción: si el valor ya ERA 0 (legacy de la SG) y no se tocó, se
+ * conserva tal cual para no des-marcar pagados históricos al pasar.
+ */
+export function montoEstimadoDesdeInput(
+  crudo: string,
+  original: number | null,
+): { valor: number | null; ceroConvertido: boolean } {
+  const str = (crudo || '').trim()
+  const nuevo = str === '' ? null : parseMontoUY(str)
+  if (nuevo === 0 && original !== 0) return { valor: null, ceroConvertido: true }
+  return { valor: nuevo, ceroConvertido: false }
+}
+
+/**
+ * Qué guardar como monto REALMENTE pagado al apretar Pagado: vacío = null (no
+ * se informó — la pantalla cae al estimado). Un 0 tipeado es un 0 REAL (flete
+ * bonificado, gasto que no se cobró): se respeta, nunca se supone.
+ */
+export function montoPagadoDesdeInput(crudo: string): number | null {
+  const str = (crudo || '').trim()
+  return str === '' ? null : parseMontoUY(str)
+}
 
 /** Cargas por Chile (POD San Antonio/Valparaíso → dest_country CL): las maneja
  *  el equipo de Chile, sus pagos no entran acá (pedido Brian 10/07, caso A7793). */
@@ -333,10 +375,14 @@ export function buildPagoItems(dbShipments: DbShipment[], hoyISO: string): { ite
         docNumber: s.doc_number || '', contenedor: s.contenedor || '',
         linea: s.linea || '', terminal: s.terminal || '',
         empresa: empresaRubro(rubro, s),
-        rubro, monto, eta: s.eta || null, vence,
+        rubro, monto,
+        montoPagado: montoNum(s[PAGO_MONTO_KEYS[rubro]]),
+        eta: s.eta || null, vence,
         dias: vence ? diffDaysISO(hoyISO, vence) : null,
         pagadoAt, pagadoBy: s[PAGO_BY_KEYS[rubro]] || '',
         formaPago: fp.value, formaPagoOverride: fp.overridden,
+        // Pagado = el HECHO (pago_*_at). monto===0 queda como fallback de los
+        // datos históricos de la SG — el flujo nuevo nunca escribe ceros.
         estado: pagadoAt || monto === 0 ? 'pagado' : 'pendiente',
       })
     }

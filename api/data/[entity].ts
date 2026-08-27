@@ -1885,11 +1885,14 @@ const SHIPMENT_COLS = new Set([
   'dest_country','discharge_port','dest_port','fiscal','wood','no_apilable','oog','imo','tipo','ftl_ltl','costo_extra','observacion','status',
   'operator_id','notes','archived','source','desconsol_date','entrega_planta',
   'libre','salida','eta_fiscal','operativa','descarga','dev','terminal','n_cntr','origin_ref',
-  // Pagos: montos por rubro (null=sin datos · 0=pagado · >0=pendiente) + forma de
-  // pago override + fecha de pago. Los pago_*_by NO están acá a propósito: los
-  // estampa el server desde el token (el cliente no puede falsificar quién pagó).
+  // Pagos: monto_* = ESTIMADO por rubro (null=sin datos · >0=previsto · 0=pagado
+  // solo como convención legacy de la SG) + forma de pago override + fecha de
+  // pago + pago_*_monto = lo que FINALMENTE se pagó (Brian 26/08). Los
+  // pago_*_by NO están acá a propósito: los estampa el server desde el token
+  // (el cliente no puede falsificar quién pagó).
   'monto_flete','monto_locales','monto_terminal','monto_devolucion','forma_pago',
   'pago_flete_at','pago_locales_at','pago_terminal_at','pago_devolucion_at',
+  'pago_flete_monto','pago_locales_monto','pago_terminal_monto','pago_devolucion_monto',
   'operativas',
 ])
 
