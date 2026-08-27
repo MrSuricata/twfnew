@@ -3,6 +3,7 @@ import { authenticateRequest, type ClientPayload } from '../_lib/jwt.js'
 import { matchesClientePattern } from '../_lib/csvParser.js'
 import { getSupabase } from '../_lib/supabase.js'
 import { CLIENT_SHIPMENT_COLS, esCargaDeClienteActiva, rowToClientShipment } from '../_lib/clientShipments.js'
+import { esViaMontevideo } from '../_lib/clientDigest.js'
 
 // ── Datos del PORTAL DE CLIENTES ─────────────────────────────────────────
 // Desde el flip (16/06) la web es master: este endpoint lee la TABLA, no la
@@ -48,8 +49,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const hoyISO = new Date().toISOString().slice(0, 10)
     const rows = (data || []) as unknown as Record<string, unknown>[]
+    // Solo la operación VÍA MONTEVIDEO (mismo criterio que el digest por mail):
+    // las cargas CL (San Antonio/Valpo) y AR directo no pasan por acá y al
+    // cliente lo confunden en su portal (Brian 27/08).
     const propias = rows.filter(s =>
-      matchesClientePattern(String(s.cliente || ''), pattern) && esCargaDeClienteActiva(s, hoyISO))
+      matchesClientePattern(String(s.cliente || ''), pattern) && esCargaDeClienteActiva(s, hoyISO)
+      && esViaMontevideo(s as { dest_country?: string }))
     const shipments = propias.map(rowToClientShipment)
 
     return res.status(200).json({

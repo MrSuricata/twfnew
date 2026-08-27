@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { eventosCliente, agendaCliente } from './clientAgenda'
+import { eventosCliente, agendaCliente, refParaCliente } from './clientAgenda'
 import type { ParsedShipment } from './shipmentTypes'
 
 const HOY = '2026-08-26'
@@ -13,6 +13,24 @@ const carga = (over: Partial<ParsedShipment> & { CLIENT_REF?: string } = {}): Pa
   SEGUIMIENTO: '', TIPO: '', containers: [], calculatedN: 1, calculatedLibreHasta: '',
   operativas: [], ...over,
 } as unknown as ParsedShipment)
+
+describe('refParaCliente — una sola referencia visible para el cliente', () => {
+  it('la ref propia del cliente gana cuando está cargada', () => {
+    expect(refParaCliente({ REF: 'A8121', CLIENT_REF: '1410' })).toBe('1410')
+  })
+  it('sin ref propia: la nuestra SIN la A (regla de mails)', () => {
+    expect(refParaCliente({ REF: 'A8121', CLIENT_REF: '' })).toBe('8121')
+    expect(refParaCliente({ REF: 'A8121' })).toBe('8121')
+  })
+  it('refs no numéricas no pierden la A inicial', () => {
+    expect(refParaCliente({ REF: 'ABC-12' })).toBe('ABC-12')
+  })
+  it('vacíos y nulos no explotan', () => {
+    expect(refParaCliente({})).toBe('')
+    expect(refParaCliente(null)).toBe('')
+    expect(refParaCliente(undefined)).toBe('')
+  })
+})
 
 describe('eventosCliente — los movimientos derivados de las cargas', () => {
   it('llegada MVD de la ETA + salida y llegada a depósito por contenedor', () => {
