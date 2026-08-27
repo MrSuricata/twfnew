@@ -54,6 +54,7 @@ export const FALTANTE_INPUTS: Partial<Record<keyof CargaCampos, FaltanteInput>> 
   pkgs: { widget: 'number', placeholder: 'bultos' },
   kg: { widget: 'number', placeholder: 'kg' },
   m3: { widget: 'number', placeholder: 'm³' },
+  descripcion: { widget: 'text', placeholder: 'mercadería (ej: MOTOPARTES)' },
   agente: { widget: 'datalist', sugerencias: 'agentes', placeholder: 'quién factura el flete' },
   deposito: { widget: 'datalist', sugerencias: 'depositos', placeholder: DEPOSITOS_UY[0] },
   operativa: { widget: 'select', opciones: OPERATIVA_OPCIONES.map(v => ({ value: v, label: v })) },
@@ -159,8 +160,9 @@ export function buildFaltantePatch(
     // Misma regla que el panel: el texto libre se canonicaliza contra el
     // catálogo ('peretti' → 'BICI PERETTI S.A.') para no crear variantes.
     valor = canonicalizeCliente(texto, clientes ?? [])
-  } else if (campo === 'buque' || campo === 'linea' || campo === 'deposito' || campo === 'transporte' || campo === 'fiscal' || campo === 'dev') {
+  } else if (campo === 'buque' || campo === 'linea' || campo === 'deposito' || campo === 'transporte' || campo === 'fiscal' || campo === 'dev' || campo === 'descripcion') {
     // dev en MAYÚSCULAS: empresaRubro/costoDevDefault comparan contra STL/MPS.
+    // descripcion también: todo el histórico de la planilla vino en mayúsculas.
     valor = texto.toUpperCase()
   }
 

@@ -8,7 +8,7 @@
  *
  *   Siempre (activa)      → Cliente · País destino · ETA
  *   Embarcada (ETD pasó)  → Buque · Línea · BL · Contenedor (solo FCL)
- *   Llega en ≤14 días     → Bultos · Kg · M³ · Agente (quién factura)
+ *   Llega en ≤14 días     → Bultos · Kg · M³ · Descripción · Agente
  *                            + Terminal y Devolución (FCL por MVD)
  *   Llega en ≤7 / llegó   → Depósito · Operativa · Transporte · Fiscal
  *                            (coordinación: solo cargas por Uruguay)
@@ -38,6 +38,9 @@ export interface CargaCampos {
   pkgs?: number | null
   kg?: number | null
   m3?: number | null
+  /** Descripción de la mercadería (columna real: `observacion`, herencia de la
+   *  DESCRIPCION de la planilla): sin ella no se arma DJ ni informe. */
+  descripcion?: string | null
   agente?: string | null
   deposito?: string | null
   operativa?: string | null
@@ -116,6 +119,10 @@ export function datosFaltantes(c: CargaCampos, hoy: Date): CampoFaltante[] {
     if (cero(c.pkgs)) falta('pkgs', 'Bultos')
     if (cero(c.kg)) falta('kg', 'Kg')
     if (cero(c.m3)) falta('m3', 'M³')
+    // Descripción de la mercadería (Brian 26/08: "me están quedando vacíos"):
+    // sin ella no se arma la DJ, el plan operativo sale con "—" y el informe
+    // no puede decir qué se cargó.
+    if (vacio(c.descripcion)) falta('descripcion', 'Descripción')
     if (vacio(c.agente)) falta('agente', 'Agente')
     // Terminal de llegada (Brian 22/08: "es importante saberla"): define el
     // vencimiento del pago (MONTECON = ETA − 5 días, se paga ANTES de que el
