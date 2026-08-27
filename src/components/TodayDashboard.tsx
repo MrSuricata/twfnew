@@ -291,6 +291,7 @@ export default function TodayDashboard({
         .filter(s => !s.archived)
         .map(s => ({
           dbId: s.id, ref: s.ref, mode: s.mode, pais: s.dest_country, cliente: s.cliente,
+          clientRef: s.client_ref,
           eta: s.eta, etd: s.etd, buque: s.buque, linea: s.linea, docNumber: s.doc_number,
           cntr: s.contenedor,
           pkgs: s.pkgs, kg: s.kg, m3: s.m3, agente: s.agente, deposito: s.deposito,

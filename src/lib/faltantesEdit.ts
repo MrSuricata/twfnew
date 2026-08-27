@@ -44,6 +44,7 @@ export const OPERATIVA_OPCIONES = ['TRASIEGO', 'CONTENEDOR', 'CARGA A PISO']
 
 export const FALTANTE_INPUTS: Partial<Record<keyof CargaCampos, FaltanteInput>> = {
   cliente: { widget: 'text', placeholder: 'Cliente' },
+  clientRef: { widget: 'text', placeholder: 'ref del cliente (ej: 1410)' },
   pais: { widget: 'select', opciones: (EDITABLE_FIELDS.pais?.options ?? []).filter(o => o.value !== '') },
   eta: { widget: 'date' },
   buque: { widget: 'text', placeholder: 'BUQUE VIAJE' },

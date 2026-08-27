@@ -86,6 +86,39 @@ describe('devolución del vacío como faltante (Brian 26/08)', () => {
   })
 })
 
+describe('ref del cliente como faltante para CHIAPERO/VMG (Brian 26/08)', () => {
+  const hoy = new Date(2026, 7, 26)
+  const base = carga({ eta: '2026-09-05', etd: '2026-08-01', buque: 'B', linea: 'MSC', docNumber: 'MBL', cntr: 'ABCD1234567' })
+
+  it('CHIAPERO embarcada sin ref cliente: la pide', () => {
+    const f = datosFaltantes({ ...base, cliente: 'CHIAPERO Y ASOC. S.R.L.', clientRef: '' }, hoy)
+    expect(f.map(x => x.campo)).toContain('clientRef')
+    expect(f.find(x => x.campo === 'clientRef')?.etiqueta).toBe('Ref cliente')
+  })
+
+  it('las variantes de VMG también ("VMG S.A.", "EQUIPO ORIGINAL VMG")', () => {
+    for (const cliente of ['VMG S.A.', 'VMG SA', 'EQUIPO ORIGINAL VMG']) {
+      const f = datosFaltantes({ ...base, cliente, clientRef: '' }, hoy)
+      expect(f.map(x => x.campo)).toContain('clientRef')
+    }
+  })
+
+  it('con la ref cargada no molesta', () => {
+    const f = datosFaltantes({ ...base, cliente: 'CHIAPERO Y ASOC. S.R.L.', clientRef: '1410' }, hoy)
+    expect(f.map(x => x.campo)).not.toContain('clientRef')
+  })
+
+  it('a los demás clientes no se les pide', () => {
+    const f = datosFaltantes({ ...base, cliente: 'BICI PERETTI S.A.', clientRef: '' }, hoy)
+    expect(f.map(x => x.campo)).not.toContain('clientRef')
+  })
+
+  it('en origen lejano sin embarcar todavía no se pide', () => {
+    const f = datosFaltantes(carga({ cliente: 'CHIAPERO Y ASOC. S.R.L.', clientRef: '', eta: '2026-11-20' }), hoy)
+    expect(f.map(x => x.campo)).not.toContain('clientRef')
+  })
+})
+
 describe('datosFaltantes — exigencia por etapa', () => {
   it('en origen lejano con lo básico completo no debe nada', () => {
     expect(datosFaltantes(carga(), HOY)).toEqual([])

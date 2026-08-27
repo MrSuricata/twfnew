@@ -24,6 +24,9 @@ export interface CargaCampos {
   archived?: boolean
   pais?: string | null
   cliente?: string | null
+  /** Referencia PROPIA del cliente (ej. CHIAPERO "1410"): es como ELLOS nombran
+   *  la carga en mails y planes — sin ella no se les puede contestar nada. */
+  clientRef?: string | null
   eta?: string | null
   etd?: string | null
   buque?: string | null
@@ -66,6 +69,12 @@ const medianoche = (d: Date): Date => new Date(d.getFullYear(), d.getMonth(), d.
 const vacio = (s: string | null | undefined): boolean => !String(s || '').trim()
 const cero = (n: number | null | undefined): boolean => !(Number(n) > 0)
 
+/** Clientes que trabajan con SU referencia propia en cada mail/plan (Brian
+ *  26/08): para ellos la ref del cliente es un dato exigido, no un opcional.
+ *  Substring case-insensitive: cubre "CHIAPERO Y ASOC. S.R.L.", "VMG S.A.",
+ *  "EQUIPO ORIGINAL VMG" y todas las variantes de tipeo. */
+export const CLIENTES_CON_REF_PROPIA = /CHIAPERO|VMG/i
+
 export function datosFaltantes(c: CargaCampos, hoy: Date): CampoFaltante[] {
   if (c.archived) return []
   const m = String(c.mode || '').toLowerCase()
@@ -93,6 +102,12 @@ export function datosFaltantes(c: CargaCampos, hoy: Date): CampoFaltante[] {
     if (vacio(c.linea)) falta('linea', 'Línea')
     if (vacio(c.docNumber)) falta('docNumber', 'BL')
     if (m === 'fcl' && vacio(c.cntr)) falta('cntr', 'Contenedor')
+    // Ref del cliente (Brian 26/08): CHIAPERO/VMG nombran cada carga con SU
+    // número — sin cargarlo acá no hay cómo mapear sus mails ni sus planes.
+    // Existe desde el booking, así que se pide junto con buque/BL.
+    if (CLIENTES_CON_REF_PROPIA.test(String(c.cliente || '')) && vacio(c.clientRef)) {
+      falta('clientRef', 'Ref cliente')
+    }
   }
 
   // Ventana de checks: sin bultos/kg/m³ no se arma AD/AT ni se factura bien;
