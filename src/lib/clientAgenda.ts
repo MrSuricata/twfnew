@@ -43,6 +43,15 @@ export interface AgendaCliente {
 const ISO_RE = /^\d{4}-\d{2}-\d{2}/
 const txt = (v: unknown): string => String(v ?? '').trim()
 
+/** Cómo se le nombra una carga AL CLIENTE: su referencia propia si está
+ *  cargada, sino la nuestra SIN la A (regla de los mails con clientes).
+ *  Una sola referencia visible — mostrar las dos juntas confunde (Brian 27/08). */
+export function refParaCliente(s: { REF?: unknown; CLIENT_REF?: unknown } | null | undefined): string {
+  const propia = txt(s?.CLIENT_REF)
+  if (propia) return propia
+  return txt(s?.REF).replace(/^A(?=\d)/, '')
+}
+
 const isoDia = (v: unknown): string | null => {
   const s = txt(v).slice(0, 10)
   return ISO_RE.test(s) ? s : null

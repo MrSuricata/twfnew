@@ -36,13 +36,14 @@ import {
   Funnel,
   Boat,
   FilePdf,
+  CaretDown,
 } from '@phosphor-icons/react'
 import { ParsedShipment, getShipmentStatus, generateShipmentAlerts, isShipmentCompleted, parseLocalDate } from '@/lib/shipmentTypes'
 import { statusColorToClass, getUrgencyMeta } from '@/lib/statusColors'
 import { ClientAccount, OperativeReport, OriginPhoto } from '@/lib/quotationTypes'
 import { authFetch } from '@/lib/authClient'
 import { fetchClientReports, fetchClientOriginPhotos } from '@/lib/dataClient'
-import { agendaCliente, EVENTO_LABELS } from '@/lib/clientAgenda'
+import { agendaCliente, EVENTO_LABELS, refParaCliente } from '@/lib/clientAgenda'
 import { fmtDateDMY } from '@/lib/format'
 import ShipmentDetailsDialog from './ShipmentDetailsDialog'
 import AgendaCalendar from './agenda/AgendaCalendar'
@@ -53,15 +54,30 @@ import { downloadClientStatusPdf } from '@/lib/clientStatusPdf'
 interface ClientPortalProps {
   onLogout: () => void
   clientEmail: string
+  /** Nombre visible que viene del token — fallback cuando el catálogo no
+   *  matchea por email (impersonate de clientes sin email de contacto). */
+  clientName?: string
   shipments?: ParsedShipment[]
   clients?: ClientAccount[]
   reports?: OperativeReport[]
 }
 
-export default function ClientPortal({ onLogout, clientEmail, shipments = [], clients = [], reports = [] }: ClientPortalProps) {
+export default function ClientPortal({ onLogout, clientEmail, clientName = '', shipments = [], clients = [], reports = [] }: ClientPortalProps) {
   const [activeTab, setActiveTab] = useState('active')
   const [selectedShipment, setSelectedShipment] = useState<ParsedShipment | null>(null)
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false)
+  // Cards de cargas colapsadas por defecto: una fila por carga, click expande.
+  // Antes cada carga era una tarjeta gigante y había que scrollear por cada
+  // una (Brian 27/08).
+  const [expandedRefs, setExpandedRefs] = useState<Set<string>>(new Set())
+  const toggleExpanded = (ref: string) => {
+    setExpandedRefs(prev => {
+      const next = new Set(prev)
+      if (next.has(ref)) next.delete(ref)
+      else next.add(ref)
+      return next
+    })
+  }
   const [showNotifications, setShowNotifications] = useState(false)
   const [serverShipments, setServerShipments] = useState<ParsedShipment[]>([])
   const [serverReports, setServerReports] = useState<OperativeReport[]>([])
@@ -170,8 +186,10 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
         const desc = ops[0]?.DESCRIPCION || ''
         const containers = s.containers.map(c => c.number).join(' ')
         const opsContainers = ops.map(o => o.CNTR_OP).join(' ')
+        const clientRef = String((s as { CLIENT_REF?: string }).CLIENT_REF || '')
         return (
           s.REF.toLowerCase().includes(q) ||
+          clientRef.toLowerCase().includes(q) ||
           (s.BUQUE || '').toLowerCase().includes(q) ||
           (s.LINEA || '').toLowerCase().includes(q) ||
           containers.toLowerCase().includes(q) ||
@@ -300,7 +318,7 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
               <BrandLogo variant="nav" className="h-8 w-auto" />
               <div className="border-l border-primary-foreground/20 pl-2">
                 <div className="text-xl font-bold">Portal de Cliente</div>
-                <div className="text-xs opacity-80">{currentClient?.company || currentClient?.name}</div>
+                <div className="text-xs opacity-80">{currentClient?.company || currentClient?.name || clientName}</div>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -434,7 +452,7 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2">Mis Cargas</h1>
           <p className="text-muted-foreground">
-            Bienvenido/a, {currentClient?.name}
+            {(currentClient?.name || clientName) ? `Bienvenido/a, ${currentClient?.name || clientName}` : 'Bienvenido/a'}
           </p>
         </div>
 
@@ -533,7 +551,7 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
                               : <Package size={16} weight="fill" className="text-green-600 shrink-0" />}
                           <span className="font-semibold tabular-nums whitespace-nowrap">{fmtDateDMY(e.fecha)}</span>
                           <span className="truncate">
-                            {EVENTO_LABELS[e.tipo]} — <b>{e.clientRef || e.ref}</b>
+                            {EVENTO_LABELS[e.tipo]} — <b>Ref. {refParaCliente({ REF: e.ref, CLIENT_REF: e.clientRef })}</b>
                             {e.cntr ? <span className="text-muted-foreground font-mono text-xs"> · {e.cntr}</span> : null}
                           </span>
                           <span className="ml-auto text-xs text-muted-foreground whitespace-nowrap">
@@ -561,7 +579,7 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
                         <div key={`ull-${e.ref}-${i}`} className="flex items-center gap-2.5 text-sm min-w-0">
                           <Anchor size={16} weight="fill" className="text-primary shrink-0" />
                           <span className="font-semibold tabular-nums whitespace-nowrap">{fmtDateDMY(e.fecha)}</span>
-                          <span className="truncate"><b>{e.clientRef || e.ref}</b>{e.buque ? ` · ${e.buque}` : ''}</span>
+                          <span className="truncate"><b>Ref. {refParaCliente({ REF: e.ref, CLIENT_REF: e.clientRef })}</b>{e.buque ? ` · ${e.buque}` : ''}</span>
                           <span className="ml-auto text-xs text-muted-foreground whitespace-nowrap">hace {-e.dias}d</span>
                         </div>
                       ))}
@@ -597,7 +615,7 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
                 <div className="relative flex-1">
                   <MagnifyingGlass size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
                   <Input
-                    placeholder="Buscar por REF, buque, contenedor..."
+                    placeholder="Buscar por referencia, buque, contenedor..."
                     value={filterSearch}
                     onChange={(e) => setFilterSearch(e.target.value)}
                     className="pl-9 h-9"
@@ -761,6 +779,12 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
                   const desc = firstOp?.DESCRIPCION || ''
                   const status = getShipmentStatus(shipment)
                   const daysLibre = getDaysUntilFree(shipment.LIBRE_HASTA)
+                  // UNA referencia protagonista: la del cliente, o la nuestra
+                  // sin la A; la TWF corta queda como dato secundario.
+                  const clientRef = String((shipment as { CLIENT_REF?: string }).CLIENT_REF || '')
+                  const refVisible = refParaCliente(shipment)
+                  const refTwfCorta = shipment.REF.replace(/^A(?=\d)/, '')
+                  const expanded = expandedRefs.has(shipment.REF)
 
                   // Build container list: from operativas or fallback to main CNTR
                   const containerList: { number: string; salida: string; etaFisc: string; tipo: string }[] = []
@@ -779,40 +803,78 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
                     }
                   }
 
-                  return (
-                  <Card key={shipment.REF} className="hover:shadow-lg transition-shadow overflow-hidden">
-                    {/* ── Header with status color strip ── */}
-                    <div className={`h-1.5 ${
-                      status.color === 'green' ? 'bg-green-500' :
-                      status.color === 'yellow' ? 'bg-yellow-500' :
-                      status.color === 'red' ? 'bg-red-500' :
-                      status.color === 'gray' ? 'bg-gray-400' :
-                      'bg-blue-500'
-                    }`} />
+                  // Próximo hito para la fila colapsada: lo más avanzado con fecha.
+                  const salidaFecha = ops.find(o => o.SALIDA && o.SALIDA.trim())?.SALIDA || ''
+                  const etaFiscFecha = ops.find(o => o.ETA_FISC && o.ETA_FISC.trim())?.ETA_FISC || ''
+                  const hito = etaFiscFecha
+                    ? { label: 'Llega a depósito', fecha: fmtDateDMY(etaFiscFecha) }
+                    : salidaFecha
+                      ? { label: 'Salida MVD', fecha: fmtDateDMY(salidaFecha) }
+                      : shipment.ETA
+                        ? { label: 'ETA Montevideo', fecha: fmtDateDMY(shipment.ETA) }
+                        : { label: 'Salida', fecha: 'A confirmar' }
 
-                    <CardContent className="pt-5 pb-4">
-                      {/* ── Row 1: REF + Badges + Actions ── */}
-                      <div className="flex items-start justify-between gap-3 mb-3">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h3 className="text-xl font-bold tracking-tight">{shipment.REF}</h3>
-                          {/* La referencia PROPIA del cliente (viene del server como
-                              CLIENT_REF, extra sobre ParsedShipment): es como ÉL
-                              nombra la carga en sus mails — verla acá evita el
-                              "¿cuál es la 1410?" (Brian 26/08). */}
-                          {Boolean((shipment as { CLIENT_REF?: string }).CLIENT_REF) && (
-                            <Badge variant="outline" className="text-xs" title="Tu referencia interna">
-                              Ref. propia: {(shipment as { CLIENT_REF?: string }).CLIENT_REF}
-                            </Badge>
-                          )}
-                          <Badge className="bg-accent text-accent-foreground text-xs">{shipment.N} CNTR</Badge>
-                          {getStatusBadge(shipment)}
+                  const stripClass =
+                    status.color === 'green' ? 'bg-green-500' :
+                    status.color === 'yellow' ? 'bg-yellow-500' :
+                    status.color === 'red' ? 'bg-red-500' :
+                    status.color === 'gray' ? 'bg-gray-400' :
+                    'bg-blue-500'
+
+                  return (
+                  <Card key={shipment.REF} className="overflow-hidden py-0 gap-0">
+                    {/* ── Fila compacta: siempre visible, click expande ── */}
+                    <button
+                      type="button"
+                      onClick={() => toggleExpanded(shipment.REF)}
+                      aria-expanded={expanded}
+                      className="w-full text-left hover:bg-muted/30 transition-colors"
+                    >
+                      <div className="flex items-stretch">
+                        <div className={`w-1.5 shrink-0 ${stripClass}`} />
+                        <div className="flex-1 min-w-0 px-3 sm:px-4 py-2.5 flex items-center gap-2 sm:gap-3">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-bold">Ref. {refVisible}</span>
+                              {clientRef && (
+                                <span className="text-[11px] text-muted-foreground" title="Nuestra referencia">
+                                  TWF {refTwfCorta}
+                                </span>
+                              )}
+                              {getStatusBadge(shipment)}
+                              <Badge variant="secondary" className="text-xs">{shipment.N} CNTR</Badge>
+                              {shipment.LIBRE_HASTA && daysLibre <= 3 && (
+                                <Badge className={daysLibre < 0 ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}>
+                                  {daysLibre < 0 ? 'Libre vencido' : daysLibre === 0 ? 'Libre vence HOY' : `Libre: ${daysLibre}d`}
+                                </Badge>
+                              )}
+                            </div>
+                            {(desc || shipment.BUQUE) && (
+                              <div className="text-xs text-muted-foreground truncate mt-0.5">
+                                {desc || shipment.BUQUE}
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-right shrink-0">
+                            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{hito.label}</div>
+                            <div className="text-sm font-bold tabular-nums">{hito.fecha}</div>
+                          </div>
+                          <CaretDown
+                            size={16}
+                            className={`shrink-0 text-muted-foreground transition-transform ${expanded ? 'rotate-180' : ''}`}
+                          />
                         </div>
-                        <div className="flex gap-2 shrink-0">
-                          <Button size="sm" onClick={() => handleViewDetails(shipment)} className="gap-1.5">
-                            <Eye size={16} />
-                            <span className="hidden sm:inline">Detalle</span>
-                          </Button>
-                        </div>
+                      </div>
+                    </button>
+
+                    {expanded && (
+                    <CardContent className="pt-4 pb-4 border-t">
+                      {/* ── Row 1: acción ── */}
+                      <div className="flex items-center justify-end mb-3">
+                        <Button size="sm" onClick={() => handleViewDetails(shipment)} className="gap-1.5">
+                          <Eye size={16} />
+                          Ver detalle completo
+                        </Button>
                       </div>
 
                       {/* ── Row 2: Progress bar ── */}
@@ -849,7 +911,7 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
                           </div>
                           {shipment.LIBRE_HASTA ? (
                             <>
-                              <div className="text-sm font-bold">{shipment.LIBRE_HASTA}</div>
+                              <div className="text-sm font-bold">{fmtDateDMY(shipment.LIBRE_HASTA)}</div>
                               <div className={`text-xs font-semibold mt-0.5 ${
                                 daysLibre < 0 ? 'text-red-600' :
                                 daysLibre <= 3 ? 'text-orange-600' :
@@ -878,7 +940,7 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
                                 <span className="font-medium">Salida Montevideo</span>
                               </div>
                               {hasSalida ? (
-                                <div className="text-sm font-bold text-blue-700">{salidaDate}</div>
+                                <div className="text-sm font-bold text-blue-700">{fmtDateDMY(salidaDate || '')}</div>
                               ) : (
                                 <div className="text-sm font-semibold text-orange-600">A CONFIRMAR</div>
                               )}
@@ -917,7 +979,7 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
                                 </div>
                                 <div className="text-xs">
                                   {c.salida ? (
-                                    <span className="text-green-700 font-medium">Salida: {c.salida}</span>
+                                    <span className="text-green-700 font-medium">Salida: {fmtDateDMY(c.salida)}</span>
                                   ) : (
                                     <span className="text-orange-600 font-medium">Salida: A CONFIRMAR</span>
                                   )}
@@ -940,10 +1002,11 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
                           <span>Terminal: <span className="font-medium text-foreground">{shipment.TERMINAL}</span></span>
                         )}
                         {shipment.ETA && (
-                          <span>ETA: <span className="font-medium text-foreground">{shipment.ETA}</span></span>
+                          <span>ETA: <span className="font-medium text-foreground">{fmtDateDMY(shipment.ETA)}</span></span>
                         )}
                       </div>
                     </CardContent>
+                    )}
                   </Card>
                   )
                 })
@@ -1093,7 +1156,7 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
                       <div className="flex items-center justify-between">
                         <div className="flex-1">
                           <div className="flex items-center gap-3 mb-2 flex-wrap">
-                            <h3 className="text-lg font-bold">{shipment.REF}</h3>
+                            <h3 className="text-lg font-bold">Ref. {refParaCliente(shipment)}</h3>
                             <Badge variant="secondary">{shipment.N} CNTR</Badge>
                             {isShipmentCompleted(shipment) && (
                               <Badge className="bg-gray-500">
@@ -1105,11 +1168,11 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
                           <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-1 text-sm">
                             <div>
                               <span className="text-muted-foreground">ETD:</span>
-                              <span className="ml-2">{shipment.ETD || '-'}</span>
+                              <span className="ml-2">{fmtDateDMY(shipment.ETD) || '-'}</span>
                             </div>
                             <div>
                               <span className="text-muted-foreground">ETA:</span>
-                              <span className="ml-2">{shipment.ETA || '-'}</span>
+                              <span className="ml-2">{fmtDateDMY(shipment.ETA) || '-'}</span>
                             </div>
                             <div>
                               <span className="text-muted-foreground">Buque:</span>

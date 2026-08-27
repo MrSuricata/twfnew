@@ -13,6 +13,7 @@ import { parseLocalDate } from '@/lib/shipmentTypes'
 import type { AgendaView, CalendarEvent } from '@/lib/agendaTypes'
 import type { Truck, TruckLoad } from '@/lib/truckTypes'
 import { shipmentsToEvents, trucksToEvents, countAlertsInRange, getWeekDates, toDateKey } from '@/lib/agendaUtils'
+import { refParaCliente } from '@/lib/clientAgenda'
 
 // Shipment is "pending to coordinate" only if it's already at MVD port or
 // arrives within this many days. Farther-out ETAs aren't actionable yet.
@@ -132,9 +133,13 @@ export default function AgendaCalendar({
   const allEvents = useMemo(() => {
     const list = shipmentsToEvents(shipments, depotFilter, transportFilter)
     if (trucks?.length) list.push(...trucksToEvents(trucks, truckLoads || [], sinTelexRefs, depoByRef))
+    // Vista cliente: cada chip nombra la carga como la nombra ÉL — su ref
+    // propia, o la nuestra sin la A. Acá los eventos son read-only (sin drag
+    // ni patch), así que `ref` es puro display (Brian 27/08).
+    if (clientView) for (const e of list) e.ref = refParaCliente(e.shipment) || e.ref
     list.sort((a, b) => a.date.localeCompare(b.date))
     return list
-  }, [shipments, trucks, truckLoads, depotFilter, transportFilter, sinTelexRefs, depoByRef])
+  }, [shipments, trucks, truckLoads, depotFilter, transportFilter, sinTelexRefs, depoByRef, clientView])
 
   // Extract unique depots from events
   const availableDepots = useMemo(() => {
