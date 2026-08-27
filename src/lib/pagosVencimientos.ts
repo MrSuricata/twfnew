@@ -166,6 +166,34 @@ export function parseMontoUY(s: string): number {
 /** Número → valor de input (coma decimal); null = campo vacío (sin datos). */
 export const montoToInput = (n: number | null): string => (n === null ? '' : String(n).replace('.', ','))
 
+/**
+ * Qué guardar cuando se edita un monto ESTIMADO (Brian 26/08: "no se debe
+ * suponer"): vacío = sin dato (null). Un 0 TIPEADO tampoco existe como
+ * estimado — la regla legacy lo leería como "pagado" en silencio, así que se
+ * guarda como sin dato y se avisa (el pago se registra con el botón Pagado).
+ * Única excepción: si el valor ya ERA 0 (legacy de la SG) y no se tocó, se
+ * conserva tal cual para no des-marcar pagados históricos al pasar.
+ */
+export function montoEstimadoDesdeInput(
+  crudo: string,
+  original: number | null,
+): { valor: number | null; ceroConvertido: boolean } {
+  const str = (crudo || '').trim()
+  const nuevo = str === '' ? null : parseMontoUY(str)
+  if (nuevo === 0 && original !== 0) return { valor: null, ceroConvertido: true }
+  return { valor: nuevo, ceroConvertido: false }
+}
+
+/**
+ * Qué guardar como monto REALMENTE pagado al apretar Pagado: vacío = null (no
+ * se informó — la pantalla cae al estimado). Un 0 tipeado es un 0 REAL (flete
+ * bonificado, gasto que no se cobró): se respeta, nunca se supone.
+ */
+export function montoPagadoDesdeInput(crudo: string): number | null {
+  const str = (crudo || '').trim()
+  return str === '' ? null : parseMontoUY(str)
+}
+
 /** Cargas por Chile (POD San Antonio/Valparaíso → dest_country CL): las maneja
  *  el equipo de Chile, sus pagos no entran acá (pedido Brian 10/07, caso A7793). */
 const esCargaChile = (s: DbShipment): boolean => up(s.dest_country) === 'CL'

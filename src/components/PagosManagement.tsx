@@ -36,7 +36,8 @@ import {
   MONTO_KEYS,
   PAGO_AT_KEYS,
   PAGO_MONTO_KEYS,
-  parseMontoUY,
+  montoEstimadoDesdeInput,
+  montoPagadoDesdeInput,
   montoToInput,
   type PagoItem,
   type PagoRubro,
@@ -212,11 +213,13 @@ export default function PagosManagement({ dbShipments = [], onPatchShipment, onO
   const cerrarPagoDraft = (it: PagoItem) =>
     setPagoDraft(d => { const n = { ...d }; delete n[claveItem(it)]; return n })
 
-  const marcarPagado = (it: PagoItem, montoReal: number) => {
+  const marcarPagado = (it: PagoItem, crudo: string) => {
     if (!onPatchShipment) return
     const key = PAGO_AT_KEYS[it.rubro]
     const keyMonto = PAGO_MONTO_KEYS[it.rubro]
-    const real = montoReal > 0 ? montoReal : null
+    // Vacío = no se informó el monto real (la pantalla cae al estimado).
+    // Un 0 TIPEADO es un 0 real (bonificado): se respeta, nunca se supone.
+    const real = montoPagadoDesdeInput(crudo)
     onPatchShipment(it.id, { [key]: new Date().toISOString(), [keyMonto]: real })
     sacarDeSel(it)
     cerrarPagoDraft(it)
@@ -259,11 +262,18 @@ export default function PagosManagement({ dbShipments = [], onPatchShipment, onO
   const saveEditor = () => {
     if (!editS || !onPatchShipment) { setEditS(null); return }
     const fields: Record<string, unknown> = {}
+    let ceroConvertido = false
     for (const rubro of PAGO_RUBROS) {
-      const str = draft[rubro].trim()
-      const nuevo = str === '' ? null : parseMontoUY(str)
-      const orig = editS[MONTO_KEYS[rubro]] ?? null
-      if (nuevo !== (orig === null ? null : Number(orig))) fields[MONTO_KEYS[rubro]] = nuevo
+      const origNum = editS[MONTO_KEYS[rubro]] === null || editS[MONTO_KEYS[rubro]] === undefined
+        ? null : Number(editS[MONTO_KEYS[rubro]])
+      const r = montoEstimadoDesdeInput(draft[rubro], origNum)
+      if (r.ceroConvertido) ceroConvertido = true
+      if (r.valor !== origNum) fields[MONTO_KEYS[rubro]] = r.valor
+    }
+    if (ceroConvertido) {
+      toast.info('El 0 no marca pagado: el campo quedó SIN DATO.', {
+        description: 'Para registrar un pago usá el botón Pagado de la fila, que pide el monto final.',
+      })
     }
     const origFp = normalizeFormaPago(editS.forma_pago) ?? ''
     if (draft.formaPago !== origFp) fields.forma_pago = draft.formaPago || null
@@ -455,13 +465,13 @@ export default function PagosManagement({ dbShipments = [], onPatchShipment, onO
                                 value={pagoDraft[claveItem(it)]}
                                 onChange={e => setPagoDraft(d => ({ ...d, [claveItem(it)]: e.target.value }))}
                                 onKeyDown={e => {
-                                  if (e.key === 'Enter') marcarPagado(it, parseMontoUY(pagoDraft[claveItem(it)]))
+                                  if (e.key === 'Enter') marcarPagado(it, pagoDraft[claveItem(it)])
                                   if (e.key === 'Escape') cerrarPagoDraft(it)
                                 }}
                                 title="¿Cuánto se pagó finalmente? (prellenado con el estimado)"
                                 className="h-7 w-24 rounded-md border border-input bg-background px-1.5 text-right text-xs tabular-nums focus:outline-none focus:ring-1 focus:ring-primary/50"
                               />
-                              <Button size="sm" className="h-7 px-2.5" onClick={() => marcarPagado(it, parseMontoUY(pagoDraft[claveItem(it)]))}>
+                              <Button size="sm" className="h-7 px-2.5" onClick={() => marcarPagado(it, pagoDraft[claveItem(it)])}>
                                 OK
                               </Button>
                               <Button variant="ghost" size="sm" className="h-7 px-2 text-muted-foreground" onClick={() => cerrarPagoDraft(it)} aria-label="Cancelar">
@@ -778,7 +788,7 @@ export default function PagosManagement({ dbShipments = [], onPatchShipment, onO
           {editS && (
             <div className="space-y-3">
               <p className="text-xs text-muted-foreground">
-                Estos montos son la <strong>previsión</strong> (con esto se arma cuánta plata hace falta). Vacío = sin dato. Para registrar un pago usá el botón <strong>Pagado</strong> de la fila, que pide el monto final. El vencimiento se calcula solo con la ETA, la naviera y la terminal.
+                Estos montos son la <strong>previsión</strong> (con esto se arma cuánta plata hace falta). Vacío = sin dato, y <strong>el 0 tampoco marca pagado</strong> — nunca se supone. Para registrar un pago usá el botón <strong>Pagado</strong> de la fila, que pide el monto final. El vencimiento se calcula solo con la ETA, la naviera y la terminal.
               </p>
               <div className="grid grid-cols-2 gap-3">
                 {PAGO_RUBROS.map(rubro => (

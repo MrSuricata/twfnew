@@ -3,7 +3,8 @@ import {
   addDaysISO, diffDaysISO, esLineaOne, esLineaRepremar, deriveFormaPago,
   normalizeFormaPago, formaPagoEfectiva, venceRubro, buildPagoItems, corteHasta, kpisPagos,
   costoTerminalDefault, costoDevDefault, empresaRubro, agruparPorAcreedor, SIN_ACREEDOR,
-  ordenarPagos, ordenarSinDatos, paisDePago, agruparPorPais, montosUrgentes, type PagoItem,
+  ordenarPagos, ordenarSinDatos, paisDePago, agruparPorPais, montosUrgentes,
+  montoEstimadoDesdeInput, montoPagadoDesdeInput, type PagoItem,
 } from './pagosVencimientos'
 import type { DbShipment } from './operationsTypes'
 
@@ -98,6 +99,34 @@ describe('venceRubro — matriz de reglas', () => {
   it('sin ETA → null en todos los rubros', () => {
     expect(venceRubro('flete', '', 'programado', 'TCP')).toBeNull()
     expect(venceRubro('devolucion', undefined, 'al arribo', '')).toBeNull()
+  })
+})
+
+describe('el 0 nunca se supone (Brian 26/08)', () => {
+  it('editor de estimados: vacío = sin dato', () => {
+    expect(montoEstimadoDesdeInput('', null)).toEqual({ valor: null, ceroConvertido: false })
+    expect(montoEstimadoDesdeInput('  ', 500)).toEqual({ valor: null, ceroConvertido: false })
+  })
+
+  it('editor de estimados: un 0 TIPEADO no marca pagado — queda sin dato, con aviso', () => {
+    expect(montoEstimadoDesdeInput('0', null)).toEqual({ valor: null, ceroConvertido: true })
+    expect(montoEstimadoDesdeInput('0,00', 500)).toEqual({ valor: null, ceroConvertido: true })
+  })
+
+  it('editor de estimados: el 0 legacy de la SG se conserva si no se toca', () => {
+    // El draft arranca con '0' porque el valor guardado ES 0 (pagado histórico):
+    // guardarlo sin tocarlo no debe des-marcar el pagado.
+    expect(montoEstimadoDesdeInput('0', 0)).toEqual({ valor: 0, ceroConvertido: false })
+  })
+
+  it('editor de estimados: montos normales pasan tal cual', () => {
+    expect(montoEstimadoDesdeInput('1.234,56', null)).toEqual({ valor: 1234.56, ceroConvertido: false })
+  })
+
+  it('monto pagado real: vacío = no informado · 0 tipeado = 0 real (bonificado)', () => {
+    expect(montoPagadoDesdeInput('')).toBeNull()
+    expect(montoPagadoDesdeInput('0')).toBe(0)
+    expect(montoPagadoDesdeInput('1.250,50')).toBe(1250.5)
   })
 })
 
