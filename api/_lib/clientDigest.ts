@@ -18,7 +18,7 @@ export interface EstadoDigest { code: string; label: string; emoji: string; orde
 export interface CargaDigest {
   REF: string; CLIENT_REF: string; CNTR: string; BUQUE: string
   ETA: string; SALIDA: string; ETA_FISC: string; FISCAL: string
-  DESCRIPCION: string; PKGS: number; KG: number; M3: number
+  OPERATIVA: string; DESCRIPCION: string; PKGS: number; KG: number; M3: number
   estado: EstadoDigest
 }
 export interface ClienteDigest {
@@ -73,7 +73,7 @@ const reached = (d: unknown, hoyISO: string): boolean => {
   return !!n && n <= hoyISO
 }
 
-interface ParsedDigestOp { SALIDA?: string; ETA_FISC?: string; FISCAL?: string; DESCRIPCION?: string; PKGS?: unknown; KG?: unknown; M3?: unknown }
+interface ParsedDigestOp { SALIDA?: string; ETA_FISC?: string; FISCAL?: string; OPERATIVA?: string; DESCRIPCION?: string; PKGS?: unknown; KG?: unknown; M3?: unknown }
 interface ParsedDigestShipment { ETA?: string; operativas?: ParsedDigestOp[] }
 
 /**
@@ -133,6 +133,7 @@ export function buildClientDigest(
         CNTR: txt(parsed.CNTR), BUQUE: txt(parsed.BUQUE),
         ETA: txt(parsed.ETA), SALIDA: txt(ops.find(o => o.SALIDA)?.SALIDA),
         ETA_FISC: txt(ops.find(o => o.ETA_FISC)?.ETA_FISC), FISCAL: txt(ops.find(o => o.FISCAL)?.FISCAL),
+        OPERATIVA: txt(ops.find(o => o.OPERATIVA)?.OPERATIVA),
         DESCRIPCION: txt(ops.find(o => o.DESCRIPCION)?.DESCRIPCION),
         // pkgs/kg/m3 viven en cada operativa (rowToClientShipment no los sube al nivel carga)
         PKGS: ops.reduce((a, o) => a + num(o.PKGS), 0),
