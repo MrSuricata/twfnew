@@ -15,7 +15,11 @@ import { buildAnalyticsReport, downloadAnalyticsPdf } from '@/lib/analyticsPdf'
 import { fmtNum } from '@/lib/format'
 import { exportToCSV } from '@/lib/exportUtils'
 import { toast } from 'sonner'
-import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
+import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, Legend } from 'recharts'
+import {
+  tiemposResumen, transitoPorLinea, transitoPorOrigen, coordinacionPorDeposito,
+  tiemposPorMes, MIN_MUESTRA_GRUPO,
+} from '@/lib/tiemposUtils'
 
 interface AnalyticsDashboardProps {
   shipments: ParsedShipment[]
@@ -72,6 +76,13 @@ export default function AnalyticsDashboard({ shipments, dbShipments = [], trucks
     () => filterOperations(operations, selectedYear, modeFilter, zoneFilter),
     [operations, selectedYear, modeFilter, zoneFilter]
   )
+
+  // Tiempos operativos (Brian 26/08) — sobre el MISMO filtro año/modo/zona.
+  const tiempos = useMemo(() => tiemposResumen(filtered), [filtered])
+  const tiemposLinea = useMemo(() => transitoPorLinea(filtered), [filtered])
+  const tiemposOrigen = useMemo(() => transitoPorOrigen(filtered), [filtered])
+  const tiemposDeposito = useMemo(() => coordinacionPorDeposito(filtered), [filtered])
+  const tiemposMes = useMemo(() => tiemposPorMes(filtered), [filtered])
 
   // Años con datos (cargas por ETA + camiones por fecha de carga) + año actual.
   const availableYears = useMemo(() => {
@@ -596,6 +607,154 @@ export default function AnalyticsDashboard({ shipments, dbShipments = [], trucks
                 ) : (
                   <div className="h-[280px] flex items-center justify-center text-muted-foreground">
                     No hay datos
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </>
+      )}
+
+      {/* ── Tiempos operativos (Brian 26/08): cuánto tarda cada tramo. La
+          MEDIANA manda (una fecha mal tipeada envenena el promedio) — el
+          promedio y el p90 acompañan. Respeta año/modalidad/zona. ── */}
+      {(tiempos.transito || tiempos.coordinacion || tiempos.aFiscal) && (
+        <>
+          <div className="border-t pt-6">
+            <h3 className="text-lg font-semibold mb-1 flex items-center gap-2">
+              <Clock size={22} className="text-accent" />
+              Tiempos operativos
+            </h3>
+            <p className="text-xs text-muted-foreground mb-4">
+              Mediana en días (promedio y p90 al lado) — solo marítimas con las dos fechas del tramo cargadas.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {([
+              ['Tránsito internacional', 'Puerto a puerto (ETD → llegada MVD)', tiempos.transito],
+              ['Llegada → salida', 'Coordinar el tránsito una vez en Uruguay', tiempos.coordinacion],
+              ['Salida → fiscal', 'El camión hasta el depósito destino', tiempos.aFiscal],
+              ['Puerta a puerta', 'Del embarque a la entrega fiscal', tiempos.puertaAPuerta],
+            ] as const).map(([titulo, sub, st]) => (
+              <Card key={titulo}>
+                <CardContent className="pt-5 pb-4">
+                  <div className="text-xs text-muted-foreground">{titulo}</div>
+                  {st ? (
+                    <>
+                      <div className="text-2xl font-bold mt-0.5">{fmtNum(st.mediana)} días</div>
+                      <div className="text-[11px] text-muted-foreground mt-0.5">
+                        prom {fmtNum(st.promedio)} · p90 {fmtNum(st.p90)} · {st.n} medid{st.n === 1 ? 'a' : 'as'}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-sm text-muted-foreground mt-1.5">Sin datos en el filtro</div>
+                  )}
+                  <div className="text-[10px] text-muted-foreground/70 mt-1">{sub}</div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Tránsito por línea marítima (mediana, días)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {tiemposLinea.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={280}>
+                    <BarChart data={tiemposLinea.map(g => ({ nombre: g.nombre, dias: g.stats.mediana, n: g.stats.n }))} layout="vertical">
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                      <XAxis type="number" tick={{ fontSize: 12 }} />
+                      <YAxis type="category" dataKey="nombre" width={110} tick={{ fontSize: 11 }} />
+                      <Tooltip
+                        contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }}
+                        formatter={(v: number, _n, item) => [`${v} días (${(item?.payload as { n?: number })?.n ?? '—'} viajes)`, 'Mediana']}
+                      />
+                      <Bar dataKey="dias" fill={CHART_PRIMARY} radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-[280px] flex items-center justify-center text-muted-foreground">
+                    Se necesitan al menos {MIN_MUESTRA_GRUPO} viajes por línea
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Tránsito por puerto de origen (mediana, días)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {tiemposOrigen.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={280}>
+                    <BarChart data={tiemposOrigen.map(g => ({ nombre: g.nombre, dias: g.stats.mediana, n: g.stats.n }))} layout="vertical">
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                      <XAxis type="number" tick={{ fontSize: 12 }} />
+                      <YAxis type="category" dataKey="nombre" width={110} tick={{ fontSize: 11 }} />
+                      <Tooltip
+                        contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }}
+                        formatter={(v: number, _n, item) => [`${v} días (${(item?.payload as { n?: number })?.n ?? '—'} viajes)`, 'Mediana']}
+                      />
+                      <Bar dataKey="dias" fill={CHART_PRIMARY} radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-[280px] flex items-center justify-center text-muted-foreground">
+                    Se necesitan al menos {MIN_MUESTRA_GRUPO} viajes por puerto
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Coordinación por depósito (llegada → salida, mediana)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {tiemposDeposito.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={280}>
+                    <BarChart data={tiemposDeposito.map(g => ({ nombre: g.nombre, dias: g.stats.mediana, n: g.stats.n }))} layout="vertical">
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                      <XAxis type="number" tick={{ fontSize: 12 }} />
+                      <YAxis type="category" dataKey="nombre" width={110} tick={{ fontSize: 11 }} />
+                      <Tooltip
+                        contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }}
+                        formatter={(v: number, _n, item) => [`${v} días (${(item?.payload as { n?: number })?.n ?? '—'} trasiegos)`, 'Mediana']}
+                      />
+                      <Bar dataKey="dias" fill={CHART_SECONDARY} radius={[0, 4, 4, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-[280px] flex items-center justify-center text-muted-foreground">
+                    Se necesitan al menos {MIN_MUESTRA_GRUPO} trasiegos por depósito
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Tendencia mensual (mediana de días)</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {tiemposMes.length > 1 ? (
+                  <ResponsiveContainer width="100%" height={280}>
+                    <LineChart data={tiemposMes}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                      <XAxis dataKey="mes" tick={{ fontSize: 11 }} />
+                      <YAxis tick={{ fontSize: 12 }} />
+                      <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }} />
+                      <Legend wrapperStyle={{ fontSize: 12 }} />
+                      <Line type="monotone" dataKey="transito" name="Tránsito internacional" stroke={CHART_PRIMARY} strokeWidth={2} dot={false} connectNulls />
+                      <Line type="monotone" dataKey="coordinacion" name="Llegada → salida" stroke={CHART_SECONDARY} strokeWidth={2} dot={false} connectNulls />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-[280px] flex items-center justify-center text-muted-foreground">
+                    Con más meses de datos aparece la tendencia
                   </div>
                 )}
               </CardContent>
