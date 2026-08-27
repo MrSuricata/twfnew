@@ -239,6 +239,12 @@ export interface DbShipment {
   pago_locales_by?: string | null
   pago_terminal_by?: string | null
   pago_devolucion_by?: string | null
+  /** Monto FINALMENTE pagado por rubro (Brian 26/08): el monto_* de arriba es
+   *  el ESTIMADO para la previsión; este es el real del día del pago. */
+  pago_flete_monto?: number | null
+  pago_locales_monto?: number | null
+  pago_terminal_monto?: number | null
+  pago_devolucion_monto?: number | null
 }
 
 // ── Fila unificada de la grilla ──

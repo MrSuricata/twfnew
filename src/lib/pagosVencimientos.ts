@@ -9,8 +9,14 @@
 //   TERMINAL   · MONTECON                     → ETA − 5 días
 //              · TCP / resto                  → ETA
 //   DEVOLUCIÓN · siempre                      → ETA
-// Convención de montos: null = sin datos · 0 = ya pagado (regla histórica de la
-// SG) · >0 = pendiente, salvo pago_*_at estampado.
+// Convención de montos (revisada por Brian 26/08):
+//   monto_*        = monto ESTIMADO del rubro — la previsión de "qué plata
+//                    necesito". null = sin datos · >0 = previsto. NUNCA se pisa
+//                    al pagar. (0 = pagado sobrevive SOLO como legacy de la SG:
+//                    lo cargado antes de esta revisión; el flujo nuevo no
+//                    escribe ceros.)
+//   pago_*_at/_by  = el HECHO del pago: cuándo y quién.
+//   pago_*_monto   = lo que FINALMENTE se pagó (puede diferir del estimado).
 import type { DbShipment } from './operationsTypes'
 
 export type PagoRubro = 'devolucion' | 'terminal' | 'locales' | 'flete'
@@ -34,6 +40,10 @@ export const PAGO_AT_KEYS = {
 export const PAGO_BY_KEYS = {
   devolucion: 'pago_devolucion_by', terminal: 'pago_terminal_by',
   locales: 'pago_locales_by', flete: 'pago_flete_by',
+} as const satisfies Record<PagoRubro, keyof DbShipment>
+export const PAGO_MONTO_KEYS = {
+  devolucion: 'pago_devolucion_monto', terminal: 'pago_terminal_monto',
+  locales: 'pago_locales_monto', flete: 'pago_flete_monto',
 } as const satisfies Record<PagoRubro, keyof DbShipment>
 
 export const FLETE_CTA_CTE_DIAS = 35
@@ -119,7 +129,11 @@ export interface PagoItem {
   /** A quién se le paga este rubro: flete/locales → naviera · terminal → terminal · devolución → DEV. */
   empresa: string
   rubro: PagoRubro
+  /** Monto ESTIMADO del rubro (la previsión). */
   monto: number
+  /** Monto FINALMENTE pagado (solo pagados por el flujo nuevo; null en los
+   *  legacy). Para mostrar plata pagada usá montoPagado ?? monto. */
+  montoPagado: number | null
   /** Llegada de la carga (ISO). El vencimiento se DERIVA de acá, pero Brian
    *  ordena por la llegada: es la fecha con la que piensa la semana. */
   eta: string | null
@@ -333,10 +347,14 @@ export function buildPagoItems(dbShipments: DbShipment[], hoyISO: string): { ite
         docNumber: s.doc_number || '', contenedor: s.contenedor || '',
         linea: s.linea || '', terminal: s.terminal || '',
         empresa: empresaRubro(rubro, s),
-        rubro, monto, eta: s.eta || null, vence,
+        rubro, monto,
+        montoPagado: montoNum(s[PAGO_MONTO_KEYS[rubro]]),
+        eta: s.eta || null, vence,
         dias: vence ? diffDaysISO(hoyISO, vence) : null,
         pagadoAt, pagadoBy: s[PAGO_BY_KEYS[rubro]] || '',
         formaPago: fp.value, formaPagoOverride: fp.overridden,
+        // Pagado = el HECHO (pago_*_at). monto===0 queda como fallback de los
+        // datos históricos de la SG — el flujo nuevo nunca escribe ceros.
         estado: pagadoAt || monto === 0 ? 'pagado' : 'pendiente',
       })
     }

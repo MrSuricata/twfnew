@@ -101,6 +101,35 @@ describe('venceRubro — matriz de reglas', () => {
   })
 })
 
+describe('monto pagado real vs estimado (Brian 26/08)', () => {
+  it('el pago estampado trae el monto real y el estimado queda intacto', () => {
+    const { items } = buildPagoItems([base({
+      monto_flete: 1200,
+      pago_flete_at: '2026-07-20T14:00:00Z',
+      pago_flete_by: 'brian',
+      pago_flete_monto: 1250.5,
+    })], '2026-07-25')
+    const flete = items.find(i => i.rubro === 'flete')!
+    expect(flete.estado).toBe('pagado')
+    expect(flete.monto).toBe(1200)          // estimado: NO se pisa al pagar
+    expect(flete.montoPagado).toBe(1250.5)  // lo que finalmente salió
+  })
+
+  it('pendiente: sin monto pagado (es la previsión pura)', () => {
+    const { items } = buildPagoItems([base({ monto_flete: 900 })], '2026-07-25')
+    const flete = items.find(i => i.rubro === 'flete')!
+    expect(flete.estado).toBe('pendiente')
+    expect(flete.montoPagado).toBeNull()
+  })
+
+  it('legacy: monto 0 sin pago_at sigue contando como pagado, sin monto real', () => {
+    const { items } = buildPagoItems([base({ monto_terminal: 0 })], '2026-07-25')
+    const term = items.find(i => i.rubro === 'terminal')!
+    expect(term.estado).toBe('pagado')
+    expect(term.montoPagado).toBeNull()
+  })
+})
+
 describe('buildPagoItems', () => {
   const hoy = '2026-07-10'
   it('monto null/undefined no genera item · 0 = pagado · >0 = pendiente', () => {
@@ -407,7 +436,7 @@ describe('agruparPorAcreedor', () => {
 describe('ordenarPagos — la tabla se ordena, los totales no se tocan', () => {
   const it_ = (over: Partial<PagoItem>): PagoItem => ({
     id: over.ref || 'x', ref: 'A1', cliente: 'PERETTI', docNumber: '', contenedor: '',
-    linea: 'ONE', terminal: 'TCP', empresa: 'ONE', rubro: 'flete', monto: 100,
+    linea: 'ONE', terminal: 'TCP', empresa: 'ONE', rubro: 'flete', monto: 100, montoPagado: null,
     eta: '2026-07-10', vence: '2026-08-14', dias: 5, pagadoAt: null, pagadoBy: '',
     formaPago: 'cuenta corriente', formaPagoOverride: false, estado: 'pendiente',
     ...over,

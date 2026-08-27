@@ -35,6 +35,7 @@ import {
   PAGO_RUBROS,
   MONTO_KEYS,
   PAGO_AT_KEYS,
+  PAGO_MONTO_KEYS,
   parseMontoUY,
   montoToInput,
   type PagoItem,
@@ -203,26 +204,44 @@ export default function PagosManagement({ dbShipments = [], onPatchShipment, onO
       const n = new Set(cur); n.delete(claveItem(it)); return n
     })
 
-  const marcarPagado = (it: PagoItem) => {
+  // El PAGADO registra el HECHO completo (Brian 26/08): fecha + quién (server)
+  // + monto FINALMENTE pagado. El monto estimado de la carga queda intacto —
+  // es la previsión, no el pago. El draft por ítem abre el input del monto
+  // real, prellenado con el estimado.
+  const [pagoDraft, setPagoDraft] = useState<Record<string, string>>({})
+  const cerrarPagoDraft = (it: PagoItem) =>
+    setPagoDraft(d => { const n = { ...d }; delete n[claveItem(it)]; return n })
+
+  const marcarPagado = (it: PagoItem, montoReal: number) => {
     if (!onPatchShipment) return
     const key = PAGO_AT_KEYS[it.rubro]
-    onPatchShipment(it.id, { [key]: new Date().toISOString() })
+    const keyMonto = PAGO_MONTO_KEYS[it.rubro]
+    const real = montoReal > 0 ? montoReal : null
+    onPatchShipment(it.id, { [key]: new Date().toISOString(), [keyMonto]: real })
     sacarDeSel(it)
-    toast.success(`${RUBRO_LABELS[it.rubro]} de ${it.ref} marcado como pagado`, {
-      action: { label: 'Deshacer', onClick: () => onPatchShipment(it.id, { [key]: null }) },
+    cerrarPagoDraft(it)
+    toast.success(`${RUBRO_LABELS[it.rubro]} de ${it.ref} pagado — ${fmtUSD(real ?? it.monto)}`, {
+      ...(real !== null && real !== it.monto
+        ? { description: `Estimado: ${fmtUSD(it.monto)}` }
+        : {}),
+      action: { label: 'Deshacer', onClick: () => onPatchShipment(it.id, { [key]: null, [keyMonto]: null }) },
     })
   }
 
-  /** Igual que marcarPagado pero sin toast: el lote muestra uno solo al final. */
+  /** Lote: sin input por ítem — el monto real queda igual al estimado (es la
+   *  transferencia que se acaba de hacer con esos números a la vista). */
   const marcarPagadoSilencioso = (it: PagoItem) => {
     if (!onPatchShipment) return
-    onPatchShipment(it.id, { [PAGO_AT_KEYS[it.rubro]]: new Date().toISOString() })
+    onPatchShipment(it.id, {
+      [PAGO_AT_KEYS[it.rubro]]: new Date().toISOString(),
+      [PAGO_MONTO_KEYS[it.rubro]]: it.monto > 0 ? it.monto : null,
+    })
     sacarDeSel(it)
   }
 
   const deshacerPago = (it: PagoItem) => {
     if (!onPatchShipment) return
-    onPatchShipment(it.id, { [PAGO_AT_KEYS[it.rubro]]: null })
+    onPatchShipment(it.id, { [PAGO_AT_KEYS[it.rubro]]: null, [PAGO_MONTO_KEYS[it.rubro]]: null })
     toast.success(`${RUBRO_LABELS[it.rubro]} de ${it.ref} vuelve a pendiente`)
   }
 
@@ -428,13 +447,38 @@ export default function PagosManagement({ dbShipments = [], onPatchShipment, onO
                         <td className="px-3 py-2 whitespace-nowrap tabular-nums">{it.vence ? fmtDateDMY(it.vence) : <span className="text-muted-foreground">sin ETA</span>}</td>
                         <td className="px-3 py-2 whitespace-nowrap"><DiasChip dias={it.dias} /></td>
                         <td className="px-3 py-2 text-right whitespace-nowrap">
-                          <Button variant="ghost" size="sm" className="h-7 px-2 text-muted-foreground" onClick={() => { const s = byId.get(it.id); if (s) openEditor(s) }} title="Editar montos">
-                            <PencilSimple size={15} />
-                          </Button>
-                          <Button variant="outline" size="sm" className="h-7" onClick={() => marcarPagado(it)}>
-                            <CheckCircle size={15} className="mr-1 text-green-600" weight="fill" />
-                            Pagado
-                          </Button>
+                          {pagoDraft[claveItem(it)] !== undefined ? (
+                            <span className="inline-flex items-center gap-1">
+                              <input
+                                autoFocus
+                                inputMode="decimal"
+                                value={pagoDraft[claveItem(it)]}
+                                onChange={e => setPagoDraft(d => ({ ...d, [claveItem(it)]: e.target.value }))}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') marcarPagado(it, parseMontoUY(pagoDraft[claveItem(it)]))
+                                  if (e.key === 'Escape') cerrarPagoDraft(it)
+                                }}
+                                title="¿Cuánto se pagó finalmente? (prellenado con el estimado)"
+                                className="h-7 w-24 rounded-md border border-input bg-background px-1.5 text-right text-xs tabular-nums focus:outline-none focus:ring-1 focus:ring-primary/50"
+                              />
+                              <Button size="sm" className="h-7 px-2.5" onClick={() => marcarPagado(it, parseMontoUY(pagoDraft[claveItem(it)]))}>
+                                OK
+                              </Button>
+                              <Button variant="ghost" size="sm" className="h-7 px-2 text-muted-foreground" onClick={() => cerrarPagoDraft(it)} aria-label="Cancelar">
+                                ✕
+                              </Button>
+                            </span>
+                          ) : (
+                            <>
+                              <Button variant="ghost" size="sm" className="h-7 px-2 text-muted-foreground" onClick={() => { const s = byId.get(it.id); if (s) openEditor(s) }} title="Editar montos estimados">
+                                <PencilSimple size={15} />
+                              </Button>
+                              <Button variant="outline" size="sm" className="h-7" title="Registrar el pago con el monto final" onClick={() => setPagoDraft(d => ({ ...d, [claveItem(it)]: montoToInput(it.monto > 0 ? it.monto : null) }))}>
+                                <CheckCircle size={15} className="mr-1 text-green-600" weight="fill" />
+                                Pagado
+                              </Button>
+                            </>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -577,7 +621,7 @@ export default function PagosManagement({ dbShipments = [], onPatchShipment, onO
                     action: {
                       label: 'Deshacer',
                       onClick: () => previos.forEach(p =>
-                        onPatchShipment?.(p.id, { [PAGO_AT_KEYS[p.rubro]]: null })),
+                        onPatchShipment?.(p.id, { [PAGO_AT_KEYS[p.rubro]]: null, [PAGO_MONTO_KEYS[p.rubro]]: null })),
                     },
                   })
                 }} disabled={!onPatchShipment}>
@@ -604,7 +648,7 @@ export default function PagosManagement({ dbShipments = [], onPatchShipment, onO
                     <th className="px-3 py-2 text-left">Ref</th>
                     <th className="px-3 py-2 text-left">Cliente</th>
                     <th className="px-3 py-2 text-left">Rubro</th>
-                    <th className="px-3 py-2 text-right">Monto USD</th>
+                    <th className="px-3 py-2 text-right" title="Lo que finalmente se pagó; si difiere del estimado, se muestra entre paréntesis">Pagado USD</th>
                     <th className="px-3 py-2 text-left">Pagado el</th>
                     <th className="px-3 py-2 text-left">Por</th>
                     <th className="px-3 py-2 text-right">Acciones</th>
@@ -616,7 +660,12 @@ export default function PagosManagement({ dbShipments = [], onPatchShipment, onO
                       <td className="px-3 py-2 font-medium whitespace-nowrap"><RefCell it={it} onOpenDetail={onOpenDetail} /></td>
                       <td className="px-3 py-2 max-w-[220px] truncate" title={it.cliente}>{it.cliente || '—'}</td>
                       <td className="px-3 py-2 whitespace-nowrap">{RUBRO_LABELS[it.rubro]}</td>
-                      <td className="px-3 py-2 text-right tabular-nums">{fmtMoneyUY(it.monto)}</td>
+                      <td className="px-3 py-2 text-right tabular-nums">
+                        {fmtMoneyUY(it.montoPagado ?? it.monto)}
+                        {it.montoPagado !== null && it.montoPagado !== it.monto && (
+                          <span className="ml-1.5 text-[11px] text-muted-foreground" title="Monto estimado antes de pagar">(est. {fmtMoneyUY(it.monto)})</span>
+                        )}
+                      </td>
                       <td className="px-3 py-2 whitespace-nowrap">{
                         /* Fecha LOCAL: el ISO es UTC y de noche (UY) el slice daba el día siguiente. */
                         new Date(String(it.pagadoAt)).toLocaleDateString('es-UY')
@@ -723,13 +772,13 @@ export default function PagosManagement({ dbShipments = [], onPatchShipment, onO
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <CurrencyDollar size={20} weight="fill" className="text-primary" />
-              Datos de pago — {editS?.ref}
+              Montos estimados — {editS?.ref}
             </DialogTitle>
           </DialogHeader>
           {editS && (
             <div className="space-y-3">
               <p className="text-xs text-muted-foreground">
-                Vacío = sin dato · <strong>0 = ya pagado</strong> · mayor a 0 = pendiente. El vencimiento se calcula solo con la ETA, la naviera y la terminal.
+                Estos montos son la <strong>previsión</strong> (con esto se arma cuánta plata hace falta). Vacío = sin dato. Para registrar un pago usá el botón <strong>Pagado</strong> de la fila, que pide el monto final. El vencimiento se calcula solo con la ETA, la naviera y la terminal.
               </p>
               <div className="grid grid-cols-2 gap-3">
                 {PAGO_RUBROS.map(rubro => (
