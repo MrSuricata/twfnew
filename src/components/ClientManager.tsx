@@ -318,12 +318,22 @@ export default function ClientManager({ clients, onUpdateClients, shipments = []
     setImpersonatingId(client.id)
     try {
       const result = await impersonateClient({ id: client.id })
+      // Sin token no se navega: ir a /portal sin sesión te deja en el login del
+      // cliente (o, dentro de la PWA, en la pública) — el bug que reportó Brian.
+      if (!result?.token) {
+        toast.error('No se pudo iniciar sesión como este cliente (token vacío)')
+        setImpersonatingId(null)
+        return
+      }
       toast.info('Iniciando sesión como ' + client.name)
       // Persist the client token so session restore picks it up on /portal.
       // Full page nav reinitializes the auth module, which reads this key.
       try { sessionStorage.setItem('twf-token', result.token) } catch { /* ignore */ }
-      // Small delay so the toast is visible before the redirect.
-      setTimeout(() => { window.location.href = '/portal' }, 300)
+      // Navegación en el MISMO documento (assign) — con scope:"/" en el manifest,
+      // la PWA instalada se queda adentro y conserva el sessionStorage recién
+      // escrito (antes, sin scope, algunos navegadores abrían /portal fuera de la
+      // app, sin el token, y caía en la landing). Delay corto para que se vea el toast.
+      setTimeout(() => { window.location.assign('/portal') }, 250)
     } catch (err: any) {
       console.error('[impersonate] error:', err)
       toast.error(err?.message || 'No se pudo iniciar sesión como este cliente')

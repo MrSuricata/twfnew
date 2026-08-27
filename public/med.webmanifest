@@ -10,5 +10,7 @@
   "background_color": "#261c79",
   "display": "standalone",
   "start_url": "/admin",
+  "id": "/admin",
+  "scope": "/",
   "lang": "es"
 }
