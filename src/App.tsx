@@ -12,7 +12,7 @@ import { withRollupColumns } from '@/lib/operativasRollup'
 import { subscribeTrucksLive } from '@/lib/realtimeBus'
 import { getDemoShipments } from '@/lib/demoShipments'
 import { filterShipments } from '@/lib/sheetsSync'
-import { verifySession, clearAuth, authFetch, hasStoredToken } from '@/lib/authClient'
+import { verifySession, clearAuth, authFetch, hasStoredToken, adoptImpersonationToken } from '@/lib/authClient'
 import { shouldRestoreSession } from '@/lib/authGate'
 import { loadAdminData, saveQuotes, saveDocuments, saveReports, saveClients, saveTrucks, saveTruckLoads, saveLclAir, deleteTruck as apiDeleteTruck, deleteTruckLoad as apiDeleteTruckLoad, deleteLclAir as apiDeleteLclAir, saveBilling, deleteBilling as apiDeleteBilling, saveOperators, saveOperatorAssignment, deleteOperator as apiDeleteOperator, patchDbShipment, createDbShipment, deleteDbShipment, patchFclShipment, renameShipmentRef, fetchTrucks, fetchTruckLoads } from '@/lib/dataClient'
 
@@ -281,6 +281,17 @@ function App() {
 
   // ── Session restore on mount ──
   useEffect(() => {
+    // Token de "Ver como cliente" por fragment (#imp=…): se adopta ANTES del
+    // verify. El fragment sobrevive el salto PWA→navegador donde el
+    // sessionStorage se pierde (bug 27/08: el impersonate caía en la landing).
+    // Se limpia de la URL apenas se consume — no queda en el historial visible.
+    try {
+      const m = window.location.hash.match(/[#&]imp=([^&]+)/)
+      if (m) {
+        adoptImpersonationToken(decodeURIComponent(m[1]))
+        history.replaceState(null, '', window.location.pathname + window.location.search)
+      }
+    } catch { /* sin fragment, flujo normal */ }
     verifySession().then(result => {
       if (result.valid) {
         const path = window.location.pathname.toLowerCase()

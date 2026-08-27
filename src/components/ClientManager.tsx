@@ -326,14 +326,16 @@ export default function ClientManager({ clients, onUpdateClients, shipments = []
         return
       }
       toast.info('Iniciando sesión como ' + client.name)
-      // Persist the client token so session restore picks it up on /portal.
-      // Full page nav reinitializes the auth module, which reads this key.
+      // Cinturón: storage para el caso normal (misma ventana, mismo contexto).
       try { sessionStorage.setItem('twf-token', result.token) } catch { /* ignore */ }
-      // Navegación en el MISMO documento (assign) — con scope:"/" en el manifest,
-      // la PWA instalada se queda adentro y conserva el sessionStorage recién
-      // escrito (antes, sin scope, algunos navegadores abrían /portal fuera de la
-      // app, sin el token, y caía en la landing). Delay corto para que se vea el toast.
-      setTimeout(() => { window.location.assign('/portal') }, 250)
+      // Y TIRANTES: el token viaja también en el fragment (#imp=…), que
+      // sobrevive cualquier salto de contexto (PWA instalada → navegador,
+      // ventana nueva) donde el sessionStorage se pierde — la causa real del
+      // impersonate que caía en la landing (bug 27/08). App lo adopta al
+      // montar y lo limpia de la URL. El fragment nunca viaja al server.
+      setTimeout(() => {
+        window.location.assign('/portal#imp=' + encodeURIComponent(result.token))
+      }, 250)
     } catch (err: any) {
       console.error('[impersonate] error:', err)
       toast.error(err?.message || 'No se pudo iniciar sesión como este cliente')

@@ -33,6 +33,15 @@ function setAuth(token: string, role: UserRole, data?: Record<string, string>) {
   try { sessionStorage.setItem('twf-token', token) } catch {}
 }
 
+/** Adopta el token de "Ver como cliente" que llega por el fragment de la URL
+ *  (#imp=…). El fragment sobrevive CUALQUIER salto de contexto (PWA instalada
+ *  → navegador, ventana nueva) donde el sessionStorage se pierde — la causa
+ *  del impersonate que caía en la landing (bug 27/08). El fragment nunca
+ *  viaja al server ni queda en access logs. */
+export function adoptImpersonationToken(token: string) {
+  setAuth(token, 'client')
+}
+
 /** Decodifica el payload del JWT guardado (sin verificar — solo para UI;
  *  el servidor SIEMPRE re-valida los permisos). */
 function decodeTokenPayload(): Record<string, unknown> | null {
