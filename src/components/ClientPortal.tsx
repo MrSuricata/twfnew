@@ -724,6 +724,15 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
                       <div className="flex items-start justify-between gap-3 mb-3">
                         <div className="flex items-center gap-2 flex-wrap">
                           <h3 className="text-xl font-bold tracking-tight">{shipment.REF}</h3>
+                          {/* La referencia PROPIA del cliente (viene del server como
+                              CLIENT_REF, extra sobre ParsedShipment): es como ÉL
+                              nombra la carga en sus mails — verla acá evita el
+                              "¿cuál es la 1410?" (Brian 26/08). */}
+                          {Boolean((shipment as { CLIENT_REF?: string }).CLIENT_REF) && (
+                            <Badge variant="outline" className="text-xs" title="Tu referencia interna">
+                              Ref. propia: {(shipment as { CLIENT_REF?: string }).CLIENT_REF}
+                            </Badge>
+                          )}
                           <Badge className="bg-accent text-accent-foreground text-xs">{shipment.N} CNTR</Badge>
                           {getStatusBadge(shipment)}
                         </div>

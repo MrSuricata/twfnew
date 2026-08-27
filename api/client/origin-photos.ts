@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { authenticateRequest, type ClientPayload } from '../_lib/jwt.js'
 import { handleCors } from '../_lib/cors.js'
 import { getSupabase } from '../_lib/supabase.js'
-import { performServerSync, matchesClientePattern } from '../_lib/csvParser.js'
+import { matchesClientePattern } from '../_lib/csvParser.js'
 import { signPhotoUrls, signPhotoUrl, THUMB_TTL, FULL_TTL } from '../_lib/photoStorage.js'
 
 // ─── Client Origin Photos API ────────────────────────────────────────
@@ -10,42 +10,25 @@ import { signPhotoUrls, signPhotoUrl, THUMB_TTL, FULL_TTL } from '../_lib/photoS
 // GET  /api/client/origin-photos?id=xxx    → single photo WITH file_data (full-size view)
 // ─────────────────────────────────────────────────────────────────────
 
-/** Get all shipment REFs for a client */
+/** REFs del cliente desde la TABLA (la web es master desde el flip 16/06 —
+ *  el cache de la planilla dejaba afuera todas las cargas nuevas). */
 async function getClientShipmentRefs(db: any, pattern: string): Promise<Set<string>> {
   try {
-    const { data: cache } = await db.from('shipments_cache').select('data').eq('id', 1).single()
-    if (cache?.data && cache.data.length > 0) {
-      const refs = new Set<string>(
-        cache.data
-          .filter((s: any) => matchesClientePattern(s.CLIENTE, pattern))
-          .map((s: any) => s.REF)
-      )
-      if (refs.size > 0) return refs
-    }
+    const { data } = await db
+      .from('shipments')
+      .select('ref, cliente')
+      .eq('archived', false)
+      .neq('source', 'sheet')
+      .limit(5000)
+    return new Set<string>(
+      (data || [])
+        .filter((s: any) => matchesClientePattern(String(s.cliente || ''), pattern))
+        .map((s: any) => String(s.ref))
+    )
   } catch (err) {
-    console.warn('[client/origin-photos] Supabase cache read failed:', err)
+    console.warn('[client/origin-photos] shipments read failed:', err)
+    return new Set()
   }
-
-  const sheetsUrl = process.env.GOOGLE_SHEETS_CSV_URL
-  if (sheetsUrl) {
-    try {
-      const allShipments = await performServerSync(sheetsUrl)
-      try {
-        await db
-          .from('shipments_cache')
-          .upsert({ id: 1, data: allShipments, synced_at: new Date().toISOString() }, { onConflict: 'id' })
-      } catch {}
-      return new Set<string>(
-        allShipments
-          .filter((s: any) => matchesClientePattern(s.CLIENTE, pattern))
-          .map((s: any) => s.REF)
-      )
-    } catch (sheetsErr) {
-      console.warn('[client/origin-photos] Google Sheets fallback failed:', sheetsErr)
-    }
-  }
-
-  return new Set()
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
