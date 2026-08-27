@@ -42,6 +42,8 @@ import { statusColorToClass, getUrgencyMeta } from '@/lib/statusColors'
 import { ClientAccount, OperativeReport, OriginPhoto } from '@/lib/quotationTypes'
 import { authFetch } from '@/lib/authClient'
 import { fetchClientReports, fetchClientOriginPhotos } from '@/lib/dataClient'
+import { agendaCliente, EVENTO_LABELS } from '@/lib/clientAgenda'
+import { fmtDateDMY } from '@/lib/format'
 import ShipmentDetailsDialog from './ShipmentDetailsDialog'
 import AgendaCalendar from './agenda/AgendaCalendar'
 import { matchesPattern } from '@/lib/clientMatching'
@@ -229,6 +231,13 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
   }, [effectiveReports, clientShipments])
 
   const allAlerts = useMemo(() => generateShipmentAlerts(activeShipments, clientReports), [activeShipments, clientReports])
+
+  // La agenda del cliente (Brian 26/08): próximos movimientos, últimas
+  // llegadas y contadores de semana/mes — derivada de las cargas activas.
+  const agenda = useMemo(
+    () => agendaCliente(clientShipments, new Date().toISOString().slice(0, 10)),
+    [clientShipments],
+  )
   const visibleAlerts = allAlerts.filter(a => !dismissedAlerts.includes(a.id))
   const unseenAlerts = visibleAlerts.filter(a => !seenAlerts.includes(a.id))
   const criticalCount = visibleAlerts.filter(a => a.severity === 'critical' || a.severity === 'warning').length
@@ -504,6 +513,68 @@ export default function ClientPortal({ onLogout, clientEmail, shipments = [], cl
           </TabsList>
 
           <TabsContent value="agenda" className="space-y-4 mt-6">
+            {/* ── Resumen: qué viene y qué acaba de llegar (Brian 26/08) ── */}
+            <div className="grid gap-4 md:grid-cols-2">
+              <Card>
+                <CardContent className="pt-5 pb-4">
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+                    Próximos movimientos
+                  </h3>
+                  {agenda.proximos.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Nada agendado por ahora — te avisamos apenas haya novedades.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {agenda.proximos.slice(0, 8).map((e, i) => (
+                        <div key={`${e.tipo}-${e.ref}-${e.cntr}-${i}`} className="flex items-center gap-2.5 text-sm min-w-0">
+                          {e.tipo === 'llegada_mvd'
+                            ? <Boat size={16} weight="fill" className="text-blue-600 shrink-0" />
+                            : e.tipo === 'salida'
+                              ? <Truck size={16} weight="fill" className="text-amber-600 shrink-0" />
+                              : <Package size={16} weight="fill" className="text-green-600 shrink-0" />}
+                          <span className="font-semibold tabular-nums whitespace-nowrap">{fmtDateDMY(e.fecha)}</span>
+                          <span className="truncate">
+                            {EVENTO_LABELS[e.tipo]} — <b>{e.clientRef || e.ref}</b>
+                            {e.cntr ? <span className="text-muted-foreground font-mono text-xs"> · {e.cntr}</span> : null}
+                          </span>
+                          <span className="ml-auto text-xs text-muted-foreground whitespace-nowrap">
+                            {e.dias === 0 ? 'hoy' : `en ${e.dias}d`}
+                          </span>
+                        </div>
+                      ))}
+                      {agenda.proximos.length > 8 && (
+                        <p className="text-xs text-muted-foreground">y {agenda.proximos.length - 8} más — los ves en el calendario de abajo</p>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="pt-5 pb-4">
+                  <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-3">
+                    Últimas llegadas a Montevideo
+                  </h3>
+                  {agenda.ultimasLlegadas.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Sin llegadas en los últimos 14 días.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {agenda.ultimasLlegadas.slice(0, 6).map((e, i) => (
+                        <div key={`ull-${e.ref}-${i}`} className="flex items-center gap-2.5 text-sm min-w-0">
+                          <Anchor size={16} weight="fill" className="text-primary shrink-0" />
+                          <span className="font-semibold tabular-nums whitespace-nowrap">{fmtDateDMY(e.fecha)}</span>
+                          <span className="truncate"><b>{e.clientRef || e.ref}</b>{e.buque ? ` · ${e.buque}` : ''}</span>
+                          <span className="ml-auto text-xs text-muted-foreground whitespace-nowrap">hace {-e.dias}d</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground mt-3 pt-3 border-t border-border">
+                    Esta semana: <b className="text-foreground">{agenda.estaSemana.length}</b> movimiento{agenda.estaSemana.length === 1 ? '' : 's'} ·
+                    Este mes: <b className="text-foreground">{agenda.esteMes.length}</b>
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+
             <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm text-muted-foreground flex items-start gap-2">
               <Info size={16} className="shrink-0 mt-0.5" />
               <span>
