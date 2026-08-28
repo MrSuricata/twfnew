@@ -94,6 +94,13 @@ export function alertasVigentes<T extends Noticia>(list: T[], hoyISO: string): T
   return noticiasVigentes(list, hoyISO).filter(n => n.alerta)
 }
 
+/** Orden del carrusel de portada: los avisos abren (el más nuevo primero) y
+ *  atrás va el resto en orden cronológico. Lo urgente no queda al final. */
+export function ordenSlides<T extends Noticia>(vigentes: T[], max = 6): T[] {
+  const top = vigentes.slice(0, max)
+  return [...top.filter(n => n.alerta), ...top.filter(n => !n.alerta).reverse()]
+}
+
 const LS_KEY = 'med_novedad_alerta_vista'
 
 /** Clave del día + ids: si cambia el día O aparece una alerta nueva, se vuelve
