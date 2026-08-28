@@ -271,6 +271,32 @@ export async function renameShipmentRef(id: string, newRef: string, pin: string)
 //   - POST /api/notifications/send-email
 // The notification_tasks table is kept for historical audit; no new rows are written.
 
+// ── Noticias (Novedades logísticas de la landing) ──
+
+export async function fetchNoticiasAdmin(): Promise<Record<string, unknown>[]> {
+  const res = await authFetch('/api/data/noticias')
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const data = await res.json()
+  return data.noticias || []
+}
+
+export async function saveNoticia(n: Record<string, unknown>): Promise<void> {
+  const res = await authFetch('/api/data/noticias', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(n),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
+}
+
+export async function deleteNoticia(id: string): Promise<void> {
+  const res = await authFetch(`/api/data/noticias?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+}
+
 // ── Clients ──
 
 export async function fetchClients(): Promise<ClientAccount[]> {

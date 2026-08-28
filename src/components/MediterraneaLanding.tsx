@@ -25,6 +25,7 @@ import {
   SignIn,
 } from '@phosphor-icons/react'
 import { useBrand } from '@/lib/brand'
+import NovedadesSection from './NovedadesSection'
 import { processShipmentRecord, getShipmentStatus } from '@/lib/shipmentTypes'
 import { voyageProgress, voyageCaption } from '@/lib/trackProgress'
 import LoginDialog from './LoginDialog'
@@ -539,6 +540,9 @@ export default function MediterraneaLanding() {
       </section>
 
       {/* ── Cobertura ── */}
+      {/* ── Novedades logísticas (avisos + noticias, Brian 28/08) ── */}
+      <NovedadesSection />
+
       <section id="cobertura" className="py-20 lg:py-28 relative overflow-hidden" style={{ background: 'linear-gradient(180deg, #261c79 0%, #352e6a 100%)' }}>
         <div className="absolute inset-0 opacity-10 bg-cover bg-center" style={{ backgroundImage: 'url(/images/ops-container-yard.jpg)' }} />
         <div className="relative max-w-7xl mx-auto px-5 lg:px-8">

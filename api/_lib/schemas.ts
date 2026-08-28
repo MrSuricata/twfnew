@@ -70,6 +70,21 @@ export const ClientRowSchema = z.object({
   digest_emails: optTrimmed(1000),
 })
 
+/** Noticias / avisos de la landing (sección Novedades logísticas). */
+export const NoticiaRowSchema = z.object({
+  id: z.string().max(64).optional(),
+  titulo: z.string().trim().min(1, 'El título es obligatorio').max(300),
+  bajada: optTrimmed(600),
+  cuerpo: optTrimmed(8000),
+  categoria: optTrimmed(40),
+  imagenUrl: optTrimmed(1000),
+  imagen_url: optTrimmed(1000),
+  alerta: z.boolean().optional(),
+  activo: z.boolean().optional(),
+  vigenteHasta: optTrimmed(20),
+  vigente_hasta: optTrimmed(20),
+})
+
 /** Settings upsert (PUT) */
 export const SettingsUpsertSchema = z.object({
   key: z.string().refine(
