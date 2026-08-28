@@ -8,6 +8,15 @@ App de gestión de cargas en producción (Vite + React + TS + Tailwind 4 + Supab
 - **Admin** en `/admin` (PWA abre ahí) · Portal partners (depot/transport) · Landing pública + tracking
 - **Supabase:** proyecto TWF `ihpsdeoexkipxmaxsmrc` · **Vercel:** proyecto `twf` (único)
 
+## Diseño de Mediterránea — LEER ANTES DE TOCAR PANTALLAS DE MED
+`docs/DISENO-MED.md` es la fuente de verdad: paleta, tipografía (Nunito 900 +
+Montserrat), piezas del sistema (pills, cards, tablas, arcos, nodos de ruta),
+tono de copy y qué falta aplicar. Los colores están como utilidades de Tailwind
+(`bg-med-violeta`, `text-med-celeste`…) en el `@theme` de `src/main.css`, junto
+con `.titulo-med`, `.papel-med` y `.degradado-med`. NO inventar valores nuevos ni
+volver a pegar hexadecimales sueltos. TWF conserva su estética: nada de esto se
+le aplica.
+
 ## Arquitectura de datos (¡leer antes de tocar!)
 - **FCL** nace en Google Sheet (SG gid=1606359155 + Operativas gid=1133111465, solo refs `A####`).
   Sync (`api/sheets/sync.ts` → `performServerSync`) escribe: cache JSON (`shipments_cache`) + **espejo**

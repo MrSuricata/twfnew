@@ -98,6 +98,31 @@
 /*
   ---break---
 */
+/* ── Paleta de Mediterránea ──────────────────────────────────────────────
+   Los mismos valores que usa el manual de marca. Sirven como utilidades de
+   Tailwind (bg-med-violeta, text-med-celeste…) para no repetir el hex en cada
+   componente. Solo las usa lo de Mediterránea; TWF no se toca.
+   El sistema completo está en docs/DISENO-MED.md. */
+@theme {
+  --color-med-violeta: #49286b;      /* títulos, botones, sidebar */
+  --color-med-texto: #352e6a;        /* cuerpo sobre fondo claro */
+  --color-med-profundo: #261c79;     /* fin de degradados */
+  --color-med-celeste: #9bd1e5;      /* acentos y líneas */
+  --color-med-pastel: #ceffff;       /* pills y fondos suaves */
+  --color-med-aviso: #e8863b;        /* SOLO riesgo: vencidos, pisadas, faltantes */
+  --color-med-gris: #6b6688;         /* texto secundario */
+  --color-med-gris-suave: #9a96b8;   /* labels y datos terciarios */
+  --color-med-borde: #eef0f8;        /* bordes de card y separadores */
+  --color-med-fondo: #fbfbfe;        /* fondo de campos y cabeceras */
+  --color-med-ok: #2f8f5b;           /* pagado, cobrado, check pasado */
+  --color-med-error: #d94f4f;        /* check fallido */
+}
+
+/* Degradado de marca, para bandas y encabezados. */
+.degradado-med {
+  background: linear-gradient(160deg, #49286b 0%, #352e6a 55%, #261c79 100%);
+}
+
 /* Títulos de la landing de Mediterránea: la marca usa Gotham y Nunito 900 es
    el sustituto web aprobado. Solo la usa esa landing — el resto de la app y la
    marca TWF siguen con la tipografía de siempre. */
