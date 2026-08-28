@@ -292,8 +292,10 @@ html {
   color: var(--foreground) !important;
 }
 .tab-underline[data-state="active"] {
+  border-bottom-width: 3px !important;
   border-bottom-color: var(--accent) !important;
   color: var(--accent) !important;
+  font-weight: 700;
   background: transparent !important;
   box-shadow: none !important;
 }
