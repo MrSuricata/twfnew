@@ -122,31 +122,62 @@ export function NovedadAlertaModal({ noticias }: { noticias: Noticia[] }) {
   if (alertas.length === 0) return null
   const a = alertas[0]
 
+  const otras = alertas.length - 1
+
   return (
     <Dialog open={abierta} onOpenChange={o => { if (!o) cerrar() }}>
-      <DialogContent className="p-0 overflow-hidden max-w-md border-0">
+      <DialogContent
+        className="p-0 overflow-hidden border-0 gap-0 sm:max-w-[620px]"
+        style={{ borderRadius: 28, boxShadow: '0 60px 130px rgba(20,12,60,0.5)' }}
+      >
         <DialogTitle className="sr-only">{tituloPlano(a.titulo)}</DialogTitle>
-        {/* Banda lisa: el dibujo cuadrado de la categoría acá saldría recortado. */}
-        <div className="relative h-24" style={{ backgroundColor: colorVineta(a.categoria) }}>
-          {a.imagenUrl && <img src={a.imagenUrl} alt="" className="w-full h-full object-cover" />}
-          <span className="absolute top-3 left-4"><Kicker categoria={a.categoria} claro /></span>
-          <span className="absolute top-3.5 right-4 text-[11px] text-white/90">{fmtFecha(a.publicadaAt)}</span>
+
+        {/* Banda de encabezado con los arcos de la marca */}
+        <div
+          className="relative overflow-hidden flex items-center justify-between gap-4 px-6 sm:px-9 py-[26px] sm:py-[30px]"
+          style={{ background: 'linear-gradient(160deg,#49286b 0%,#352e6a 60%,#261c79 100%)' }}
+        >
+          <div className="absolute pointer-events-none rounded-full" style={{ top: -120, right: -120, width: 220, height: 220, background: 'rgba(155,209,229,0.18)' }} />
+          <div className="absolute pointer-events-none rounded-full box-border" style={{ top: -135, right: -135, width: 270, height: 270, border: '14px solid rgba(155,209,229,0.35)' }} />
+          <span className="relative rounded-full text-white uppercase" style={{ background: '#e8863b', padding: '9px 22px', fontWeight: 600, fontSize: 13, letterSpacing: '0.08em' }}>
+            {a.kicker || categoriaMeta(a.categoria).label}
+          </span>
+          <span className="relative" style={{ color: '#9bd1e5', fontWeight: 600, fontSize: 13, letterSpacing: '0.08em' }}>
+            {fmtFecha(a.publicadaAt)}
+          </span>
         </div>
-        <div className="px-5 pt-4 pb-5">
-          <h3 className="text-lg font-bold leading-snug text-[#261c79]">{tituloPlano(a.titulo)}</h3>
-          {a.bajada && <p className="mt-2 text-sm text-[#5b5780]">{conNegrita(a.bajada)}</p>}
-          {alertas.length > 1 && (
-            <p className="mt-2 text-xs font-medium text-[#49286b]">+ {alertas.length - 1} aviso{alertas.length > 2 ? 's' : ''} más en Novedades</p>
+
+        <div className="flex flex-col items-start gap-4 px-6 sm:px-9 pt-7 sm:pt-8 pb-[26px] sm:pb-[30px]">
+          <h3 style={{ fontFamily: "'Nunito','Jost',sans-serif", fontWeight: 900, fontSize: 29, lineHeight: 1.05, letterSpacing: '-0.01em', color: '#49286b' }}>
+            {tituloPlano(a.titulo)}
+          </h3>
+          <div style={{ width: 120, height: 5, background: '#e8863b' }} />
+          {a.bajada && (
+            <p style={{ fontSize: 16.5, lineHeight: 1.55, color: '#352e6a' }}>
+              {conNegrita(a.bajada, { color: '#49286b' })}
+            </p>
           )}
-          <div className="mt-4 flex items-center gap-3">
-            <button onClick={cerrar} className="rounded-lg bg-[#261c79] px-5 py-2 text-sm font-semibold text-white hover:bg-[#352e6a] transition-colors">
-              Entendido
-            </button>
-            <a href="/novedades" className="text-sm font-semibold text-[#49286b] inline-flex items-center gap-1">
-              Ver novedades <ArrowRight size={14} weight="bold" />
+          {otras > 0 && (
+            <a href="/novedades" className="rounded-full" style={{ background: '#ceffff', border: '2px solid #9bd1e5', padding: '8px 18px', fontWeight: 600, fontSize: 13, color: '#352e6a' }}>
+              + {otras} aviso{otras > 1 ? 's' : ''} más en Novedades
             </a>
-            <span className="ml-auto text-[10px] text-[#6b6688]">1 aviso por día</span>
-          </div>
+          )}
+        </div>
+
+        <div className="flex items-center gap-3 sm:gap-[18px] px-6 sm:px-9 pb-[26px] sm:pb-[30px]">
+          <button
+            onClick={cerrar}
+            className="rounded-full text-white transition-colors"
+            style={{ background: '#49286b', padding: '14px 32px', fontWeight: 600, fontSize: 15 }}
+            onMouseEnter={e => { e.currentTarget.style.background = '#261c79' }}
+            onMouseLeave={e => { e.currentTarget.style.background = '#49286b' }}
+          >
+            Entendido
+          </button>
+          <a href="/novedades" className="inline-flex items-center gap-2 whitespace-nowrap" style={{ fontWeight: 600, fontSize: 15, color: '#49286b' }}>
+            Ver novedades <ArrowRight size={15} weight="bold" />
+          </a>
+          <span className="ml-auto hidden sm:inline" style={{ fontWeight: 500, fontSize: 12, color: '#9a96b8' }}>1 aviso por día</span>
         </div>
       </DialogContent>
     </Dialog>
