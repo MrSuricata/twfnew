@@ -37,7 +37,7 @@ export default function TermsPage({ onBack }: TermsPageProps) {
         <Card>
           <CardContent className="px-8 py-8 space-y-6">
             <div>
-              <h1 className="text-3xl font-bold text-primary mb-2">Términos y Condiciones</h1>
+              <h1 className="titulo-med text-3xl text-primary mb-2">Términos y Condiciones</h1>
               <p className="text-sm text-muted-foreground">Última actualización: abril de 2026</p>
             </div>
 
