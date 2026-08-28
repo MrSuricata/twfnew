@@ -33,7 +33,7 @@ import NotFoundPage from './components/NotFoundPage'
 
 type View = 'public' | 'admin-login' | 'admin-dashboard' | 'client-login' | 'client-portal' | 'partner-login' | 'depot-dashboard' | 'transport-dashboard' | 'terms' | 'privacy' | 'novedades' | 'not-found'
 
-const KNOWN_PATHS = new Set(['/', '/admin', '/portal', '/depot', '/transport', '/partner', '/terminos', '/privacidad', '/mirendimiento', '/deposito'])
+const KNOWN_PATHS = new Set(['/', '/admin', '/portal', '/depot', '/transport', '/partner', '/terminos', '/privacidad', '/mirendimiento', '/deposito', '/novedades'])
 
 /** Página PERSONAL de rendimiento: no está linkeada desde ningún lado (pedido
  *  de Brian 18/08: "que tenga que ponerlo yo para verlo"). Se entra tipeando la

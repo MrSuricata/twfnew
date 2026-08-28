@@ -1,16 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Dialog, DialogContent } from '@/components/ui/dialog'
-import { ArrowRight, ArrowLeft, Newspaper } from '@phosphor-icons/react'
+import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
+import { ArrowRight, ArrowLeft, Newspaper, ArrowSquareOut } from '@phosphor-icons/react'
 import { useBrand } from '@/lib/brand'
 import {
   type Noticia, rowToNoticia, noticiasVigentes, alertasVigentes,
-  alertaYaVista, marcarAlertaVista, categoriaMeta,
+  alertaYaVista, marcarAlertaVista, categoriaMeta, tituloPlano, linkNoticia,
 } from '@/lib/noticias'
+import NovedadesCarrusel, { conNegrita } from '@/components/NovedadesCarrusel'
 
 // ── Novedades logísticas (Brian 28/08) ───────────────────────────────────
-// Sección estilo diario en la landing + alerta 1×/día + página /novedades.
-// Estética = la landing Mediterránea (índigo #261c79, violeta #49286b,
-// celeste #9bd1e5, fondos #fbfbfe) — misma tipografía, mismos patrones.
+// Alerta 1×/día + carrusel de avisos en la landing + página /novedades.
+// El carrusel usa la plantilla de marca (NovedadesCarrusel); el resto sigue
+// la estética de la landing (índigo #261c79, violeta #49286b, #fbfbfe).
 // Si no hay noticias vigentes, NADA se muestra: la web nunca se ve vieja.
 
 const hoyISO = () => new Date().toISOString().slice(0, 10)
@@ -119,14 +120,15 @@ export function NovedadAlertaModal({ noticias }: { noticias: Noticia[] }) {
   return (
     <Dialog open={abierta} onOpenChange={o => { if (!o) cerrar() }}>
       <DialogContent className="p-0 overflow-hidden max-w-md border-0">
+        <DialogTitle className="sr-only">{tituloPlano(a.titulo)}</DialogTitle>
         <div className="relative h-24">
           <ImagenNota n={a} className="w-full h-full" />
           <span className="absolute top-3 left-4"><Kicker categoria={a.categoria} claro /></span>
           <span className="absolute top-3.5 right-4 text-[11px] text-white/90">{fmtFecha(a.publicadaAt)}</span>
         </div>
         <div className="px-5 pt-4 pb-5">
-          <h3 className="text-lg font-bold leading-snug text-[#261c79]">{a.titulo}</h3>
-          {a.bajada && <p className="mt-2 text-sm text-[#5b5780]">{a.bajada}</p>}
+          <h3 className="text-lg font-bold leading-snug text-[#261c79]">{tituloPlano(a.titulo)}</h3>
+          {a.bajada && <p className="mt-2 text-sm text-[#5b5780]">{conNegrita(a.bajada)}</p>}
           {alertas.length > 1 && (
             <p className="mt-2 text-xs font-medium text-[#49286b]">+ {alertas.length - 1} aviso{alertas.length > 2 ? 's' : ''} más en Novedades</p>
           )}
@@ -145,19 +147,19 @@ export function NovedadAlertaModal({ noticias }: { noticias: Noticia[] }) {
   )
 }
 
-// ── Sección para la landing ──────────────────────────────────────────────
+// ── Sección para la landing: el carrusel de avisos ───────────────────────
 export default function NovedadesSection() {
   const { noticias } = useNoticias()
   const vigentes = useMemo(() => noticiasVigentes(noticias, hoyISO()), [noticias])
   if (vigentes.length === 0) return <NovedadAlertaModal noticias={noticias} />
 
-  const [destacada, ...resto] = vigentes
-  const secundarias = resto.slice(0, 4)
+  // Los 6 avisos más recientes, en orden cronológico (el más viejo abre).
+  const slides = vigentes.slice(0, 6).reverse()
 
   return (
     <>
       <NovedadAlertaModal noticias={noticias} />
-      <section id="novedades" className="py-20 lg:py-28 bg-white">
+      <section id="novedades" className="py-20 lg:py-28 bg-white overflow-x-clip">
         <div className="max-w-7xl mx-auto px-5 lg:px-8">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div className="max-w-2xl">
@@ -170,45 +172,13 @@ export default function NovedadesSection() {
             </a>
           </div>
 
-          <div className="mt-12 grid lg:grid-cols-2 gap-6">
-            {/* Destacada con imagen de portada */}
-            <a href="/novedades" className="group relative rounded-2xl overflow-hidden border border-[#e5e4f1] min-h-[300px] flex items-end">
-              <ImagenNota n={destacada} className="absolute inset-0 w-full h-full" />
-              <div className="relative w-full p-6 pt-24 bg-gradient-to-t from-[#12143c]/95 via-[#12143c]/55 to-transparent">
-                <Kicker categoria={destacada.categoria} claro />
-                <h3 className="mt-2.5 text-2xl font-bold leading-snug text-white group-hover:underline decoration-[#9bd1e5] underline-offset-4">{destacada.titulo}</h3>
-                {destacada.bajada && <p className="mt-2 text-sm text-white/75 line-clamp-2">{destacada.bajada}</p>}
-                <p className="mt-2.5 text-[11px] text-white/60">{brandFirma()} · {fmtFecha(destacada.publicadaAt)}</p>
-              </div>
-            </a>
-
-            {/* Secundarias con viñeta */}
-            <div className="flex flex-col divide-y divide-[#e5e4f1] rounded-2xl border border-[#e5e4f1] bg-[#fbfbfe] px-5">
-              {secundarias.length === 0 && (
-                <p className="py-6 text-sm text-[#6b6688]">Más novedades pronto.</p>
-              )}
-              {secundarias.map(n => (
-                <a key={n.id} href="/novedades" className="group flex gap-4 py-4 items-start">
-                  <div className="w-[74px] h-[74px] rounded-xl overflow-hidden flex-shrink-0">
-                    <ImagenNota n={n} className="w-full h-full" />
-                  </div>
-                  <div className="min-w-0">
-                    <Kicker categoria={n.categoria} />
-                    <h4 className="mt-1.5 font-semibold leading-snug text-[#261c79] group-hover:underline decoration-[#9bd1e5] underline-offset-4 line-clamp-2">{n.titulo}</h4>
-                    <p className="mt-1 text-[11px] text-[#6b6688]">{fmtFecha(n.publicadaAt)}</p>
-                  </div>
-                </a>
-              ))}
-            </div>
+          <div className="mt-12 lg:mt-14">
+            <NovedadesCarrusel noticias={slides} />
           </div>
         </div>
       </section>
     </>
   )
-}
-
-function brandFirma(): string {
-  return 'Mediterránea Carghas'
 }
 
 // ── Página /novedades: el archivo completo ───────────────────────────────
@@ -253,16 +223,22 @@ export function NovedadesPage() {
                     <Kicker categoria={n.categoria} />
                     <span className="text-[11px] text-[#6b6688]">{fmtFecha(n.publicadaAt)}{n.vigenteHasta ? ` · vigente hasta ${fmtFecha(n.vigenteHasta)}` : ''}</span>
                   </div>
-                  <h2 className="mt-1.5 text-lg lg:text-xl font-bold leading-snug text-[#261c79]">{n.titulo}</h2>
-                  {n.bajada && <p className="mt-1.5 text-sm text-[#5b5780]">{n.bajada}</p>}
-                  {n.cuerpo && (
+                  <h2 className="mt-1.5 text-lg lg:text-xl font-bold leading-snug text-[#261c79]">{tituloPlano(n.titulo)}</h2>
+                  {n.bajada && <p className="mt-1.5 text-sm text-[#5b5780]">{conNegrita(n.bajada)}</p>}
+                  {(n.cuerpo || linkNoticia(n).externo) && (
                     <p className="mt-2 text-xs font-semibold text-[#49286b]">{abierta === n.id ? 'Cerrar' : 'Leer más'}</p>
                   )}
                 </div>
               </button>
-              {abierta === n.id && n.cuerpo && (
-                <div className="px-5 pb-5 sm:pl-[132px] text-sm text-[#3d3a5c] whitespace-pre-line leading-relaxed">
-                  {n.cuerpo}
+              {abierta === n.id && (n.cuerpo || linkNoticia(n).externo) && (
+                <div className="px-5 pb-5 sm:pl-[132px] text-sm text-[#3d3a5c] leading-relaxed">
+                  {n.cuerpo && <p className="whitespace-pre-line">{conNegrita(n.cuerpo)}</p>}
+                  {linkNoticia(n).externo && (
+                    <a href={linkNoticia(n).href} target="_blank" rel="noopener noreferrer"
+                      className="mt-3 inline-flex items-center gap-1.5 font-semibold text-[#49286b]">
+                      Ver la nota original <ArrowSquareOut size={14} weight="bold" />
+                    </a>
+                  )}
                 </div>
               )}
             </article>

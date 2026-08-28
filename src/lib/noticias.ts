@@ -18,6 +18,47 @@ export interface Noticia {
   publicadaAt: string       // ISO timestamp
   /** '' = sin vencimiento. 'YYYY-MM-DD' = última fecha en portada. */
   vigenteHasta: string
+  // ── Slide del carrusel de portada (todos opcionales, con fallback) ──
+  /** Variante visual: 'violeta' | 'celeste' | 'actualizacion' | 'papel'. '' = según categoría. */
+  estilo: string
+  /** Texto de la pill naranja. '' = etiqueta de la categoría. */
+  kicker: string
+  /** Texto corto al lado del kicker (fecha, país…). '' = fecha de publicación. */
+  kickerExtra: string
+  /** Pill celeste bajo el título (variante celeste) o 2º párrafo (actualización). */
+  subtitulo: string
+  /** Mensaje de la columna derecha del slide. */
+  mensaje: string
+  /** Nota fuente ("Ir a la noticia"). '' = /novedades. */
+  linkUrl: string
+}
+
+export type EstiloSlide = 'violeta' | 'celeste' | 'actualizacion' | 'papel'
+
+/** Variante visual del slide: la elegida a mano o la de su categoría. */
+export function estiloSlide(n: Pick<Noticia, 'estilo' | 'categoria'>): EstiloSlide {
+  const e = (n.estilo || '').toLowerCase()
+  if (e === 'violeta' || e === 'celeste' || e === 'actualizacion' || e === 'papel') return e
+  if (n.categoria === 'tifones') return 'violeta'
+  if (n.categoria === 'feriados') return 'papel'
+  return 'celeste'
+}
+
+/** 'Tifones en China:|cierres portuarios' → ['Tifones en China:', 'cierres portuarios'].
+ *  La barra corta el título en dos líneas; la 2ª va en el color de acento del slide. */
+export function tituloPartes(titulo: string): [string, string] {
+  const ix = titulo.indexOf('|')
+  return ix === -1 ? [titulo, ''] : [titulo.slice(0, ix).trim(), titulo.slice(ix + 1).trim()]
+}
+
+/** Título sin la barra, para listas y textos corridos. */
+export const tituloPlano = (titulo: string) => titulo.replace(/\|/g, ' ').replace(/\s+/g, ' ').trim()
+
+/** Solo se navega a links http(s) — cualquier otra cosa cae en /novedades. */
+export function linkNoticia(n: Pick<Noticia, 'linkUrl'>): { href: string; externo: boolean } {
+  const url = (n.linkUrl || '').trim()
+  if (/^https?:\/\//i.test(url)) return { href: url, externo: true }
+  return { href: '/novedades', externo: false }
 }
 
 /** Categorías con su estética (chips estilo landing Mediterránea). */
@@ -85,5 +126,11 @@ export function rowToNoticia(r: Record<string, unknown>): Noticia {
     activo: r.activo !== false,
     publicadaAt: s(r.publicada_at ?? r.publicadaAt),
     vigenteHasta: s(r.vigente_hasta ?? r.vigenteHasta),
+    estilo: s(r.estilo),
+    kicker: s(r.kicker),
+    kickerExtra: s(r.kicker_extra ?? r.kickerExtra),
+    subtitulo: s(r.subtitulo),
+    mensaje: s(r.mensaje),
+    linkUrl: s(r.link_url ?? r.linkUrl),
   }
 }

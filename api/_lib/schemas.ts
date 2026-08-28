@@ -83,6 +83,15 @@ export const NoticiaRowSchema = z.object({
   activo: z.boolean().optional(),
   vigenteHasta: optTrimmed(20),
   vigente_hasta: optTrimmed(20),
+  // Slide del carrusel de portada
+  estilo: optTrimmed(20),
+  kicker: optTrimmed(80),
+  kickerExtra: optTrimmed(80),
+  kicker_extra: optTrimmed(80),
+  subtitulo: optTrimmed(200),
+  mensaje: optTrimmed(500),
+  linkUrl: optTrimmed(1000),
+  link_url: optTrimmed(1000),
 })
 
 /** Settings upsert (PUT) */
