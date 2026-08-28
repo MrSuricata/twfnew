@@ -36,13 +36,18 @@ const fmtFecha = (iso: string): string => {
   return m ? `${m[3]}/${m[2]}/${m[1]}` : ''
 }
 
+/** Fondo de la viñeta por categoría — también sirve de banda lisa cuando la
+ *  franja es demasiado apaisada para meter el dibujo. */
+const colorVineta = (c: string): string =>
+  c === 'paros' ? '#49286b' : c === 'fletes' ? '#352e6a' : '#261c79'
+
 /** Ilustración de respaldo por categoría — si la nota no tiene foto, nunca
  *  queda pelada. Paleta de la landing. */
 function VinetaCategoria({ categoria, className }: { categoria: string; className?: string }) {
   const c = categoria
   return (
     <svg viewBox="0 0 120 120" preserveAspectRatio="xMidYMid slice" className={className} aria-hidden>
-      <rect width="120" height="120" fill={c === 'tifones' ? '#261c79' : c === 'paros' ? '#49286b' : c === 'fletes' ? '#352e6a' : '#261c79'} />
+      <rect width="120" height="120" fill={colorVineta(c)} />
       {c === 'tifones' && (
         <g stroke="#9bd1e5" fill="none" strokeWidth="3.4" strokeLinecap="round" opacity=".92">
           <path d="M 62 56 a 22 22 0 1 1 22 22" />
@@ -121,8 +126,9 @@ export function NovedadAlertaModal({ noticias }: { noticias: Noticia[] }) {
     <Dialog open={abierta} onOpenChange={o => { if (!o) cerrar() }}>
       <DialogContent className="p-0 overflow-hidden max-w-md border-0">
         <DialogTitle className="sr-only">{tituloPlano(a.titulo)}</DialogTitle>
-        <div className="relative h-24">
-          <ImagenNota n={a} className="w-full h-full" />
+        {/* Banda lisa: el dibujo cuadrado de la categoría acá saldría recortado. */}
+        <div className="relative h-24" style={{ backgroundColor: colorVineta(a.categoria) }}>
+          {a.imagenUrl && <img src={a.imagenUrl} alt="" className="w-full h-full object-cover" />}
           <span className="absolute top-3 left-4"><Kicker categoria={a.categoria} claro /></span>
           <span className="absolute top-3.5 right-4 text-[11px] text-white/90">{fmtFecha(a.publicadaAt)}</span>
         </div>
