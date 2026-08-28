@@ -9,9 +9,12 @@
  *   Siempre (activa)      → Cliente · País destino · ETA
  *   Embarcada (ETD pasó)  → Buque · Línea · BL · Contenedor (solo FCL)
  *   Llega en ≤14 días     → Bultos · Kg · M³ · Descripción · Agente
- *                            + Terminal y Devolución (FCL por MVD)
+ *                            + Terminal (FCL por MVD)
  *   Llega en ≤7 / llegó   → Depósito · Operativa · Transporte · Fiscal
  *                            (coordinación: solo cargas por Uruguay)
+ *   Llegó (ETA+1)         → Devolución (lugar) · Fecha devolución
+ *                            (Brian 28/08: no antes — el buque tiene que
+ *                            haber atracado para que el dato importe)
  *
  * Marítimas (FCL/LCL) no archivadas. Pura y testeable.
  */
@@ -51,6 +54,8 @@ export interface CargaCampos {
   /** Terminal/depósito de DEVOLUCIÓN del vacío (STL/MPS/TCP…): Pagos saca de
    *  acá a QUIÉN se le paga la devolución y su costo default. */
   dev?: string | null
+  /** Fecha de devolución del vacío confirmada por la naviera. */
+  devFecha?: string | null
   salida?: string | null
 }
 
@@ -130,10 +135,17 @@ export function datosFaltantes(c: CargaCampos, hoy: Date): CampoFaltante[] {
     // las cargas por Chile van directo a San Antonio, sin terminal MVD.
     if (m === 'fcl' && String(c.pais || '').trim().toUpperCase() !== 'CL') {
       if (vacio(c.terminal)) falta('terminal', 'Terminal')
-      // Devolución del vacío (Brian 26/08): sin ella Pagos no sabe a quién
-      // se le paga la devolución ni puede derivar su costo default (STL/MPS).
-      if (vacio(c.dev)) falta('dev', 'Devolución')
     }
+  }
+
+  // Llegada (ETA + 1 día en adelante, Brian 28/08): la devolución se reclama
+  // recién con el buque en puerto — antes ocupaba lugar en la tarjeta de HOY
+  // que necesitan las cargas que sí piden datos ya. Lugar (STL/MPS…) para que
+  // Pagos sepa a quién pagar, y fecha confirmada por la naviera.
+  const llego = diasAEta !== null && diasAEta <= -1
+  if (llego && m === 'fcl' && String(c.pais || '').trim().toUpperCase() !== 'CL') {
+    if (vacio(c.dev)) falta('dev', 'Devolución')
+    if (vacio(c.devFecha)) falta('devFecha', 'Fecha devolución')
   }
 
   // Coordinación (solo por Uruguay): con el buque encima hay que saber a qué
@@ -178,12 +190,42 @@ export function faltantesUrgentes(
     if (!eta) continue
     const dias = Math.round((medianoche(eta).getTime() - h) / MS_DIA)
     if (dias > FALTANTES_DIAS_COORDINACION) continue
-    // Ya llegada: solo mientras no tenga salida coordinada, y con PISO de 14
-    // días — las llegadas viejas con la salida nunca cargada son deuda de
-    // datos histórica, no trabajo de hoy (medido 17/08: sin piso, la tarjeta
-    // nacía con ~95 filas; con piso, con lo realmente accionable).
-    if (dias < 0 && (!vacio(c.salida) || dias < -2 * FALTANTES_DIAS_COORDINACION)) continue
+    // Piso de 14 días extra: las llegadas viejas con datos nunca cargados son
+    // deuda histórica, no trabajo de hoy (medido 17/08: sin piso, ~95 filas).
+    if (dias < -2 * FALTANTES_DIAS_COORDINACION) continue
     const faltantes = datosFaltantes(c, hoy)
+    if (faltantes.length === 0) continue
+    // Llegada con salida ya coordinada: sigue en la tarjeta SOLO por la
+    // devolución (lugar/fecha, etapa post-arribo) — el resto de sus faltantes
+    // es deuda vieja que no debe revivir la fila (regla original 17/08).
+    if (dias < 0 && !vacio(c.salida) && !faltantes.some(f => f.campo === 'dev' || f.campo === 'devFecha')) continue
+    out.push({ carga: c, faltantes, diasAEta: dias })
+  }
+  return out.sort((a, b) => a.diasAEta - b.diasAEta)
+}
+
+/**
+ * Modo "adelantar datos" (Brian 28/08): cargas que llegan DESPUÉS de la
+ * ventana, con los campos que se les van a pedir al entrar. Se listan aparte,
+ * plegadas — para seguir completando cuando lo urgente quedó en cero.
+ *
+ * Truco: se evalúa datosFaltantes con un "hoy" virtual en la víspera de la
+ * ETA — abre embarque/checks/coordinación y deja FUERA la etapa de llegada
+ * (la devolución no se adelanta: no antes del arribo, regla explícita).
+ */
+export function faltantesFuturos(
+  cargas: (CargaCampos & { dbId?: string | null; ref?: string | null })[],
+  hoy: Date,
+): FaltanteUrgente[] {
+  const h = medianoche(hoy).getTime()
+  const out: FaltanteUrgente[] = []
+  for (const c of cargas) {
+    const eta = parseLocalDate(String(c.eta || '').trim())
+    if (!eta) continue
+    const dias = Math.round((medianoche(eta).getTime() - h) / MS_DIA)
+    if (dias <= FALTANTES_DIAS_COORDINACION) continue   // esas ya están en lo urgente
+    const vispera = new Date(medianoche(eta).getTime() - MS_DIA)
+    const faltantes = datosFaltantes(c, vispera)
     if (faltantes.length === 0) continue
     out.push({ carga: c, faltantes, diasAEta: dias })
   }
