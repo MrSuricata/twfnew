@@ -98,14 +98,25 @@ Los datos duros de una pieza noticiosa llevan fuente y fecha, o no van.
 
 ## Qué ya está aplicado (28/08/2026)
 
-Landing: portada, servicios, proceso, novedades con carrusel, cobertura y
-equipo. Popup de avisos. Página `/novedades`.
+Todo el recorrido base:
 
-Pendiente: portal del cliente, logins, páginas públicas restantes y las quince
-pantallas de `/admin`. El orden que conviene es de lo compartido a lo
-específico — primero pills de estado y tipografía de referencias (aparecen en
-casi todas las pantallas), después la barra y las pestañas, después las tablas,
-y al final cada pantalla con lo suyo.
+- **Landing completa** — portada, servicios, proceso, novedades con carrusel,
+  cobertura, equipo, texturas de papel y el imán suave de scroll (`proximity`,
+  hero excluido; se quita sacando `data-snap-landing` si molesta).
+- **Admin** — referencias en `ref-med` (grilla + HOY), `statusBadgeClass` con
+  la paleta, contadores de pestañas por significado, barra con `degradado-med`
+  + pill ADMIN + "Activar avisos" naranja, pestaña activa 3px/700, cabecera de
+  la grilla en violeta profundo y tablas compartidas con cabecera clara.
+- **Accesos** — `MarcoLogin` envuelve los tres logins (formularios intactos;
+  colores por variables de marca, TWF conserva su azul). Header del portal del
+  cliente con el degradado.
+- **Menores** — 404 con papel y Nunito gigante; títulos de Términos y
+  Privacidad.
+
+Fino pendiente, solo si hace falta: pantallas admin una a una contra
+`03-admin.dc.html` del handoff (Agenda, Analíticas, Checks…), y decisiones que
+cambian flujos — login unificado por perfil, fondo claro del hero — que se
+conversan antes.
 
 ## Una advertencia para el panel
 
