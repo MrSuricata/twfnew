@@ -82,15 +82,50 @@ export function isSalidaAjustada(
   return d !== null && d >= 0 && d < MARGEN_SALIDA_DIAS
 }
 
-/** Texto del aviso, o '' si la salida tiene margen suficiente. */
+/** ¿Retiro directo desde terminal? (OPERATIVA 'CONTENEDOR' / 'CONTENEDOR DIRECTO…'). */
+const esDirecta = (operativa: string | undefined | null): boolean =>
+  String(operativa || '').trim().toUpperCase().startsWith('CONTENEDOR')
+
+/**
+ * Texto del aviso, o '' si la salida tiene margen suficiente.
+ *
+ * La regla depende de la OPERATIVA (Brian 28/08): el retiro DIRECTO desde
+ * terminal tiene su propia ventana — ETA+1 o ETA+2 es lo normal (el mismo día
+ * tal vez no descargó y "se pisa"; después de ETA+2 quedó fuera de la ventana
+ * de retiro de terminal). El trasiego mantiene el margen mínimo de 2 días
+ * (regla 10/08: descarga + liberación + coordinación del depósito).
+ * Sin operativa se asume trasiego: es el caso común y el conservador.
+ */
 export function avisoSalida(
   salida: string | undefined | null,
   eta: string | undefined | null,
+  operativa?: string | null,
 ): string {
   const d = margenSalida(salida, eta)
   if (d === null) return ''
   if (d < 0) return 'Salida ANTES de la llegada a MVD — revisar fecha'
+  if (esDirecta(operativa)) {
+    if (d === 0) return 'Sale el MISMO día que llega el buque — tal vez no descargó, se pisa (el directo se retira ETA+1 o ETA+2)'
+    if (d > MARGEN_SALIDA_DIAS) return `Retiro a ${d} días de la llegada — el directo se retira de terminal hasta ETA+2`
+    return ''
+  }
   if (d === 0) return 'Sale el MISMO día que llega el buque — sin margen para retirar'
   if (d < MARGEN_SALIDA_DIAS) return `Sale a ${d} día de la llegada — lo normal son ${MARGEN_SALIDA_DIAS}`
   return ''
+}
+
+/**
+ * Nota POSITIVA para el chip (Brian 28/08: "aclarar que está OK porque es
+ * contenedor"): un directo saliendo en su ventana ETA+1/ETA+2 no es una salida
+ * apretada — es exactamente como se hace. '' para todo lo demás.
+ */
+export function notaSalidaDirectaOk(
+  salida: string | undefined | null,
+  eta: string | undefined | null,
+  operativa?: string | null,
+): string {
+  if (!esDirecta(operativa)) return ''
+  const d = margenSalida(salida, eta)
+  if (d !== 1 && d !== 2) return ''
+  return `Retiro directo a ${d === 1 ? '1 día' : '2 días'} de la llegada — ventana normal ✓`
 }

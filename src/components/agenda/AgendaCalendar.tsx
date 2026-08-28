@@ -429,7 +429,7 @@ export default function AgendaCalendar({
     // La salida necesita margen contra la llegada a MVD (mínimo 2 días): confirmar
     // antes de guardar. Misma protección que ContainerDatesSection/QuickEdit.
     const avisoDrop = event?.type === 'salida' && newDate
-      ? avisoSalida(newDate, event.shipment?.ETA || '')
+      ? avisoSalida(newDate, event.shipment?.ETA || '', event.operativa)
       : ''
     if (avisoDrop) {
       const ok = window.confirm(

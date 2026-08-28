@@ -243,7 +243,7 @@ export function computeFlush(
       if (skipSalidaIdx.has(idx)) continue // el usuario eligió no guardar esta salida
       const rec = resolveRecord(cntrs, existing, idx, op)
       const eta = etaVigente(op.eta, rec.ETA_OP)
-      if (avisoSalida(rawValue, eta)) {
+      if (avisoSalida(rawValue, eta, rec.OPERATIVA || op.operativa)) {
         salidaWarnings.push({ idx, cntr: cntrs[idx], salida: rawValue, eta })
       }
       const acc = patchByIdx.get(idx) || {}
@@ -519,7 +519,7 @@ const ContainerDatesSection = forwardRef<ContainerDatesHandle, {
                     </span>
                   )}
                   {(() => {
-                    const aviso = avisoSalida(getDraft(i, 'SALIDA', rec.SALIDA || ''), etaVigente(op.eta, rec.ETA_OP))
+                    const aviso = avisoSalida(getDraft(i, 'SALIDA', rec.SALIDA || ''), etaVigente(op.eta, rec.ETA_OP), rec.OPERATIVA || op.operativa)
                     if (!aviso) return null
                     const grave = isSalidaBeforeArrival(getDraft(i, 'SALIDA', rec.SALIDA || ''), etaVigente(op.eta, rec.ETA_OP))
                     return (

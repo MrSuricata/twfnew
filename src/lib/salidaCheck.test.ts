@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isSalidaBeforeArrival, margenSalida, avisoSalida, isSalidaAjustada, etaVigente } from './salidaCheck'
+import { isSalidaBeforeArrival, margenSalida, avisoSalida, notaSalidaDirectaOk, isSalidaAjustada, etaVigente } from './salidaCheck'
 
 describe('isSalidaBeforeArrival', () => {
   it('salida anterior a la llegada → true', () => {
@@ -91,5 +91,44 @@ describe('etaVigente — la ETA de la carga manda sobre la copia del contenedor'
   it('sin ninguna de las dos devuelve vacío (no se inventa)', () => {
     expect(etaVigente('', '')).toBe('')
     expect(etaVigente(null, null)).toBe('')
+  })
+})
+
+describe('avisoSalida según operativa (Brian 28/08: el directo ETA+1/+2 es normal)', () => {
+  it('CONTENEDOR a ETA+1 y ETA+2: ventana normal, SIN aviso', () => {
+    expect(avisoSalida('2026-08-28', '2026-08-27', 'CONTENEDOR')).toBe('')
+    expect(avisoSalida('2026-08-29', '2026-08-27', 'CONTENEDOR')).toBe('')
+  })
+
+  it('CONTENEDOR el mismo día del arribo: se pisa con la descarga', () => {
+    expect(avisoSalida('2026-08-27', '2026-08-27', 'CONTENEDOR')).toContain('pisa')
+  })
+
+  it('CONTENEDOR después de ETA+2: fuera de la ventana de retiro', () => {
+    expect(avisoSalida('2026-08-31', '2026-08-27', 'CONTENEDOR')).toContain('ETA+2')
+  })
+
+  it('antes de la llegada sigue siendo imposible, directo o no', () => {
+    expect(avisoSalida('2026-08-26', '2026-08-27', 'CONTENEDOR')).toContain('ANTES')
+  })
+
+  it('TRASIEGO (y sin operativa) mantienen la regla de los 2 días', () => {
+    expect(avisoSalida('2026-08-28', '2026-08-27', 'TRASIEGO')).toContain('lo normal son 2')
+    expect(avisoSalida('2026-08-28', '2026-08-27')).toContain('lo normal son 2')
+    expect(avisoSalida('2026-08-27', '2026-08-27', 'TRASIEGO')).toContain('sin margen')
+  })
+})
+
+describe('notaSalidaDirectaOk — la aclaración verde del directo', () => {
+  it('directo en ventana: nota positiva con los días', () => {
+    expect(notaSalidaDirectaOk('2026-08-28', '2026-08-27', 'CONTENEDOR')).toContain('ventana normal')
+    expect(notaSalidaDirectaOk('2026-08-29', '2026-08-27', 'CONTENEDOR')).toContain('2 días')
+  })
+
+  it('fuera de ventana, mismo día, trasiego o sin fechas: nada', () => {
+    expect(notaSalidaDirectaOk('2026-08-27', '2026-08-27', 'CONTENEDOR')).toBe('')
+    expect(notaSalidaDirectaOk('2026-08-31', '2026-08-27', 'CONTENEDOR')).toBe('')
+    expect(notaSalidaDirectaOk('2026-08-28', '2026-08-27', 'TRASIEGO')).toBe('')
+    expect(notaSalidaDirectaOk('', '2026-08-27', 'CONTENEDOR')).toBe('')
   })
 })
