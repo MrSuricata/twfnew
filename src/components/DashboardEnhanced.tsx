@@ -312,12 +312,12 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
         onLogout={onLogout}
       />
 
-      <nav className="bg-primary text-primary-foreground border-b border-border">
+      <nav className="degradado-med text-primary-foreground border-b border-white/10">
         <div className="max-w-7xl mx-auto px-4 md:px-6">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-3 min-w-0">
               <BrandLogo variant="nav" className="h-8 w-auto" />
-              <span className="text-sm font-medium opacity-60 border-l border-primary-foreground/20 pl-3">Admin</span>
+              <span className="shrink-0 rounded-full border border-white/40 px-3 py-1 text-[11px] font-bold tracking-widest uppercase text-white/90">Admin</span>
             </div>
             <div className="flex items-center gap-2">
               {ops && <PushBell />}
@@ -868,7 +868,7 @@ function PushBell() {
           className={`inline-flex items-center gap-1.5 px-3 h-9 rounded-md text-sm transition-colors border ${
             pushOn
               ? 'bg-primary-foreground/20 border-primary-foreground/25 text-primary-foreground'
-              : 'bg-primary-foreground/10 hover:bg-primary-foreground/20 border-primary-foreground/10 text-primary-foreground/85 hover:text-primary-foreground'
+              : 'bg-med-aviso hover:bg-[#d97826] border-med-aviso text-white'
           }`}
           title={pushOn ? 'Avisos activos en este dispositivo — click para configurar' : 'Activar avisos del día en este dispositivo'}
         >
