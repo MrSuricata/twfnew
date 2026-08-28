@@ -143,6 +143,20 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Scroll con imán suave en la landing: al soltar la rueda o el dedo cerca
+   del comienzo de una sección, el navegador acomoda solo. `proximity` (nunca
+   `mandatory`): si el usuario frena a mitad de una sección larga, no pasa
+   nada — el scroll libre sigue intacto. */
+html:has([data-snap-landing]) {
+  scroll-snap-type: y proximity;
+}
+/* El hero queda afuera: su punto de imán en 0 hacía que costara "despegar"
+   la página con la rueda. Las demás secciones sí ofrecen su comienzo. */
+[data-snap-landing] section:not(#top) {
+  scroll-snap-align: start;
+  scroll-margin-top: 0px;
+}
+
 /* Papel de la marca para las secciones claras: la textura sola queda muy
    marcada de cerca, así que va lavada sobre el fondo con un velo blanco. */
 .papel-med {
