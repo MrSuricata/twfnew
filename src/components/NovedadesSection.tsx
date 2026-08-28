@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { ArrowRight, ArrowLeft, Newspaper, ArrowSquareOut } from '@phosphor-icons/react'
 import { useBrand } from '@/lib/brand'
 import {
-  type Noticia, rowToNoticia, noticiasVigentes, alertasVigentes,
+  type Noticia, rowToNoticia, noticiasVigentes, alertasVigentes, ordenSlides,
   alertaYaVista, marcarAlertaVista, categoriaMeta, tituloPlano, linkNoticia,
 } from '@/lib/noticias'
 import NovedadesCarrusel, { conNegrita } from '@/components/NovedadesCarrusel'
@@ -153,8 +153,7 @@ export default function NovedadesSection() {
   const vigentes = useMemo(() => noticiasVigentes(noticias, hoyISO()), [noticias])
   if (vigentes.length === 0) return <NovedadAlertaModal noticias={noticias} />
 
-  // Los 6 avisos más recientes, en orden cronológico (el más viejo abre).
-  const slides = vigentes.slice(0, 6).reverse()
+  const slides = ordenSlides(vigentes)
 
   return (
     <>

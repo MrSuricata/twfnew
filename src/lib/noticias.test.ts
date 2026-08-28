@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   esVigente, noticiasVigentes, alertasVigentes, claveAlertas, rowToNoticia, categoriaMeta,
-  estiloSlide, tituloPartes, tituloPlano, linkNoticia, type Noticia,
+  estiloSlide, tituloPartes, tituloPlano, linkNoticia, ordenSlides, type Noticia,
 } from './noticias'
 
 const HOY = '2026-08-28'
@@ -85,6 +85,21 @@ describe('carrusel de portada', () => {
     expect(tituloPartes('Tifones en China:|cierres portuarios')).toEqual(['Tifones en China:', 'cierres portuarios'])
     expect(tituloPartes('Sin barra')).toEqual(['Sin barra', ''])
     expect(tituloPlano('China cerrada|del 1 al 7 de octubre')).toBe('China cerrada del 1 al 7 de octubre')
+  })
+  it('los avisos abren el carrusel y el resto va cronológico', () => {
+    const vigentes = [   // como los devuelve noticiasVigentes: más nueva primero
+      noticia({ id: 'aviso-nuevo', alerta: true }),
+      noticia({ id: 'nota-c' }),
+      noticia({ id: 'aviso-viejo', alerta: true }),
+      noticia({ id: 'nota-b' }),
+      noticia({ id: 'nota-a' }),
+    ]
+    expect(ordenSlides(vigentes).map(n => n.id))
+      .toEqual(['aviso-nuevo', 'aviso-viejo', 'nota-a', 'nota-b', 'nota-c'])
+  })
+  it('corta en los 6 más recientes antes de ordenar', () => {
+    const muchas = Array.from({ length: 9 }, (_, i) => noticia({ id: `n${i}` }))
+    expect(ordenSlides(muchas)).toHaveLength(6)
   })
   it('"Ir a la noticia" solo navega a http(s); cualquier otra cosa cae en /novedades', () => {
     expect(linkNoticia(noticia({ linkUrl: 'https://lanacion.com.ar/x' }))).toEqual({ href: 'https://lanacion.com.ar/x', externo: true })
