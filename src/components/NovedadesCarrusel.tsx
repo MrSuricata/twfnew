@@ -128,7 +128,7 @@ function SlideVioleta({ n }: { n: Noticia }) {
         <Titulo titulo={n.titulo} color="#FFFFFF" acento={CELESTE} size={86} />
         <Linea color={NARANJA} />
         {n.bajada && (
-          <div style={{ fontWeight: 400, fontSize: 38, lineHeight: 1.3, color: PASTEL, textWrap: 'pretty' }}>{n.bajada}</div>
+          <div style={{ fontWeight: 400, fontSize: 38, lineHeight: 1.3, color: PASTEL, textWrap: 'pretty' }}>{conNegrita(n.bajada, { color: '#FFFFFF' })}</div>
         )}
       </div>
       <div style={{ position: 'relative', boxSizing: 'border-box', flex: 1, padding: '100px 110px 90px 30px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: n.mensaje ? 'space-between' : 'center', gap: 30 }}>
@@ -157,7 +157,7 @@ function SlideCeleste({ n }: { n: Noticia }) {
           </div>
         )}
         {n.bajada && (
-          <div style={{ fontWeight: 400, fontSize: 32, lineHeight: 1.3, color: VIOLETA_TXT, textWrap: 'pretty' }}>{n.bajada}</div>
+          <div style={{ fontWeight: 400, fontSize: 32, lineHeight: 1.3, color: VIOLETA_TXT, textWrap: 'pretty' }}>{conNegrita(n.bajada, { color: VIOLETA })}</div>
         )}
       </div>
       <div style={{ position: 'relative', boxSizing: 'border-box', flex: 1, padding: '110px 110px 90px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: n.mensaje ? 'space-between' : 'center', gap: 28 }}>
@@ -210,7 +210,7 @@ function SlidePapel({ n }: { n: Noticia }) {
         <Titulo titulo={n.titulo} color="#FFFFFF" acento={CELESTE} size={78} />
         <Linea color={CELESTE} />
         {n.bajada && (
-          <div style={{ fontWeight: 400, fontSize: 34, lineHeight: 1.3, color: PASTEL, textWrap: 'pretty' }}>{n.bajada}</div>
+          <div style={{ fontWeight: 400, fontSize: 34, lineHeight: 1.3, color: PASTEL, textWrap: 'pretty' }}>{conNegrita(n.bajada, { color: '#FFFFFF' })}</div>
         )}
       </div>
       <div style={{ position: 'relative', boxSizing: 'border-box', flex: 1, padding: '90px 100px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: n.mensaje ? 'space-between' : 'center', gap: 28 }}>

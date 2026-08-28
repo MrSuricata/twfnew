@@ -472,7 +472,7 @@ export default function MediterraneaLanding() {
       </section>
 
       {/* ── Modos ── */}
-      <section id="modos" className="py-20 lg:py-28 bg-white">
+      <section id="modos" className="papel-med py-20 lg:py-28">
         <div className="max-w-7xl mx-auto px-5 lg:px-8">
           <Reveal>
             <div>

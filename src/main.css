@@ -108,6 +108,23 @@
   line-height: 1.02;
 }
 
+/* Papel de la marca para las secciones claras: la textura sola queda muy
+   marcada de cerca, así que va lavada sobre el fondo con un velo blanco. */
+.papel-med {
+  position: relative;
+  background-color: #fbfbfe;
+  isolation: isolate;
+}
+.papel-med::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: url('/images/bg-paper.webp') center / cover no-repeat;
+  opacity: 0.5;
+  z-index: -1;
+  pointer-events: none;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
