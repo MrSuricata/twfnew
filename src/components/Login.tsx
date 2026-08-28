@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import { loginAdmin } from '@/lib/authClient'
 import { useTranslation, getStoredLanguage } from '@/lib/i18n'
 import { useBrand } from '@/lib/brand'
+import MarcoLogin from '@/components/MarcoLogin'
 
 interface LoginProps {
   onLogin: () => void
@@ -41,16 +42,12 @@ export default function Login({ onLogin, onBack }: LoginProps) {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary via-primary/95 to-secondary flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <Button
-          variant="ghost"
-          onClick={onBack}
-          className="mb-6 text-white hover:bg-white/10"
-        >
-          <ArrowLeft size={20} className="mr-2" />
-          Volver al sitio
-        </Button>
+    <MarcoLogin
+      titulo="Tu operación,"
+      acento="bajo control."
+      bajada="El panel del equipo: cargas, agenda, checks, facturación y pagos en un solo lugar."
+      onBack={onBack}
+    >
 
         <Card>
           <CardHeader className="text-center">
@@ -113,7 +110,6 @@ export default function Login({ onLogin, onBack }: LoginProps) {
             )}
           </CardContent>
         </Card>
-      </div>
-    </div>
+    </MarcoLogin>
   )
 }
