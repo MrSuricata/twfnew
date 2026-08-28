@@ -93,7 +93,7 @@ describe('buildClientDigest', () => {
   const filas = [
     { ref: 'A7620', cliente: 'CHIAPERO Y ASOC. S.R.L.', archived: false, source: 'fcl', mode: 'fcl', eta: '2026-09-05', eta_fiscal: '', dest_country: 'UY', buque: 'MSC ALTAIR', contenedor: 'MSCU1234567', flete: 99999, operativas: [] },
     { ref: 'A7621', cliente: 'CHIAPERO Y ASOC SRL', archived: false, source: 'web', mode: 'fcl', eta: '2026-09-01', eta_fiscal: '', dest_country: 'CL', operativas: [] },
-    { ref: 'A7622', cliente: 'RDM - ABEA S.A.', archived: false, source: 'fcl', mode: 'fcl', eta: '2026-08-20', eta_fiscal: '', dest_country: 'UY', operativas: [{ SALIDA: '2026-08-29', ETA_FISC: '', DESCARGA: '', PKGS: 10, KG: 500, M3: 3 }] },
+    { ref: 'A7622', cliente: 'RDM - ABEA S.A.', archived: false, source: 'fcl', mode: 'fcl', eta: '2026-08-20', eta_fiscal: '', dest_country: 'UY', operativas: [{ SALIDA: '2026-08-29', ETA_FISC: '', DESCARGA: '', OPERATIVA: 'TRASIEGO', PKGS: 10, KG: 500, M3: 3 }] },
     { ref: 'A7623', cliente: 'OTRO CLIENTE S.A.', archived: false, source: 'fcl', mode: 'fcl', eta: '2026-09-02', eta_fiscal: '', dest_country: 'UY', operativas: [] },
   ]
   const digest = buildClientDigest(clientes, filas, HOY)
@@ -105,6 +105,7 @@ describe('buildClientDigest', () => {
     expect(abea.cargas).toHaveLength(1)
     expect(abea.cargas[0].estado.code).toBe('salida_programada')
     expect(abea.cargas[0].PKGS).toBe(10)
+    expect(abea.cargas[0].OPERATIVA).toBe('TRASIEGO')
     expect(digest.clients.some(c => c.name.includes('OTRO'))).toBe(false)
   })
   it('REF sin A y sin nombre de cliente en las cargas', () => {
