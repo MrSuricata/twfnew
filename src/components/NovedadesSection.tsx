@@ -195,7 +195,7 @@ export default function NovedadesSection() {
   return (
     <>
       <NovedadAlertaModal noticias={noticias} />
-      <section id="novedades" className="py-20 lg:py-28 bg-white overflow-x-clip">
+      <section id="novedades" className="papel-med py-20 lg:py-28 overflow-x-clip">
         <div className="max-w-7xl mx-auto px-5 lg:px-8">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div className="max-w-2xl">
