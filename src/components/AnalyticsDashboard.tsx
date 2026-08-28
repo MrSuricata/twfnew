@@ -543,7 +543,7 @@ export default function AnalyticsDashboard({ shipments, dbShipments = [], trucks
                       <XAxis type="number" tick={{ fontSize: 12 }} />
                       <YAxis dataKey="name" type="category" tick={{ fontSize: 11 }} width={100} />
                       <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }} />
-                      <Bar dataKey="value" fill="#5B8C5A" radius={[0, 4, 4, 0]} name="Operaciones" />
+                      <Bar dataKey="value" fill={CHART_TERTIARY} radius={[0, 4, 4, 0]} name="Operaciones" />
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (
@@ -567,7 +567,7 @@ export default function AnalyticsDashboard({ shipments, dbShipments = [], trucks
                       <XAxis type="number" tick={{ fontSize: 12 }} />
                       <YAxis dataKey="name" type="category" tick={{ fontSize: 11 }} width={120} />
                       <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb' }} />
-                      <Bar dataKey="value" fill="#D4A373" radius={[0, 4, 4, 0]} name="Contenedores" />
+                      <Bar dataKey="value" fill="var(--chart-5)" radius={[0, 4, 4, 0]} name="Contenedores" />
                     </BarChart>
                   </ResponsiveContainer>
                 ) : (

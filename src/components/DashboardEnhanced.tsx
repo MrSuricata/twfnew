@@ -326,7 +326,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
                 type="button"
                 onClick={handleRefresh}
                 disabled={isRefreshing}
-                className="inline-flex items-center gap-1.5 px-3 h-9 rounded-md text-sm bg-primary-foreground/10 hover:bg-primary-foreground/20 text-primary-foreground/85 hover:text-primary-foreground transition-colors border border-primary-foreground/10 disabled:opacity-60 disabled:cursor-wait"
+                className={`inline-flex items-center gap-1.5 px-3 h-9 ${brand.id === 'med' ? 'rounded-full' : 'rounded-md'} text-sm bg-primary-foreground/10 hover:bg-primary-foreground/20 text-primary-foreground/85 hover:text-primary-foreground transition-colors border border-primary-foreground/10 disabled:opacity-60 disabled:cursor-wait`}
                 title="Sincronizar con Google Sheets ahora"
               >
                 <ArrowsClockwise
@@ -341,7 +341,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
               <button
                 type="button"
                 onClick={() => setHelpOpen(true)}
-                className="inline-flex items-center justify-center w-9 h-9 rounded-md text-sm bg-primary-foreground/10 hover:bg-primary-foreground/20 text-primary-foreground/85 hover:text-primary-foreground transition-colors border border-primary-foreground/10"
+                className={`inline-flex items-center justify-center w-9 h-9 ${brand.id === 'med' ? 'rounded-full' : 'rounded-md'} text-sm bg-primary-foreground/10 hover:bg-primary-foreground/20 text-primary-foreground/85 hover:text-primary-foreground transition-colors border border-primary-foreground/10`}
                 title="Ayuda: cómo se usa cada pantalla"
                 aria-label="Ayuda"
               >
@@ -354,7 +354,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
                   const ev = new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true })
                   document.dispatchEvent(ev)
                 }}
-                className="hidden md:inline-flex items-center gap-2 px-3 h-9 rounded-md text-sm bg-primary-foreground/10 hover:bg-primary-foreground/20 text-primary-foreground/80 hover:text-primary-foreground transition-colors border border-primary-foreground/10"
+                className={`hidden md:inline-flex items-center gap-2 px-3 h-9 ${brand.id === 'med' ? 'rounded-full' : 'rounded-md'} text-sm bg-primary-foreground/10 hover:bg-primary-foreground/20 text-primary-foreground/80 hover:text-primary-foreground transition-colors border border-primary-foreground/10`}
                 title="Abrir paleta de comandos (Ctrl+K)"
               >
                 <span className="opacity-70">Buscar…</span>

@@ -56,6 +56,7 @@ import { parseCntr } from '@/lib/cntrUtils'
 import { subscribeTrucksLive } from '@/lib/realtimeBus'
 import { RefNotaLine, useRefNotas } from './RefNotaLine'
 import { getAdminName } from '@/lib/authClient'
+import { useBrand } from '@/lib/brand'
 import { fmtDateDMY } from '@/lib/format'
 import { cargasMontecon, type AgendaRow, type CargaMontecon } from '@/lib/monteconAgenda'
 import { fetchMonteconAgenda, agendarMontecon, desagendarMontecon, marcarMontecon } from '@/lib/dataClient'
@@ -497,6 +498,11 @@ export default function TodayDashboard({
     }
   }
 
+  // Terminación por marca (handoff 03-admin): bajo Mediterránea los títulos y
+  // tarjetas de HOY usan el sistema (Nunito 900, naranja de riesgo, violeta
+  // informativo). Bajo TWF, ni una clase cambia.
+  const med = useBrand().id === 'med'
+
   // "jueves 2 de julio" — minúsculas como corresponde en español (sin la coma
   // del locale y SIN la clase `capitalize`, que capitalizaba mes y preposición).
   const todayLabel = new Date().toLocaleDateString('es-UY', {
@@ -511,9 +517,9 @@ export default function TodayDashboard({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">
-            <span className="text-muted-foreground/70 font-semibold">Hoy</span>
+            <span className={med ? 'titulo-med text-med-violeta' : 'text-muted-foreground/70 font-semibold'}>Hoy</span>
             <span className="text-muted-foreground/50 font-normal mx-2">·</span>
-            {todayLabel}
+            <span className={med ? 'text-lg font-normal text-med-gris' : ''}>{todayLabel}</span>
           </h1>
           {snapshot.hasMovement ? (
             <div className="mt-2 flex flex-wrap items-center gap-2 text-sm">
@@ -561,16 +567,16 @@ export default function TodayDashboard({
 
       {/* ── Salidas pisadas por el buque ─────────────────── */}
       {snapshot.salidasPisadas.length > 0 && (
-        <Card className="accent-top overflow-hidden bg-destructive/[0.04] border-destructive/25" style={{ ['--bar-color' as any]: 'var(--destructive)' }}>
+        <Card className={med ? 'overflow-hidden bg-med-aviso-tinte border-2 border-med-aviso-borde' : 'accent-top overflow-hidden bg-destructive/[0.04] border-destructive/25'} style={{ ['--bar-color' as any]: 'var(--destructive)' }}>
           <CardContent className="pt-5 pb-4">
             <div className="flex items-center gap-2.5 mb-1">
-              <div className="p-1.5 bg-destructive/10 rounded-md">
-                <Warning size={18} weight="fill" className="text-destructive pulse-soft" />
+              <div className={med ? 'p-1.5 bg-med-aviso/10 rounded-md' : 'p-1.5 bg-destructive/10 rounded-md'}>
+                <Warning size={18} weight="fill" className={med ? 'text-med-aviso pulse-soft' : 'text-destructive pulse-soft'} />
               </div>
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-destructive">
+              <h2 className={med ? 'titulo-med text-[17px] text-med-aviso-texto' : 'text-sm font-semibold uppercase tracking-wide text-destructive'}>
                 Salidas pisadas por el buque
               </h2>
-              <span className="ml-auto inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-full bg-destructive text-destructive-foreground text-xs font-bold">
+              <span className={med ? 'ml-auto inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-full bg-med-aviso text-white text-xs font-bold' : 'ml-auto inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-full bg-destructive text-destructive-foreground text-xs font-bold'}>
                 {snapshot.salidasPisadas.length}
               </span>
             </div>
@@ -583,7 +589,7 @@ export default function TodayDashboard({
                   key={`${a.shipment.REF}-${a.cntr}`}
                   type="button"
                   onClick={() => openOpMatch({ shipment: a.shipment, op: a.op })}
-                  className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-left hover:bg-destructive/10 transition-colors"
+                  className={med ? 'w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-left hover:bg-med-aviso/10 transition-colors' : 'w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-left hover:bg-destructive/10 transition-colors'}
                 >
                   <span className="ref-med text-sm shrink-0 min-w-[64px]">{a.shipment.REF}</span>
                   <span className="text-sm text-foreground/85 truncate flex-1 min-w-0">
@@ -593,10 +599,10 @@ export default function TodayDashboard({
                   <span className="text-xs text-muted-foreground shrink-0 hidden md:inline">
                     sale {fmtDMY(a.salida)} · buque llega {fmtDMY(a.eta)}
                   </span>
-                  <span className={`text-xs font-bold shrink-0 px-1.5 py-0.5 rounded ${
-                    a.grave
-                      ? 'bg-destructive/10 text-destructive'
-                      : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                  <span className={`text-xs font-bold shrink-0 px-1.5 py-0.5 ${
+                    med
+                      ? `rounded-full px-2.5 uppercase tracking-wide ${a.grave ? 'bg-med-aviso text-white' : 'bg-med-aviso-pill text-med-aviso-texto'}`
+                      : `rounded ${a.grave ? 'bg-destructive/10 text-destructive' : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'}`
                   }`}>
                     {a.margen < 0 ? 'IMPOSIBLE' : a.margen === 0 ? 'MISMO DÍA' : 'MUY JUSTA'}
                   </span>
@@ -611,26 +617,26 @@ export default function TodayDashboard({
           las cards — turnos escasos en Montecon, y en ambas terminales el
           retiro termina con el aviso al cliente del traslado a depósito */}
       {montecon.length > 0 && (
-        <Card className="accent-top overflow-hidden bg-sky-500/[0.04] border-sky-500/25" style={{ ['--bar-color' as any]: 'rgb(14 165 233)' }}>
+        <Card className={med ? 'overflow-hidden bg-med-info-tinte border-2 border-med-info-borde' : 'accent-top overflow-hidden bg-sky-500/[0.04] border-sky-500/25'} style={{ ['--bar-color' as any]: 'rgb(14 165 233)' }}>
           <CardContent className="pt-5 pb-4">
             <div className="flex items-center gap-2.5 mb-1">
-              <div className="p-1.5 bg-sky-500/10 rounded-md">
-                <Anchor size={18} weight="fill" className="text-sky-600" />
+              <div className={med ? 'p-1.5 bg-med-violeta/10 rounded-md' : 'p-1.5 bg-sky-500/10 rounded-md'}>
+                <Anchor size={18} weight="fill" className={med ? 'text-med-violeta' : 'text-sky-600'} />
               </div>
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-sky-700">
+              <h2 className={med ? 'titulo-med text-[17px] text-med-violeta' : 'text-sm font-semibold uppercase tracking-wide text-sky-700'}>
                 Retiros de terminal — Montecon y TCP
               </h2>
               {monteconReagendar > 0 && (
-                <span className="inline-flex items-center gap-1 text-xs font-bold text-red-700 bg-red-500/10 border border-red-500/30 rounded-full px-2 py-0.5">
+                <span className={med ? 'inline-flex items-center gap-1 text-xs font-bold text-med-error bg-med-error/10 border border-med-error/30 rounded-full px-2 py-0.5' : 'inline-flex items-center gap-1 text-xs font-bold text-red-700 bg-red-500/10 border border-red-500/30 rounded-full px-2 py-0.5'}>
                   {monteconReagendar} para reagendar
                 </span>
               )}
               {monteconAvisar > 0 && (
-                <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-700 bg-amber-500/10 border border-amber-500/30 rounded-full px-2 py-0.5">
+                <span className={med ? 'inline-flex items-center gap-1 text-xs font-bold text-med-aviso-texto bg-med-aviso/10 border border-med-aviso/30 rounded-full px-2 py-0.5' : 'inline-flex items-center gap-1 text-xs font-bold text-amber-700 bg-amber-500/10 border border-amber-500/30 rounded-full px-2 py-0.5'}>
                   {monteconAvisar} avisar cliente
                 </span>
               )}
-              <span className="ml-auto inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-full bg-sky-500 text-white text-xs font-bold">
+              <span className={med ? 'ml-auto inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-full bg-med-violeta text-med-celeste text-xs font-bold' : 'ml-auto inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-full bg-sky-500 text-white text-xs font-bold'}>
                 {montecon.length}
               </span>
             </div>
@@ -643,10 +649,10 @@ export default function TodayDashboard({
                   key={c.dbId || c.ref}
                   className={`rounded-lg border px-2.5 py-2 ${
                     c.estado === 'reagendar'
-                      ? 'border-red-500/40 bg-red-500/[0.06]'
+                      ? (med ? 'border-med-error/40 bg-med-error/[0.06]' : 'border-red-500/40 bg-red-500/[0.06]')
                       : c.estado === 'retirado'
-                        ? 'border-amber-500/40 bg-amber-500/[0.06]'
-                        : 'border-border/60 bg-background/50'
+                        ? (med ? 'border-med-aviso/40 bg-med-aviso/[0.06]' : 'border-amber-500/40 bg-amber-500/[0.06]')
+                        : (med ? 'border-med-info-borde bg-white' : 'border-border/60 bg-background/50')
                   }`}
                 >
                   <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
@@ -655,8 +661,8 @@ export default function TodayDashboard({
                     </button>
                     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${
                       c.terminal === 'MONTECON'
-                        ? 'bg-sky-500/10 text-sky-700 dark:text-sky-300'
-                        : 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-300'
+                        ? (med ? 'bg-med-pastel text-med-texto' : 'bg-sky-500/10 text-sky-700 dark:text-sky-300')
+                        : (med ? 'bg-med-lila text-med-violeta' : 'bg-indigo-500/10 text-indigo-700 dark:text-indigo-300')
                     }`}>
                       {c.terminal}
                     </span>
@@ -681,12 +687,12 @@ export default function TodayDashboard({
                               if (e.key === 'Escape') cerrarTurnoDraft(c.ref)
                             }}
                             title="¿Para qué fecha conseguiste el turno de retiro?"
-                            className="h-7 rounded-md border border-sky-500/40 bg-background px-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-sky-500/50"
+                            className={med ? 'h-7 rounded-md border border-med-violeta/40 bg-background px-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-med-violeta/50' : 'h-7 rounded-md border border-sky-500/40 bg-background px-1.5 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-sky-500/50'}
                           />
                           <button
                             type="button"
                             onClick={() => agendarRetiro(c, turnoDraft[c.ref])}
-                            className="h-7 px-2.5 rounded-full bg-sky-600 text-white text-xs font-bold hover:opacity-90 transition-opacity"
+                            className={med ? 'h-7 px-2.5 rounded-full bg-med-violeta text-white text-xs font-bold hover:opacity-90 transition-opacity' : 'h-7 px-2.5 rounded-full bg-sky-600 text-white text-xs font-bold hover:opacity-90 transition-opacity'}
                           >
                             OK
                           </button>
@@ -705,7 +711,7 @@ export default function TodayDashboard({
                           type="button"
                           onClick={() => setTurnoDraft(d => ({ ...d, [c.ref]: c.eta }))}
                           title="Conseguiste turno: cargá para qué fecha"
-                          className="h-7 px-3 rounded-full border border-sky-500/40 text-xs font-semibold text-sky-700 hover:bg-sky-500/10 transition-colors"
+                          className={med ? 'h-7 px-3 rounded-full border border-med-violeta/40 text-xs font-semibold text-med-violeta hover:bg-med-violeta/10 transition-colors' : 'h-7 px-3 rounded-full border border-sky-500/40 text-xs font-semibold text-sky-700 hover:bg-sky-500/10 transition-colors'}
                         >
                           Agendada
                         </button>
@@ -715,7 +721,7 @@ export default function TodayDashboard({
                           type="button"
                           onClick={() => quitarAgenda(c)}
                           title={`${c.fechaRetiro ? `Turno de retiro para el ${fmtDateDMY(c.fechaRetiro)}, ` : ''}agendada contra ETA ${fmtDateDMY(c.etaAgendada)} — click para quitar`}
-                          className="h-7 px-3 rounded-full bg-emerald-600 text-white text-xs font-bold inline-flex items-center gap-1 hover:opacity-90 transition-opacity"
+                          className={med ? 'h-7 px-3 rounded-full bg-med-violeta text-white text-xs font-bold inline-flex items-center gap-1 hover:opacity-90 transition-opacity' : 'h-7 px-3 rounded-full bg-emerald-600 text-white text-xs font-bold inline-flex items-center gap-1 hover:opacity-90 transition-opacity'}
                         >
                           <CheckCircle size={13} weight="fill" /> Agendada{c.fechaRetiro ? ` · ${fmtDateDMY(c.fechaRetiro)}` : ''}
                         </button>
@@ -725,7 +731,7 @@ export default function TodayDashboard({
                           <button
                             type="button"
                             onClick={() => setTurnoDraft(d => ({ ...d, [c.ref]: c.eta }))}
-                            className="h-7 px-3 rounded-full bg-red-600 text-white text-xs font-bold hover:opacity-90 transition-opacity"
+                            className={med ? 'h-7 px-3 rounded-full bg-med-error text-white text-xs font-bold hover:opacity-90 transition-opacity' : 'h-7 px-3 rounded-full bg-red-600 text-white text-xs font-bold hover:opacity-90 transition-opacity'}
                           >
                             Volver a agendar
                           </button>
@@ -743,7 +749,7 @@ export default function TodayDashboard({
                           type="button"
                           onClick={() => marcarRetirado(c)}
                           title="El contenedor ya salió de Montecon hacia el depósito"
-                          className="h-7 px-3 rounded-full border border-amber-500/50 text-xs font-semibold text-amber-700 hover:bg-amber-500/10 transition-colors"
+                          className={med ? 'h-7 px-3 rounded-full border border-med-violeta/30 text-xs font-semibold text-med-violeta hover:bg-med-violeta/10 transition-colors' : 'h-7 px-3 rounded-full border border-amber-500/50 text-xs font-semibold text-amber-700 hover:bg-amber-500/10 transition-colors'}
                         >
                           Retirado
                         </button>
@@ -754,7 +760,7 @@ export default function TodayDashboard({
                             type="button"
                             onClick={() => marcarAvisado(c)}
                             title="Ya le avisé al cliente — sacar de la card"
-                            className="h-7 px-3 rounded-full bg-emerald-600 text-white text-xs font-bold inline-flex items-center gap-1 hover:opacity-90 transition-opacity"
+                            className={med ? 'h-7 px-3 rounded-full bg-med-ok text-white text-xs font-bold inline-flex items-center gap-1 hover:opacity-90 transition-opacity' : 'h-7 px-3 rounded-full bg-emerald-600 text-white text-xs font-bold inline-flex items-center gap-1 hover:opacity-90 transition-opacity'}
                           >
                             <CheckCircle size={13} weight="fill" /> Avisado
                           </button>
@@ -770,13 +776,13 @@ export default function TodayDashboard({
                     </span>
                   </div>
                   {c.estado === 'reagendar' && (
-                    <p className="mt-1 text-xs font-semibold text-red-700">
+                    <p className={med ? 'mt-1 text-xs font-semibold text-med-error' : 'mt-1 text-xs font-semibold text-red-700'}>
                       Se modificó la fecha de arribo — estaba agendada para {fmtDateDMY(c.etaAgendada)}, ahora la ETA es {fmtDateDMY(c.eta)}.
                       {c.fechaRetiro ? ` Tenías turno para el ${fmtDateDMY(c.fechaRetiro)} — conseguí uno nuevo.` : ''}
                     </p>
                   )}
                   {c.estado === 'retirado' && (
-                    <p className="mt-1 text-xs font-semibold text-amber-700">
+                    <p className={med ? 'mt-1 text-xs font-semibold text-med-aviso-texto' : 'mt-1 text-xs font-semibold text-amber-700'}>
                       Retirado el {fmtDateDMY(c.retiradoEl)} — avisale al cliente que el contenedor ya se trasladó al depósito y marcá AVISADO.
                     </p>
                   )}
@@ -791,24 +797,24 @@ export default function TodayDashboard({
       {snapshot.sinLiberar.length === 0 && (
         /* Estado feliz explícito (pedido Brian 13/08): que se VEA que el
            trabajo de liberación está al día, no solo la ausencia de alerta. */
-        <div className="flex items-center gap-2.5 rounded-lg border border-emerald-500/25 bg-emerald-500/[0.05] px-4 py-2.5">
-          <CheckCircle size={18} weight="fill" className="text-emerald-600 dark:text-emerald-400 shrink-0" />
-          <p className="text-sm text-emerald-700 dark:text-emerald-400">
+        <div className={med ? 'flex items-center gap-2.5 rounded-lg border border-med-ok/25 bg-med-ok-suave px-4 py-2.5' : 'flex items-center gap-2.5 rounded-lg border border-emerald-500/25 bg-emerald-500/[0.05] px-4 py-2.5'}>
+          <CheckCircle size={18} weight="fill" className={med ? 'text-med-ok shrink-0' : 'text-emerald-600 dark:text-emerald-400 shrink-0'} />
+          <p className={med ? 'text-sm text-med-ok' : 'text-sm text-emerald-700 dark:text-emerald-400'}>
             <b>¡Felicitaciones!</b> Todas tus cargas de los próximos 10 días están liberadas.
           </p>
         </div>
       )}
       {snapshot.sinLiberar.length > 0 && (
-        <Card className="accent-top overflow-hidden bg-amber-500/[0.04] border-amber-500/25" style={{ ['--bar-color' as any]: 'rgb(245 158 11)' }}>
+        <Card className={med ? 'overflow-hidden bg-med-aviso-tinte border-2 border-med-aviso-borde' : 'accent-top overflow-hidden bg-amber-500/[0.04] border-amber-500/25'} style={{ ['--bar-color' as any]: 'rgb(245 158 11)' }}>
           <CardContent className="pt-5 pb-4">
             <div className="flex items-center gap-2.5 mb-1">
-              <div className="p-1.5 bg-amber-500/10 rounded-md">
-                <LockKey size={18} weight="fill" className="text-amber-600 dark:text-amber-400" />
+              <div className={med ? 'p-1.5 bg-med-aviso/10 rounded-md' : 'p-1.5 bg-amber-500/10 rounded-md'}>
+                <LockKey size={18} weight="fill" className={med ? 'text-med-aviso' : 'text-amber-600 dark:text-amber-400'} />
               </div>
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
+              <h2 className={med ? 'titulo-med text-[17px] text-med-aviso-texto' : 'text-sm font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400'}>
                 Llegan sin liberar
               </h2>
-              <span className="ml-auto inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-full bg-amber-500 text-white text-xs font-bold">
+              <span className={med ? 'ml-auto inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-full bg-med-aviso text-white text-xs font-bold' : 'ml-auto inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-full bg-amber-500 text-white text-xs font-bold'}>
                 {snapshot.sinLiberar.length}
               </span>
             </div>
@@ -817,7 +823,7 @@ export default function TodayDashboard({
             </p>
             <div className="space-y-1">
               {snapshot.sinLiberar.map(a => (
-                <div key={a.shipment.REF} className="rounded-md hover:bg-amber-500/10 transition-colors pb-1.5">
+                <div key={a.shipment.REF} className={med ? 'rounded-md hover:bg-med-aviso/10 transition-colors pb-1.5' : 'rounded-md hover:bg-amber-500/10 transition-colors pb-1.5'}>
                   <button
                     type="button"
                     onClick={() => {
@@ -859,16 +865,16 @@ export default function TodayDashboard({
 
       {/* ── Llegan con datos incompletos ─────────────────── */}
       {(incompletasTodas.length > 0 || adelantables.length > 0) && (
-        <Card className="accent-top overflow-hidden bg-amber-500/[0.04] border-amber-500/25" style={{ ['--bar-color' as any]: 'rgb(245 158 11)' }}>
+        <Card className={med ? 'overflow-hidden bg-med-aviso-tinte border-2 border-med-aviso-borde' : 'accent-top overflow-hidden bg-amber-500/[0.04] border-amber-500/25'} style={{ ['--bar-color' as any]: 'rgb(245 158 11)' }}>
           <CardContent className="pt-5 pb-4">
             <div className="flex items-center gap-2.5 mb-1">
-              <div className="p-1.5 bg-amber-500/10 rounded-md">
-                <PencilSimple size={18} weight="fill" className="text-amber-600" />
+              <div className={med ? 'p-1.5 bg-med-aviso/10 rounded-md' : 'p-1.5 bg-amber-500/10 rounded-md'}>
+                <PencilSimple size={18} weight="fill" className={med ? 'text-med-aviso' : 'text-amber-600'} />
               </div>
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-amber-700">
+              <h2 className={med ? 'titulo-med text-[17px] text-med-aviso-texto' : 'text-sm font-semibold uppercase tracking-wide text-amber-700'}>
                 Llegan con datos incompletos
               </h2>
-              <span className="ml-auto inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-full bg-amber-500 text-white text-xs font-bold">
+              <span className={med ? 'ml-auto inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-full bg-med-aviso text-white text-xs font-bold' : 'ml-auto inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-full bg-amber-500 text-white text-xs font-bold'}>
                 {incompletas.length}
               </span>
             </div>
@@ -880,7 +886,7 @@ export default function TodayDashboard({
                   onClick={() => setCardTab(id)}
                   aria-pressed={cardTab === id}
                   className={`h-7 px-3 rounded-full text-xs font-bold transition-colors ${
-                    cardTab === id ? 'bg-amber-600 text-white' : 'bg-background/60 text-muted-foreground border border-border hover:bg-amber-500/10'
+                    cardTab === id ? (med ? 'bg-med-aviso text-white' : 'bg-amber-600 text-white') : (med ? 'bg-white text-med-gris border border-med-borde hover:bg-med-aviso/10' : 'bg-background/60 text-muted-foreground border border-border hover:bg-amber-500/10')
                   }`}
                 >
                   {label}
@@ -908,8 +914,8 @@ export default function TodayDashboard({
                     aria-pressed={activo}
                     className={`inline-flex items-center gap-1.5 h-7 px-2.5 rounded-full text-xs font-semibold transition-colors ${
                       activo
-                        ? 'bg-amber-500 text-white'
-                        : 'bg-background/60 text-muted-foreground border border-border hover:bg-amber-500/10'
+                        ? (med ? 'bg-med-aviso text-white' : 'bg-amber-500 text-white')
+                        : (med ? 'bg-white text-med-gris border border-med-borde hover:bg-med-aviso/10' : 'bg-background/60 text-muted-foreground border border-border hover:bg-amber-500/10')
                     }`}
                   >
                     {d.label}
@@ -928,7 +934,7 @@ export default function TodayDashboard({
                       onClick={() => setMontosPais(null)}
                       aria-pressed={montosPais === null}
                       className={`h-7 px-2.5 rounded-full text-xs font-semibold transition-colors ${
-                        montosPais === null ? 'bg-amber-600 text-white' : 'bg-background/60 text-muted-foreground border border-border hover:bg-amber-500/10'
+                        montosPais === null ? (med ? 'bg-med-aviso text-white' : 'bg-amber-600 text-white') : (med ? 'bg-white text-med-gris border border-med-borde hover:bg-med-aviso/10' : 'bg-background/60 text-muted-foreground border border-border hover:bg-amber-500/10')
                       }`}
                     >
                       Todas <span className="opacity-70">{montosCard.length}</span>
@@ -940,7 +946,7 @@ export default function TodayDashboard({
                         onClick={() => setMontosPais(prev => (prev === g.pais ? null : g.pais))}
                         aria-pressed={montosPais === g.pais}
                         className={`h-7 px-2.5 rounded-full text-xs font-semibold transition-colors ${
-                          montosPais === g.pais ? 'bg-amber-600 text-white' : 'bg-background/60 text-muted-foreground border border-border hover:bg-amber-500/10'
+                          montosPais === g.pais ? (med ? 'bg-med-aviso text-white' : 'bg-amber-600 text-white') : (med ? 'bg-white text-med-gris border border-med-borde hover:bg-amber-500/10' : 'bg-background/60 text-muted-foreground border border-border hover:bg-amber-500/10')
                         }`}
                       >
                         {g.pais} <span className="opacity-70">{g.n}</span>
@@ -1069,7 +1075,7 @@ export default function TodayDashboard({
               <div className="p-1.5 bg-destructive/10 rounded-md">
                 <Siren size={18} weight="fill" className="text-destructive pulse-soft" />
               </div>
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-destructive">
+              <h2 className={med ? 'titulo-med text-[17px] text-destructive' : 'text-sm font-semibold uppercase tracking-wide text-destructive'}>
                 LIBRE vencido / crítico
               </h2>
               <span className="ml-auto inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-full bg-destructive text-destructive-foreground text-xs font-bold">
@@ -1235,6 +1241,7 @@ interface TodayCardProps {
 }
 
 function TodayCard({ title, subtitle, icon, iconBg, barColor, matches, trucks = [], emptyLabel, onRowClick, column, checksByRef, onToggleAviso }: TodayCardProps) {
+  const med = useBrand().id === 'med'
   const stepKey = AVISO_STEP_BY_COLUMN[column]
   const avisoLabel = AVISO_LABEL_BY_COLUMN[column]
   const total = matches.length + trucks.length
@@ -1247,10 +1254,10 @@ function TodayCard({ title, subtitle, icon, iconBg, barColor, matches, trucks = 
         <div className="flex items-center gap-2.5 mb-4">
           <div className={`p-1.5 rounded-md ${iconBg}`}>{icon}</div>
           <div className="flex-1 min-w-0">
-            <h3 className="text-sm font-semibold uppercase tracking-wide truncate">{title}</h3>
-            <p className="text-[11px] text-muted-foreground truncate">{subtitle}</p>
+            <h3 className={med ? 'text-[11px] font-semibold uppercase tracking-[0.08em] text-med-gris-suave truncate' : 'text-sm font-semibold uppercase tracking-wide truncate'}>{title}</h3>
+            <p className={med ? 'text-[11px] text-med-gris-suave truncate' : 'text-[11px] text-muted-foreground truncate'}>{subtitle}</p>
           </div>
-          <span className="inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-full bg-muted text-foreground text-xs font-bold tabular-nums">
+          <span className={med ? 'ref-med inline-flex items-center justify-center min-w-7 h-7 px-2 text-2xl tabular-nums' : 'inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-full bg-muted text-foreground text-xs font-bold tabular-nums'}>
             {total}
           </span>
         </div>
@@ -1260,11 +1267,11 @@ function TodayCard({ title, subtitle, icon, iconBg, barColor, matches, trucks = 
             {trucks.map(({ truck, refs, kg, m3 }) => (
               <div
                 key={truck.id}
-                className="rounded-lg border border-amber-300/70 bg-amber-50/60 dark:bg-amber-500/5 px-3 py-2.5"
+                className={med ? 'rounded-lg border border-med-info-borde bg-med-info-tinte px-3 py-2.5' : 'rounded-lg border border-amber-300/70 bg-amber-50/60 dark:bg-amber-500/5 px-3 py-2.5'}
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-semibold text-sm">🚛 {truck.code}</span>
-                  <Badge variant="outline" className="text-[10px] whitespace-nowrap border-amber-400 text-amber-700 dark:text-amber-400">
+                  <Badge variant="outline" className={med ? 'text-[10px] whitespace-nowrap border-med-celeste text-med-texto bg-med-pastel' : 'text-[10px] whitespace-nowrap border-amber-400 text-amber-700 dark:text-amber-400'}>
                     Consolidado
                   </Badge>
                 </div>

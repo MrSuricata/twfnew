@@ -18,6 +18,7 @@ import {
 } from '@/lib/distribucionTransportes'
 import { fetchTransporteCuotas, saveTransporteCuotas } from '@/lib/dataClient'
 import { invalidarCuotas } from '@/hooks/useTransporteCuotas'
+import { useBrand } from '@/lib/brand'
 
 const CORTES: { v: Ventana; label: string }[] = [
   { v: 'semana', label: 'Semana' },
@@ -47,6 +48,9 @@ interface Props {
 }
 
 export default function DistribucionTransportes({ shipments }: Props) {
+  // Fino por marca (handoff 03-admin · Transportes): naranja = desviado de la
+  // cuota, celeste = margen, violeta = en cuota. TWF intacto.
+  const med = useBrand().id === 'med'
   const [cuotas, setCuotas] = useState<CuotaTransporte[]>([])
   const [guardadas, setGuardadas] = useState<CuotaTransporte[]>([])
   const [modo, setModo] = useState<Modo>('despachado')
@@ -230,9 +234,9 @@ export default function DistribucionTransportes({ shipments }: Props) {
                       )}
                       <div
                         className={`absolute inset-y-0 left-0 ${
-                          esSinAsignar ? 'bg-amber-500/60'
-                            : !f.enCuota ? 'bg-muted-foreground/40'
-                            : desviado ? 'bg-destructive/70' : 'bg-primary/70'
+                          esSinAsignar ? (med ? 'bg-med-aviso/60' : 'bg-amber-500/60')
+                            : !f.enCuota ? (med ? 'bg-med-celeste/60' : 'bg-muted-foreground/40')
+                            : desviado ? (med ? 'bg-med-aviso/80' : 'bg-destructive/70') : 'bg-primary/70'
                         }`}
                         style={{ width: `${Math.min(100, (f.porcentaje / maxPct) * 100)}%` }}
                       />
@@ -249,7 +253,7 @@ export default function DistribucionTransportes({ shipments }: Props) {
                       {sug > 0 && <span className="text-primary font-medium"> +{sug}</span>}{' '}
                       <span className="text-muted-foreground">{Math.round(f.porcentaje)}%</span>
                       {f.diferencia !== null && (
-                        <div className={f.diferencia > 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-400'}>
+                        <div className={f.diferencia > 0 ? (med ? 'text-med-aviso-texto' : 'text-destructive') : (med ? 'text-med-ok' : 'text-emerald-600 dark:text-emerald-400')}>
                           {f.diferencia > 0 ? `faltan ${f.diferencia}` : f.diferencia < 0 ? `sobran ${-f.diferencia}` : 'en meta'}
                         </div>
                       )}
@@ -263,7 +267,7 @@ export default function DistribucionTransportes({ shipments }: Props) {
           {esPrevision && dist.sinAsignar > 0 && (
             <div className="mt-4 pt-3 border-t">
               <p className="flex items-center gap-1.5 text-sm font-medium">
-                <Lightbulb size={16} weight="fill" className="text-amber-500" />
+                <Lightbulb size={16} weight="fill" className={med ? 'text-med-aviso' : 'text-amber-500'} />
                 {dist.sinAsignar} contenedor{dist.sinAsignar > 1 ? 'es' : ''} sin transporte
               </p>
               {reparto.some(r => r.cantidad > 0) && (

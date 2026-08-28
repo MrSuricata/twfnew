@@ -1,5 +1,6 @@
 import { useDroppable } from '@dnd-kit/core'
 import type { CalendarEvent } from '@/lib/agendaTypes'
+import { useBrand } from '@/lib/brand'
 import { DAY_NAMES } from '@/lib/agendaTypes'
 import { getWeekDates, toDateKey, isToday } from '@/lib/agendaUtils'
 import AgendaEventCard from './AgendaEventCard'
@@ -98,10 +99,13 @@ export default function AgendaWeekView({ date, events, onSelectShipment, onDayCl
     eventsByDate.set(e.date, existing)
   }
 
+  // Fino por marca (handoff 03-admin · Agenda): cabecera de días del sistema
+  // (labels en mayúsculas gris suave sobre fondo claro, hoy tintado lila).
+  const med = useBrand().id === 'med'
   return (
-    <div className="bg-card border border-border rounded-xl overflow-hidden">
+    <div className={med ? 'bg-card border-2 border-med-borde rounded-[20px] overflow-hidden' : 'bg-card border border-border rounded-xl overflow-hidden'}>
       {/* Header row */}
-      <div className="grid grid-cols-6 border-b border-border">
+      <div className={med ? 'grid grid-cols-6 border-b-2 border-med-borde bg-med-fondo' : 'grid grid-cols-6 border-b border-border'}>
         {weekDates.map((d, i) => {
           const today = isToday(d)
           return (
@@ -110,14 +114,14 @@ export default function AgendaWeekView({ date, events, onSelectShipment, onDayCl
               onClick={() => onDayClick(d)}
               className={`py-3 px-2 text-center border-r border-border last:border-r-0
                 hover:bg-muted/50 transition-colors cursor-pointer
-                ${today ? 'bg-accent/10' : ''}`}
+                ${today ? (med ? 'bg-med-lila' : 'bg-accent/10') : ''}`}
             >
-              <div className={`text-xs font-medium ${today ? 'text-accent-foreground' : 'text-muted-foreground'}`}>
+              <div className={`text-xs font-medium ${med ? 'font-bold uppercase tracking-[0.06em] text-[11px]' : ''} ${today ? (med ? 'text-med-violeta' : 'text-accent-foreground') : (med ? 'text-med-gris-suave' : 'text-muted-foreground')}`}>
                 {DAY_NAMES[i]}
               </div>
-              <div className={`text-lg font-bold ${today
-                ? 'text-primary bg-primary/10 rounded-full w-8 h-8 flex items-center justify-center mx-auto'
-                : 'text-foreground'
+              <div className={`text-lg font-bold ${med ? 'titulo-med' : ''} ${today
+                ? (med ? 'text-white bg-med-violeta rounded-full w-8 h-8 flex items-center justify-center mx-auto' : 'text-primary bg-primary/10 rounded-full w-8 h-8 flex items-center justify-center mx-auto')
+                : (med ? 'text-med-violeta' : 'text-foreground')
               }`}>
                 {d.getDate()}
               </div>

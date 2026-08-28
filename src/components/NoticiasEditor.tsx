@@ -154,11 +154,13 @@ export default function NoticiasEditor() {
                   <span className={`text-[10px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded ${categoriaMeta(n.categoria).chip}`}>
                     {categoriaMeta(n.categoria).label}
                   </span>
-                  {n.alerta && <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-amber-700"><Megaphone size={11} weight="fill" /> alerta diaria</span>}
-                  {!n.activo && <span className="text-[10px] font-semibold text-muted-foreground">inactiva</span>}
+                  {n.alerta && <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-med-aviso-texto"><Megaphone size={11} weight="fill" /> alerta diaria</span>}
+                  {/* Estado como pill del sistema (handoff 03-admin · Contenido web) */}
+                  {n.activo && vigente && <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-med-ok-suave text-med-ok">Publicada</span>}
+                  {!n.activo && <span className="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-med-lila text-med-gris">Borrador</span>}
                   {n.activo && !vigente && <span className="text-[10px] font-semibold text-muted-foreground">vencida (archivada)</span>}
                 </div>
-                <p className="mt-1 font-medium text-sm leading-snug">{tituloPlano(n.titulo)}</p>
+                <p className="mt-1 font-semibold text-sm leading-snug text-med-texto">{tituloPlano(n.titulo)}</p>
                 <p className="text-[11px] text-muted-foreground mt-0.5">
                   {(n.publicadaAt || '').slice(0, 10)}{n.vigenteHasta ? ` · vigente hasta ${n.vigenteHasta.slice(0, 10)}` : ' · sin vencimiento'}
                 </p>

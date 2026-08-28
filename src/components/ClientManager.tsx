@@ -61,6 +61,7 @@ import {
 } from '@/lib/dataClient'
 import { getMatchCount as computeMatchCount } from '@/lib/clientMatching'
 import { deriveClientePattern } from '@/lib/clientCatalog'
+import { getBrand } from '@/lib/brand'
 
 // ── Gestión del catálogo de clientes ─────────────────────────────────────
 // Tabla real de clientes (datos legales + aliases) + accesos al portal por
@@ -509,7 +510,7 @@ export default function ClientManager({ clients, onUpdateClients, shipments = []
                             type="button"
                             onClick={() => openAccess(client)}
                             className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border transition-colors hover:border-primary hover:text-primary ${
-                              activos > 0 ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'text-muted-foreground border-dashed'
+                              activos > 0 ? (getBrand().id === 'med' ? 'bg-med-pastel border-med-celeste/60 text-med-texto font-semibold' : 'bg-emerald-50 border-emerald-200 text-emerald-700') : (getBrand().id === 'med' ? 'bg-med-aviso-pill border-med-aviso-borde text-med-aviso-texto font-semibold' : 'text-muted-foreground border-dashed')
                             }`}
                             title="Gestionar accesos al portal"
                           >

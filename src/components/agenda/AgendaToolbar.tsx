@@ -1,4 +1,5 @@
 import { CaretLeft, CaretRight, Funnel, Truck, X, Warning } from '@phosphor-icons/react'
+import { useBrand } from '@/lib/brand'
 import type { AgendaView } from '@/lib/agendaTypes'
 import { MONTH_NAMES } from '@/lib/agendaTypes'
 
@@ -82,8 +83,11 @@ export default function AgendaToolbar({
   showPendingSidebar = false,
   onTogglePendingSidebar
 }: AgendaToolbarProps) {
+  // Fino por marca (handoff 03-admin · Agenda): tipografía y pills del sistema
+  // bajo Mediterránea; TWF queda exactamente igual.
+  const med = useBrand().id === 'med'
   return (
-    <div className="bg-card border rounded-xl px-4 py-3 space-y-3">
+    <div className={med ? 'bg-card border-2 border-med-borde rounded-[20px] px-4 py-3 space-y-3' : 'bg-card border rounded-xl px-4 py-3 space-y-3'}>
       {/* Top row: navigation + period + view selector */}
       <div className="flex items-center justify-between gap-4">
         {/* Navigation button group */}
@@ -114,13 +118,13 @@ export default function AgendaToolbar({
 
         {/* Period label */}
         <div className="flex-1 text-center min-w-0">
-          <h2 className="text-lg font-semibold text-foreground tracking-tight truncate capitalize">
+          <h2 className={med ? 'titulo-med text-xl text-med-violeta truncate capitalize' : 'text-lg font-semibold text-foreground tracking-tight truncate capitalize'}>
             {getPeriodLabel(view, currentDate)}
           </h2>
           <p className="text-[11px] text-muted-foreground">
             <span className="tabular-nums font-medium">{eventCount}</span> operacion{eventCount !== 1 ? 'es' : ''}
             {alertCount > 0 && (
-              <span className="ml-1.5 inline-flex items-center gap-1 text-orange-600">
+              <span className={med ? 'ml-1.5 inline-flex items-center gap-1 text-med-aviso' : 'ml-1.5 inline-flex items-center gap-1 text-orange-600'}>
                 <Warning size={10} weight="fill" />
                 <span className="tabular-nums font-medium">{alertCount}</span> alerta{alertCount !== 1 ? 's' : ''}
               </span>
@@ -130,15 +134,17 @@ export default function AgendaToolbar({
 
         {/* View selector + pending button */}
         <div className="flex items-center gap-2 shrink-0">
-          <div className="inline-flex items-center bg-muted/70 rounded-md p-0.5">
+          <div className={med ? 'inline-flex items-center bg-med-lila rounded-full p-0.5' : 'inline-flex items-center bg-muted/70 rounded-md p-0.5'}>
             {(Object.keys(VIEW_LABELS) as AgendaView[]).map(v => (
               <button
                 key={v}
                 onClick={() => onViewChange(v)}
-                className={`px-2.5 py-1 text-[11px] font-semibold rounded transition-all ${
+                className={`px-2.5 py-1 text-[11px] font-semibold transition-all ${
+                  med ? 'rounded-full' : 'rounded'
+                } ${
                   view === v
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
+                    ? (med ? 'bg-med-violeta text-white' : 'bg-background text-foreground shadow-sm')
+                    : (med ? 'text-med-gris hover:text-med-violeta' : 'text-muted-foreground hover:text-foreground')
                 }`}
               >
                 {VIEW_LABELS[v]}
@@ -149,9 +155,11 @@ export default function AgendaToolbar({
           {onTogglePendingSidebar && (
             <button
               onClick={onTogglePendingSidebar}
-              className={`flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold rounded-md border transition-all ${
+              className={`flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold border transition-all ${
+                med ? 'rounded-full' : 'rounded-md'
+              } ${
                 showPendingSidebar
-                  ? 'bg-amber-50 text-amber-700 border-amber-300'
+                  ? (med ? 'bg-med-aviso-tinte text-med-aviso-texto border-med-aviso-borde' : 'bg-amber-50 text-amber-700 border-amber-300')
                   : 'bg-background text-muted-foreground hover:bg-muted hover:text-foreground'
               }`}
             >
@@ -160,7 +168,7 @@ export default function AgendaToolbar({
               {pendingCount > 0 && (
                 <span className={`text-[10px] tabular-nums px-1.5 rounded-full ${
                   showPendingSidebar
-                    ? 'bg-amber-200 text-amber-800'
+                    ? (med ? 'bg-med-aviso text-white' : 'bg-amber-200 text-amber-800')
                     : 'bg-muted text-muted-foreground'
                 }`}>
                   {pendingCount}

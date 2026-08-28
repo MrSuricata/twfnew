@@ -47,6 +47,7 @@ import {
 } from '@/lib/billingTypes'
 import { openFichaFacturacionPrint, fmtMoneyUY } from '@/lib/fichaFacturacionPdf'
 import { fmtDateDMY } from '@/lib/format'
+import { getBrand } from '@/lib/brand'
 
 // ─── Facturación universal ───────────────────────────────────────────
 // TODA carga (FCL planilla + LCL/aéreo/terrestre/FCL web) entra acá cuando
@@ -508,13 +509,13 @@ export default function BillingManagement({ shipments, dbShipments = [], trucks 
               {/* Resultado: VENTA − GASTOS */}
               <div
                 className={`rounded-lg border p-3 flex items-center justify-between gap-4 ${
-                  fichaResultado >= 0 ? 'border-green-300 bg-green-50' : 'border-red-300 bg-red-50'
+                  fichaResultado >= 0 ? (getBrand().id === 'med' ? 'border-med-ok/30 bg-med-ok-suave' : 'border-green-300 bg-green-50') : (getBrand().id === 'med' ? 'border-med-error/30 bg-med-error/10' : 'border-red-300 bg-red-50')
                 }`}
               >
-                <span className={`text-sm font-medium ${fichaResultado >= 0 ? 'text-green-900' : 'text-red-900'}`}>
+                <span className={`text-sm font-medium ${fichaResultado >= 0 ? (getBrand().id === 'med' ? 'text-med-ok' : 'text-green-900') : (getBrand().id === 'med' ? 'text-med-error' : 'text-red-900')}`}>
                   Resultado (venta − gastos)
                 </span>
-                <span className={`text-2xl font-bold tabular-nums ${fichaResultado >= 0 ? 'text-green-700' : 'text-red-700'}`}>
+                <span className={`text-2xl font-bold tabular-nums ${fichaResultado >= 0 ? (getBrand().id === 'med' ? 'text-med-ok' : 'text-green-700') : (getBrand().id === 'med' ? 'text-med-error' : 'text-red-700')}`}>
                   USD {fmtMoneyUY(fichaResultado)}
                 </span>
               </div>
@@ -755,11 +756,19 @@ function SubTabChip({
   active: boolean
   onClick: () => void
 }) {
-  const tones = {
-    amber: { active: 'bg-amber-100 border-amber-300 text-amber-900', num: 'text-amber-700' },
-    green: { active: 'bg-green-100 border-green-300 text-green-900', num: 'text-green-700' },
-    muted: { active: 'bg-muted border-muted-foreground/30 text-foreground', num: 'text-muted-foreground' },
-  }
+  // Bajo Mediterránea (handoff 03-admin · Facturación): naranja de aviso para
+  // lo pendiente, verde del sistema para lo cobrado.
+  const tones = getBrand().id === 'med'
+    ? {
+        amber: { active: 'bg-med-aviso-pill border-med-aviso-borde text-med-aviso-texto', num: 'text-med-aviso-texto' },
+        green: { active: 'bg-med-ok-suave border-med-ok/30 text-med-ok', num: 'text-med-ok' },
+        muted: { active: 'bg-med-lila border-med-borde text-med-texto', num: 'text-med-gris' },
+      }
+    : {
+        amber: { active: 'bg-amber-100 border-amber-300 text-amber-900', num: 'text-amber-700' },
+        green: { active: 'bg-green-100 border-green-300 text-green-900', num: 'text-green-700' },
+        muted: { active: 'bg-muted border-muted-foreground/30 text-foreground', num: 'text-muted-foreground' },
+      }
   const t = tones[tone]
   return (
     <button

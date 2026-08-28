@@ -207,11 +207,15 @@ export const LCL_AIR_STATUS_LABELS: Record<LclAirStatus, string> = {
   despachado: 'Despachado',
 }
 
+// Colores por VARIABLE de marca (src/index.css): bajo TWF los defaults del
+// :root replican exactamente los amber/blue/green de siempre; bajo Mediterránea
+// el bloque [data-brand="med"] los pisa con la paleta del sistema (handoff
+// 03-admin: naranja = hoy/cargado, pastel = en ruta, verde = entregado).
 export const TRUCK_STATUS_COLORS: Record<TruckStatus, string> = {
   planning: 'bg-slate-100 text-slate-700 border-slate-200',
-  loaded: 'bg-amber-100 text-amber-800 border-amber-200',
-  in_transit: 'bg-blue-100 text-blue-800 border-blue-200',
-  delivered: 'bg-green-100 text-green-800 border-green-200',
+  loaded: 'bg-[var(--estado-hoy-bg)] text-[var(--estado-hoy-fg)] border-[var(--estado-hoy-bd)]',
+  in_transit: 'bg-[var(--estado-transito-bg)] text-[var(--estado-transito-fg)] border-[var(--estado-transito-bd)]',
+  delivered: 'bg-[var(--estado-ok-bg)] text-[var(--estado-ok-fg)] border-[var(--estado-ok-bd)]',
 }
 
 // ── Borradores y costos (12/06/2026) ──────────────────────────────────────────

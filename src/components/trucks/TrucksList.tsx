@@ -47,6 +47,7 @@ import {
 import { formatKg, formatM3, discardPendingArrays } from '@/lib/truckUtils'
 import { nextTruckCode } from '@/lib/dataClient'
 import { makeEmptyTruck } from '@/lib/truckUtils'
+import { useBrand } from '@/lib/brand'
 
 interface TrucksListProps {
   trucks: Truck[]
@@ -69,6 +70,9 @@ export default function TrucksList({
   onDeleteTruckLoad,
   onOpenBuilder,
 }: TrucksListProps) {
+  // Fino por marca (handoff 03-admin · Camiones): CAM-XXXX con la tipografía
+  // del sistema bajo Mediterránea; TWF intacto.
+  const medBrand = useBrand().id === 'med'
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [creating, setCreating] = useState(false)
@@ -230,7 +234,7 @@ export default function TrucksList({
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-lg tracking-tight">{t.code}</span>
+                      <span className={medBrand ? 'titulo-med text-lg text-med-violeta' : 'font-semibold text-lg tracking-tight'}>{t.code}</span>
                       {t.isSider && (
                         <Badge variant="outline" className="text-[10px] h-5">Sider</Badge>
                       )}
@@ -411,13 +415,16 @@ export default function TrucksList({
 }
 
 function CapacityBar({ label, pct, over }: { label: string; pct: number; over: boolean }) {
+  // Fino por marca (handoff 03-admin · Camiones): la barra de ocupación en
+  // violeta de marca; naranja solo cuando se acerca al límite, rojo pasado.
+  const med = useBrand().id === 'med'
   const clamped = Math.min(Math.max(pct, 0), 1.2)
-  // Color: green <80%, amber 80-100%, red >100%
+  // Color: green <80%, amber 80-100%, red >100% (med: violeta / naranja / rojo)
   const color = over
-    ? 'bg-red-500'
+    ? (med ? 'bg-med-error' : 'bg-red-500')
     : clamped > 0.8
-    ? 'bg-amber-500'
-    : 'bg-emerald-500'
+    ? (med ? 'bg-med-aviso' : 'bg-amber-500')
+    : (med ? 'bg-med-violeta' : 'bg-emerald-500')
   return (
     <div className="space-y-0.5">
       <div className="flex items-center justify-between text-[10px] text-muted-foreground tabular-nums">
@@ -426,7 +433,7 @@ function CapacityBar({ label, pct, over }: { label: string; pct: number; over: b
           {Math.round(clamped * 100)}%
         </span>
       </div>
-      <div className="h-1.5 bg-muted rounded-full overflow-hidden">
+      <div className={med ? 'h-1.5 bg-med-lila rounded-full overflow-hidden' : 'h-1.5 bg-muted rounded-full overflow-hidden'}>
         <div
           className={`h-full ${color} transition-all`}
           style={{ width: `${Math.min(clamped, 1) * 100}%` }}
