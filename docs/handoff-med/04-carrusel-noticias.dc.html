@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#EEF2F6}
+a{color:#49286b;text-decoration:none}a:hover{color:#7A3FA8}
+</style>
+</helmet>
+<div style="min-height:100vh;box-sizing:border-box;padding:70px;display:flex;flex-direction:column;align-items:center;gap:36px;font-family:Montserrat,sans-serif">
+
+<div style="position:relative;width:1600px;flex:none">
+  <div style="width:1600px;height:900px;overflow:hidden;border-radius:48px;box-shadow:0 50px 110px rgba(38,28,121,0.22);cursor:grab;touch-action:pan-y" onPointerDown="{{ down }}" onPointerMove="{{ move }}" onPointerUp="{{ up }}" onPointerCancel="{{ up }}">
+    <div style="{{ trackStyle }}">
+
+      <div data-screen-label="Tifones" style="position:relative;flex:none;width:1600px;height:900px;overflow:hidden;background:linear-gradient(160deg,#49286b 0%,#352e6a 55%,#261c79 100%);display:flex">
+        <div style="position:absolute;top:-300px;right:-300px;width:460px;height:460px;border-radius:50%;background:rgba(155,209,229,0.18);pointer-events:none"></div>
+        <div style="position:absolute;top:-330px;right:-330px;width:560px;height:560px;border-radius:50%;border:26px solid rgba(155,209,229,0.35);box-sizing:border-box;pointer-events:none"></div>
+        <div style="position:absolute;bottom:-300px;left:-300px;width:440px;height:440px;border-radius:50%;border:22px solid rgba(206,255,255,0.25);box-sizing:border-box;pointer-events:none"></div>
+        <div style="position:relative;box-sizing:border-box;flex:none;width:940px;padding:90px 40px 90px 110px;display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;gap:30px">
+          <div style="display:flex;align-items:center;gap:28px">
+            <div style="background:#e8863b;border-radius:999px;padding:16px 40px;font-weight:600;font-size:28px;letter-spacing:0.08em;text-transform:uppercase;color:#FFFFFF">Aviso operativo</div>
+            <div style="font-weight:600;font-size:26px;letter-spacing:0.08em;text-transform:uppercase;color:#9bd1e5">Agosto 2026</div>
+          </div>
+          <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:86px;line-height:0.98;letter-spacing:-0.02em;color:#FFFFFF">Tifones en China:<br><span style="color:#9bd1e5">cierres portuarios</span></div>
+          <div style="width:310px;height:8px;background:#e8863b"></div>
+          <div style="font-weight:400;font-size:38px;line-height:1.3;color:#ceffff;text-wrap:pretty">Cierres en Shanghái y Ningbo. Salidas marítimas con demoras.</div>
+        </div>
+        <div style="position:relative;box-sizing:border-box;flex:1;padding:100px 110px 90px 30px;display:flex;flex-direction:column;align-items:center;justify-content:space-between;gap:30px">
+          <div style="font-weight:300;font-size:33px;line-height:1.35;color:#FFFFFF;opacity:0.92;text-align:center;text-wrap:pretty">Seguimos cada embarque y avisamos ante cualquier cambio de ETA.</div>
+          <a href="#" style="background:#ceffff;border-radius:999px;padding:24px 52px;font-weight:600;font-size:30px;color:#352e6a;display:flex;align-items:center;gap:18px">Ir a la noticia <span style="font-family:Nunito,sans-serif;font-weight:900">→</span></a>
+          <img src="assets/logo-blanco.png" alt="Mediterranea Carghas" style="width:290px" draggable="false">
+        </div>
+      </div>
+
+      <div data-screen-label="Cristo Redentor cierre" style="position:relative;flex:none;width:1600px;height:900px;overflow:hidden;background:#cfe4f0 url(assets/bg-gradient.png) center/cover no-repeat;display:flex">
+        <div style="position:absolute;top:-300px;right:-300px;width:460px;height:460px;border-radius:50%;background:#49286b;pointer-events:none"></div>
+        <div style="position:absolute;top:-330px;right:-330px;width:560px;height:560px;border-radius:50%;border:26px solid rgba(155,209,229,0.65);box-sizing:border-box;pointer-events:none"></div>
+        <div style="position:absolute;bottom:-300px;left:-300px;width:440px;height:440px;border-radius:50%;background:#49286b;pointer-events:none"></div>
+        <div style="position:absolute;bottom:-330px;left:-330px;width:540px;height:540px;border-radius:50%;border:22px solid #ceffff;box-sizing:border-box;pointer-events:none"></div>
+        <div style="position:relative;box-sizing:border-box;flex:none;width:900px;padding:90px 40px 90px 110px;display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;gap:26px">
+          <div style="display:flex;align-items:center;gap:28px">
+            <div style="background:#e8863b;border-radius:999px;padding:16px 40px;font-weight:600;font-size:28px;letter-spacing:0.08em;text-transform:uppercase;color:#FFFFFF">Aviso importante</div>
+            <div style="font-weight:600;font-size:26px;letter-spacing:0.08em;text-transform:uppercase;color:#49286b;opacity:0.7">28/08/2026</div>
+          </div>
+          <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:84px;line-height:0.98;letter-spacing:-0.02em;color:#49286b">Paso Cristo<br>Redentor</div>
+          <div style="background:#ceffff;border-radius:999px;padding:16px 40px;font-family:Nunito,sans-serif;font-weight:900;font-size:34px;color:#352e6a">Nuevo cierre preventivo</div>
+          <div style="font-weight:400;font-size:32px;line-height:1.3;color:#352e6a;text-wrap:pretty">Tras el bloqueo récord de 34 días, la cordillera vuelve a cerrar por temporales de nieve y viento.</div>
+        </div>
+        <div style="position:relative;box-sizing:border-box;flex:1;padding:110px 110px 90px 0;display:flex;flex-direction:column;align-items:center;justify-content:space-between;gap:28px">
+          <div style="align-self:stretch;background:#FFFFFF;border-radius:28px;padding:40px 44px;box-shadow:0 30px 70px rgba(40,60,90,0.14);font-weight:400;font-size:32px;line-height:1.3;color:#352e6a;text-wrap:pretty">La medida afecta la circulación entre Argentina y Chile y puede generar <strong style="color:#49286b">demoras y reprogramaciones</strong> en el transporte terrestre de cargas.</div>
+          <a href="https://www.lanacion.com.ar/sociedad/tras-una-breve-apertura-vuelven-a-cerrar-cristo-redentor-por-condiciones-meteorologicas-extremas-nid24082026/" target="_blank" style="background:#49286b;border-radius:999px;padding:24px 52px;font-weight:600;font-size:30px;color:#FFFFFF;display:flex;align-items:center;gap:18px">Ir a la noticia <span style="font-family:Nunito,sans-serif;font-weight:900">→</span></a>
+          <img src="assets/logo-violeta.png" alt="Mediterranea Carghas" style="width:290px" draggable="false">
+        </div>
+      </div>
+
+      <div data-screen-label="Cristo Redentor pronóstico" style="position:relative;flex:none;width:1600px;height:900px;overflow:hidden;background:#cfe4f0 url(assets/bg-gradient.png) center/cover no-repeat;display:flex">
+        <div style="position:absolute;top:-300px;right:-300px;width:460px;height:460px;border-radius:50%;background:#49286b;pointer-events:none"></div>
+        <div style="position:absolute;top:-330px;right:-330px;width:560px;height:560px;border-radius:50%;border:26px solid rgba(155,209,229,0.65);box-sizing:border-box;pointer-events:none"></div>
+        <div style="position:absolute;bottom:-300px;left:-300px;width:440px;height:440px;border-radius:50%;background:#49286b;pointer-events:none"></div>
+        <div style="position:absolute;bottom:-330px;left:-330px;width:540px;height:540px;border-radius:50%;border:22px solid #ceffff;box-sizing:border-box;pointer-events:none"></div>
+        <div style="position:relative;box-sizing:border-box;flex:none;width:880px;padding:100px 40px 90px 110px;display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;gap:28px">
+          <div style="background:#e8863b;border-radius:999px;padding:16px 40px;font-weight:600;font-size:28px;letter-spacing:0.08em;text-transform:uppercase;color:#FFFFFF">Actualización · 28/08</div>
+          <div style="font-weight:400;font-size:44px;line-height:1.3;color:#352e6a;text-wrap:pretty">Según los pronósticos, las condiciones adversas podrían mantenerse <strong style="font-family:Nunito,sans-serif;font-weight:900;color:#49286b">hasta el lunes 31 de agosto.</strong></div>
+          <div style="width:310px;height:8px;background:#e8863b"></div>
+          <div style="font-weight:400;font-size:32px;line-height:1.3;color:#352e6a;text-wrap:pretty">La reapertura dependerá de la evolución climática y de las <strong style="color:#49286b">comunicaciones oficiales</strong>.</div>
+        </div>
+        <div style="position:relative;box-sizing:border-box;flex:1;padding:110px 110px 90px 0;display:flex;flex-direction:column;align-items:center;justify-content:space-between;gap:28px">
+          <div style="font-weight:400;font-size:32px;line-height:1.35;color:#352e6a;text-align:center;text-wrap:pretty">Desde Mediterranea Carghas seguimos monitoreando cada operación para mantener informados a nuestros clientes.</div>
+          <a href="https://dinamicarg.com/nuevo-cierre-del-paso-cristo-redentor/" target="_blank" style="background:#49286b;border-radius:999px;padding:24px 52px;font-weight:600;font-size:30px;color:#FFFFFF;display:flex;align-items:center;gap:18px">Ir a la noticia <span style="font-family:Nunito,sans-serif;font-weight:900">→</span></a>
+          <img src="assets/logo-violeta.png" alt="Mediterranea Carghas" style="width:290px" draggable="false">
+        </div>
+      </div>
+
+      <div data-screen-label="Golden Week" style="position:relative;flex:none;width:1600px;height:900px;overflow:hidden;background:#f4f6f8 url(assets/bg-paper.png) center/cover no-repeat;display:flex">
+        <div style="box-sizing:border-box;flex:none;width:760px;background:linear-gradient(160deg,#49286b 0%,#352e6a 60%,#261c79 100%);padding:90px 80px 90px 110px;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:32px">
+          <div style="display:flex;align-items:center;gap:28px">
+            <div style="background:#e8863b;border-radius:999px;padding:16px 40px;font-weight:600;font-size:28px;letter-spacing:0.08em;text-transform:uppercase;color:#FFFFFF">Golden Week</div>
+            <div style="font-weight:600;font-size:26px;letter-spacing:0.08em;text-transform:uppercase;color:#9bd1e5">China</div>
+          </div>
+          <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:78px;line-height:0.98;letter-spacing:-0.02em;color:#FFFFFF">China cerrada<br><span style="color:#9bd1e5">del 1 al 7 de octubre</span></div>
+          <div style="width:310px;height:8px;background:#9bd1e5"></div>
+          <div style="font-weight:400;font-size:34px;line-height:1.3;color:#ceffff;text-wrap:pretty">Fábricas y puertos detenidos. Navieras con salidas canceladas.</div>
+        </div>
+        <div style="position:relative;box-sizing:border-box;flex:1;padding:90px 100px;display:flex;flex-direction:column;align-items:center;justify-content:space-between;gap:28px">
+          <div style="align-self:stretch;background:#FFFFFF;border-radius:28px;padding:40px 44px;box-shadow:0 30px 70px rgba(40,60,90,0.12);font-family:Nunito,sans-serif;font-weight:900;font-size:46px;line-height:1.12;color:#49286b;text-wrap:pretty">Reservá tus embarques de septiembre con anticipación.</div>
+          <a href="#" style="background:#49286b;border-radius:999px;padding:24px 52px;font-weight:600;font-size:30px;color:#FFFFFF;display:flex;align-items:center;gap:18px">Ir a la noticia <span style="font-family:Nunito,sans-serif;font-weight:900">→</span></a>
+          <img src="assets/logo-violeta.png" alt="Mediterranea Carghas" style="width:290px" draggable="false">
+        </div>
+      </div>
+
+    </div>
+  </div>
+  <div onClick="{{ prev }}" style="position:absolute;left:-34px;top:414px;width:72px;height:72px;border-radius:50%;background:#FFFFFF;box-shadow:0 12px 30px rgba(38,28,121,0.25);display:flex;align-items:center;justify-content:center;cursor:pointer;font-family:Nunito,sans-serif;font-weight:900;font-size:34px;color:#49286b;user-select:none">‹</div>
+  <div onClick="{{ next }}" style="position:absolute;right:-34px;top:414px;width:72px;height:72px;border-radius:50%;background:#FFFFFF;box-shadow:0 12px 30px rgba(38,28,121,0.25);display:flex;align-items:center;justify-content:center;cursor:pointer;font-family:Nunito,sans-serif;font-weight:900;font-size:34px;color:#49286b;user-select:none">›</div>
+</div>
+
+<div style="display:flex;gap:16px">
+  <sc-for list="{{ dots }}" as="d" hint-placeholder-count="4">
+    <div onClick="{{ d.go }}" style="width:{{ d.w }};height:14px;border-radius:999px;background:{{ d.bg }};cursor:pointer;transition:all 300ms"></div>
+  </sc-for>
+</div>
+
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;: {&quot;width&quot;: 1760, &quot;height&quot;: 1120}, &quot;autoplay&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: false, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Carrusel&quot;}, &quot;autoplaySeconds&quot;: {&quot;editor&quot;: &quot;range&quot;, &quot;default&quot;: 6, &quot;min&quot;: 3, &quot;max&quot;: 12, &quot;step&quot;: 1, &quot;unit&quot;: &quot;s&quot;, &quot;tsType&quot;: &quot;number&quot;, &quot;section&quot;: &quot;Carrusel&quot;}}">
+class Component extends DCLogic {
+  state = { i: 0, dragX: 0, dragging: false };
+  N = 4; W = 1600;
+  componentDidMount() {
+    this._kb = (e) => { if (e.key === 'ArrowRight') this.go(1); if (e.key === 'ArrowLeft') this.go(-1); };
+    window.addEventListener('keydown', this._kb);
+    this.startAuto();
+  }
+  componentWillUnmount() { window.removeEventListener('keydown', this._kb); clearInterval(this._t); }
+  startAuto() {
+    clearInterval(this._t);
+    if (this.props.autoplay ?? false) this._t = setInterval(() => this.go(1), (this.props.autoplaySeconds ?? 6) * 1000);
+  }
+  componentDidUpdate(prev) {
+    if (prev.autoplay !== this.props.autoplay || prev.autoplaySeconds !== this.props.autoplaySeconds) this.startAuto();
+  }
+  go(d) { this.setState(s => ({ i: (s.i + d + this.N) % this.N, dragX: 0 })); }
+  renderVals() {
+    const { i, dragX, dragging } = this.state;
+    return {
+      trackStyle: {
+        display: 'flex',
+        transform: 'translateX(' + (-i * this.W + dragX) + 'px)',
+        transition: dragging ? 'none' : 'transform 480ms cubic-bezier(.22,.61,.36,1)'
+      },
+      prev: () => this.go(-1),
+      next: () => this.go(1),
+      down: (e) => { if (e.target.closest('a')) return; e.currentTarget.setPointerCapture(e.pointerId); this._x0 = e.clientX; this.setState({ dragging: true, dragX: 0 }); },
+      move: (e) => { if (this.state.dragging) this.setState({ dragX: e.clientX - this._x0 }); },
+      up: () => {
+        if (!this.state.dragging) return;
+        const dx = this.state.dragX;
+        this.setState({ dragging: false });
+        if (dx < -120) this.go(1); else if (dx > 120) this.go(-1); else this.setState({ dragX: 0 });
+      },
+      dots: Array.from({ length: this.N }, (_, n) => ({
+        w: n === i ? '52px' : '14px',
+        bg: n === i ? '#49286b' : 'rgba(73,40,107,0.25)',
+        go: () => this.setState({ i: n, dragX: 0 })
+      }))
+    };
+  }
+}
+</script>
+</body>
+</html>

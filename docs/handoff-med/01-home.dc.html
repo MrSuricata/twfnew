@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#FFFFFF}
+a{color:#49286b;text-decoration:none}a:hover{color:#7A3FA8}
+</style>
+</helmet>
+<div style="width:1440px;margin:0 auto;font-family:Montserrat,sans-serif;color:#352e6a;background:#FFFFFF">
+
+<div style="position:sticky;top:0;z-index:50;background:rgba(255,255,255,0.92);backdrop-filter:blur(12px);border-bottom:1px solid rgba(73,40,107,0.10)">
+  <div style="height:84px;padding:0 72px;display:flex;align-items:center;justify-content:space-between">
+    <div style="display:flex;align-items:center;gap:12px">
+      <img src="public/images/med-emblem-dark.svg" alt="" style="height:40px">
+      <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:21px;letter-spacing:-0.01em;color:#49286b;white-space:nowrap">Mediterranea <span style="color:#7A3FA8">Carghas</span></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:36px;font-weight:500;font-size:15px">
+      <a href="#servicios">Servicios</a><a href="#novedades">Novedades</a><a href="#cobertura">Cobertura</a><a href="#nosotros">Nosotros</a>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px">
+      <a href="#" style="padding:11px 24px;border:2px solid rgba(73,40,107,0.25);border-radius:999px;font-weight:600;font-size:14px;color:#49286b">Ingresar</a>
+      <a href="#" style="padding:12px 26px;background:#49286b;border-radius:999px;font-weight:600;font-size:14px;color:#FFFFFF">Cotizar embarque</a>
+    </div>
+  </div>
+</div>
+
+<div style="position:relative;overflow:hidden;background:#f2f7fb url(assets/bg-paper.png) center/cover no-repeat">
+  <div style="position:absolute;top:-260px;right:-260px;width:420px;height:420px;border-radius:50%;background:#49286b;pointer-events:none"></div>
+  <div style="position:absolute;top:-290px;right:-290px;width:520px;height:520px;border-radius:50%;border:22px solid rgba(155,209,229,0.55);box-sizing:border-box;pointer-events:none"></div>
+  <div style="position:relative;padding:96px 72px 90px;display:grid;grid-template-columns:1.15fr 0.85fr;gap:64px;align-items:center">
+    <div style="display:flex;flex-direction:column;align-items:flex-start;gap:28px">
+      <div style="background:#e8863b;border-radius:999px;padding:10px 24px;font-weight:600;font-size:14px;letter-spacing:0.08em;text-transform:uppercase;color:#FFFFFF">Casa matriz · Logística internacional</div>
+      <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:76px;line-height:0.98;letter-spacing:-0.02em;color:#49286b">Una sola casa para <span style="background:#ceffff;padding:0 10px;border-radius:12px">toda tu logística</span> internacional.</div>
+      <div style="width:180px;height:6px;background:#e8863b"></div>
+      <div style="font-weight:400;font-size:20px;line-height:1.5;color:#352e6a;max-width:560px;text-wrap:pretty">De China al Cono Sur, de origen a depósito fiscal. Todos los modos y todos los destinos, coordinados por un solo equipo.</div>
+      <div style="display:flex;gap:14px">
+        <a href="#" style="padding:16px 34px;background:#49286b;border-radius:999px;font-weight:600;font-size:16px;color:#FFFFFF;display:flex;align-items:center;gap:10px">Cotizar mi embarque <span style="font-family:Nunito,sans-serif;font-weight:900">→</span></a>
+        <a href="#servicios" style="padding:16px 34px;border:2px solid rgba(73,40,107,0.25);border-radius:999px;font-weight:600;font-size:16px;color:#49286b">Ver servicios</a>
+      </div>
+    </div>
+    <div style="background:#FFFFFF;border-radius:28px;padding:34px;box-shadow:0 40px 90px rgba(38,28,121,0.18);display:flex;flex-direction:column;gap:18px">
+      <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:24px;color:#49286b">Rastreá tu carga</div>
+      <div style="font-weight:400;font-size:15px;color:#6b6688">Ingresá tu referencia, contenedor o BL / AWB.</div>
+      <div style="display:flex;gap:10px">
+        <div style="flex:1;height:52px;border:2px solid #e5e4f1;border-radius:14px;display:flex;align-items:center;padding:0 18px;font-size:15px;color:#9a96b8;background:#fbfbfe">Ej: A7762, MEDU1234567 o BL</div>
+        <div style="height:52px;padding:0 26px;background:#49286b;border-radius:14px;display:flex;align-items:center;font-weight:600;font-size:15px;color:#FFFFFF">Rastrear</div>
+      </div>
+      <div style="border:2px solid #eef0f8;border-radius:18px;padding:22px;display:flex;flex-direction:column;gap:16px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:19px;color:#49286b">A7762</div>
+          <div style="background:#ceffff;border-radius:999px;padding:6px 16px;font-weight:600;font-size:13px;color:#352e6a">En tránsito</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:0">
+          <div style="width:16px;height:16px;border-radius:50%;background:#49286b;flex:none"></div>
+          <div style="flex:1;height:4px;background:#49286b"></div>
+          <div style="width:16px;height:16px;border-radius:50%;background:#49286b;flex:none;box-shadow:0 0 0 5px rgba(73,40,107,0.15)"></div>
+          <div style="flex:1;height:4px;background:#e5e4f1"></div>
+          <div style="width:16px;height:16px;border-radius:50%;background:#e5e4f1;flex:none"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-weight:600;font-size:12px;letter-spacing:0.04em;text-transform:uppercase"><span style="color:#9a96b8">En origen</span><span style="color:#49286b">En tránsito</span><span style="color:#9a96b8">En destino</span></div>
+        <div style="font-size:13px;color:#6b6688;text-align:center">Día 12 de 34 de travesía · ETA 15/09/2026</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="position:relative;height:420px;overflow:hidden">
+  <img src="public/images/ops-crane-port.jpg" alt="Operativa portuaria" style="width:100%;height:100%;object-fit:cover;display:block">
+  <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(38,28,121,0.30) 0%,rgba(38,28,121,0.78) 100%)"></div>
+  <div style="position:absolute;left:72px;right:72px;bottom:56px;display:flex;justify-content:space-between;align-items:flex-end">
+    <div style="display:flex;gap:72px">
+      <div><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:52px;line-height:1;color:#9bd1e5">+15</div><div style="margin-top:8px;font-weight:600;font-size:13px;letter-spacing:0.08em;text-transform:uppercase;color:rgba(255,255,255,0.75)">años de experiencia</div></div>
+      <div><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:52px;line-height:1;color:#9bd1e5">+250</div><div style="margin-top:8px;font-weight:600;font-size:13px;letter-spacing:0.08em;text-transform:uppercase;color:rgba(255,255,255,0.75)">destinos activos</div></div>
+      <div><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:52px;line-height:1;color:#9bd1e5">5</div><div style="margin-top:8px;font-weight:600;font-size:13px;letter-spacing:0.08em;text-transform:uppercase;color:rgba(255,255,255,0.75)">modos de transporte</div></div>
+      <div><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:52px;line-height:1;color:#9bd1e5">24/7</div><div style="margin-top:8px;font-weight:600;font-size:13px;letter-spacing:0.08em;text-transform:uppercase;color:rgba(255,255,255,0.75)">seguimiento</div></div>
+    </div>
+    <img src="public/images/med-emblem-white.svg" alt="" style="height:72px;opacity:0.9">
+  </div>
+</div>
+
+<div id="servicios" style="padding:110px 72px 90px">
+  <div style="display:flex;align-items:center;gap:20px">
+    <div style="background:#ceffff;border:2px solid #9bd1e5;border-radius:999px;padding:8px 22px;font-weight:600;font-size:13px;letter-spacing:0.08em;text-transform:uppercase;color:#352e6a">Servicios</div>
+    <div style="flex:1;height:2px;background:#eef0f8"></div>
+  </div>
+  <div style="margin-top:28px;font-family:Nunito,sans-serif;font-weight:900;font-size:58px;line-height:1;letter-spacing:-0.02em;color:#49286b;max-width:800px">Un operador, todos los modos.</div>
+  <div style="margin-top:48px;display:flex;flex-direction:column">
+    <div style="display:grid;grid-template-columns:120px 320px 1fr auto;gap:32px;align-items:center;padding:34px 0;border-top:2px solid #eef0f8" style-hover="background:#fbfbfe">
+      <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:30px;color:#9bd1e5">01</div>
+      <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:28px;color:#49286b">Marítimo FCL</div>
+      <div style="font-size:17px;line-height:1.5;color:#6b6688">Contenedor completo puerta a puerta, con trazabilidad de punta a punta.</div>
+      <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:24px;color:#49286b">→</div>
+    </div>
+    <div style="display:grid;grid-template-columns:120px 320px 1fr auto;gap:32px;align-items:center;padding:34px 0;border-top:2px solid #eef0f8">
+      <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:30px;color:#9bd1e5">02</div>
+      <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:28px;color:#49286b">Marítimo LCL</div>
+      <div style="font-size:17px;line-height:1.5;color:#6b6688">Carga consolidada: pagás solo por el espacio que ocupás.</div>
+      <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:24px;color:#49286b">→</div>
+    </div>
+    <div style="display:grid;grid-template-columns:120px 320px 1fr auto;gap:32px;align-items:center;padding:34px 0;border-top:2px solid #eef0f8">
+      <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:30px;color:#9bd1e5">03</div>
+      <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:28px;color:#49286b">Aéreo</div>
+      <div style="font-size:17px;line-height:1.5;color:#6b6688">Cuando el tiempo manda. Urgencias y carga de alto valor.</div>
+      <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:24px;color:#49286b">→</div>
+    </div>
+    <div style="display:grid;grid-template-columns:120px 320px 1fr auto;gap:32px;align-items:center;padding:34px 0;border-top:2px solid #eef0f8">
+      <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:30px;color:#9bd1e5">04</div>
+      <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:28px;color:#49286b">Terrestre</div>
+      <div style="font-size:17px;line-height:1.5;color:#6b6688">Cruces regionales y distribución en Mercosur.</div>
+      <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:24px;color:#49286b">→</div>
+    </div>
+    <div style="display:grid;grid-template-columns:120px 320px 1fr auto;gap:32px;align-items:center;padding:34px 0;border-top:2px solid #eef0f8;border-bottom:2px solid #eef0f8">
+      <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:30px;color:#9bd1e5">05</div>
+      <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:28px;color:#49286b">Proyectos OOG</div>
+      <div style="font-size:17px;line-height:1.5;color:#6b6688">Cargas fuera de medida, maquinaria y operativas especiales.</div>
+      <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:24px;color:#49286b">→</div>
+    </div>
+  </div>
+</div>
+
+<div style="padding:0 72px 100px">
+  <div style="background:#f2f7fb url(assets/bg-gradient.png) center/cover;border-radius:36px;padding:64px 72px;position:relative;overflow:hidden">
+    <div style="position:absolute;bottom:-240px;right:-240px;width:400px;height:400px;border-radius:50%;background:#49286b"></div>
+    <div style="position:absolute;bottom:-270px;right:-270px;width:500px;height:500px;border-radius:50%;border:20px solid rgba(155,209,229,0.6);box-sizing:border-box"></div>
+    <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:44px;color:#49286b">De la cotización a la entrega.</div>
+    <div style="margin-top:56px;display:flex;align-items:flex-start">
+      <div style="flex:1;display:flex;flex-direction:column;gap:16px;padding-right:24px">
+        <div style="display:flex;align-items:center;gap:0"><div style="width:30px;height:30px;border-radius:50%;background:#49286b;flex:none"></div><div style="flex:1;height:4px;background:#9bd1e5"></div></div>
+        <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:23px;color:#49286b">Cotizás</div>
+        <div style="font-size:15px;line-height:1.5;color:#352e6a">Origen, destino y tipo de carga. Te devolvemos una propuesta clara.</div>
+      </div>
+      <div style="flex:1;display:flex;flex-direction:column;gap:16px;padding-right:24px">
+        <div style="display:flex;align-items:center;gap:0"><div style="width:30px;height:30px;border-radius:50%;background:#49286b;flex:none"></div><div style="flex:1;height:4px;background:#9bd1e5"></div></div>
+        <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:23px;color:#49286b">Coordinamos origen</div>
+        <div style="font-size:15px;line-height:1.5;color:#352e6a">Recolección, consolidación y documentación — sin que muevas un dedo.</div>
+      </div>
+      <div style="flex:1;display:flex;flex-direction:column;gap:16px;padding-right:24px">
+        <div style="display:flex;align-items:center;gap:0"><div style="width:30px;height:30px;border-radius:50%;background:#49286b;flex:none"></div><div style="flex:1;height:4px;background:#9bd1e5"></div></div>
+        <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:23px;color:#49286b">Embarque y tránsito</div>
+        <div style="font-size:15px;line-height:1.5;color:#352e6a">Tu carga viaja con seguimiento en tiempo real, modo a modo.</div>
+      </div>
+      <div style="flex:1;display:flex;flex-direction:column;gap:16px">
+        <div style="display:flex;align-items:center;gap:0"><div style="width:30px;height:30px;border-radius:50%;background:#ceffff;border:5px solid #49286b;box-sizing:border-box;flex:none"></div></div>
+        <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:23px;color:#49286b">Despacho y entrega</div>
+        <div style="font-size:15px;line-height:1.5;color:#352e6a">Aduana, fiscal y transporte final, un mismo equipo.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="novedades" style="padding:0 72px 100px">
+  <div style="display:flex;align-items:center;gap:20px">
+    <div style="background:#e8863b;border-radius:999px;padding:8px 22px;font-weight:600;font-size:13px;letter-spacing:0.08em;text-transform:uppercase;color:#FFFFFF">Novedades</div>
+    <div style="flex:1;height:2px;background:#eef0f8"></div>
+  </div>
+  <div style="margin-top:28px;display:flex;justify-content:space-between;align-items:flex-end;gap:40px">
+    <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:58px;line-height:1;letter-spacing:-0.02em;color:#49286b">Avisos que afectan tu carga.</div>
+    <div style="font-size:16px;color:#6b6688;max-width:360px;padding-bottom:8px">El carrusel de noticias operativas vive acá — cierres, demoras y ventanas de embarque.</div>
+  </div>
+  <div style="margin-top:44px;position:relative">
+    <div style="width:100%;aspect-ratio:16/9;max-height:730px;height:730px;overflow:hidden;border-radius:36px;box-shadow:0 40px 90px rgba(38,28,121,0.20);position:relative;background:linear-gradient(160deg,#49286b 0%,#352e6a 55%,#261c79 100%)">
+      <div style="position:absolute;top:-260px;right:-260px;width:400px;height:400px;border-radius:50%;background:rgba(155,209,229,0.18)"></div>
+      <div style="position:absolute;top:-290px;right:-290px;width:500px;height:500px;border-radius:50%;border:24px solid rgba(155,209,229,0.35);box-sizing:border-box"></div>
+      <div style="position:absolute;inset:0;box-sizing:border-box;padding:80px 90px;display:flex">
+        <div style="flex:none;width:56%;display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;gap:24px">
+          <div style="display:flex;align-items:center;gap:22px">
+            <div style="background:#e8863b;border-radius:999px;padding:13px 32px;font-weight:600;font-size:22px;letter-spacing:0.08em;text-transform:uppercase;color:#FFFFFF">Aviso operativo</div>
+            <div style="font-weight:600;font-size:20px;letter-spacing:0.08em;text-transform:uppercase;color:#9bd1e5">Agosto 2026</div>
+          </div>
+          <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:66px;line-height:0.98;letter-spacing:-0.02em;color:#FFFFFF">Tifones en China:<br><span style="color:#9bd1e5">cierres portuarios</span></div>
+          <div style="width:240px;height:7px;background:#e8863b"></div>
+          <div style="font-weight:400;font-size:29px;line-height:1.3;color:#ceffff">Cierres en Shanghái y Ningbo. Salidas marítimas con demoras.</div>
+        </div>
+        <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:space-between;gap:24px;padding:10px 0 0 50px">
+          <div style="font-weight:300;font-size:26px;line-height:1.35;color:rgba(255,255,255,0.92);text-align:center">Seguimos cada embarque y avisamos ante cualquier cambio de ETA.</div>
+          <div style="background:#ceffff;border-radius:999px;padding:19px 42px;font-weight:600;font-size:24px;color:#352e6a;display:flex;align-items:center;gap:14px">Ir a la noticia <span style="font-family:Nunito,sans-serif;font-weight:900">→</span></div>
+          <img src="assets/logo-blanco.png" alt="Mediterranea Carghas" style="width:230px">
+        </div>
+      </div>
+    </div>
+    <div style="position:absolute;left:-28px;top:50%;transform:translateY(-50%);width:60px;height:60px;border-radius:50%;background:#FFFFFF;box-shadow:0 12px 30px rgba(38,28,121,0.25);display:flex;align-items:center;justify-content:center;font-family:Nunito,sans-serif;font-weight:900;font-size:28px;color:#49286b">‹</div>
+    <div style="position:absolute;right:-28px;top:50%;transform:translateY(-50%);width:60px;height:60px;border-radius:50%;background:#FFFFFF;box-shadow:0 12px 30px rgba(38,28,121,0.25);display:flex;align-items:center;justify-content:center;font-family:Nunito,sans-serif;font-weight:900;font-size:28px;color:#49286b">›</div>
+  </div>
+  <div style="margin-top:26px;display:flex;justify-content:center;gap:12px">
+    <div style="width:44px;height:12px;border-radius:999px;background:#49286b"></div>
+    <div style="width:12px;height:12px;border-radius:999px;background:rgba(73,40,107,0.25)"></div>
+    <div style="width:12px;height:12px;border-radius:999px;background:rgba(73,40,107,0.25)"></div>
+    <div style="width:12px;height:12px;border-radius:999px;background:rgba(73,40,107,0.25)"></div>
+  </div>
+</div>
+
+<div id="cobertura" style="position:relative;overflow:hidden;background:linear-gradient(160deg,#49286b 0%,#352e6a 55%,#261c79 100%);padding:100px 72px">
+  <div style="position:absolute;inset:0;opacity:0.12;background:url(public/images/ops-container-yard.jpg) center/cover"></div>
+  <div style="position:relative;display:grid;grid-template-columns:0.9fr 1.1fr;gap:72px;align-items:start">
+    <div style="display:flex;flex-direction:column;align-items:flex-start;gap:26px">
+      <div style="border:2px solid #9bd1e5;border-radius:999px;padding:8px 22px;font-weight:600;font-size:13px;letter-spacing:0.08em;text-transform:uppercase;color:#9bd1e5">Cobertura</div>
+      <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:56px;line-height:1;letter-spacing:-0.02em;color:#FFFFFF">De origen a destino, <span style="color:#9bd1e5">sin fronteras.</span></div>
+      <div style="width:180px;height:6px;background:#9bd1e5"></div>
+      <div style="font-size:19px;line-height:1.5;color:rgba(255,255,255,0.75);text-wrap:pretty">Como casa matriz gestionamos todas las destinaciones del Cono Sur y más allá — con red propia de agentes en origen.</div>
+      <div style="display:flex;flex-wrap:wrap;gap:10px">
+        <div style="padding:9px 20px;border-radius:999px;background:rgba(255,255,255,0.10);border:1px solid rgba(255,255,255,0.18);color:rgba(255,255,255,0.9);font-size:14px;font-weight:500">China</div>
+        <div style="padding:9px 20px;border-radius:999px;background:rgba(255,255,255,0.10);border:1px solid rgba(255,255,255,0.18);color:rgba(255,255,255,0.9);font-size:14px;font-weight:500">Europa</div>
+        <div style="padding:9px 20px;border-radius:999px;background:rgba(255,255,255,0.10);border:1px solid rgba(255,255,255,0.18);color:rgba(255,255,255,0.9);font-size:14px;font-weight:500">Norteamérica</div>
+        <div style="padding:9px 20px;border-radius:999px;background:rgba(255,255,255,0.10);border:1px solid rgba(255,255,255,0.18);color:rgba(255,255,255,0.9);font-size:14px;font-weight:500">Uruguay</div>
+        <div style="padding:9px 20px;border-radius:999px;background:rgba(255,255,255,0.10);border:1px solid rgba(255,255,255,0.18);color:rgba(255,255,255,0.9);font-size:14px;font-weight:500">Argentina</div>
+        <div style="padding:9px 20px;border-radius:999px;background:rgba(255,255,255,0.10);border:1px solid rgba(255,255,255,0.18);color:rgba(255,255,255,0.9);font-size:14px;font-weight:500">Brasil</div>
+        <div style="padding:9px 20px;border-radius:999px;background:rgba(255,255,255,0.10);border:1px solid rgba(255,255,255,0.18);color:rgba(255,255,255,0.9);font-size:14px;font-weight:500">Paraguay</div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:20px;padding:26px 30px">
+        <div style="display:flex;align-items:center;gap:14px"><div style="width:14px;height:14px;border-radius:50%;background:#9bd1e5;flex:none"></div><div style="flex:1;height:3px;background:rgba(155,209,229,0.4)"></div><div style="width:14px;height:14px;border-radius:50%;background:#ceffff;border:3px solid #9bd1e5;box-sizing:border-box;flex:none"></div></div>
+        <div style="margin-top:14px;font-family:Nunito,sans-serif;font-weight:900;font-size:22px;color:#FFFFFF">China → Uruguay · Argentina</div>
+        <div style="margin-top:6px;font-size:15px;color:rgba(255,255,255,0.6)">Shanghai · Ningbo · Qingdao → Montevideo · Buenos Aires</div>
+      </div>
+      <div style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:20px;padding:26px 30px">
+        <div style="display:flex;align-items:center;gap:14px"><div style="width:14px;height:14px;border-radius:50%;background:#9bd1e5;flex:none"></div><div style="flex:1;height:3px;background:rgba(155,209,229,0.4)"></div><div style="width:14px;height:14px;border-radius:50%;background:#ceffff;border:3px solid #9bd1e5;box-sizing:border-box;flex:none"></div></div>
+        <div style="margin-top:14px;font-family:Nunito,sans-serif;font-weight:900;font-size:22px;color:#FFFFFF">Europa → Cono Sur</div>
+        <div style="margin-top:6px;font-size:15px;color:rgba(255,255,255,0.6)">Hamburgo · Rotterdam · Valencia → MVD · BUE</div>
+      </div>
+      <div style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:20px;padding:26px 30px">
+        <div style="display:flex;align-items:center;gap:14px"><div style="width:14px;height:14px;border-radius:50%;background:#9bd1e5;flex:none"></div><div style="flex:1;height:3px;background:rgba(155,209,229,0.4)"></div><div style="width:14px;height:14px;border-radius:50%;background:#ceffff;border:3px solid #9bd1e5;box-sizing:border-box;flex:none"></div></div>
+        <div style="margin-top:14px;font-family:Nunito,sans-serif;font-weight:900;font-size:22px;color:#FFFFFF">Norteamérica → Mercosur</div>
+        <div style="margin-top:6px;font-size:15px;color:rgba(255,255,255,0.6)">Miami · Houston → Montevideo</div>
+      </div>
+      <div style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:20px;padding:26px 30px">
+        <div style="display:flex;align-items:center;gap:14px"><div style="width:14px;height:14px;border-radius:50%;background:#9bd1e5;flex:none"></div><div style="flex:1;height:3px;background:rgba(155,209,229,0.4)"></div><div style="width:14px;height:14px;border-radius:50%;background:#ceffff;border:3px solid #9bd1e5;box-sizing:border-box;flex:none"></div></div>
+        <div style="margin-top:14px;font-family:Nunito,sans-serif;font-weight:900;font-size:22px;color:#FFFFFF">Intra-región · Puerta a puerta</div>
+        <div style="margin-top:6px;font-size:15px;color:rgba(255,255,255,0.6)">Tránsitos UY ↔ AR ↔ BR ↔ PY</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="nosotros" style="padding:110px 72px;display:grid;grid-template-columns:0.9fr 1.1fr;gap:72px;align-items:center">
+  <div style="position:relative">
+    <img src="public/images/team-containers.jpg" alt="Equipo Mediterranea" style="width:100%;height:520px;object-fit:cover;border-radius:36px;display:block">
+    <div style="position:absolute;left:-24px;bottom:-24px;background:#49286b;border-radius:24px;padding:26px 34px">
+      <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:34px;color:#9bd1e5">+15 años</div>
+      <div style="margin-top:4px;font-weight:600;font-size:13px;letter-spacing:0.08em;text-transform:uppercase;color:rgba(255,255,255,0.75)">moviendo carga en la región</div>
+    </div>
+  </div>
+  <div style="display:flex;flex-direction:column;align-items:flex-start;gap:26px">
+    <div style="background:#ceffff;border:2px solid #9bd1e5;border-radius:999px;padding:8px 22px;font-weight:600;font-size:13px;letter-spacing:0.08em;text-transform:uppercase;color:#352e6a">Por qué Mediterranea</div>
+    <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:54px;line-height:1;letter-spacing:-0.02em;color:#49286b">La tranquilidad de un solo responsable.</div>
+    <div style="display:flex;flex-direction:column;gap:0;align-self:stretch">
+      <div style="padding:22px 0;border-top:2px solid #eef0f8;display:flex;gap:20px;align-items:baseline"><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:19px;color:#49286b;flex:none;width:280px">Casa matriz, una sola ventana</div><div style="font-size:15px;line-height:1.5;color:#6b6688">Una cuenta, un interlocutor, toda tu logística.</div></div>
+      <div style="padding:22px 0;border-top:2px solid #eef0f8;display:flex;gap:20px;align-items:baseline"><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:19px;color:#49286b;flex:none;width:280px">Red propia de agentes</div><div style="font-size:15px;line-height:1.5;color:#6b6688">Origen en China, presencia en el Cono Sur, corresponsales en el mundo.</div></div>
+      <div style="padding:22px 0;border-top:2px solid #eef0f8;display:flex;gap:20px;align-items:baseline"><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:19px;color:#49286b;flex:none;width:280px">Despacho integral</div><div style="font-size:15px;line-height:1.5;color:#6b6688">Flete, aduana, depósito y transporte sin puntos ciegos.</div></div>
+      <div style="padding:22px 0;border-top:2px solid #eef0f8;border-bottom:2px solid #eef0f8;display:flex;gap:20px;align-items:baseline"><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:19px;color:#49286b;flex:none;width:280px">Operación 24/7</div><div style="font-size:15px;line-height:1.5;color:#6b6688">Seguimiento en tiempo real, respuesta en tu huso horario.</div></div>
+    </div>
+  </div>
+</div>
+
+<div style="padding:0 72px 110px">
+  <div style="position:relative;overflow:hidden;background:linear-gradient(120deg,#49286b 0%,#261c79 100%);border-radius:36px;padding:80px;display:flex;flex-direction:column;align-items:center;gap:26px;text-align:center">
+    <div style="position:absolute;top:-240px;left:-240px;width:400px;height:400px;border-radius:50%;border:22px solid rgba(155,209,229,0.30);box-sizing:border-box"></div>
+    <div style="position:absolute;bottom:-260px;right:-260px;width:440px;height:440px;border-radius:50%;background:rgba(155,209,229,0.14)"></div>
+    <div style="position:relative;font-family:Nunito,sans-serif;font-weight:900;font-size:56px;line-height:1;letter-spacing:-0.02em;color:#FFFFFF">Cotizá tu próximo embarque.</div>
+    <div style="position:relative;font-size:19px;line-height:1.5;color:rgba(255,255,255,0.75);max-width:560px">Decinos origen, destino y tipo de carga. Te respondemos con una propuesta clara, sin letra chica.</div>
+    <div style="position:relative;display:flex;gap:14px">
+      <a href="#" style="padding:16px 36px;background:#9bd1e5;border-radius:999px;font-weight:600;font-size:16px;color:#261c79;display:flex;align-items:center;gap:10px">WhatsApp directo <span style="font-family:Nunito,sans-serif;font-weight:900">→</span></a>
+      <a href="#" style="padding:16px 36px;border:2px solid rgba(255,255,255,0.3);border-radius:999px;font-weight:600;font-size:16px;color:#FFFFFF">Escribinos por mail</a>
+    </div>
+  </div>
+</div>
+
+<div style="background:#1a1448;padding:64px 72px 40px;color:rgba(255,255,255,0.7)">
+  <div style="display:flex;justify-content:space-between;gap:64px">
+    <div style="max-width:360px;display:flex;flex-direction:column;gap:18px">
+      <div style="display:flex;align-items:center;gap:12px;align-self:flex-start">
+        <img src="public/images/med-emblem-white.svg" alt="" style="height:40px">
+        <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:21px;letter-spacing:-0.01em;color:#FFFFFF;white-space:nowrap">Mediterranea <span style="color:#9bd1e5">Carghas</span></div>
+      </div>
+      <div style="font-size:14px;line-height:1.6">Casa matriz de logística internacional. Unificamos todos los modos y destinos bajo un mismo operador.</div>
+    </div>
+    <div style="display:flex;gap:80px;font-size:14px">
+      <div style="display:flex;flex-direction:column;gap:10px"><div style="font-weight:700;color:#FFFFFF;margin-bottom:6px">Servicios</div><a href="#servicios" style="color:rgba(255,255,255,0.7)">Marítimo</a><a href="#servicios" style="color:rgba(255,255,255,0.7)">Aéreo</a><a href="#servicios" style="color:rgba(255,255,255,0.7)">Terrestre</a><a href="#servicios" style="color:rgba(255,255,255,0.7)">Proyectos</a></div>
+      <div style="display:flex;flex-direction:column;gap:10px"><div style="font-weight:700;color:#FFFFFF;margin-bottom:6px">Empresa</div><a href="#cobertura" style="color:rgba(255,255,255,0.7)">Cobertura</a><a href="#nosotros" style="color:rgba(255,255,255,0.7)">Nosotros</a><a href="#" style="color:rgba(255,255,255,0.7)">Términos</a><a href="#" style="color:rgba(255,255,255,0.7)">Privacidad</a></div>
+      <div style="display:flex;flex-direction:column;gap:10px"><div style="font-weight:700;color:#FFFFFF;margin-bottom:6px">Accesos</div><a href="#" style="color:rgba(255,255,255,0.7)">Portal de clientes</a><a href="#" style="color:rgba(255,255,255,0.7)">Portal de partners</a><a href="#" style="color:rgba(255,255,255,0.7)">Acceso equipo</a></div>
+    </div>
+  </div>
+  <div style="margin-top:48px;padding-top:24px;border-top:1px solid rgba(255,255,255,0.12);display:flex;justify-content:space-between;font-size:12px;color:rgba(255,255,255,0.45)">
+    <span>© 2026 Mediterranea Carghas. Todos los derechos reservados.</span>
+    <span>mediterraneacarghas.com.ar</span>
+  </div>
+</div>
+
+</div>
+
+</x-dc>
+</body>
+</html>
