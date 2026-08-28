@@ -169,6 +169,43 @@
   border-bottom-color: #f4f5fa;
 }
 
+/* ── El fino del panel bajo Mediterránea (handoff 03-admin) ──
+   Todo por marca y por data-slot: bajo TWF no aplica nada de esto.
+   Son terminaciones — radios, tipografía de títulos y números —,
+   nunca layout ni comportamiento. */
+:root[data-brand="med"] [data-slot="button"] {
+  border-radius: 999px;
+}
+:root[data-brand="med"] [data-slot="card"] {
+  border-radius: 20px;
+  border-color: #eef0f8;
+}
+:root[data-brand="med"] [data-slot="dialog-content"] {
+  border-radius: 20px;
+}
+:root[data-brand="med"] [data-slot="input"],
+:root[data-brand="med"] [data-slot="select-trigger"],
+:root[data-brand="med"] textarea {
+  border-radius: 12px;
+}
+:root[data-brand="med"] [data-slot="badge"] {
+  border-radius: 999px;
+}
+/* Títulos de cada pantalla del panel: la tipografía de la marca. Los h2 de
+   los diálogos no entran (van por portal, fuera del contenido de pestañas). */
+:root[data-brand="med"] [data-slot="tabs-content"] h2 {
+  font-family: 'Nunito', 'Jost', sans-serif;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  color: #49286b;
+}
+/* Números grandes de los KPI dentro de cards */
+:root[data-brand="med"] [data-slot="card"] div.text-2xl {
+  font-family: 'Nunito', 'Jost', sans-serif;
+  font-weight: 900;
+  color: #49286b;
+}
+
 /* Brand fonts — Jost is a free geometric face close to Gotham. */
 :root[data-brand="med"] body {
   font-family: 'Jost', 'Inter', sans-serif;

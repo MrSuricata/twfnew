@@ -21,6 +21,7 @@
 | Texturas y logos | `public/novedades/`, `public/images/` |
 | Landing | `src/components/MediterraneaLanding.tsx` |
 | Carrusel de avisos | `src/components/NovedadesCarrusel.tsx` |
+| Mockups de origen (todas las pantallas) | `docs/handoff-med/` |
 
 ## Color
 
