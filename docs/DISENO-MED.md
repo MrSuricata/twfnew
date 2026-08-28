@@ -2,9 +2,12 @@
 
 > Fuente de verdad del diseño de la marca Med dentro de este repo.
 > Antes de tocar cualquier pantalla de Mediterránea, leer esto.
-> **No aplica a TWF**: esa marca tiene su propia landing (`PublicSiteEnhanced`) y
-> su propia estética. Todo lo de acá vive detrás de `getBrand().id === 'med'`
-> o dentro de componentes que solo usa Med.
+> **No aplica a TWF — nunca**: las dos marcas comparten el código pero no la
+> identidad. Todo lo compartido (admin, portal, logins, tablas, badges) resuelve
+> sus colores por variables de marca en `src/index.css`: los defaults del
+> `:root` son el look de TWF y el bloque `[data-brand="med"]` pisa con este
+> sistema. Las clases `.titulo-med`, `.ref-med`, `.degradado-med` y `.papel-med`
+> son neutras por default y solo se visten bajo `data-brand="med"`.
 
 ## Dónde vive cada cosa
 

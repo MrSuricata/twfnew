@@ -82,14 +82,14 @@ export const STATUS_LABEL: Record<string, string> = Object.fromEntries(
 
 /** Clases de color para el badge de estado de una carga (grilla + panel).
  *  Display-only: matchea por LABEL (la FCL deriva labels de la planilla y la DB
- *  usa STATUS_LABEL). Paleta del sistema (docs/DISENO-MED.md):
- *  Entregado/Devuelto=OK verde · En tránsito/viaje=celeste pastel ·
- *  Carga hoy/Sale hoy=naranja de aviso (requiere acción) · resto=gris. */
+ *  usa STATUS_LABEL). Colores por variables de marca
+ *  (src/index.css): bajo TWF el look de siempre, bajo Mediterránea la paleta
+ *  del sistema (docs/DISENO-MED.md). Resto=gris. */
 export function statusBadgeClass(label: string): string {
   const s = (label || '').toLowerCase()
-  if (s.includes('entregado') || s.includes('devuelto')) return 'bg-[#e4f4ea] text-med-ok border-[#cbe7d6]'
-  if (s.includes('tránsito') || s.includes('transito') || s.includes('viaje')) return 'bg-med-pastel text-med-texto border-med-celeste/60'
-  if (s.includes('carga hoy') || s.includes('sale hoy')) return 'bg-med-aviso text-white border-med-aviso'
+  if (s.includes('entregado') || s.includes('devuelto')) return 'bg-[var(--estado-ok-bg)] text-[var(--estado-ok-fg)] border-[var(--estado-ok-bd)]'
+  if (s.includes('tránsito') || s.includes('transito') || s.includes('viaje')) return 'bg-[var(--estado-transito-bg)] text-[var(--estado-transito-fg)] border-[var(--estado-transito-bd)]'
+  if (s.includes('carga hoy') || s.includes('sale hoy')) return 'bg-[var(--estado-hoy-bg)] text-[var(--estado-hoy-fg)] border-[var(--estado-hoy-bd)]'
   return ''
 }
 
