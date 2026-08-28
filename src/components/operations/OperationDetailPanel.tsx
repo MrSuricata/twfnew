@@ -10,7 +10,7 @@ import { toast } from 'sonner'
 import type { DbShipment, Operator, UnifiedOperation } from '@/lib/operationsTypes'
 import {
   EDITABLE_FIELDS, EDITABLE_FCL_FIELDS, MODALITY_COLORS, MODALITY_LABELS,
-  STATUS_LABEL, STATUS_OPTIONS, operatorsForMode, isSeguimientoVencido,
+  STATUS_LABEL, STATUS_OPTIONS, operatorsForMode, isSeguimientoVencido, alertaSalidaDirecto,
   buildPerContainerPatch, statusBadgeClass,
 } from '@/lib/operationsTypes'
 import { fmtDateDMY } from '@/lib/format'
@@ -358,6 +358,8 @@ export default function OperationDetailPanel({
   // en la planilla. Editable solo en LCL/aéreo/terrestre sin camión.
   const statusEditable = op.source === 'db' && op.mode !== 'fcl' && !!op.dbId && !truckStatus
   const segVencido = isSeguimientoVencido(op, truckStatus?.status, hoy)
+  // Directo con retiro el día del arribo — misma marca roja que la grilla.
+  const salidaPisada = alertaSalidaDirecto(op, hoy) === 'pisada'
 
   // Fotos e informes: chip compacto junto a la REF (abre el Dialog). El conteo
   // suma fotos de la operación (origen + Uruguay) + informes PDF — mismo criterio
@@ -627,7 +629,7 @@ export default function OperationDetailPanel({
                     kind={f.kind}
                     wide={f.wide}
                     dateDisplay={f.dateDisplay}
-                    segVencido={f.key === 'seguimiento' && segVencido}
+                    segVencido={(f.key === 'seguimiento' && segVencido) || (f.key === 'salida' && salidaPisada)}
                     boxClass={tone.box}
                     options={f.key === 'cliente' && clienteOptions.length > 0 ? clienteOptions : undefined}
                     onCommit={commit}

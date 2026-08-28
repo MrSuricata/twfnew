@@ -625,6 +625,29 @@ export function isSeguimientoVencido(op: UnifiedOperation, truckStatus: string |
   return today.getTime() - d.getTime() >= SEGUIMIENTO_DIAS * 86400000
 }
 
+/** Ventana de retiro de terminal para contenedor DIRECTO (Brian 28/08):
+ *  la salida se coordina ETA+1 o ETA+2. El mismo día del arribo "se pisa" con
+ *  la descarga del buque; después de ETA+2 quedó fuera de la ventana de
+ *  retiro. Solo salidas de HOY en adelante (lo pasado ya no se coordina) y
+ *  operativa explícitamente CONTENEDOR (vacía = sin definir, no alerta;
+ *  trasiego/carga a piso no tienen esta restricción — ya están en depósito). */
+export type AlertaSalidaDirecto = 'pisada' | 'fuera_ventana' | null
+export function alertaSalidaDirecto(
+  op: Pick<UnifiedOperation, 'operativa' | 'eta' | 'salida'>,
+  today: Date,
+): AlertaSalidaDirecto {
+  if (!(op.operativa || '').toUpperCase().trim().startsWith('CONTENEDOR')) return null
+  const eta = parseSegDate(op.eta)
+  const sal = parseSegDate(op.salida)
+  if (!eta || !sal) return null
+  const hoy = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  if (sal.getTime() < hoy.getTime()) return null
+  const dias = Math.round((sal.getTime() - eta.getTime()) / 86400000)
+  if (dias <= 0) return 'pisada'
+  if (dias > 2) return 'fuera_ventana'
+  return null
+}
+
 /** Criterio de Brian (10/06/2026): una carga deja de estar "activa" cuando el
  *  contenedor se devolvió Y la carga llegó a fiscal; sin tramo fiscal cuenta
  *  solo la devolución. FCL sin datos de operativa (Chile/BA, históricas): se
