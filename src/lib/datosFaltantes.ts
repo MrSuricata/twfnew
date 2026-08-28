@@ -190,9 +190,10 @@ export function faltantesUrgentes(
     if (!eta) continue
     const dias = Math.round((medianoche(eta).getTime() - h) / MS_DIA)
     if (dias > FALTANTES_DIAS_COORDINACION) continue
-    // Piso de 14 días extra: las llegadas viejas con datos nunca cargados son
-    // deuda histórica, no trabajo de hoy (medido 17/08: sin piso, ~95 filas).
-    if (dias < -2 * FALTANTES_DIAS_COORDINACION) continue
+    // Piso: llegadas de hace más de 14 días son deuda histórica, no trabajo de
+    // hoy (Brian 28/08: "que no me pida tan anteriores" — el piso viejo de 28
+    // días llenó la tarjeta de cargas de hace un mes al sumar la devolución).
+    if (dias < -FALTANTES_DIAS_COORDINACION) continue
     const faltantes = datosFaltantes(c, hoy)
     if (faltantes.length === 0) continue
     // Llegada con salida ya coordinada: sigue en la tarjeta SOLO por la
