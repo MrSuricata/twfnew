@@ -427,7 +427,7 @@ export default function MediterraneaLanding() {
                 </span>
               </Reveal>
               <Reveal delay={80}>
-                <h1 className="text-white font-bold tracking-tight leading-[1.02] text-4xl sm:text-6xl lg:text-7xl break-words">
+                <h1 className="titulo-med text-white text-4xl sm:text-6xl lg:text-7xl break-words">
                   Una sola casa para<br />
                   <span className="text-[#9bd1e5]">toda tu logística</span> internacional.
                 </h1>
@@ -477,7 +477,7 @@ export default function MediterraneaLanding() {
           <Reveal>
             <div className="max-w-2xl">
               <p className="text-[#49286b] font-semibold text-sm tracking-widest uppercase">Servicios</p>
-              <h2 className="mt-3 text-3xl lg:text-5xl font-bold tracking-tight text-[#261c79]">Un operador, todos los modos.</h2>
+              <h2 className="titulo-med mt-3 text-3xl lg:text-5xl text-[#261c79]">Un operador, todos los modos.</h2>
               <p className="mt-4 text-[#5b5780] text-lg">No importa cómo viaje tu carga: la movemos, la despachamos y te la entregamos. Sin tercerizar tu tranquilidad.</p>
             </div>
           </Reveal>
@@ -519,14 +519,14 @@ export default function MediterraneaLanding() {
           <Reveal>
             <div className="max-w-2xl">
               <p className="text-[#49286b] font-semibold text-sm tracking-widest uppercase">Cómo trabajamos</p>
-              <h2 className="mt-3 text-3xl lg:text-5xl font-bold tracking-tight text-[#261c79]">De la cotización a la entrega.</h2>
+              <h2 className="titulo-med mt-3 text-3xl lg:text-5xl text-[#261c79]">De la cotización a la entrega.</h2>
             </div>
           </Reveal>
           <div className="mt-12 grid md:grid-cols-4 gap-5">
             {STEPS.map((s, i) => (
               <Reveal key={s.n} delay={i * 80}>
                 <div className="relative h-full rounded-2xl bg-white border border-[#e5e4f1] p-6">
-                  <div className="text-4xl font-bold tracking-tight" style={{ color: '#9bd1e5' }}>{s.n}</div>
+                  <div className="titulo-med text-4xl" style={{ color: '#9bd1e5' }}>{s.n}</div>
                   <h3 className="mt-3 font-semibold text-lg text-[#261c79]">{s.title}</h3>
                   <p className="mt-2 text-sm text-[#6b6688] leading-relaxed">{s.desc}</p>
                   {i < STEPS.length - 1 && (
@@ -546,27 +546,41 @@ export default function MediterraneaLanding() {
       <section id="cobertura" className="py-20 lg:py-28 relative overflow-hidden" style={{ background: 'linear-gradient(180deg, #261c79 0%, #352e6a 100%)' }}>
         <div className="absolute inset-0 opacity-10 bg-cover bg-center" style={{ backgroundImage: 'url(/images/ops-container-yard.jpg)' }} />
         <div className="relative max-w-7xl mx-auto px-5 lg:px-8">
-          <div className="grid lg:grid-cols-2 gap-12 items-center">
+          <div className="grid lg:grid-cols-[0.9fr_1.1fr] gap-12 lg:gap-16 items-start">
             <Reveal>
-              <div>
-                <p className="text-[#9bd1e5] font-semibold text-sm tracking-widest uppercase">Cobertura</p>
-                <h2 className="mt-3 text-3xl lg:text-5xl font-bold tracking-tight text-white">De origen a destino, sin fronteras.</h2>
-                <p className="mt-4 text-white/70 text-lg">Antes movíamos lo que pasaba por Uruguay. Hoy, como casa matriz, gestionamos todas las destinaciones del Cono Sur y más allá.</p>
-                <div className="mt-8 flex flex-wrap gap-3">
+              <div className="flex flex-col items-start gap-6">
+                <span className="rounded-full border-2 border-[#9bd1e5] px-5 py-2 text-[13px] font-semibold tracking-widest uppercase text-[#9bd1e5]">
+                  Cobertura
+                </span>
+                <h2 className="titulo-med text-4xl lg:text-[56px] text-white">
+                  De origen a destino, <span className="text-[#9bd1e5]">sin fronteras.</span>
+                </h2>
+                <div className="w-[180px] h-1.5 bg-[#9bd1e5]" />
+                <p className="text-white/75 text-lg leading-relaxed">
+                  Como casa matriz gestionamos todas las destinaciones del Cono Sur y más allá — con red
+                  propia de agentes en origen.
+                </p>
+                <div className="flex flex-wrap gap-2.5">
                   {['China', 'Europa', 'Norteamérica', 'Uruguay', 'Argentina', 'Brasil', 'Paraguay'].map(c => (
-                    <span key={c} className="px-3.5 py-1.5 rounded-full bg-white/10 border border-white/15 text-white/85 text-sm">{c}</span>
+                    <span key={c} className="px-5 py-2 rounded-full bg-white/10 border border-white/[0.18] text-white/90 text-sm font-medium">{c}</span>
                   ))}
                 </div>
               </div>
             </Reveal>
-            <div className="space-y-3">
+            <div className="flex flex-col gap-3.5">
               {ROUTES.map((r, i) => (
                 <Reveal key={r.from + r.to} delay={i * 70}>
-                  <div className="rounded-xl bg-white/[0.06] border border-white/10 p-4 hover:bg-white/[0.1] transition-colors">
-                    <div className="flex items-center gap-2 text-white font-semibold">
-                      {r.from} <CaretRight size={14} className="text-[#9bd1e5]" weight="bold" /> {r.to}
+                  <div className="rounded-[20px] bg-white/[0.06] border border-white/[0.12] px-6 py-6 sm:px-[30px] hover:bg-white/[0.1] transition-colors">
+                    {/* El trayecto: sale de un puerto y llega a otro */}
+                    <div className="flex items-center gap-3.5" aria-hidden>
+                      <span className="w-3.5 h-3.5 rounded-full bg-[#9bd1e5] shrink-0" />
+                      <span className="flex-1 h-[3px] bg-[#9bd1e5]/40" />
+                      <span className="w-3.5 h-3.5 rounded-full bg-[#ceffff] border-[3px] border-[#9bd1e5] box-border shrink-0" />
                     </div>
-                    <div className="text-sm text-white/55 mt-1">{r.detail}</div>
+                    <div className="titulo-med mt-3.5 text-[22px] text-white">
+                      {r.from} <span className="text-[#9bd1e5]">→</span> {r.to}
+                    </div>
+                    <div className="mt-1.5 text-[15px] text-white/60">{r.detail}</div>
                   </div>
                 </Reveal>
               ))}
@@ -578,29 +592,44 @@ export default function MediterraneaLanding() {
       {/* ── Nosotros / Por qué ── */}
       <section id="nosotros" className="py-20 lg:py-28 bg-[#fbfbfe]">
         <div className="max-w-7xl mx-auto px-5 lg:px-8">
-          <Reveal>
-            <div className="max-w-2xl mb-12">
-              <p className="text-[#49286b] font-semibold text-sm tracking-widest uppercase">Por qué Mediterranea</p>
-              <h2 className="mt-3 text-3xl lg:text-5xl font-bold tracking-tight text-[#261c79]">La tranquilidad de un solo responsable.</h2>
-            </div>
-          </Reveal>
-          <div className="grid md:grid-cols-2 gap-5">
-            {REASONS.map((r, i) => {
-              const Icon = r.icon
-              return (
-                <Reveal key={r.title} delay={i * 70}>
-                  <div className="flex gap-4 h-full rounded-2xl bg-white border border-[#e5e4f1] p-6">
-                    <div className="shrink-0 w-12 h-12 rounded-xl bg-gradient-to-br from-[#352e6a] to-[#49286b] flex items-center justify-center">
-                      <Icon size={24} weight="duotone" className="text-[#9bd1e5]" />
-                    </div>
-                    <div>
-                      <h3 className="font-semibold text-lg text-[#261c79]">{r.title}</h3>
-                      <p className="mt-1.5 text-[#6b6688] leading-relaxed">{r.desc}</p>
-                    </div>
+          <div className="grid lg:grid-cols-[0.9fr_1.1fr] gap-14 lg:gap-[72px] items-center">
+            <Reveal>
+              <div className="relative">
+                <img
+                  src="/images/team-containers.jpg"
+                  alt="El equipo de Mediterranea Carghas en el depósito de contenedores"
+                  loading="lazy"
+                  className="w-full h-[360px] lg:h-[520px] object-cover rounded-[36px] block"
+                />
+                <div className="absolute left-4 -bottom-6 lg:-left-6 lg:-bottom-6 rounded-3xl bg-[#49286b] px-8 py-6">
+                  <div className="titulo-med text-[34px] text-[#9bd1e5]">+15 años</div>
+                  <div className="mt-1 text-[13px] font-semibold tracking-widest uppercase text-white/75">
+                    moviendo carga en la región
                   </div>
-                </Reveal>
-              )
-            })}
+                </div>
+              </div>
+            </Reveal>
+            <Reveal delay={90}>
+              <div className="flex flex-col items-start gap-6 pt-10 lg:pt-0">
+                <span className="rounded-full bg-[#ceffff] border-2 border-[#9bd1e5] px-5 py-2 text-[13px] font-semibold tracking-widest uppercase text-[#352e6a]">
+                  Por qué Mediterranea
+                </span>
+                <h2 className="titulo-med text-4xl lg:text-[54px] text-[#49286b]">
+                  La tranquilidad de un solo responsable.
+                </h2>
+                <dl className="self-stretch">
+                  {REASONS.map((r, i) => (
+                    <div
+                      key={r.title}
+                      className={`py-5 border-t-2 border-[#eef0f8] flex flex-col sm:flex-row gap-1.5 sm:gap-5 sm:items-baseline ${i === REASONS.length - 1 ? 'border-b-2' : ''}`}
+                    >
+                      <dt className="titulo-med text-[19px] text-[#49286b] sm:shrink-0 sm:w-[260px]">{r.title}</dt>
+                      <dd className="text-[15px] leading-relaxed text-[#6b6688] m-0">{r.desc}</dd>
+                    </div>
+                  ))}
+                </dl>
+              </div>
+            </Reveal>
           </div>
         </div>
       </section>
@@ -609,7 +638,7 @@ export default function MediterraneaLanding() {
       <section id="contacto" className="py-20 lg:py-24" style={{ background: 'linear-gradient(120deg, #49286b 0%, #261c79 100%)' }}>
         <div className="max-w-5xl mx-auto px-5 lg:px-8 text-center">
           <Reveal>
-            <h2 className="text-3xl lg:text-5xl font-bold tracking-tight text-white leading-tight">Cotizá tu próximo embarque.</h2>
+            <h2 className="titulo-med text-3xl lg:text-5xl text-white">Cotizá tu próximo embarque.</h2>
             <p className="mt-4 text-white/70 text-lg max-w-xl mx-auto">Decinos origen, destino y tipo de carga. Te respondemos con una propuesta clara, sin letra chica.</p>
             <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
               <a href={wa} target="_blank" rel="noopener noreferrer"

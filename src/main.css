@@ -98,6 +98,16 @@
 /*
   ---break---
 */
+/* Títulos de la landing de Mediterránea: la marca usa Gotham y Nunito 900 es
+   el sustituto web aprobado. Solo la usa esa landing — el resto de la app y la
+   marca TWF siguen con la tipografía de siempre. */
+.titulo-med {
+  font-family: 'Nunito', 'Jost', sans-serif;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  line-height: 1.02;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
