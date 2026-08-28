@@ -513,8 +513,10 @@ describe('salidasPisadasAlerts — el buque se movió y pisa la salida', () => {
     expect(out[0].margen).toBe(0)
   })
 
-  it('sale al día siguiente de la llegada → aviso "muy justa", no grave', () => {
-    const s = uy('A1', [{ SALIDA: '2026-04-22', ETA_OP: TOMORROW }])
+  it('TRASIEGO al día siguiente de la llegada → aviso "muy justa", no grave', () => {
+    // Desde el 28/08 la "muy justa" es regla de TRASIEGO: el directo tiene su
+    // ventana normal en ETA+1/+2 (test propio abajo).
+    const s = uy('A1', [{ OPERATIVA: 'TRASIEGO', SALIDA: '2026-04-22', ETA_OP: TOMORROW }])
     const out = salidasPisadasAlerts([s])
     expect(out).toHaveLength(1)
     expect(out[0].grave).toBe(false)
@@ -572,11 +574,33 @@ describe('salidasPisadasAlerts — el buque se movió y pisa la salida', () => {
 
   it('imposibles primero, después las justas; el snapshot las incluye', () => {
     const grave = uy('A2', [{ SALIDA: '2026-04-24', ETA_OP: '2026-04-26' }])
-    const justa = uy('A1', [{ SALIDA: '2026-04-22', ETA_OP: TOMORROW }])
+    const justa = uy('A1', [{ OPERATIVA: 'TRASIEGO', SALIDA: '2026-04-22', ETA_OP: TOMORROW }])
     const out = salidasPisadasAlerts([justa, grave])
     expect(out.map(a => a.shipment.REF)).toEqual(['A2', 'A1'])
     const snap = buildTodaySnapshot([grave])
     expect(snap.salidasPisadas).toHaveLength(1)
     expect(snap.hasMovement).toBe(true)
+  })
+})
+
+describe('salidasPisadasAlerts — el directo tiene su propia ventana (Brian 28/08)', () => {
+  const uy = (ref: string, ops: Partial<OperativasRecord>[], extra: Partial<ParsedShipment> = {}) =>
+    mkShip(ref, ops.map(o => mkOp({ REF: ref, CNTR_OP: 'ABCD1234567', ...o })), { PAIS: 'UY', ETA: '', ...extra })
+
+  it('CONTENEDOR directo saliendo a ETA+1: ventana normal, NO alerta (caso A7967)', () => {
+    const s = uy('A7967', [{ OPERATIVA: 'CONTENEDOR', SALIDA: TOMORROW, ETA_OP: TODAY }])
+    expect(salidasPisadasAlerts([s])).toHaveLength(0)
+  })
+
+  it('CONTENEDOR directo saliendo el MISMO día que llega: sigue siendo grave', () => {
+    const s = uy('A1', [{ OPERATIVA: 'CONTENEDOR', SALIDA: TOMORROW, ETA_OP: TOMORROW }])
+    const out = salidasPisadasAlerts([s])
+    expect(out).toHaveLength(1)
+    expect(out[0].grave).toBe(true)
+  })
+
+  it('TRASIEGO a 1 día sigue avisando (margen de 2 días)', () => {
+    const s = uy('A2', [{ OPERATIVA: 'TRASIEGO', SALIDA: TOMORROW, ETA_OP: TODAY }])
+    expect(salidasPisadasAlerts([s])).toHaveLength(1)
   })
 })

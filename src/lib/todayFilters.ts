@@ -363,6 +363,11 @@ export function salidasPisadasAlerts(shipments: ParsedShipment[]): SalidaPisadaA
       const eta = etaVigente(s.ETA, op.ETA_OP)
       const margen = margenSalida(salida, eta)
       if (margen === null || margen >= MARGEN_SALIDA_DIAS) continue
+      // Retiro DIRECTO desde terminal (Brian 28/08, caso A7967): su ventana
+      // normal es ETA+1 o ETA+2 — "muy justa" no aplica. Solo alerta cuando es
+      // imposible de verdad: sale antes o el MISMO día que llega el buque.
+      const directa = String(op.OPERATIVA || '').trim().toUpperCase().startsWith('CONTENEDOR')
+      if (directa && margen > 0) continue
 
       const salidaFutura = (parseLocalDate(salida)?.getTime() ?? -1) >= hoy.getTime()
       const etaFutura = (parseLocalDate(eta)?.getTime() ?? -1) >= hoy.getTime()
