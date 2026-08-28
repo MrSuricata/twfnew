@@ -1,7 +1,7 @@
 import type { ParsedShipment, OperativasRecord } from './shipmentTypes'
 import { parseLocalDate } from './shipmentTypes'
 import { fmtDateDMY } from './format'
-import { isSalidaBeforeArrival, avisoSalida, etaVigente } from './salidaCheck'
+import { isSalidaBeforeArrival, avisoSalida, notaSalidaDirectaOk, etaVigente } from './salidaCheck'
 import { needsTelexAlert, SIN_TELEX_MSG } from './telexCheck'
 import type { CalendarEvent, AlertEmoji, EventType } from './agendaTypes'
 import { getShipmentStatus, processShipmentRecord } from './shipmentTypes'
@@ -246,9 +246,15 @@ export function shipmentsToEvents(
       // Salida pegada a la llegada del buque: imposible (antes de que llegue) o
       // sin el margen mínimo de 2 días que necesita descarga + retiro. La ETA
       // se corre seguido y deja la salida colgada → alertar en el chip.
-      const avisoSal = avisoSalida(op.SALIDA, etaVigente(shipment.ETA, op.ETA_OP))
+      const avisoSal = avisoSalida(op.SALIDA, etaVigente(shipment.ETA, op.ETA_OP), op.OPERATIVA)
       if (avisoSal) {
         alerts.push({ emoji: '⏰', label: avisoSal, type: 'salida_antes_llegada' })
+      }
+      // Directo saliendo en su ventana ETA+1/+2 (Brian 28/08): no es una salida
+      // apretada, es lo normal — chip verde aclarándolo en vez del aviso.
+      const notaDirecta = notaSalidaDirectaOk(op.SALIDA, etaVigente(shipment.ETA, op.ETA_OP), op.OPERATIVA)
+      if (notaDirecta) {
+        alerts.push({ emoji: '🟢', label: notaDirecta, type: 'salida_directa_ok' })
       }
       // Sin telex con salida agendada: sin la liberación de la naviera el
       // contenedor no se puede retirar — la fecha está comprometida al pedo.
