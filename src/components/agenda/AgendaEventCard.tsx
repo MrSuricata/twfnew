@@ -1,4 +1,5 @@
 import { useDraggable } from '@dnd-kit/core'
+import { useBrand } from '@/lib/brand'
 import type { CalendarEvent } from '@/lib/agendaTypes'
 import { getOperativaColor } from '@/lib/agendaTypes'
 import { formatDateShort, daysUntil } from '@/lib/agendaUtils'
@@ -28,6 +29,9 @@ export default function AgendaEventCard({ event, compact = true, onClick, dragga
   })
   const opColor = getOperativaColor(event.operativa)
   const libreRemaining = event.libre ? daysUntil(event.libre) : null
+  // Fino por marca: la ref con la tipografía del sistema (ref-med es neutra
+  // bajo TWF, Nunito 900 violeta bajo Mediterránea).
+  const med = useBrand().id === 'med'
 
   if (compact) {
     const hasCargoInfo = event.kg > 0 || event.pkgs > 0
@@ -64,7 +68,7 @@ export default function AgendaEventCard({ event, compact = true, onClick, dragga
                   copyToClipboard(event.ref, 'REF')
                 }
               }}
-              className={`text-xs font-bold text-foreground truncate ${COPY_CLASS}`}
+              className={`text-xs truncate ${med ? 'ref-med' : 'font-bold text-foreground'} ${COPY_CLASS}`}
             >
               {event.ref}
             </span>

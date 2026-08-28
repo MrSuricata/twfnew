@@ -23,6 +23,7 @@ import { fetchAuditLog, fetchSeguimientosLog, postSeguimientoLog } from '@/lib/d
 import { fmtDateDMY } from '@/lib/format'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import HistorialSeguimientos from '@/components/HistorialSeguimientos'
+import { useBrand } from '@/lib/brand'
 
 const hoyIso = (): string => {
   const d = new Date()
@@ -56,6 +57,9 @@ interface Props {
 interface ItemViaje { buque: string; eta: string; fila: FilaSeguimiento }
 
 export default function SeguimientosBoard({ dbShipments, onPatchShipment, onOpenDetail }: Props) {
+  // Fino por marca (handoff 03-admin · Seguimientos): tipografía y verdes del
+  // sistema bajo Mediterránea; TWF intacto.
+  const med = useBrand().id === 'med'
   // 'hoy' con clave por DÍA: si la pestaña queda abierta de una noche para la
   // otra, la cola se recomputa con la fecha nueva en el próximo render.
   const hoyKey = new Date().toDateString()
@@ -437,7 +441,7 @@ export default function SeguimientosBoard({ dbShipments, onPatchShipment, onOpen
           <button
             type="button"
             onClick={() => onOpenDetail?.(c.dbId || c.ref)}
-            className="font-mono text-sm font-semibold hover:underline shrink-0"
+            className={med ? 'ref-med text-sm hover:underline shrink-0' : 'font-mono text-sm font-semibold hover:underline shrink-0'}
             title="Abrir ficha"
           >
             {c.ref}
@@ -595,11 +599,11 @@ export default function SeguimientosBoard({ dbShipments, onPatchShipment, onOpen
   }
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5">{/* Fino por marca (handoff 03-admin · Seguimientos) */}
       {/* ── Header + progreso del día ── */}
       <div>
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h1 className="text-2xl font-bold tracking-tight">Seguimientos</h1>
+          <h1 className={med ? 'titulo-med text-3xl text-med-violeta' : 'text-2xl font-bold tracking-tight'}>Seguimientos</h1>
           <p className="text-sm text-muted-foreground">
             {totalDia > 0
               ? <><b className="text-foreground">{enviadosHoy} de {totalDia}</b> enviados hoy · {cola.alDia.length} al día</>
@@ -608,7 +612,7 @@ export default function SeguimientosBoard({ dbShipments, onPatchShipment, onOpen
         </div>
         {totalDia > 0 && (
           <div className="mt-2 h-2 max-w-md rounded-full bg-muted overflow-hidden" role="progressbar" aria-valuenow={pctDia} aria-valuemin={0} aria-valuemax={100}>
-            <div className="h-full bg-emerald-500 transition-all duration-500" style={{ width: `${pctDia}%` }} />
+            <div className={med ? 'h-full bg-med-ok transition-all duration-500' : 'h-full bg-emerald-500 transition-all duration-500'} style={{ width: `${pctDia}%` }} />
           </div>
         )}
       </div>
@@ -621,9 +625,9 @@ export default function SeguimientosBoard({ dbShipments, onPatchShipment, onOpen
 
         <TabsContent value="cola" className="space-y-5 mt-4">
           {cola.pendientes.length === 0 && (
-            <div className="flex items-center gap-2.5 rounded-lg border border-emerald-500/25 bg-emerald-500/[0.05] px-4 py-2.5">
-              <CheckCircle size={18} weight="fill" className="text-emerald-600 shrink-0" />
-              <p className="text-sm text-emerald-700">
+            <div className={med ? 'flex items-center gap-2.5 rounded-lg border border-med-ok/25 bg-med-ok-suave px-4 py-2.5' : 'flex items-center gap-2.5 rounded-lg border border-emerald-500/25 bg-emerald-500/[0.05] px-4 py-2.5'}>
+              <CheckCircle size={18} weight="fill" className={med ? 'text-med-ok shrink-0' : 'text-emerald-600 shrink-0'} />
+              <p className={med ? 'text-sm text-med-ok' : 'text-sm text-emerald-700'}>
                 {enviadosHoy > 0
                   ? <><b>¡Terminaste!</b> {enviadosHoy} update{enviadosHoy === 1 ? '' : 's'} enviado{enviadosHoy === 1 ? '' : 's'} hoy — todos los seguimientos al día.</>
                   : <><b>¡Felicitaciones!</b> Todos los seguimientos están al día — ninguna carga en viaje lleva 7 días sin update.</>}
@@ -633,7 +637,7 @@ export default function SeguimientosBoard({ dbShipments, onPatchShipment, onOpen
 
           {secciones.map(sec => (
             <div key={sec.destino} className="space-y-3">
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+              <h2 className={med ? 'titulo-med text-[15px] text-med-violeta' : 'text-sm font-semibold uppercase tracking-wide text-muted-foreground'}>
                 {sec.destino} <span className="font-normal">({sec.viajes.reduce((a, g) => a + g.ops.length, 0) + sec.sinBuque.length})</span>
               </h2>
 

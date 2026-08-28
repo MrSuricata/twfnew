@@ -116,6 +116,19 @@
   --color-med-fondo: #fbfbfe;        /* fondo de campos y cabeceras */
   --color-med-ok: #2f8f5b;           /* pagado, cobrado, check pasado */
   --color-med-error: #d94f4f;        /* check fallido */
+
+  /* Tintes del panel (handoff 03-admin): derivados fijos de la paleta para
+     tarjetas de aviso y filas con alerta. El naranja pleno señala el riesgo;
+     estos son sus fondos/bordes/textos de acompañamiento. */
+  --color-med-aviso-tinte: #fff8f2;  /* fondo de tarjeta/fila de riesgo */
+  --color-med-aviso-borde: #f3d9c4;  /* borde de tarjeta de riesgo */
+  --color-med-aviso-texto: #b45f16;  /* texto sobre los tintes naranjas */
+  --color-med-aviso-pill: #fdece0;   /* pill "Muy justa" / "Salida pisada" */
+  --color-med-info-tinte: #f4fbfe;   /* fondo de tarjeta informativa */
+  --color-med-info-borde: #d8eaf3;   /* borde de tarjeta informativa */
+  --color-med-lila: #f0ecf6;         /* pill/fondo lila suave (TCP, neutros) */
+  --color-med-ok-suave: #e4f4ea;     /* fondo del pill OK */
+  --color-med-fila-alerta: #fff9f4;  /* tinte de fila con alerta en tablas */
 }
 
 /* Banda de encabezado por marca: bajo TWF es su primario plano de siempre;

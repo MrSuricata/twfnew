@@ -16,6 +16,7 @@ import type { ParsedShipment } from '@/lib/shipmentTypes'
 import type { LclAirShipment, Truck, TruckLoad, LoadSource } from '@/lib/truckTypes'
 import type { DbShipment } from '@/lib/operationsTypes'
 import { formatKg, formatM3, getAssignedCntrs, cntrKey, contenedoresLibres, isFclAvailable, isLclAirAvailable } from '@/lib/truckUtils'
+import { useBrand } from '@/lib/brand'
 
 interface AvailableLoadsPanelProps {
   shipments: ParsedShipment[]
@@ -65,6 +66,8 @@ export default function AvailableLoadsPanel({
   onAddDb,
   onCreateNew,
 }: AvailableLoadsPanelProps) {
+  // Fino por marca (handoff 03-admin · Camiones): panel de cargas disponibles.
+  const medPanel = useBrand().id === 'med'
   const [search, setSearch] = useState('')
   const [modeFilter, setModeFilter] = useState<ModeFilter>('all')
   const [fiscalFilter, setFiscalFilter] = useState<string>('all')
@@ -231,8 +234,8 @@ export default function AvailableLoadsPanel({
       {/* Header */}
       <div className="px-4 py-3 border-b bg-muted/30 space-y-2">
         <div className="flex items-center justify-between">
-          <h3 className="font-semibold text-sm">Cargas disponibles</h3>
-          <span className="text-xs text-muted-foreground">{filtered.length}</span>
+          <h3 className={medPanel ? 'titulo-med text-[15px] text-med-violeta' : 'font-semibold text-sm'}>Cargas disponibles</h3>
+          <span className={medPanel ? 'bg-med-pastel text-med-texto rounded-full px-2.5 py-0.5 text-[11px] font-bold' : 'text-xs text-muted-foreground'}>{filtered.length}</span>
         </div>
 
         <div className="relative">
@@ -364,6 +367,7 @@ function CreateNewLoadButton({ onClick }: { onClick: () => void }) {
 }
 
 function AvailableRowCard({ row, onAdd }: { row: AvailableRow; onAdd: () => void }) {
+  const med = useBrand().id === 'med'
   const Icon = row.type === 'fcl' ? TruckIcon : row.type === 'lcl' ? Boat : Airplane
   return (
     <div className="px-4 py-3 hover:bg-muted/40 transition-colors space-y-1.5">
@@ -371,10 +375,10 @@ function AvailableRowCard({ row, onAdd }: { row: AvailableRow; onAdd: () => void
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <Icon size={14} className="text-primary shrink-0" weight="fill" />
-            <span className="font-medium text-sm truncate">{row.ref}</span>
+            <span className={med ? 'ref-med text-sm truncate' : 'font-medium text-sm truncate'}>{row.ref}</span>
             <Badge variant="outline" className="h-4 text-[9px] uppercase">{row.type}</Badge>
             {row.noApilable && <Badge variant="outline" className="h-4 text-[9px] text-amber-700 border-amber-400" title="Carga NO apilable — va arriba de todo">📦 NO APILABLE</Badge>}
-            {row.imo && <Badge variant="outline" className="h-4 text-[9px] text-red-700 border-red-400" title="Mercancía peligrosa IMO">☢️ IMO</Badge>}
+            {row.imo && <Badge variant="outline" className={med ? 'h-4 text-[9px] text-med-aviso-texto border-med-aviso bg-med-aviso-tinte' : 'h-4 text-[9px] text-red-700 border-red-400'} title="Mercancía peligrosa IMO">☢️ IMO</Badge>}
           </div>
           {row.cntr && (
             <p className="text-[11px] font-mono text-foreground/70 truncate mt-0.5" title="Contenedor que se sube a este camión">

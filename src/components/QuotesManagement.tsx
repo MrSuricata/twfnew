@@ -588,6 +588,17 @@ function StatChip({ label, value, tone = 'neutral', isActive, subtle, icon, onCl
 }
 
 function statusBadgeClasses(s: QuoteStatus) {
+  // Bajo Mediterránea (handoff 03-admin · Cotizaciones): sin respuesta =
+  // naranja pleno, enviada = pastel, ganada = verde suave, perdida = lila.
+  if (getBrand().id === 'med') {
+    switch (s) {
+      case 'pending': return 'bg-med-aviso text-white border-med-aviso'
+      case 'responded': return 'bg-med-pastel text-med-texto border-med-celeste/60'
+      case 'won': return 'bg-med-ok-suave text-med-ok border-med-ok/30'
+      case 'lost': return 'bg-med-lila text-med-gris border-med-borde'
+      case 'spam': return 'bg-med-error/10 text-med-error border-med-error/30'
+    }
+  }
   switch (s) {
     case 'pending': return 'bg-orange-100 text-orange-800 border-orange-200'
     case 'responded': return 'bg-blue-100 text-blue-800 border-blue-200'
@@ -617,7 +628,7 @@ function QuoteListItem({ quote, isSelected, onClick }: QuoteListItemProps) {
       <div className="flex items-start gap-2 mb-1">
         <div className="shrink-0 mt-0.5">
           {quote.status === 'pending' ? (
-            <span className={`block w-2 h-2 rounded-full ${isOverdue ? 'bg-destructive' : 'bg-orange-500'}`} />
+            <span className={`block w-2 h-2 rounded-full ${isOverdue ? (getBrand().id === 'med' ? 'bg-med-error' : 'bg-destructive') : (getBrand().id === 'med' ? 'bg-med-aviso' : 'bg-orange-500')}`} />
           ) : (
             <Icon size={14} weight="duotone" className="text-muted-foreground" />
           )}

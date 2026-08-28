@@ -40,6 +40,7 @@ import { RefNotaLine, useRefNotas } from '../RefNotaLine'
 import type { NotaRef } from '@/lib/refNotas'
 import { hasTelex as hasTelexValue } from '@/lib/telexCheck'
 import { subscribeTrucksLive } from '@/lib/realtimeBus'
+import { useBrand } from '@/lib/brand'
 import { fetchRefChecks, saveRefCheckSteps, saveRefCheckCntrs } from '@/lib/dataClient'
 import {
   buildChecksUniverse,
@@ -414,6 +415,9 @@ interface ChecksRowProps {
 }
 
 function ChecksRow({ op, steps, expanded, onToggleExpand, onToggleStep, onDateChange, onReclamo, onToggleTelex, onToggleLiberado, onOpenRef, nota, onAgregarNota }: ChecksRowProps) {
+  // Fino por marca (handoff 03-admin · Checks): verde/naranja/rojo del sistema
+  // bajo Mediterránea; TWF conserva sus emerald/amber de siempre.
+  const med = useBrand().id === 'med'
   const hoyIso = todayIso()
   const operativa = (op.operativa || '').trim()
   const opColor = operativa ? getOperativaColor(operativa) : null
@@ -504,13 +508,13 @@ function ChecksRow({ op, steps, expanded, onToggleExpand, onToggleStep, onDateCh
                 title={`${i + 1}. ${def.label} — ${detalle}`}
                 className={`h-2 w-2 rounded-full ${
                   stepDone
-                    ? 'bg-emerald-500'
+                    ? (med ? 'bg-med-ok' : 'bg-emerald-500')
                     : reclamadoHoy
-                      ? 'bg-amber-400'
+                      ? (med ? 'bg-med-aviso' : 'bg-amber-400')
                       : isNext
-                        ? 'bg-background ring-2 ring-indigo-500'
+                        ? (med ? 'bg-background ring-2 ring-med-violeta' : 'bg-background ring-2 ring-indigo-500')
                         : agg && agg.done > 0
-                          ? 'bg-amber-400'
+                          ? (med ? 'bg-med-aviso' : 'bg-amber-400')
                           : 'bg-background border border-muted-foreground/35'
                 }`}
               />
@@ -536,9 +540,9 @@ function ChecksRow({ op, steps, expanded, onToggleExpand, onToggleStep, onDateCh
         <span
           className={`shrink-0 rounded-full px-2 py-px text-[10px] font-bold leading-4 tabular-nums ${
             complete
-              ? 'bg-emerald-100 text-emerald-800'
+              ? (med ? 'bg-med-ok-suave text-med-ok' : 'bg-emerald-100 text-emerald-800')
               : done > 0
-                ? 'bg-blue-50 text-blue-700'
+                ? (med ? 'bg-med-pastel text-med-texto' : 'bg-blue-50 text-blue-700')
                 : 'bg-muted text-muted-foreground'
           }`}
           title={`${done} de ${total} pasos hechos`}
@@ -547,7 +551,7 @@ function ChecksRow({ op, steps, expanded, onToggleExpand, onToggleStep, onDateCh
         </span>
         <span className="hidden md:block w-16 h-1.5 rounded-full bg-muted shrink-0 overflow-hidden">
           <span
-            className={`block h-full rounded-full ${complete ? 'bg-emerald-500' : 'bg-primary'}`}
+            className={`block h-full rounded-full ${complete ? (med ? 'bg-med-ok' : 'bg-emerald-500') : 'bg-primary'}`}
             style={{ width: `${pct}%` }}
           />
         </span>
@@ -580,8 +584,8 @@ function ChecksRow({ op, steps, expanded, onToggleExpand, onToggleStep, onDateCh
                     className="shrink-0 rounded-full transition-transform hover:scale-110"
                   >
                     {stepDone
-                      ? <CheckCircle size={22} weight="fill" className="text-emerald-500" />
-                      : <Circle size={22} className={isNext ? 'text-primary' : agg && agg.done > 0 ? 'text-amber-500' : 'text-muted-foreground/40'} />}
+                      ? <CheckCircle size={22} weight="fill" className={med ? 'text-med-ok' : 'text-emerald-500'} />
+                      : <Circle size={22} className={isNext ? 'text-primary' : agg && agg.done > 0 ? (med ? 'text-med-aviso' : 'text-amber-500') : 'text-muted-foreground/40'} />}
                   </button>
                   <button
                     type="button"
@@ -602,7 +606,7 @@ function ChecksRow({ op, steps, expanded, onToggleExpand, onToggleStep, onDateCh
                     // Aviso por contenedor: se marca en HOY (una tarjeta por
                     // contenedor). Acá se ve el agregado; el toggle marca todos.
                     <span
-                      className={`shrink-0 text-[11px] tabular-nums font-medium ${agg.done === agg.total ? 'text-emerald-600' : agg.done > 0 ? 'text-amber-600' : 'text-muted-foreground'}`}
+                      className={`shrink-0 text-[11px] tabular-nums font-medium ${agg.done === agg.total ? (med ? 'text-med-ok' : 'text-emerald-600') : agg.done > 0 ? (med ? 'text-med-aviso-texto' : 'text-amber-600') : 'text-muted-foreground'}`}
                       title="Avisos por contenedor (se marcan en la pestaña HOY)"
                     >
                       {agg.done}/{agg.total} avisados
@@ -642,8 +646,8 @@ function ChecksRow({ op, steps, expanded, onToggleExpand, onToggleStep, onDateCh
                           : 'Marcar que HOY reclamaste la factura/datos para este paso (mañana vence solo, para volver a reclamar)'}
                         className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors ${
                           esReclamadoHoy(st, hoyIso)
-                            ? 'border-amber-400 bg-amber-100 text-amber-800'
-                            : 'border-dashed border-amber-300 bg-background text-amber-700 hover:bg-amber-50'
+                            ? (med ? 'border-med-aviso bg-med-aviso-pill text-med-aviso-texto' : 'border-amber-400 bg-amber-100 text-amber-800')
+                            : (med ? 'border-dashed border-med-aviso/50 bg-background text-med-aviso-texto hover:bg-med-aviso-tinte' : 'border-dashed border-amber-300 bg-background text-amber-700 hover:bg-amber-50')
                         }`}
                       >
                         {esReclamadoHoy(st, hoyIso) ? '📣 Reclamado hoy' : 'Reclamar'}
@@ -669,9 +673,9 @@ function ChecksRow({ op, steps, expanded, onToggleExpand, onToggleStep, onDateCh
               }
               className={`inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-semibold transition-colors ${
                 liberada
-                  ? 'bg-emerald-600 text-white hover:bg-emerald-700'
+                  ? (med ? 'bg-med-ok text-white hover:opacity-90' : 'bg-emerald-600 text-white hover:bg-emerald-700')
                   : habilitarLiberar
-                    ? 'border border-emerald-600 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950'
+                    ? (med ? 'border border-med-ok text-med-ok hover:bg-med-ok-suave' : 'border border-emerald-600 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950')
                     : 'border border-input text-muted-foreground opacity-60 cursor-not-allowed'
               }`}
             >
@@ -704,8 +708,9 @@ function ChecksRow({ op, steps, expanded, onToggleExpand, onToggleStep, onDateCh
 // <button>) con stopPropagation para no expandir/cerrar la fila al click.
 // Sin onToggle (carga no editable, caso raro) queda estático como siempre.
 function TelexChip({ hasTelex, onToggle }: { hasTelex: boolean; onToggle?: () => void }) {
+  const med = useBrand().id === 'med'
   const base = `shrink-0 rounded-full px-2 py-px text-[10px] font-semibold leading-4 ${
-    hasTelex ? 'bg-emerald-100 text-emerald-800' : 'bg-red-100 text-red-700'
+    hasTelex ? (med ? 'bg-med-ok-suave text-med-ok' : 'bg-emerald-100 text-emerald-800') : (med ? 'bg-med-error/10 text-med-error' : 'bg-red-100 text-red-700')
   }`
   if (!onToggle) {
     return (
@@ -725,7 +730,7 @@ function TelexChip({ hasTelex, onToggle }: { hasTelex: boolean; onToggle?: () =>
         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); onToggle() }
       }}
       className={`${base} cursor-pointer transition-shadow hover:ring-2 ${
-        hasTelex ? 'hover:ring-emerald-300' : 'hover:ring-red-300'
+        hasTelex ? (med ? 'hover:ring-med-ok/40' : 'hover:ring-emerald-300') : (med ? 'hover:ring-med-error/40' : 'hover:ring-red-300')
       }`}
     >
       {hasTelex ? 'TELEX' : 'Sin telex'}

@@ -832,12 +832,21 @@ export default function PagosManagement({ dbShipments = [], onPatchShipment, onO
 }
 
 function KpiCard({ label, bucket, tone }: { label: string; bucket: KpiBucket; tone: 'red' | 'amber' | 'sky' | 'slate' }) {
-  const tones = {
-    red: 'border-red-200 bg-red-50/60 text-red-700',
-    amber: 'border-amber-200 bg-amber-50/60 text-amber-700',
-    sky: 'border-sky-200 bg-sky-50/60 text-sky-700',
-    slate: 'border-slate-200 bg-slate-50/70 text-slate-700',
-  }
+  // Bajo Mediterránea (handoff 03-admin · Pagos): vencido = rojo del sistema,
+  // vence hoy/pronto = naranja de aviso, informativo = celeste, resto lila.
+  const tones = getBrand().id === 'med'
+    ? {
+        red: 'border-med-error/30 bg-med-error/10 text-med-error',
+        amber: 'border-med-aviso-borde bg-med-aviso-tinte text-med-aviso-texto',
+        sky: 'border-med-info-borde bg-med-info-tinte text-med-texto',
+        slate: 'border-med-borde bg-med-lila text-med-gris',
+      }
+    : {
+        red: 'border-red-200 bg-red-50/60 text-red-700',
+        amber: 'border-amber-200 bg-amber-50/60 text-amber-700',
+        sky: 'border-sky-200 bg-sky-50/60 text-sky-700',
+        slate: 'border-slate-200 bg-slate-50/70 text-slate-700',
+      }
   return (
     <div className={`rounded-lg border p-3 ${tones[tone]}`}>
       <div className="text-[11px] uppercase tracking-wide">{label}</div>
@@ -856,7 +865,7 @@ function RefCell({ it, onOpenDetail }: { it: { id: string; ref: string }; onOpen
       type="button"
       onClick={() => onOpenDetail(it.id)}
       title="Abrir la ficha de la carga"
-      className="font-medium text-primary hover:underline underline-offset-2"
+      className={getBrand().id === 'med' ? 'ref-med hover:underline underline-offset-2' : 'font-medium text-primary hover:underline underline-offset-2'}
     >
       {it.ref}
     </button>
@@ -864,24 +873,28 @@ function RefCell({ it, onOpenDetail }: { it: { id: string; ref: string }; onOpen
 }
 
 function DiasChip({ dias }: { dias: number | null }) {
+  const med = getBrand().id === 'med'
+  const rojo = med ? 'bg-med-error/10 text-med-error border-med-error/30' : 'bg-red-100 text-red-800 border-red-200'
+  const hoy = med ? 'bg-med-aviso text-white border-med-aviso font-bold' : 'bg-red-100 text-red-800 border-red-200'
+  const pronto = med ? 'bg-med-aviso-pill text-med-aviso-texto border-med-aviso-borde' : 'bg-amber-100 text-amber-800 border-amber-200'
   if (dias === null) return <span className="text-xs text-muted-foreground">—</span>
   if (dias < 0) {
     return (
-      <span className="inline-flex items-center rounded-full bg-red-100 text-red-800 border border-red-200 px-2 py-0.5 text-xs font-medium">
+      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${rojo}`}>
         vencido hace {Math.abs(dias)} d
       </span>
     )
   }
   if (dias === 0) {
     return (
-      <span className="inline-flex items-center rounded-full bg-red-100 text-red-800 border border-red-200 px-2 py-0.5 text-xs font-medium">
+      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${hoy}`}>
         HOY
       </span>
     )
   }
   if (dias <= 7) {
     return (
-      <span className="inline-flex items-center rounded-full bg-amber-100 text-amber-800 border border-amber-200 px-2 py-0.5 text-xs font-medium">
+      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${pronto}`}>
         en {dias} d
       </span>
     )
@@ -902,11 +915,17 @@ function SubTabChip({
   active: boolean
   onClick: () => void
 }) {
-  const tones = {
-    amber: { active: 'bg-amber-100 border-amber-300 text-amber-900', num: 'text-amber-700' },
-    green: { active: 'bg-green-100 border-green-300 text-green-900', num: 'text-green-700' },
-    muted: { active: 'bg-muted border-muted-foreground/30 text-foreground', num: 'text-muted-foreground' },
-  }
+  const tones = getBrand().id === 'med'
+    ? {
+        amber: { active: 'bg-med-aviso-pill border-med-aviso-borde text-med-aviso-texto', num: 'text-med-aviso-texto' },
+        green: { active: 'bg-med-ok-suave border-med-ok/30 text-med-ok', num: 'text-med-ok' },
+        muted: { active: 'bg-med-lila border-med-borde text-med-texto', num: 'text-med-gris' },
+      }
+    : {
+        amber: { active: 'bg-amber-100 border-amber-300 text-amber-900', num: 'text-amber-700' },
+        green: { active: 'bg-green-100 border-green-300 text-green-900', num: 'text-green-700' },
+        muted: { active: 'bg-muted border-muted-foreground/30 text-foreground', num: 'text-muted-foreground' },
+      }
   const t = tones[tone]
   return (
     <button

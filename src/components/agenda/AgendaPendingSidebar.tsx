@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
 import { parseLocalDate } from '@/lib/shipmentTypes'
 import { Package, Truck, MapPin, X, Warning, Calendar } from '@phosphor-icons/react'
+import { useBrand } from '@/lib/brand'
 
 interface AgendaPendingSidebarProps {
   shipments: ParsedShipment[]
@@ -152,14 +153,17 @@ export default function AgendaPendingSidebar({ shipments, windowDays = 4, onClos
     return order.map(key => ({ reason: key, items: groups[key] })).filter(g => g.items.length > 0)
   }, [pendingItems])
 
+  // Fino por marca (handoff 03-admin · Agenda): el panel "Sin coordinar" con
+  // el naranja de aviso del sistema bajo Mediterránea.
+  const med = useBrand().id === 'med'
   return (
     <div className="w-80 border-l bg-background flex flex-col h-full overflow-hidden">
       {/* Header — compact, single row */}
-      <div className="flex items-center justify-between px-4 py-3 border-b bg-gradient-to-b from-amber-50/60 to-transparent">
+      <div className={med ? 'flex items-center justify-between px-4 py-3 border-b bg-gradient-to-b from-med-aviso-tinte to-transparent' : 'flex items-center justify-between px-4 py-3 border-b bg-gradient-to-b from-amber-50/60 to-transparent'}>
         <div className="flex items-center gap-2 min-w-0">
-          <Warning className="text-amber-500 shrink-0" size={18} weight="fill" />
+          <Warning className={med ? 'text-med-aviso shrink-0' : 'text-amber-500 shrink-0'} size={18} weight="fill" />
           <div className="min-w-0">
-            <h3 className="font-semibold text-sm leading-tight">Pendientes</h3>
+            <h3 className={med ? 'titulo-med text-[15px] text-med-violeta leading-tight' : 'font-semibold text-sm leading-tight'}>Pendientes</h3>
             <p className="text-[10.5px] text-muted-foreground leading-tight">
               {pendingItems.length} · llegan ≤ {windowDays}d
             </p>
@@ -214,7 +218,7 @@ export default function AgendaPendingSidebar({ shipments, windowDays = 4, onClos
                         >
                           {/* Top: REF · cliente · ETA */}
                           <div className="flex items-baseline gap-2 mb-1.5">
-                            <span className="font-bold text-[13px] font-mono text-foreground shrink-0">
+                            <span className={med ? 'ref-med text-[13px] shrink-0' : 'font-bold text-[13px] font-mono text-foreground shrink-0'}>
                               A{item.ref}
                             </span>
                             <span className="text-[11.5px] text-muted-foreground truncate flex-1">

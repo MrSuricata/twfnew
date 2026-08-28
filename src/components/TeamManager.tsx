@@ -33,6 +33,7 @@ import {
 import { toast } from 'sonner'
 import { authFetch } from '@/lib/authClient'
 import { migratePhotos, bakeFclToColumns } from '@/lib/dataClient'
+import { getBrand } from '@/lib/brand'
 
 // ─── Equipo: usuarios individuales del admin + log de actividad ──────
 // Solo visible/usable por el OWNER (Brian). Los usuarios creados acá entran
@@ -354,7 +355,7 @@ export default function TeamManager({ refreshKey = 0 }: { refreshKey?: number })
                       {u.cliente_pattern || <span className="italic">Todas</span>}
                     </td>
                     <td className="px-3 py-2">
-                      <Badge variant="outline" className={`text-[10px] ${u.active ? 'text-green-700 border-green-300' : 'text-muted-foreground'}`}>
+                      <Badge variant="outline" className={`text-[10px] ${u.active ? (getBrand().id === 'med' ? 'bg-med-ok-suave text-med-ok border-med-ok/30 font-bold uppercase tracking-wide' : 'text-green-700 border-green-300') : (getBrand().id === 'med' ? 'bg-med-lila text-med-gris border-med-borde font-bold uppercase tracking-wide' : 'text-muted-foreground')}`}>
                         {u.active ? 'Activo' : 'Desactivado'}
                       </Badge>
                     </td>
