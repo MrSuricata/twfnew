@@ -61,6 +61,7 @@ import {
   indexAssignments,
   isOperationActive,
   isSeguimientoVencido,
+  alertaSalidaDirecto,
   operatorsForMode,
   buildTruckByRef,
   suggestNextRef,
@@ -204,6 +205,8 @@ export default function OperationsGrid({
   const brand = useBrand()
   // Filtro "Seguimiento vencido" (7+ días sin actualizar, solo cargas activas).
   const [segFilter, setSegFilter] = useState(false)
+  // Filtro "Salidas pisadas por el buque" (directo con salida el día del arribo).
+  const [pisadaFilter, setPisadaFilter] = useState(false)
   // Filtro "Faltan datos" (campos pendientes según la etapa de la carga).
   const [faltanFilter, setFaltanFilter] = useState(false)
   // "Ver archivadas" (OFF por defecto) + confirmación de eliminado definitivo.
@@ -528,6 +531,7 @@ export default function OperationsGrid({
       if (vMin !== null && (o.m3 || 0) < vMin) return false
       if (vMax !== null && (o.m3 || 0) > vMax) return false
       if (segFilter && !isSeguimientoVencido(o, truckByRef.get(o.ref)?.status, today)) return false
+      if (pisadaFilter && alertaSalidaDirecto(o, today) !== 'pisada') return false
       if (faltanFilter && !faltantesPorUid.has(o.uid)) return false
       if (operatorFilter !== 'all' && (o.operatorId || '') !== operatorFilter) return false
       if (q) {
@@ -536,7 +540,7 @@ export default function OperationsGrid({
       }
       return true
     })
-  }, [visibleOps, modeFilter, zonaFilter, originFilter, destFilter, kgMin, kgMax, m3Min, m3Max, segFilter, faltanFilter, faltantesPorUid, truckByRef, operatorFilter, deferredSearch])
+  }, [visibleOps, modeFilter, zonaFilter, originFilter, destFilter, kgMin, kgMax, m3Min, m3Max, segFilter, pisadaFilter, faltanFilter, faltantesPorUid, truckByRef, operatorFilter, deferredSearch])
 
   const pesoVolActivo = !!(kgMin || kgMax || m3Min || m3Max)
 
@@ -545,6 +549,12 @@ export default function OperationsGrid({
     const today = new Date(); today.setHours(0, 0, 0, 0)
     return visibleOps.filter(o => isSeguimientoVencido(o, truckByRef.get(o.ref)?.status, today)).length
   }, [visibleOps, truckByRef])
+
+  // Salidas pisadas por el buque: directo con retiro el mismo día del arribo.
+  const salidasPisadas = useMemo(() => {
+    const today = new Date(); today.setHours(0, 0, 0, 0)
+    return visibleOps.filter(o => alertaSalidaDirecto(o, today) === 'pisada').length
+  }, [visibleOps])
 
   // Totals for the current filter (planning at a glance).
   const totals = useMemo(() => {
@@ -849,6 +859,18 @@ export default function OperationsGrid({
           >
             <Clock size={12} weight="bold" /> Seguimiento vencido
             <span className="text-[10px] tabular-nums font-bold">{segVencidos}</span>
+          </button>
+        )}
+        {salidasPisadas > 0 && (
+          <button
+            onClick={() => setPisadaFilter(v => !v)}
+            title={`${salidasPisadas} contenedor${salidasPisadas === 1 ? ' directo tiene' : 'es directos tienen'} la salida programada el mismo día del arribo del buque (o antes) — tal vez no descargó y se pisa. El retiro se coordina 1 o 2 días después del ETA. Clic para ver solo esas.`}
+            className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 border text-xs transition-all hover:shadow-sm ${
+              pisadaFilter ? 'bg-red-100 border-red-400 text-red-800 font-semibold' : 'bg-red-50 border-red-300 text-red-700'
+            }`}
+          >
+            <Boat size={12} weight="bold" /> Salidas pisadas por el buque
+            <span className="text-[10px] tabular-nums font-bold">{salidasPisadas}</span>
           </button>
         )}
         {faltantesPorUid.size > 0 && (
@@ -1393,6 +1415,8 @@ const OperationRow = memo(function OperationRow({
   const assigned = op.operatorId ? operatorById.get(op.operatorId) : null
   // Seguimiento vencido: 7+ días sin actualizar y la carga sigue activa.
   const segVencido = isSeguimientoVencido(op, truckStatus?.status, hoy)
+  // Ventana de retiro del contenedor directo: pisada (salida ≤ ETA) o fuera (> ETA+2).
+  const salidaAlerta = alertaSalidaDirecto(op, hoy)
 
   const cell = (key: string) => {
     switch (key) {
@@ -1484,6 +1508,9 @@ const OperationRow = memo(function OperationRow({
         const abrePanel = c.key === 'ref' || c.key === 'cliente'
         // Seguimiento 7+ días sin actualizar (carga activa) → celda en rojo.
         const segRojo = c.key === 'seguimiento' && segVencido
+        // Directo con salida el día del arribo (roja) o pasada la ventana ETA+2 (ámbar).
+        const salidaPisada = c.key === 'salida' && salidaAlerta === 'pisada'
+        const salidaFuera = c.key === 'salida' && salidaAlerta === 'fuera_ventana'
         // Columnas congeladas (Ref/Cliente): fondo SÓLIDO opaco (si no, el
         // contenido de atrás se ve al scrollear), replicando el zebra/hover de
         // la fila con variantes que leen la clase row-even/hover del <tr>. z-20
@@ -1495,7 +1522,7 @@ const OperationRow = memo(function OperationRow({
           : ''
         // overflow-hidden text-ellipsis: con table-fixed (sin scroll lateral) las
         // celdas truncan en vez de desbordar; el resumen expandido muestra todo.
-        const tdClass = `px-2 py-1.5 align-top ${c.w || ''} ${c.numeric ? 'text-right tabular-nums' : ''} ${c.wrap ? 'whitespace-normal break-words' : 'whitespace-nowrap overflow-hidden text-ellipsis'} ${stickyCls} ${segRojo ? 'bg-red-50 text-red-700 font-semibold' : ''} ${abrePanel ? 'cursor-pointer hover:underline decoration-primary/40 underline-offset-2' : 'select-text'}`
+        const tdClass = `px-2 py-1.5 align-top ${c.w || ''} ${c.numeric ? 'text-right tabular-nums' : ''} ${c.wrap ? 'whitespace-normal break-words' : 'whitespace-nowrap overflow-hidden text-ellipsis'} ${stickyCls} ${segRojo || salidaPisada ? 'bg-red-50 text-red-700 font-semibold' : salidaFuera ? 'bg-amber-50 text-amber-700 font-semibold' : ''} ${abrePanel ? 'cursor-pointer hover:underline decoration-primary/40 underline-offset-2' : 'select-text'}`
         const stickyStyle = c.sticky ? { left: c.stickyLeft ?? 0 } : undefined
         const tdClick = abrePanel ? () => onOpen(op.uid) : undefined
 
@@ -1517,7 +1544,16 @@ const OperationRow = memo(function OperationRow({
 
         const content = cell(c.key)
         return (
-          <td key={c.key} className={tdClass} style={stickyStyle} onClick={tdClick} title={abrePanel ? 'Abrir el panel de la carga' : undefined}>
+          <td
+            key={c.key}
+            className={tdClass}
+            style={stickyStyle}
+            onClick={tdClick}
+            title={abrePanel ? 'Abrir el panel de la carga'
+              : salidaPisada ? 'Salida pisada por el buque: retiro programado el mismo día del arribo (o antes) — tal vez no descargó. El contenedor directo se retira 1 o 2 días después del ETA.'
+              : salidaFuera ? 'Retiro fuera de ventana: el contenedor directo se retira de terminal hasta 2 días después del arribo (ETA+2).'
+              : undefined}
+          >
             {c.wrap
               ? <div className="line-clamp-2 leading-snug" title={typeof content === 'string' ? content : undefined}>{content}</div>
               : content}
