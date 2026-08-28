@@ -427,7 +427,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
               <Boat size={16} className="mr-1.5" weight="fill" />
               <span className="hidden sm:inline">Seguimientos</span>
               {seguimientosCount > 0 && (
-                <span className="ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold rounded-full text-white shrink-0 bg-amber-500">
+                <span className="ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold rounded-full text-white shrink-0 bg-med-aviso">
                   {seguimientosCount}
                 </span>
               )}
@@ -448,7 +448,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
               <TruckIcon size={16} className="mr-1.5" weight="fill" />
               <span className="hidden sm:inline">Camiones</span>
               {trucks.filter(t => t.status === 'planning' || t.status === 'loaded').length > 0 && (
-                <span className="ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold rounded-full text-white shrink-0 bg-primary">
+                <span className="ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold rounded-full shrink-0 bg-med-pastel text-med-texto">
                   {trucks.filter(t => t.status === 'planning' || t.status === 'loaded').length}
                 </span>
               )}
@@ -462,7 +462,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
               <span className="hidden sm:inline">Cotizaciones</span>
               {pendingQuotesCount > 0 && (
                 <span className={`ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold rounded-full text-white shrink-0 ${
-                  overdueQuotesCount > 0 ? 'bg-destructive' : 'bg-orange-500'
+                  overdueQuotesCount > 0 ? 'bg-med-error' : 'bg-med-aviso'
                 }`}>
                   {pendingQuotesCount}
                 </span>
@@ -472,7 +472,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
               <Receipt size={16} className="mr-1.5" weight="fill" />
               <span className="hidden sm:inline">Facturación</span>
               {pendingBillingCount > 0 && (
-                <span className="ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold rounded-full text-white shrink-0 bg-amber-500">
+                <span className="ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold rounded-full text-white shrink-0 bg-med-aviso">
                   {pendingBillingCount}
                 </span>
               )}
@@ -481,7 +481,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
               <CurrencyDollar size={16} className="mr-1.5" weight="fill" />
               <span className="hidden sm:inline">Pagos</span>
               {pagosAlertCount > 0 && (
-                <span className="ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold rounded-full text-white shrink-0 bg-red-500">
+                <span className="ml-1.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 text-[10px] font-bold rounded-full text-white shrink-0 bg-med-aviso">
                   {pagosAlertCount}
                 </span>
               )}

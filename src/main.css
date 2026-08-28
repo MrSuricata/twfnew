@@ -133,6 +133,16 @@
   line-height: 1.02;
 }
 
+/* Referencias de carga (A7994) en el admin: la tipografía de números de la
+   marca. Solo cambia cómo se ve el texto — el layout lo pone cada pantalla. */
+.ref-med {
+  font-family: 'Nunito', 'Jost', sans-serif;
+  font-weight: 900;
+  letter-spacing: -0.01em;
+  color: var(--color-med-violeta);
+  font-variant-numeric: tabular-nums;
+}
+
 /* Papel de la marca para las secciones claras: la textura sola queda muy
    marcada de cerca, así que va lavada sobre el fondo con un velo blanco. */
 .papel-med {

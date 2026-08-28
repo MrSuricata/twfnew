@@ -585,7 +585,7 @@ export default function TodayDashboard({
                   onClick={() => openOpMatch({ shipment: a.shipment, op: a.op })}
                   className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-left hover:bg-destructive/10 transition-colors"
                 >
-                  <span className="font-mono text-sm font-semibold shrink-0 min-w-[64px]">{a.shipment.REF}</span>
+                  <span className="ref-med text-sm shrink-0 min-w-[64px]">{a.shipment.REF}</span>
                   <span className="text-sm text-foreground/85 truncate flex-1 min-w-0">
                     {a.shipment.CLIENTE || '—'}
                     {a.cntr && <span className="hidden sm:inline font-mono text-xs text-muted-foreground ml-2">{a.cntr}</span>}
@@ -650,7 +650,7 @@ export default function TodayDashboard({
                   }`}
                 >
                   <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-                    <button type="button" onClick={() => onOpenDetail?.(c.ref)} className="font-bold text-sm hover:underline">
+                    <button type="button" onClick={() => onOpenDetail?.(c.ref)} className="ref-med text-sm hover:underline">
                       {c.ref}
                     </button>
                     <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${
@@ -827,7 +827,7 @@ export default function TodayDashboard({
                     }}
                     className="w-full flex items-center gap-2.5 px-2.5 pt-2 pb-0.5 text-left"
                   >
-                    <span className="font-mono text-sm font-semibold shrink-0 min-w-[64px]">{a.shipment.REF}</span>
+                    <span className="ref-med text-sm shrink-0 min-w-[64px]">{a.shipment.REF}</span>
                     <span className="text-sm text-foreground/85 truncate flex-1 min-w-0">{a.shipment.CLIENTE || '—'}</span>
                     {a.shipment.BUQUE && (
                       <span className="hidden md:inline text-xs text-muted-foreground truncate max-w-[160px]">{a.shipment.BUQUE}</span>
@@ -1299,7 +1299,7 @@ function TodayCard({ title, subtitle, icon, iconBg, barColor, matches, trucks = 
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between gap-2 mb-0.5">
-                    <span className="font-mono text-sm font-bold tracking-tight flex items-center gap-1.5 min-w-0">
+                    <span className="ref-med text-sm flex items-center gap-1.5 min-w-0">
                       <span>{shipment.REF}</span>
                       {op.CNTR_OP && (
                         <>
@@ -1539,7 +1539,7 @@ function IncompletaRow({ u, dbRow, expanded, onToggle, onPatchShipment, onOpenDe
   const diasLabel = u.diasAEta < 0 ? `llegó hace ${-u.diasAEta}d` : u.diasAEta === 0 ? 'llega hoy' : `en ${u.diasAEta}d`
   const header = (
     <>
-      <span className="font-mono text-sm font-semibold shrink-0 min-w-[64px]">{u.carga.ref}</span>
+      <span className="ref-med text-sm shrink-0 min-w-[64px]">{u.carga.ref}</span>
       <span className="text-sm text-foreground/85 truncate flex-1 min-w-0">{u.carga.cliente || '—'}</span>
       <span className="hidden sm:inline text-xs text-amber-700 truncate max-w-[300px]">
         faltan: {resumenFaltantes(u.faltantes)}
