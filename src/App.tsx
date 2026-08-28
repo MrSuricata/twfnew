@@ -27,10 +27,11 @@ import TransportDashboard from './components/TransportDashboard'
 import PublicSiteEnhanced from './components/PublicSiteEnhanced'
 import MediterraneaLanding from './components/MediterraneaLanding'
 import TermsPage from './components/TermsPage'
+import { NovedadesPage } from './components/NovedadesSection'
 import PrivacyPage from './components/PrivacyPage'
 import NotFoundPage from './components/NotFoundPage'
 
-type View = 'public' | 'admin-login' | 'admin-dashboard' | 'client-login' | 'client-portal' | 'partner-login' | 'depot-dashboard' | 'transport-dashboard' | 'terms' | 'privacy' | 'not-found'
+type View = 'public' | 'admin-login' | 'admin-dashboard' | 'client-login' | 'client-portal' | 'partner-login' | 'depot-dashboard' | 'transport-dashboard' | 'terms' | 'privacy' | 'novedades' | 'not-found'
 
 const KNOWN_PATHS = new Set(['/', '/admin', '/portal', '/depot', '/transport', '/partner', '/terminos', '/privacidad', '/mirendimiento', '/deposito'])
 
@@ -93,6 +94,7 @@ function getInitialView(): View {
   }
   if (path === '/terminos') return 'terms'
   if (path === '/privacidad') return 'privacy'
+  if (path === '/novedades') return 'novedades'
   if (path === '/') return 'public'
   return 'not-found'
 }
@@ -945,6 +947,7 @@ function App() {
       'client-login': '/portal',
       'client-portal': '/portal',
       'terms': '/terminos',
+      'novedades': '/novedades',
       'privacy': '/privacidad',
     }
     const targetPath = pathMap[view] || '/'
@@ -1193,6 +1196,10 @@ function App() {
 
   if (currentView === 'terms') {
     return <TermsPage onBack={() => navigateTo('public')} />
+  }
+
+  if (currentView === 'novedades') {
+    return <NovedadesPage />
   }
 
   if (currentView === 'privacy') {

@@ -31,6 +31,7 @@ import {
   PushPrefsPatchSchema,
   RefChecksUpsertSchema,
   TransporteCuotasSchema,
+  NoticiaRowSchema,
 } from '../_lib/schemas.js'
 import { rollupFromOperativasApi } from '../_lib/operativasRollup.js'
 import { broadcastTrucksLive, clientIdFromRequest } from '../_lib/realtimeBroadcast.js'
@@ -134,6 +135,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return handleUserPrefs(req, res, db, payload)
       case 'transporte-cuotas':
         return handleTransporteCuotas(req, res, db, payload)
+      case 'noticias':
+        return handleNoticias(req, res, db, payload)
       case 'operators':
         return handleOperators(req, res, db)
       case 'operator-assignments':
@@ -679,6 +682,61 @@ async function handleSettings(req: VercelRequest, res: VercelResponse, db: any) 
     }, { onConflict: 'key' })
     if (error) throw error
     return res.status(200).json({ saved: true })
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' })
+}
+
+// ── Noticias (Novedades logísticas de la landing) ──────────────────
+// GET    → todas (admin ve activas e inactivas; lo público va por /api/noticias)
+// POST   → alta o edición (upsert por id)
+// DELETE → borra por ?id=
+
+async function handleNoticias(req: VercelRequest, res: VercelResponse, db: any, payload: TokenPayload | null = null) {
+  if (req.method === 'GET') {
+    const { data, error } = await db
+      .from('noticias')
+      .select('*')
+      .order('publicada_at', { ascending: false })
+      .limit(200)
+    if (error) throw error
+    return res.status(200).json({ noticias: data || [] })
+  }
+
+  if (req.method === 'POST') {
+    const v = validate(NoticiaRowSchema, req.body)
+    if (!v.ok) return res.status(400).json({ error: v.error })
+    const c = v.data
+    const row: Record<string, unknown> = {
+      titulo: c.titulo,
+      bajada: c.bajada ?? '',
+      cuerpo: c.cuerpo ?? '',
+      categoria: (c.categoria || 'general').toLowerCase(),
+      imagen_url: c.imagenUrl ?? c.imagen_url ?? '',
+      alerta: c.alerta ?? false,
+      activo: c.activo ?? true,
+      vigente_hasta: (c.vigenteHasta ?? c.vigente_hasta ?? '').slice(0, 10),
+      updated_at: new Date().toISOString(),
+    }
+    if (c.id) {
+      const { data, error } = await db.from('noticias').update(row).eq('id', c.id).select().single()
+      if (error) throw error
+      logAudit(db, payload, 'editar', 'noticias', c.id, { titulo: row.titulo })
+      return res.status(200).json({ noticia: data })
+    }
+    const { data, error } = await db.from('noticias').insert(row).select().single()
+    if (error) throw error
+    logAudit(db, payload, 'crear', 'noticias', String(data?.id || ''), { titulo: row.titulo })
+    return res.status(200).json({ noticia: data })
+  }
+
+  if (req.method === 'DELETE') {
+    const id = String(req.query.id || '')
+    if (!id) return res.status(400).json({ error: 'Falta id' })
+    const { error } = await db.from('noticias').delete().eq('id', id)
+    if (error) throw error
+    logAudit(db, payload, 'borrar', 'noticias', id, {})
+    return res.status(200).json({ deleted: true })
   }
 
   return res.status(405).json({ error: 'Method not allowed' })

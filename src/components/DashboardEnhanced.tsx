@@ -6,6 +6,7 @@ import {
   Database,
   Star,
   ChatCircleText,
+  Newspaper,
   ChartBar,
   Scales,
   UsersThree,
@@ -45,6 +46,7 @@ import AgendaCalendar from './agenda/AgendaCalendar'
 import { mergeFclShipments } from '@/lib/operationsTypes'
 import ExcelImport from './ExcelImport'
 import CaseStudiesEditor from './CaseStudiesEditor'
+import NoticiasEditor from './NoticiasEditor'
 import TestimonialsEditor from './TestimonialsEditor'
 import AnalyticsDashboard from './AnalyticsDashboard'
 import ClientManager from './ClientManager'
@@ -173,7 +175,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
   })
   // Sub-pestaña de "Contenido web" (Casos de éxito / Testimonios). Vive acá para
   // que la CommandPalette pueda abrir directo la sub-pestaña correcta.
-  const [contenidoTab, setContenidoTab] = useState<'casos' | 'testimonios'>('casos')
+  const [contenidoTab, setContenidoTab] = useState<'casos' | 'testimonios' | 'novedades'>('novedades')
   // Navegación por value (CommandPalette): los values viejos 'case-studies' y
   // 'testimonials' ahora son sub-pestañas de "Contenido web" → mapearlos.
   const navigateTab = useCallback((v: string) => {
@@ -693,8 +695,12 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
           <TabsContent value="contenido">
             {/* Sub-selector Casos/Testimonios: Tabs anidadas con el estilo pill por
                 defecto (mismo patrón que Camiones · LCL/Aéreos en TrucksManagement). */}
-            <Tabs value={contenidoTab} onValueChange={v => setContenidoTab(v as 'casos' | 'testimonios')} className="space-y-4">
+            <Tabs value={contenidoTab} onValueChange={v => setContenidoTab(v as 'casos' | 'testimonios' | 'novedades')} className="space-y-4">
               <TabsList>
+                <TabsTrigger value="novedades" className="gap-1.5">
+                  <Newspaper size={16} />
+                  Novedades
+                </TabsTrigger>
                 <TabsTrigger value="casos" className="gap-1.5">
                   <Star size={16} />
                   Casos de éxito
@@ -704,6 +710,9 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
                   Testimonios
                 </TabsTrigger>
               </TabsList>
+              <TabsContent value="novedades">
+                <NoticiasEditor />
+              </TabsContent>
               <TabsContent value="casos">
                 <CaseStudiesEditor />
               </TabsContent>
