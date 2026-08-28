@@ -1047,7 +1047,7 @@ export default function OperationsGrid({
               (bug reportado 14/07). El z-30 del th congelado juega solo DENTRO
               del thead (stacking context propio). */}
           <thead className="sticky top-0 z-30">
-            <tr className="bg-[#1e3a8a] text-white">
+            <tr className="bg-med-profundo text-white">
               {cols.map(c => {
                 const active = sort?.key === c.key
                 const arrow = active ? (sort!.dir === 'asc' ? '▲' : '▼') : ''
@@ -1070,7 +1070,7 @@ export default function OperationsGrid({
                       ...(wOverride ? { width: wOverride, minWidth: wOverride, maxWidth: wOverride } : {}),
                     }}
                     title="Hacé clic para ordenar · arrastrá para reordenar · borde derecho: ajustar ancho"
-                    className={`relative px-2 py-2 text-left font-semibold uppercase tracking-wide text-[10px] align-bottom cursor-pointer select-none overflow-hidden hover:bg-[#274aa3] ${c.w || ''} ${c.numeric ? 'text-right' : ''} ${c.sticky ? 'sticky bg-[#1e3a8a] z-30' : ''} ${c.key === lastStickyKey ? 'shadow-[6px_0_6px_-4px_rgba(0,0,0,0.45)]' : ''} ${overKey === c.key && dragKey ? 'border-l-2 border-[#9bd1e5]' : ''} ${dragKey === c.key ? 'opacity-50' : ''}`}
+                    className={`relative px-2 py-2 text-left font-semibold uppercase tracking-wide text-[10px] align-bottom cursor-pointer select-none overflow-hidden hover:bg-med-texto ${c.w || ''} ${c.numeric ? 'text-right' : ''} ${c.sticky ? 'sticky bg-med-profundo z-30' : ''} ${c.key === lastStickyKey ? 'shadow-[6px_0_6px_-4px_rgba(0,0,0,0.45)]' : ''} ${overKey === c.key && dragKey ? 'border-l-2 border-[#9bd1e5]' : ''} ${dragKey === c.key ? 'opacity-50' : ''}`}
                   >
                     <span className={`inline-flex items-center gap-1 ${c.numeric ? 'flex-row-reverse' : ''}`}>
                       {c.label}
