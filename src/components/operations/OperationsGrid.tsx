@@ -1422,7 +1422,7 @@ const OperationRow = memo(function OperationRow({
     switch (key) {
       case 'ref':
         return (
-          <span className="inline-flex items-center gap-1 font-semibold">
+          <span className="ref-med inline-flex items-center gap-1">
             {/* Chevron de expansión: resumen completo debajo, sin abrir el panel */}
             <button
               type="button"
@@ -1731,7 +1731,7 @@ const OperationCard = memo(function OperationCard({
     <div className="rounded-lg border bg-card p-3 shadow-sm cursor-pointer" onClick={() => onOpen(op.uid)}>
       {/* Header: ref + estado */}
       <div className="flex items-center justify-between gap-2">
-        <span className="inline-flex items-center gap-1.5 font-semibold text-sm">
+        <span className="ref-med inline-flex items-center gap-1.5 text-sm">
           <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ background: MODALITY_COLORS[op.mode] }} />
           {op.ref || '—'}
           {op.readOnly && <LockSimple size={12} className="text-muted-foreground" />}
