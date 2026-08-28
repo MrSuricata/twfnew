@@ -32,7 +32,7 @@ import {
 import ShipmentDetailsDialog from './ShipmentDetailsDialog'
 import ContainerQuickEdit from './operations/ContainerQuickEdit'
 import { deriveKnownTransportes, deriveKnownValues, DEPOSITOS_UY, type DbShipment } from '@/lib/operationsTypes'
-import { faltantesUrgentes, resumenFaltantes, FALTANTES_DIAS_COORDINACION, type FaltanteUrgente, type CampoFaltante } from '@/lib/datosFaltantes'
+import { faltantesUrgentes, faltantesFuturos, resumenFaltantes, FALTANTES_DIAS_COORDINACION, type FaltanteUrgente, type CampoFaltante } from '@/lib/datosFaltantes'
 import { buildFaltantePatch, columnaDeCampo, FALTANTE_INPUTS, DEVOLUCIONES_PLAZA } from '@/lib/faltantesEdit'
 import {
   esCargaSinDatosPago, montosUrgentes, formaPagoEfectiva, parseMontoUY,
@@ -281,27 +281,30 @@ export default function TodayDashboard({
 
   // Fila desplegada de la tarjeta de incompletas (una a la vez, keyed por ref).
   const [incompletaAbierta, setIncompletaAbierta] = useState<string | null>(null)
+  // Bloque "Adelantar datos" (Brian 28/08): plegado por defecto.
+  const [adelantarOpen, setAdelantarOpen] = useState(false)
 
   // Campos pendientes URGENTES: llegan dentro de la semana (o ya llegaron sin
   // salida) con datos faltantes según su etapa — la webapp repartiendo tareas.
-  const incompletasTodas = useMemo(() => {
-    const hoy = new Date()
-    return faltantesUrgentes(
-      (dbShipments || [])
-        .filter(s => !s.archived)
-        .map(s => ({
-          dbId: s.id, ref: s.ref, mode: s.mode, pais: s.dest_country, cliente: s.cliente,
-          clientRef: s.client_ref,
-          eta: s.eta, etd: s.etd, buque: s.buque, linea: s.linea, docNumber: s.doc_number,
-          cntr: s.contenedor,
-          pkgs: s.pkgs, kg: s.kg, m3: s.m3, descripcion: s.observacion,
-          agente: s.agente, deposito: s.deposito,
-          operativa: s.operativa, transporte: s.transporte, fiscal: s.fiscal,
-          terminal: s.terminal, dev: s.dev, salida: s.salida,
-        })),
-      hoy,
-    )
-  }, [dbShipments])
+  const cargasCampos = useMemo(() =>
+    (dbShipments || [])
+      .filter(s => !s.archived)
+      .map(s => ({
+        dbId: s.id, ref: s.ref, mode: s.mode, pais: s.dest_country, cliente: s.cliente,
+        clientRef: s.client_ref,
+        eta: s.eta, etd: s.etd, buque: s.buque, linea: s.linea, docNumber: s.doc_number,
+        cntr: s.contenedor,
+        pkgs: s.pkgs, kg: s.kg, m3: s.m3, descripcion: s.observacion,
+        agente: s.agente, deposito: s.deposito,
+        operativa: s.operativa, transporte: s.transporte, fiscal: s.fiscal,
+        terminal: s.terminal, dev: s.dev,
+        devFecha: s.dev_fecha || (Array.isArray(s.operativas) ? (s.operativas.find(o => o.DEV_FECHA)?.DEV_FECHA || '') : ''),
+        salida: s.salida,
+      })), [dbShipments])
+  const incompletasTodas = useMemo(() => faltantesUrgentes(cargasCampos, new Date()), [cargasCampos])
+  // "Adelantar datos": lo que llega después de la ventana, para cuando lo
+  // urgente quedó en cero (la devolución no se adelanta — regla 28/08).
+  const adelantables = useMemo(() => faltantesFuturos(cargasCampos, new Date()), [cargasCampos])
 
   // Filtro por puerto de llegada (Brian 18/08): la tarjeta arrancó solo con
   // Uruguay; ahora se elige el destino. "Sin destino" es su propio grupo — si
@@ -855,7 +858,7 @@ export default function TodayDashboard({
       )}
 
       {/* ── Llegan con datos incompletos ─────────────────── */}
-      {incompletasTodas.length > 0 && (
+      {(incompletasTodas.length > 0 || adelantables.length > 0) && (
         <Card className="accent-top overflow-hidden bg-amber-500/[0.04] border-amber-500/25" style={{ ['--bar-color' as any]: 'rgb(245 158 11)' }}>
           <CardContent className="pt-5 pb-4">
             <div className="flex items-center gap-2.5 mb-1">
@@ -1003,6 +1006,54 @@ export default function TodayDashboard({
                 <p className="px-2.5 pt-1 text-xs text-muted-foreground">
                   … y {incompletas.length - 10} más — están todas en Operaciones con el filtro <b>Faltan datos</b>.
                 </p>
+              )}
+
+              {/* ── Adelantar datos (Brian 28/08): llegan después de la ventana ── */}
+              {adelantables.length > 0 && (
+                <div className="pt-2 mt-1 border-t border-border/60">
+                  {incompletasTodas.length === 0 && (
+                    <p className="px-2.5 pb-1 text-xs font-medium text-emerald-700">
+                      ✅ Al día con lo urgente — si querés, adelantá lo que viene.
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setAdelantarOpen(v => !v)}
+                    aria-expanded={adelantarOpen}
+                    className="w-full flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    <CaretRight size={12} weight="bold" className={`shrink-0 transition-transform ${adelantarOpen ? 'rotate-90' : ''}`} />
+                    Adelantar datos ({adelantables.length})
+                    <span className="font-normal">— llegan después de los {FALTANTES_DIAS_COORDINACION} días · la devolución no se adelanta</span>
+                  </button>
+                  {adelantarOpen && (
+                    <div className="space-y-1">
+                      {adelantables.slice(0, 10).map(u => {
+                        const rowKey = `adel-${String(u.carga.dbId || u.carga.ref)}`
+                        return (
+                          <IncompletaRow
+                            key={rowKey}
+                            u={u}
+                            dbRow={dbShipments.find(s => s.id === u.carga.dbId)}
+                            expanded={incompletaAbierta === rowKey}
+                            onToggle={() => setIncompletaAbierta(prev => (prev === rowKey ? null : rowKey))}
+                            onPatchShipment={onPatchShipment}
+                            onOpenDetail={onOpenDetail}
+                            transportes={knownTransportes}
+                            agentes={knownAgentes}
+                            lineas={knownLineas}
+                            clientes={clients}
+                          />
+                        )
+                      })}
+                      {adelantables.length > 10 && (
+                        <p className="px-2.5 pt-1 text-xs text-muted-foreground">
+                          … y {adelantables.length - 10} más, ordenadas por llegada.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
             )}

@@ -1960,7 +1960,7 @@ async function handleOperators(req: VercelRequest, res: VercelResponse, db: any)
 const SHIPMENT_COLS = new Set([
   'ref','client_ref','mode','agente','cliente','shipper','incoterm','pkgs','kg','m3',
   'doc_number','hbl','origin','origin_country','etd','eta','seguimiento','contenedor','buque','linea','transbordo',
-  'seguro','certi','telex','impresa','despacho','deposito','fecha_consol','transporte','camion',
+  'seguro','certi','telex','impresa','despacho','deposito','fecha_consol','transporte','camion','dev_fecha',
   'dest_country','discharge_port','dest_port','fiscal','wood','no_apilable','oog','imo','tipo','ftl_ltl','costo_extra','observacion','status',
   'operator_id','notes','archived','source','desconsol_date','entrega_planta',
   'libre','salida','eta_fiscal','operativa','descarga','dev','terminal','n_cntr','origin_ref',

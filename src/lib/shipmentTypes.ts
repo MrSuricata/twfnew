@@ -1,6 +1,9 @@
 export interface OperativasRecord {
   REF: string
   TLX: string
+  /** Fecha de devolución del vacío confirmada por la naviera (ISO). Opcional:
+   *  campo nuevo 28/08 — DEV siguió siendo el LUGAR (STL/MPS…). */
+  DEV_FECHA?: string
   DEPOSITO: string
   ETA_OP: string         // ETA from Operativas (arrival to port)
   SALIDA: string         // Departure from Montevideo

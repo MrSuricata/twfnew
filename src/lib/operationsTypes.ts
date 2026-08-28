@@ -202,6 +202,8 @@ export interface DbShipment {
   operativa: string
   descarga: string
   dev: string
+  /** Fecha de devolución del vacío confirmada por la naviera (ISO, '' = sin dato). */
+  dev_fecha?: string | null
   terminal: string
   n_cntr: number
   origin_ref: string
@@ -290,6 +292,8 @@ export interface UnifiedOperation {
   desconsol: string              // fecha de desconsolidación (DB: desconsol_date · FCL: = descarga)
   entregaPlanta: boolean         // entrega en planta (sí/no)
   dev: string
+  /** Fecha de devolución del vacío (confirmada por la naviera). */
+  devFecha?: string
   despacho: string
   tipo: string
   terminal: string               // FCL: terminal del SG (TCP/MONTECON) · DB: ''
@@ -833,6 +837,7 @@ export const EDITABLE_FIELDS: Partial<Record<keyof UnifiedOperation, EditableFie
   despacho: { col: 'despacho', type: 'text' },
   transporte: { col: 'transporte', type: 'text' },
   seguimiento: { col: 'seguimiento', type: 'text' },
+  devFecha: { col: 'dev_fecha', type: 'text' },
   desconsol: { col: 'desconsol_date', type: 'text' },
   entregaPlanta: { col: 'entrega_planta', type: 'bool' },
   // Campos de Operativas (editables tras el flip; columnas reales en shipments)
@@ -885,6 +890,7 @@ const OP_ARRAY_FIELD_BY_COL: Partial<Record<string, keyof OperativasRecord>> = {
   salida: 'SALIDA',
   eta_fiscal: 'ETA_FISC',
   dev: 'DEV',
+  dev_fecha: 'DEV_FECHA',
   descarga: 'DESCARGA',
   deposito: 'DEPOSITO',
   // Transporte es dato de la CARGA entera (como Depósito): editarlo propaga a
