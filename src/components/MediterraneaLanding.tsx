@@ -475,67 +475,84 @@ export default function MediterraneaLanding() {
       <section id="modos" className="py-20 lg:py-28 bg-white">
         <div className="max-w-7xl mx-auto px-5 lg:px-8">
           <Reveal>
-            <div className="max-w-2xl">
-              <p className="text-[#49286b] font-semibold text-sm tracking-widest uppercase">Servicios</p>
-              <h2 className="titulo-med mt-3 text-3xl lg:text-5xl text-[#261c79]">Un operador, todos los modos.</h2>
-              <p className="mt-4 text-[#5b5780] text-lg">No importa cómo viaje tu carga: la movemos, la despachamos y te la entregamos. Sin tercerizar tu tranquilidad.</p>
+            <div>
+              <div className="flex items-center gap-5">
+                <span className="rounded-full bg-[#ceffff] border-2 border-[#9bd1e5] px-5 py-2 text-[13px] font-semibold tracking-widest uppercase text-[#352e6a] shrink-0">
+                  Servicios
+                </span>
+                <span className="flex-1 h-0.5 bg-[#eef0f8]" />
+              </div>
+              <h2 className="titulo-med mt-7 text-4xl lg:text-[58px] text-[#49286b] max-w-[800px]">Un operador, todos los modos.</h2>
             </div>
           </Reveal>
 
-          <div className="mt-12 grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="mt-10 lg:mt-12 flex flex-col">
             {MODES.map((m, i) => {
               const Icon = m.icon
               return (
                 <Reveal key={m.title} delay={i * 60}>
-                  <div className={`group h-full relative rounded-2xl p-6 border transition-all hover:-translate-y-1 ${
-                    i === 0 ? 'bg-gradient-to-br from-[#352e6a] to-[#49286b] border-transparent text-white' : 'bg-[#fbfbfe] border-[#e5e4f1] hover:border-[#9bd1e5]'
-                  }`}>
-                    <div className={`w-11 h-11 rounded-xl flex items-center justify-center mb-4 ${i === 0 ? 'bg-white/15' : 'bg-[#49286b]/8'}`}>
-                      <Icon size={22} weight="duotone" className={i === 0 ? 'text-[#9bd1e5]' : 'text-[#49286b]'} />
-                    </div>
-                    <h3 className={`font-semibold text-lg ${i === 0 ? 'text-white' : 'text-[#261c79]'}`}>{m.title}</h3>
-                    <p className={`mt-2 text-sm leading-relaxed ${i === 0 ? 'text-white/70' : 'text-[#6b6688]'}`}>{m.desc}</p>
+                  <div className={`group grid grid-cols-[auto_1fr] lg:grid-cols-[90px_300px_1fr_auto] gap-x-6 gap-y-2 lg:gap-8 items-center py-7 lg:py-8 border-t-2 border-[#eef0f8] transition-colors hover:bg-[#fbfbfe] ${i === MODES.length - 1 ? 'border-b-2' : ''}`}>
+                    <span className="titulo-med text-2xl lg:text-3xl text-[#9bd1e5] tabular-nums">{String(i + 1).padStart(2, '0')}</span>
+                    <h3 className="titulo-med text-xl lg:text-[28px] text-[#49286b] flex items-center gap-2.5">
+                      <Icon size={22} weight="duotone" className="text-[#9bd1e5] lg:hidden shrink-0" />
+                      {m.title}
+                    </h3>
+                    <p className="col-span-2 lg:col-span-1 text-[15px] lg:text-[17px] leading-relaxed text-[#6b6688]">{m.desc}</p>
+                    <ArrowRight size={22} weight="bold" className="hidden lg:block text-[#49286b] opacity-25 group-hover:opacity-100 group-hover:translate-x-1 transition-all" />
                   </div>
                 </Reveal>
               )
             })}
-            <Reveal delay={300}>
-              <a href={wa} target="_blank" rel="noopener noreferrer"
-                 className="h-full rounded-2xl p-6 border border-dashed border-[#9bd1e5] bg-[#9bd1e5]/8 flex flex-col justify-between hover:bg-[#9bd1e5]/15 transition-colors">
-                <div>
-                  <h3 className="font-semibold text-lg text-[#261c79]">¿Una operación distinta?</h3>
-                  <p className="mt-2 text-sm text-[#6b6688]">Contanos qué necesitás mover y armamos la solución.</p>
-                </div>
-                <span className="mt-4 inline-flex items-center gap-1.5 text-[#49286b] font-semibold text-sm">Hablemos <ArrowRight size={15} weight="bold" /></span>
-              </a>
-            </Reveal>
           </div>
+
+          <Reveal delay={200}>
+            <a href={wa} target="_blank" rel="noopener noreferrer"
+               className="mt-8 rounded-2xl p-6 border border-dashed border-[#9bd1e5] bg-[#9bd1e5]/8 flex flex-wrap items-center justify-between gap-4 hover:bg-[#9bd1e5]/15 transition-colors">
+              <div>
+                <h3 className="titulo-med text-xl text-[#49286b]">¿Una operación distinta?</h3>
+                <p className="mt-1.5 text-sm text-[#6b6688]">Contanos qué necesitás mover y armamos la solución.</p>
+              </div>
+              <span className="inline-flex items-center gap-1.5 text-[#49286b] font-semibold text-sm">Hablemos <ArrowRight size={15} weight="bold" /></span>
+            </a>
+          </Reveal>
         </div>
       </section>
 
       {/* ── Proceso paso a paso ── */}
-      <section id="proceso" className="py-20 lg:py-28 bg-[#fbfbfe]">
+      <section id="proceso" className="py-20 lg:py-28 bg-white">
         <div className="max-w-7xl mx-auto px-5 lg:px-8">
           <Reveal>
-            <div className="max-w-2xl">
-              <p className="text-[#49286b] font-semibold text-sm tracking-widest uppercase">Cómo trabajamos</p>
-              <h2 className="titulo-med mt-3 text-3xl lg:text-5xl text-[#261c79]">De la cotización a la entrega.</h2>
+            <div
+              className="relative overflow-hidden rounded-[36px] px-6 py-12 sm:px-12 lg:px-[72px] lg:py-16 bg-[#f2f7fb] bg-cover bg-center"
+              style={{ backgroundImage: 'url(/novedades/bg-gradient.webp)' }}
+            >
+              {/* Arcos de esquina. Van detrás del contenido: el bloque de texto
+                  también está posicionado, así que manda el orden del DOM. */}
+              <div className="absolute -bottom-60 -right-60 w-[400px] h-[400px] rounded-full bg-[#49286b] pointer-events-none" aria-hidden />
+              <div className="absolute -bottom-[270px] -right-[270px] w-[500px] h-[500px] rounded-full border-[20px] border-[#9bd1e5]/60 box-border pointer-events-none" aria-hidden />
+
+              <div className="relative">
+                <p className="text-[#49286b] font-semibold text-sm tracking-widest uppercase">Cómo trabajamos</p>
+                <h2 className="titulo-med mt-3 text-3xl lg:text-[44px] text-[#49286b]">De la cotización a la entrega.</h2>
+
+                <ol className="mt-10 lg:mt-14 grid gap-8 sm:grid-cols-2 lg:grid-cols-4 lg:gap-0">
+                  {STEPS.map((s, i) => {
+                    const ultimo = i === STEPS.length - 1
+                    return (
+                      <li key={s.n} className={`flex flex-col gap-4 ${ultimo ? '' : 'lg:pr-6'}`}>
+                        <div className="flex items-center" aria-hidden>
+                          <span className={`w-[30px] h-[30px] rounded-full shrink-0 ${ultimo ? 'bg-[#ceffff] border-[5px] border-[#49286b] box-border' : 'bg-[#49286b]'}`} />
+                          {!ultimo && <span className="flex-1 h-1 bg-[#9bd1e5]" />}
+                        </div>
+                        <h3 className="titulo-med text-xl lg:text-[23px] text-[#49286b]">{s.title}</h3>
+                        <p className="text-[15px] leading-relaxed text-[#352e6a]">{s.desc}</p>
+                      </li>
+                    )
+                  })}
+                </ol>
+              </div>
             </div>
           </Reveal>
-          <div className="mt-12 grid md:grid-cols-4 gap-5">
-            {STEPS.map((s, i) => (
-              <Reveal key={s.n} delay={i * 80}>
-                <div className="relative h-full rounded-2xl bg-white border border-[#e5e4f1] p-6">
-                  <div className="titulo-med text-4xl" style={{ color: '#9bd1e5' }}>{s.n}</div>
-                  <h3 className="mt-3 font-semibold text-lg text-[#261c79]">{s.title}</h3>
-                  <p className="mt-2 text-sm text-[#6b6688] leading-relaxed">{s.desc}</p>
-                  {i < STEPS.length - 1 && (
-                    <CaretRight size={20} weight="bold" className="hidden md:block absolute -right-3.5 top-1/2 -translate-y-1/2 text-[#d8d5ea]" />
-                  )}
-                </div>
-              </Reveal>
-            ))}
-          </div>
         </div>
       </section>
 
