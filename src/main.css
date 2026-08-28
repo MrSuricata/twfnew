@@ -118,15 +118,26 @@
   --color-med-error: #d94f4f;        /* check fallido */
 }
 
-/* Degradado de marca, para bandas y encabezados. */
+/* Banda de encabezado por marca: bajo TWF es su primario plano de siempre;
+   bajo Mediterránea, el degradado del sistema. */
 .degradado-med {
+  background: var(--primary);
+}
+:root[data-brand="med"] .degradado-med {
   background: linear-gradient(160deg, #49286b 0%, #352e6a 55%, #261c79 100%);
 }
 
 /* Títulos de la landing de Mediterránea: la marca usa Gotham y Nunito 900 es
    el sustituto web aprobado. Solo la usa esa landing — el resto de la app y la
    marca TWF siguen con la tipografía de siempre. */
+/* Default neutro: fuera de Mediterránea es una negrita normal, así las
+   pantallas compartidas (legales, 404, portal) no arrastran la identidad
+   Med a TWF. El bloque por marca la activa de verdad. */
 .titulo-med {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+:root[data-brand="med"] .titulo-med {
   font-family: 'Nunito', 'Jost', sans-serif;
   font-weight: 900;
   letter-spacing: -0.02em;
@@ -136,11 +147,14 @@
 /* Referencias de carga (A7994) en el admin: la tipografía de números de la
    marca. Solo cambia cómo se ve el texto — el layout lo pone cada pantalla. */
 .ref-med {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+:root[data-brand="med"] .ref-med {
   font-family: 'Nunito', 'Jost', sans-serif;
   font-weight: 900;
   letter-spacing: -0.01em;
   color: var(--color-med-violeta);
-  font-variant-numeric: tabular-nums;
 }
 
 /* Scroll con imán suave en la landing: al soltar la rueda o el dedo cerca
@@ -161,10 +175,17 @@ html:has([data-snap-landing]) {
    marcada de cerca, así que va lavada sobre el fondo con un velo blanco. */
 .papel-med {
   position: relative;
-  background-color: #fbfbfe;
+  background-color: var(--background);
   isolation: isolate;
 }
+:root[data-brand="med"] .papel-med {
+  background-color: #fbfbfe;
+}
+:root[data-brand="med"] .papel-med::before {
+  display: block;
+}
 .papel-med::before {
+  display: none;
   content: '';
   position: absolute;
   inset: 0;

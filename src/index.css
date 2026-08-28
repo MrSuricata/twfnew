@@ -61,6 +61,24 @@
   --ops-sticky: var(--card);
   --ops-sticky-even: oklch(0.955 0.005 250);   /* ≈ card con un toque de muted */
   --ops-sticky-hover: oklch(0.935 0.012 250);  /* ≈ hover primary/5, opaco */
+
+  /* ── Piezas del panel que cambian por marca ──
+     Defaults = el look de TWF (el previo al sistema de Mediterránea).
+     El bloque [data-brand="med"] de abajo pisa cada una con la paleta Med.
+     Así los componentes compartidos usan UNA clase y cada marca ve lo suyo. */
+  --tabla-cabecera: #1e3a8a;
+  --tabla-cabecera-hover: #274aa3;
+  --estado-ok-bg: #d1fae5;      --estado-ok-fg: #065f46;   --estado-ok-bd: #a7f3d0;
+  --estado-transito-bg: #dbeafe; --estado-transito-fg: #1e40af; --estado-transito-bd: #bfdbfe;
+  --estado-hoy-bg: #fef3c7;     --estado-hoy-fg: #92400e;  --estado-hoy-bd: #fde68a;
+  --contador-accion: #f59e0b;
+  --contador-error: var(--destructive);
+  --contador-info-bg: var(--primary);
+  --contador-info-fg: #ffffff;
+  --avisos-cta-bg: rgb(255 255 255 / 0.1);
+  --avisos-cta-bg-hover: rgb(255 255 255 / 0.2);
+  --avisos-cta-fg: rgb(255 255 255 / 0.85);
+  --avisos-cta-bd: rgb(255 255 255 / 0.1);
 }
 
 /* ─── Mediterránea Carghas brand theme ───────────────────────────────
@@ -117,6 +135,38 @@
   --ops-sticky: #ffffff;
   --ops-sticky-even: #f5f6fb;   /* ≈ card + toque de #eef0f8 */
   --ops-sticky-hover: #eaecf7;  /* ≈ hover, opaco */
+
+  /* Panel bajo Mediterránea: la terminación del sistema (docs/DISENO-MED.md) */
+  --tabla-cabecera: #261c79;
+  --tabla-cabecera-hover: #352e6a;
+  --estado-ok-bg: #e4f4ea;      --estado-ok-fg: #2f8f5b;   --estado-ok-bd: #cbe7d6;
+  --estado-transito-bg: #ceffff; --estado-transito-fg: #352e6a; --estado-transito-bd: rgb(155 209 229 / 0.6);
+  --estado-hoy-bg: #e8863b;     --estado-hoy-fg: #ffffff;  --estado-hoy-bd: #e8863b;
+  --contador-accion: #e8863b;
+  --contador-error: #d94f4f;
+  --contador-info-bg: #ceffff;
+  --contador-info-fg: #352e6a;
+  --avisos-cta-bg: #e8863b;
+  --avisos-cta-bg-hover: #d97826;
+  --avisos-cta-fg: #ffffff;
+  --avisos-cta-bd: #e8863b;
+}
+
+/* Tablas compartidas (shadcn): bajo Med, la cabecera clara del sistema.
+   Bajo TWF no hay reglas acá: quedan exactamente como siempre. */
+:root[data-brand="med"] [data-slot="table-header"] {
+  background: #fbfbfe;
+}
+:root[data-brand="med"] [data-slot="table-head"] {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #9a96b8;
+}
+:root[data-brand="med"] [data-slot="table-row"] {
+  border-bottom-width: 2px;
+  border-bottom-color: #f4f5fa;
 }
 
 /* Brand fonts — Jost is a free geometric face close to Gotham. */
