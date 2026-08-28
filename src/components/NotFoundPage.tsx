@@ -1,5 +1,5 @@
 import { Button } from '@/components/ui/button'
-import { Compass, House, EnvelopeSimple } from '@phosphor-icons/react'
+import { House, EnvelopeSimple } from '@phosphor-icons/react'
 import BrandLogo from './BrandLogo'
 import { useBrand } from '@/lib/brand'
 
@@ -9,13 +9,14 @@ interface NotFoundPageProps {
 
 export default function NotFoundPage({ onGoHome }: NotFoundPageProps) {
   const brand = useBrand()
+  const med = brand.id === 'med'
   const handleGoHome = () => {
     if (onGoHome) onGoHome()
     else window.location.href = '/'
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className={`min-h-screen flex flex-col ${med ? 'papel-med' : 'bg-background'}`}>
       {/* Header público */}
       <header className="border-b bg-white">
         <div className="max-w-5xl mx-auto px-4 py-4 flex items-center">
@@ -28,25 +29,20 @@ export default function NotFoundPage({ onGoHome }: NotFoundPageProps) {
 
       <main className="flex-1 flex items-center justify-center px-4">
         <div className="text-center max-w-md">
-          <div className="flex justify-center mb-6">
-            <div className="bg-primary/10 rounded-full p-6">
-              <Compass size={96} weight="duotone" className="text-primary" />
-            </div>
-          </div>
-
-          <p className="text-7xl font-bold text-primary mb-2">404</p>
-          <h1 className="text-2xl font-bold mb-3">Página no encontrada</h1>
+          <p className={`${med ? 'titulo-med' : 'font-bold tracking-tight'} text-[120px] leading-none text-primary`}>404</p>
+          <div className={`mx-auto mt-3 mb-5 h-1.5 w-[120px] ${med ? 'bg-med-aviso' : 'bg-accent'}`} />
+          <h1 className={`${med ? 'titulo-med' : 'font-bold'} text-2xl text-primary mb-3`}>Página no encontrada</h1>
           <p className="text-muted-foreground mb-8 leading-relaxed">
             La página que estás buscando no existe o fue movida. Revisá la dirección o volvé al
             inicio para seguir navegando.
           </p>
 
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
-            <Button onClick={handleGoHome} size="lg">
+            <Button onClick={handleGoHome} size="lg" className="rounded-full">
               <House size={18} className="mr-2" />
               Ir al inicio
             </Button>
-            <Button asChild variant="outline" size="lg">
+            <Button asChild variant="outline" size="lg" className="rounded-full">
               <a href={`mailto:${brand.contact.email}`}>
                 <EnvelopeSimple size={18} className="mr-2" />
                 Contactar
