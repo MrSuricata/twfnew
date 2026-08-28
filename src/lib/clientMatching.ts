@@ -1,4 +1,5 @@
 import type { ParsedShipment } from './shipmentTypes'
+import type { ClientAccount } from './quotationTypes'
 
 /**
  * Check if a CLIENTE value matches any pattern token.
@@ -33,4 +34,20 @@ export function matchesPattern(cliente: string, pattern: string): boolean {
 export function getMatchCount(shipments: ParsedShipment[], pattern: string): number {
   if (!pattern) return 0
   return shipments.filter(s => matchesPattern(s.CLIENTE, pattern)).length
+}
+
+/**
+ * Cliente del catálogo por email de contacto. El email NO es clave única:
+ * casi todo el catálogo lo tiene vacío, y un `find(c => c.email === '')`
+ * devolvía el primer cliente sin email para CUALQUIER sesión sin email
+ * (impersonate firmaba con email vacío → "Bienvenido CENA HNOS", 28/08).
+ * Sin email no hay match — el llamador cae al nombre que viaja en el token.
+ */
+export function findClientByEmail(
+  clients: ClientAccount[] | undefined,
+  email: string | undefined,
+): ClientAccount | undefined {
+  const e = (email || '').trim().toLowerCase()
+  if (!e) return undefined
+  return clients?.find(c => (c.email || '').trim().toLowerCase() === e)
 }

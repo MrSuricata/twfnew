@@ -47,7 +47,7 @@ import { agendaCliente, EVENTO_LABELS, refParaCliente } from '@/lib/clientAgenda
 import { fmtDateDMY } from '@/lib/format'
 import ShipmentDetailsDialog from './ShipmentDetailsDialog'
 import AgendaCalendar from './agenda/AgendaCalendar'
-import { matchesPattern } from '@/lib/clientMatching'
+import { matchesPattern, findClientByEmail } from '@/lib/clientMatching'
 import { useBrand } from '@/lib/brand'
 import { downloadClientStatusPdf } from '@/lib/clientStatusPdf'
 
@@ -129,7 +129,9 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
     fetchClientData()
   }, [clientEmail])
 
-  const currentClient = clients?.find(c => c.email === clientEmail)
+  // Por email SOLO si hay email (email vacío matcheaba al primer cliente sin
+  // email del catálogo — "Bienvenido CENA HNOS"); sin match, manda el token.
+  const currentClient = findClientByEmail(clients, clientEmail)
   const brand = useBrand()
 
   // Use server data if available, fallback to props
@@ -636,7 +638,7 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => downloadClientStatusPdf(activeShipmentsRaw, currentClient?.name || clientEmail, brand)}
+                  onClick={() => downloadClientStatusPdf(activeShipmentsRaw, currentClient?.name || clientName || clientEmail, brand)}
                   disabled={activeShipmentsRaw.length === 0}
                   className="gap-1.5 shrink-0"
                   title="Descargar PDF con el estado de todas tus cargas activas"
