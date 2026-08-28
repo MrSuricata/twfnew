@@ -1,12 +1,16 @@
 import { describe, it, expect } from 'vitest'
-import { esVigente, noticiasVigentes, alertasVigentes, claveAlertas, rowToNoticia, categoriaMeta, type Noticia } from './noticias'
+import {
+  esVigente, noticiasVigentes, alertasVigentes, claveAlertas, rowToNoticia, categoriaMeta,
+  estiloSlide, tituloPartes, tituloPlano, linkNoticia, type Noticia,
+} from './noticias'
 
 const HOY = '2026-08-28'
 
 const noticia = (over: Partial<Noticia>): Noticia => ({
   id: 'n1', titulo: 'T', bajada: '', cuerpo: '', categoria: 'general',
   imagenUrl: '', alerta: false, activo: true, publicadaAt: '2026-08-28T10:00:00Z',
-  vigenteHasta: '', ...over,
+  vigenteHasta: '', estilo: '', kicker: '', kickerExtra: '', subtitulo: '',
+  mensaje: '', linkUrl: '', ...over,
 })
 
 describe('vigencia — la portada nunca muestra notas viejas', () => {
@@ -57,5 +61,35 @@ describe('rowToNoticia y categorías', () => {
   it('categoría desconocida cae a general (nunca rompe el chip)', () => {
     expect(categoriaMeta('lo-que-sea').label).toBe('Interés general')
     expect(categoriaMeta('tifones').label).toContain('Tifones')
+  })
+  it('mapea los campos del slide (snake_case)', () => {
+    const n = rowToNoticia({
+      id: '1', titulo: 'T', estilo: 'papel', kicker: 'Aviso', kicker_extra: 'China',
+      subtitulo: 'S', mensaje: 'M', link_url: 'https://x.com/nota',
+    })
+    expect(n.estilo).toBe('papel')
+    expect(n.kickerExtra).toBe('China')
+    expect(n.linkUrl).toBe('https://x.com/nota')
+  })
+})
+
+describe('carrusel de portada', () => {
+  it('estilo elegido a mano manda; si no, el de la categoría', () => {
+    expect(estiloSlide(noticia({ estilo: 'actualizacion', categoria: 'tifones' }))).toBe('actualizacion')
+    expect(estiloSlide(noticia({ categoria: 'tifones' }))).toBe('violeta')
+    expect(estiloSlide(noticia({ categoria: 'feriados' }))).toBe('papel')
+    expect(estiloSlide(noticia({ categoria: 'general' }))).toBe('celeste')
+    expect(estiloSlide(noticia({ estilo: 'cualquiera', categoria: 'paros' }))).toBe('celeste')
+  })
+  it('la barra del título corta en dos líneas; tituloPlano la saca para las listas', () => {
+    expect(tituloPartes('Tifones en China:|cierres portuarios')).toEqual(['Tifones en China:', 'cierres portuarios'])
+    expect(tituloPartes('Sin barra')).toEqual(['Sin barra', ''])
+    expect(tituloPlano('China cerrada|del 1 al 7 de octubre')).toBe('China cerrada del 1 al 7 de octubre')
+  })
+  it('"Ir a la noticia" solo navega a http(s); cualquier otra cosa cae en /novedades', () => {
+    expect(linkNoticia(noticia({ linkUrl: 'https://lanacion.com.ar/x' }))).toEqual({ href: 'https://lanacion.com.ar/x', externo: true })
+    expect(linkNoticia(noticia({ linkUrl: '' }))).toEqual({ href: '/novedades', externo: false })
+    // eslint-disable-next-line no-script-url
+    expect(linkNoticia(noticia({ linkUrl: 'javascript:alert(1)' })).href).toBe('/novedades')
   })
 })

@@ -15,7 +15,8 @@
     { "source": "/terminos", "destination": "/index.html" },
     { "source": "/privacidad", "destination": "/index.html" },
     { "source": "/mirendimiento", "destination": "/index.html" },
-    { "source": "/deposito", "destination": "/index.html" }
+    { "source": "/deposito", "destination": "/index.html" },
+    { "source": "/novedades", "destination": "/index.html" }
   ],
   "headers": [
     {

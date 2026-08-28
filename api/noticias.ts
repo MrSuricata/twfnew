@@ -19,7 +19,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const db = getSupabase()
     const { data, error } = await db
       .from('noticias')
-      .select('id, titulo, bajada, cuerpo, categoria, imagen_url, alerta, publicada_at, vigente_hasta')
+      .select('id, titulo, bajada, cuerpo, categoria, imagen_url, alerta, publicada_at, vigente_hasta, estilo, kicker, kicker_extra, subtitulo, mensaje, link_url')
       .eq('activo', true)
       .order('publicada_at', { ascending: false })
       .limit(60)

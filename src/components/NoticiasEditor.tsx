@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Plus, Trash, PencilSimple, Newspaper, Megaphone } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import { fetchNoticiasAdmin, saveNoticia, deleteNoticia } from '@/lib/dataClient'
-import { type Noticia, rowToNoticia, esVigente, CATEGORIAS, categoriaMeta } from '@/lib/noticias'
+import { type Noticia, rowToNoticia, esVigente, CATEGORIAS, categoriaMeta, tituloPlano } from '@/lib/noticias'
 
 // ── Editor de Novedades logísticas (Brian 28/08) ─────────────────────────
 // Vive en Admin → Contenido web. Lo cargado acá sale en la landing (sección
@@ -27,12 +27,28 @@ interface Form {
   vigenteHasta: string
   alerta: boolean
   activo: boolean
+  estilo: string
+  kicker: string
+  kickerExtra: string
+  subtitulo: string
+  mensaje: string
+  linkUrl: string
 }
 
 const FORM_VACIO: Form = {
   id: '', titulo: '', bajada: '', cuerpo: '', categoria: 'general',
   imagenUrl: '', vigenteHasta: '', alerta: false, activo: true,
+  estilo: '', kicker: '', kickerExtra: '', subtitulo: '', mensaje: '', linkUrl: '',
 }
+
+/** Variantes visuales del slide en el carrusel de la portada. */
+const ESTILOS: { value: string; label: string }[] = [
+  { value: 'auto', label: 'Según la categoría' },
+  { value: 'violeta', label: 'Violeta (fondo oscuro)' },
+  { value: 'celeste', label: 'Celeste (fondo claro)' },
+  { value: 'actualizacion', label: 'Actualización (sin título grande)' },
+  { value: 'papel', label: 'Banda violeta sobre papel' },
+]
 
 const hoyISO = () => new Date().toISOString().slice(0, 10)
 
@@ -55,6 +71,8 @@ export default function NoticiasEditor() {
       id: n.id, titulo: n.titulo, bajada: n.bajada, cuerpo: n.cuerpo,
       categoria: n.categoria, imagenUrl: n.imagenUrl,
       vigenteHasta: (n.vigenteHasta || '').slice(0, 10), alerta: n.alerta, activo: n.activo,
+      estilo: n.estilo, kicker: n.kicker, kickerExtra: n.kickerExtra,
+      subtitulo: n.subtitulo, mensaje: n.mensaje, linkUrl: n.linkUrl,
     })
     setAbierto(true)
   }
@@ -62,8 +80,13 @@ export default function NoticiasEditor() {
   const guardar = async () => {
     if (!form.titulo.trim()) { toast.error('El título es obligatorio'); return }
     // Regla de la casa: sin números de tarifas en contenido publicado.
-    if (/(u\$s|usd|us\$)\s*\d/i.test(form.titulo + ' ' + form.bajada + ' ' + form.cuerpo)) {
+    const textoPublico = [form.titulo, form.bajada, form.cuerpo, form.kicker, form.subtitulo, form.mensaje].join(' ')
+    if (/(u\$s|usd|us\$)\s*\d/i.test(textoPublico)) {
       toast.error('Sin montos de fletes en las noticias — hablalo en cualitativo (el número va en la cotización)')
+      return
+    }
+    if (form.linkUrl.trim() && !/^https?:\/\//i.test(form.linkUrl.trim())) {
+      toast.error('El link de la nota tiene que empezar con https://')
       return
     }
     setGuardando(true)
@@ -78,6 +101,12 @@ export default function NoticiasEditor() {
         vigenteHasta: form.vigenteHasta,
         alerta: form.alerta,
         activo: form.activo,
+        estilo: form.estilo === 'auto' ? '' : form.estilo,
+        kicker: form.kicker.trim(),
+        kickerExtra: form.kickerExtra.trim(),
+        subtitulo: form.subtitulo.trim(),
+        mensaje: form.mensaje.trim(),
+        linkUrl: form.linkUrl.trim(),
       })
       toast.success(form.id ? 'Novedad actualizada' : 'Novedad publicada')
       setAbierto(false)
@@ -129,7 +158,7 @@ export default function NoticiasEditor() {
                   {!n.activo && <span className="text-[10px] font-semibold text-muted-foreground">inactiva</span>}
                   {n.activo && !vigente && <span className="text-[10px] font-semibold text-muted-foreground">vencida (archivada)</span>}
                 </div>
-                <p className="mt-1 font-medium text-sm leading-snug">{n.titulo}</p>
+                <p className="mt-1 font-medium text-sm leading-snug">{tituloPlano(n.titulo)}</p>
                 <p className="text-[11px] text-muted-foreground mt-0.5">
                   {(n.publicadaAt || '').slice(0, 10)}{n.vigenteHasta ? ` · vigente hasta ${n.vigenteHasta.slice(0, 10)}` : ' · sin vencimiento'}
                 </p>
@@ -181,6 +210,44 @@ export default function NoticiasEditor() {
             <div className="space-y-1.5">
               <Label htmlFor="not-img">Imagen (URL — de Canva, por ejemplo)</Label>
               <Input id="not-img" value={form.imagenUrl} onChange={e => setForm(f => ({ ...f, imagenUrl: e.target.value }))} placeholder="Si queda vacío usa la ilustración de la categoría" />
+            </div>
+
+            <div className="rounded-lg border p-3 space-y-3">
+              <p className="text-sm font-medium">Slide de portada</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Estilo</Label>
+                  <Select value={form.estilo || 'auto'} onValueChange={v => setForm(f => ({ ...f, estilo: v }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {ESTILOS.map(e => <SelectItem key={e.value} value={e.value}>{e.label}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="not-link">Link de la nota fuente</Label>
+                  <Input id="not-link" value={form.linkUrl} onChange={e => setForm(f => ({ ...f, linkUrl: e.target.value }))} placeholder="https://… (vacío = /novedades)" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="not-kicker">Etiqueta naranja</Label>
+                  <Input id="not-kicker" value={form.kicker} onChange={e => setForm(f => ({ ...f, kicker: e.target.value }))} placeholder="Aviso operativo" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="not-kicker2">Texto al lado (fecha, país…)</Label>
+                  <Input id="not-kicker2" value={form.kickerExtra} onChange={e => setForm(f => ({ ...f, kickerExtra: e.target.value }))} placeholder="Vacío = fecha de publicación" />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="not-sub">Destacado secundario</Label>
+                <Input id="not-sub" value={form.subtitulo} onChange={e => setForm(f => ({ ...f, subtitulo: e.target.value }))} placeholder="Pill celeste bajo el título / 2º párrafo en Actualización" />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="not-msj">Mensaje de la derecha</Label>
+                <Textarea id="not-msj" rows={2} value={form.mensaje} onChange={e => setForm(f => ({ ...f, mensaje: e.target.value }))} placeholder="Corto. Se puede **resaltar** entre asteriscos." />
+              </div>
+              <p className="text-xs text-muted-foreground">En el título, una barra | corta en dos líneas (la 2ª va en celeste).</p>
             </div>
             <div className="flex items-center justify-between rounded-lg border p-3">
               <div className="pr-3">

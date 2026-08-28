@@ -716,6 +716,12 @@ async function handleNoticias(req: VercelRequest, res: VercelResponse, db: any, 
       alerta: c.alerta ?? false,
       activo: c.activo ?? true,
       vigente_hasta: (c.vigenteHasta ?? c.vigente_hasta ?? '').slice(0, 10),
+      estilo: (c.estilo ?? '').toLowerCase(),
+      kicker: c.kicker ?? '',
+      kicker_extra: c.kickerExtra ?? c.kicker_extra ?? '',
+      subtitulo: c.subtitulo ?? '',
+      mensaje: c.mensaje ?? '',
+      link_url: c.linkUrl ?? c.link_url ?? '',
       updated_at: new Date().toISOString(),
     }
     if (c.id) {
