@@ -8,6 +8,7 @@ import { loginClient } from '@/lib/authClient'
 import { toast } from 'sonner'
 import { useTranslation, getStoredLanguage } from '@/lib/i18n'
 import { useBrand } from '@/lib/brand'
+import MarcoLogin from '@/components/MarcoLogin'
 
 // ── Login del portal de clientes ─────────────────────────────────────────
 // Email + contraseña (2026-07, reemplaza el OTP que nadie usaba). Los accesos
@@ -51,16 +52,12 @@ export default function ClientLogin({ onLogin, onBack }: ClientLoginProps) {
   }, [email, password, onLogin, t])
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary via-primary/95 to-secondary flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
-        <Button
-          variant="ghost"
-          onClick={onBack}
-          className="mb-6 text-white hover:bg-white/10"
-        >
-          <ArrowLeft size={20} className="mr-2" />
-          Volver al sitio
-        </Button>
+    <MarcoLogin
+      titulo="Tu operación,"
+      acento="en un solo lugar."
+      bajada="Embarques, documentos, fechas y costos. Todo lo que necesitás saber de tu carga, sin pedirlo por mail."
+      onBack={onBack}
+    >
 
         <Card>
           <CardHeader className="text-center">
@@ -132,7 +129,6 @@ export default function ClientLogin({ onLogin, onBack }: ClientLoginProps) {
             </form>
           </CardContent>
         </Card>
-      </div>
-    </div>
+    </MarcoLogin>
   )
 }

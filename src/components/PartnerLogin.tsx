@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import MarcoLogin from '@/components/MarcoLogin'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { SignIn, Envelope, Lock, Warehouse, Truck } from '@phosphor-icons/react'
@@ -45,8 +46,12 @@ export default function PartnerLogin({ onLogin, onBack }: PartnerLoginProps) {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary via-primary/95 to-secondary flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
+    <MarcoLogin
+      titulo="Coordinemos"
+      acento="en un solo canal."
+      bajada="Retiros, depósitos y viajes con la información al día, sin cadenas de mails."
+      onBack={onBack}
+    >
         <Card>
           <CardHeader className="text-center">
             <div className="flex justify-center mb-4">
@@ -117,7 +122,6 @@ export default function PartnerLogin({ onLogin, onBack }: PartnerLoginProps) {
             </form>
           </CardContent>
         </Card>
-      </div>
-    </div>
+    </MarcoLogin>
   )
 }

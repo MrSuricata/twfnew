@@ -313,13 +313,13 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
 
   return (
     <div className="min-h-screen bg-background">
-      <nav className="bg-primary text-primary-foreground border-b border-border">
+      <nav className="degradado-med text-primary-foreground border-b border-white/10">
         <div className="max-w-7xl mx-auto px-4 md:px-6">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-2">
               <BrandLogo variant="nav" className="h-8 w-auto" />
-              <div className="border-l border-primary-foreground/20 pl-2">
-                <div className="text-xl font-bold">Portal de Cliente</div>
+              <div className="border-l border-white/20 pl-3">
+                <div className="titulo-med text-lg text-white">Portal de Cliente</div>
                 <div className="text-xs opacity-80">{currentClient?.company || currentClient?.name || clientName}</div>
               </div>
             </div>
