@@ -223,10 +223,33 @@ export function NovedadesPage() {
   const { noticias, cargado } = useNoticias()
   const vigentes = useMemo(() => noticiasVigentes(noticias, hoyISO()), [noticias])
   const [abierta, setAbierta] = useState<string | null>(null)
+  const [filtro, setFiltro] = useState<string>('todas')
+
+  // Filtro por categoría: solo se ofrecen las que tienen notas vigentes.
+  const categoriasConNotas = useMemo(() => {
+    const conteo = new Map<string, number>()
+    for (const n of vigentes) conteo.set(n.categoria, (conteo.get(n.categoria) || 0) + 1)
+    return [...conteo.entries()]
+  }, [vigentes])
+  const visibles = filtro === 'todas' ? vigentes : vigentes.filter(n => n.categoria === filtro)
+
+  // Tarjeta de categoría a la izquierda de cada aviso (handoff D3).
+  const tarjetaCat = (c: string): string => {
+    if (c === 'paros') return '#49286b'
+    if (c === 'feriados') return '#ceffff'
+    if (c === 'tifones') return '#e8863b'
+    if (c === 'fletes') return '#352e6a'
+    return '#e8e4f4'
+  }
+
+  const chipFiltro = (activo: boolean) =>
+    `rounded-full px-5 py-2 text-sm font-semibold transition-colors ${activo
+      ? 'bg-[#49286b] text-white'
+      : 'bg-white border border-[#e5e4f1] text-[#6b6688] hover:border-[#9bd1e5]'}`
 
   return (
     <div className="min-h-screen bg-[#fbfbfe]">
-      <header className="bg-[#261c79]">
+      <header className="degradado-med">
         <div className="max-w-5xl mx-auto px-5 lg:px-8 py-4 flex items-center gap-3">
           <a href="/" className="inline-flex items-center gap-2 text-white/85 text-sm font-medium hover:text-white transition-colors">
             <ArrowLeft size={16} weight="bold" /> {brand.name}
@@ -237,37 +260,66 @@ export function NovedadesPage() {
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-5 lg:px-8 py-10 lg:py-14">
-        <p className="text-[#49286b] font-semibold text-sm tracking-widest uppercase">Novedades logísticas</p>
-        <h1 className="mt-2 text-3xl lg:text-4xl font-bold tracking-tight text-[#261c79]">Avisos y noticias de la ruta</h1>
-        <p className="mt-3 text-[#5b5780]">Tifones, feriados en Asia, fletes, paros y todo lo que puede afectar tu carga — publicado por nuestro equipo operativo.</p>
+      {/* Hero de papel con los arcos de la marca */}
+      <div className="papel-med relative overflow-hidden border-b border-[#eef0f8]">
+        <div className="absolute -top-40 -right-40 w-72 h-72 rounded-full bg-[#49286b] pointer-events-none" aria-hidden />
+        <div className="absolute -top-48 -right-48 w-[360px] h-[360px] rounded-full border-[18px] border-[#9bd1e5]/60 box-border pointer-events-none" aria-hidden />
+        <div className="relative max-w-5xl mx-auto px-5 lg:px-8 py-10 lg:py-14">
+          <span className="inline-block rounded-full bg-[#ceffff] border-2 border-[#9bd1e5] px-4 py-1.5 text-[12px] font-semibold tracking-widest uppercase text-[#352e6a]">
+            Novedades logísticas
+          </span>
+          <h1 className="titulo-med mt-4 text-3xl lg:text-5xl text-[#49286b]">Avisos y noticias de la ruta</h1>
+          <div className="mt-4 w-[180px] h-1.5 bg-[#49286b]" />
+          <p className="mt-4 text-[#5b5780] max-w-xl">Tifones, feriados en Asia, fletes, paros y todo lo que puede afectar tu carga — publicado por nuestro equipo operativo.</p>
+        </div>
+      </div>
 
-        <div className="mt-8 space-y-5">
+      <main className="max-w-5xl mx-auto px-5 lg:px-8 py-8 lg:py-10">
+        {vigentes.length > 0 && (
+          <div className="flex flex-wrap gap-2.5 mb-7">
+            <button type="button" onClick={() => setFiltro('todas')} className={chipFiltro(filtro === 'todas')}>
+              Todas · {vigentes.length}
+            </button>
+            {categoriasConNotas.map(([c]) => (
+              <button key={c} type="button" onClick={() => setFiltro(f => (f === c ? 'todas' : c))} className={chipFiltro(filtro === c)}>
+                {categoriaMeta(c).label}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="space-y-5">
           {cargado && vigentes.length === 0 && (
-            <div className="rounded-2xl border border-[#e5e4f1] bg-white p-8 text-center text-[#6b6688]">
+            <div className="rounded-[20px] border-2 border-[#eef0f8] bg-white p-8 text-center text-[#6b6688]">
               Sin novedades vigentes por el momento — buena señal: la ruta está tranquila.
             </div>
           )}
-          {vigentes.map(n => (
-            <article key={n.id} className="rounded-2xl border border-[#e5e4f1] bg-white overflow-hidden">
-              <button type="button" onClick={() => setAbierta(prev => (prev === n.id ? null : n.id))} className="w-full text-left flex gap-5 p-5 items-start">
-                <div className="w-[92px] h-[92px] rounded-xl overflow-hidden flex-shrink-0 hidden sm:block">
-                  <ImagenNota n={n} className="w-full h-full" />
+          {visibles.map(n => (
+            <article key={n.id} className="rounded-[20px] border-2 border-[#eef0f8] bg-white overflow-hidden">
+              <button type="button" onClick={() => setAbierta(prev => (prev === n.id ? null : n.id))} className="w-full text-left flex items-stretch">
+                <div className="w-[110px] lg:w-[150px] shrink-0 relative overflow-hidden hidden sm:flex items-center justify-center" style={{ background: tarjetaCat(n.categoria) }}>
+                  {n.imagenUrl
+                    ? <img src={n.imagenUrl} alt="" loading="lazy" className="absolute inset-0 w-full h-full object-cover" />
+                    : n.categoria === 'paros'
+                      ? <img src="/images/med-emblem-white.svg" alt="" className="w-14 opacity-90" />
+                      : <VinetaCategoria categoria={n.categoria} className="absolute inset-0 w-full h-full" />}
                 </div>
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1 p-5">
                   <div className="flex flex-wrap items-center gap-2">
                     <Kicker categoria={n.categoria} />
                     <span className="text-[11px] text-[#6b6688]">{fmtFecha(n.publicadaAt)}{n.vigenteHasta ? ` · vigente hasta ${fmtFecha(n.vigenteHasta)}` : ''}</span>
                   </div>
-                  <h2 className="mt-1.5 text-lg lg:text-xl font-bold leading-snug text-[#261c79]">{tituloPlano(n.titulo)}</h2>
+                  <h2 className="titulo-med mt-2 text-lg lg:text-2xl text-[#352e6a]">{tituloPlano(n.titulo)}</h2>
                   {n.bajada && <p className="mt-1.5 text-sm text-[#5b5780]">{conNegrita(n.bajada)}</p>}
                   {(n.cuerpo || linkNoticia(n).externo) && (
-                    <p className="mt-2 text-xs font-semibold text-[#49286b]">{abierta === n.id ? 'Cerrar' : 'Leer más'}</p>
+                    <p className="mt-2.5 inline-flex items-center gap-1.5 text-sm font-semibold text-[#49286b]">
+                      {abierta === n.id ? 'Cerrar' : 'Leer más'} <ArrowRight size={14} weight="bold" />
+                    </p>
                   )}
                 </div>
               </button>
               {abierta === n.id && (n.cuerpo || linkNoticia(n).externo) && (
-                <div className="px-5 pb-5 sm:pl-[132px] text-sm text-[#3d3a5c] leading-relaxed">
+                <div className="px-5 pb-5 sm:pl-[130px] lg:pl-[170px] text-sm text-[#3d3a5c] leading-relaxed">
                   {n.cuerpo && <p className="whitespace-pre-line">{conNegrita(n.cuerpo)}</p>}
                   {linkNoticia(n).externo && (
                     <a href={linkNoticia(n).href} target="_blank" rel="noopener noreferrer"
@@ -279,6 +331,11 @@ export function NovedadesPage() {
               )}
             </article>
           ))}
+          {cargado && vigentes.length > 0 && visibles.length === 0 && (
+            <div className="rounded-[20px] border-2 border-[#eef0f8] bg-white p-8 text-center text-[#6b6688]">
+              Sin avisos vigentes en esa categoría.
+            </div>
+          )}
         </div>
       </main>
 
