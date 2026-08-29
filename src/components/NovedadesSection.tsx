@@ -100,7 +100,7 @@ function ImagenNota({ n, className }: { n: Noticia; className?: string }) {
 function Kicker({ categoria, claro }: { categoria: string; claro?: boolean }) {
   const meta = categoriaMeta(categoria)
   return (
-    <span className={`inline-block text-[11px] font-semibold tracking-widest uppercase px-2 py-0.5 rounded ${claro ? 'bg-white/90 text-[#261c79]' : meta.chip}`}>
+    <span className={`inline-block text-[12px] font-semibold tracking-widest uppercase px-2.5 py-1 rounded ${claro ? 'bg-white/90 text-[#261c79]' : meta.chip}`}>
       {meta.label}
     </span>
   )
@@ -195,20 +195,20 @@ export default function NovedadesSection() {
   return (
     <>
       <NovedadAlertaModal noticias={noticias} />
-      <section id="novedades" className="papel-med py-20 lg:py-28 overflow-x-clip">
+      <section id="novedades" className="papel-med py-12 lg:py-16 overflow-x-clip">
         <div className="max-w-7xl mx-auto px-5 lg:px-8">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div className="max-w-2xl">
               <p className="text-[#49286b] font-semibold text-sm tracking-widest uppercase">Diario logístico</p>
               <h2 className="mt-3 text-3xl lg:text-5xl font-bold tracking-tight text-[#261c79]">Lo que está pasando en la ruta.</h2>
-              <p className="mt-4 text-[#5b5780] text-lg">Tifones, feriados en Asia, fletes y paros: te avisamos antes de que afecte tu carga.</p>
+              <p className="mt-4 text-[#5b5780] text-lg lg:text-xl">Tifones, feriados en Asia, fletes y paros: te avisamos antes de que afecte tu carga.</p>
             </div>
             <a href="/novedades" className="inline-flex items-center gap-1.5 text-[#49286b] font-semibold text-sm">
               Ver todas <ArrowRight size={15} weight="bold" />
             </a>
           </div>
 
-          <div className="mt-12 lg:mt-14">
+          <div className="mt-7 lg:mt-9">
             <NovedadesCarrusel noticias={slides} />
           </div>
         </div>
@@ -243,7 +243,7 @@ export function NovedadesPage() {
   }
 
   const chipFiltro = (activo: boolean) =>
-    `rounded-full px-5 py-2 text-sm font-semibold transition-colors ${activo
+    `rounded-full px-5 py-2.5 text-[15px] font-semibold transition-colors ${activo
       ? 'bg-[#49286b] text-white'
       : 'bg-white border border-[#e5e4f1] text-[#6b6688] hover:border-[#9bd1e5]'}`
 
@@ -270,7 +270,7 @@ export function NovedadesPage() {
           </span>
           <h1 className="titulo-med mt-4 text-3xl lg:text-5xl text-[#49286b]">Avisos y noticias de la ruta</h1>
           <div className="mt-4 w-[180px] h-1.5 bg-[#49286b]" />
-          <p className="mt-4 text-[#5b5780] max-w-xl">Tifones, feriados en Asia, fletes, paros y todo lo que puede afectar tu carga — publicado por nuestro equipo operativo.</p>
+          <p className="mt-4 text-[#5b5780] text-lg lg:text-xl leading-relaxed max-w-2xl">Tifones, feriados en Asia, fletes, paros y todo lo que puede afectar tu carga — publicado por nuestro equipo operativo.</p>
         </div>
       </div>
 
@@ -307,19 +307,19 @@ export function NovedadesPage() {
                 <div className="min-w-0 flex-1 p-5">
                   <div className="flex flex-wrap items-center gap-2">
                     <Kicker categoria={n.categoria} />
-                    <span className="text-[11px] text-[#6b6688]">{fmtFecha(n.publicadaAt)}{n.vigenteHasta ? ` · vigente hasta ${fmtFecha(n.vigenteHasta)}` : ''}</span>
+                    <span className="text-[13px] text-[#6b6688]">{fmtFecha(n.publicadaAt)}{n.vigenteHasta ? ` · vigente hasta ${fmtFecha(n.vigenteHasta)}` : ''}</span>
                   </div>
-                  <h2 className="titulo-med mt-2 text-lg lg:text-2xl text-[#352e6a]">{tituloPlano(n.titulo)}</h2>
-                  {n.bajada && <p className="mt-1.5 text-sm text-[#5b5780]">{conNegrita(n.bajada)}</p>}
+                  <h2 className="titulo-med mt-2 text-xl lg:text-[28px] text-[#352e6a]">{tituloPlano(n.titulo)}</h2>
+                  {n.bajada && <p className="mt-2 text-base lg:text-lg leading-relaxed text-[#5b5780]">{conNegrita(n.bajada)}</p>}
                   {(n.cuerpo || linkNoticia(n).externo) && (
-                    <p className="mt-2.5 inline-flex items-center gap-1.5 text-sm font-semibold text-[#49286b]">
+                    <p className="mt-3 inline-flex items-center gap-1.5 text-[15px] font-semibold text-[#49286b]">
                       {abierta === n.id ? 'Cerrar' : 'Leer más'} <ArrowRight size={14} weight="bold" />
                     </p>
                   )}
                 </div>
               </button>
               {abierta === n.id && (n.cuerpo || linkNoticia(n).externo) && (
-                <div className="px-5 pb-5 sm:pl-[130px] lg:pl-[170px] text-sm text-[#3d3a5c] leading-relaxed">
+                <div className="px-5 pb-6 sm:pl-[130px] lg:pl-[170px] text-base lg:text-[17px] text-[#3d3a5c] leading-relaxed">
                   {n.cuerpo && <p className="whitespace-pre-line">{conNegrita(n.cuerpo)}</p>}
                   {linkNoticia(n).externo && (
                     <a href={linkNoticia(n).href} target="_blank" rel="noopener noreferrer"
