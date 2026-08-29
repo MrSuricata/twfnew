@@ -79,6 +79,10 @@
   --avisos-cta-bg-hover: rgb(255 255 255 / 0.2);
   --avisos-cta-fg: rgb(255 255 255 / 0.85);
   --avisos-cta-bd: rgb(255 255 255 / 0.1);
+  --warn-suave-bg: #fffbeb;
+  --warn-suave-fg: #b45309;
+  --warn-suave-bd: #fde68a;
+  --borde-punteado: var(--border);
 }
 
 /* ─── Mediterránea Carghas brand theme ───────────────────────────────
@@ -150,6 +154,10 @@
   --avisos-cta-bg-hover: #d97826;
   --avisos-cta-fg: #ffffff;
   --avisos-cta-bd: #e8863b;
+  --warn-suave-bg: #fff8f2;
+  --warn-suave-fg: #b45f16;
+  --warn-suave-bd: #f3d9c4;
+  --borde-punteado: #c9c5d8;
 }
 
 /* Tablas compartidas (shadcn): bajo Med, la cabecera clara del sistema.
@@ -233,6 +241,46 @@
   color: #49286b;
 }
 :root[data-brand="med"] [data-slot="popover-content"] {
+  border-radius: 18px;
+}
+
+/* ── Grupo B: Nueva carga y Ctrl+K · Grupo E: transversales ── */
+:root[data-brand="med"] [data-slot="dialog-content"] h4 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom-width: 0;
+}
+:root[data-brand="med"] [data-slot="dialog-content"] h4::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #eef0f8;
+}
+:root[data-brand="med"] [data-slot="dialog-title"] {
+  font-family: 'Nunito', 'Jost', sans-serif;
+  font-weight: 900;
+  font-size: 20px;
+  letter-spacing: -0.01em;
+  color: #49286b;
+}
+/* Paleta de comandos: grupos como kickers y atajos en cápsulas */
+:root[data-brand="med"] [data-slot="command-group"] [cmdk-group-heading] {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #9a96b8;
+}
+:root[data-brand="med"] [data-slot="command-shortcut"] {
+  border: 1px solid #e5e4f1;
+  border-radius: 6px;
+  padding: 1px 6px;
+  background: #fbfbfe;
+  color: #6b6688;
+  font-size: 10px;
+}
+:root[data-brand="med"] [data-slot="command"] {
   border-radius: 18px;
 }
 
@@ -426,6 +474,10 @@ html {
   background: linear-gradient(90deg, oklch(0.92 0.005 250) 0%, oklch(0.96 0.005 250) 50%, oklch(0.92 0.005 250) 100%);
   background-size: 200% 100%;
   animation: shimmer 1.5s ease-in-out infinite;
+}
+:root[data-brand="med"] .shimmer {
+  background: linear-gradient(90deg, #eef0f8 0%, #dfe7f5 50%, #eef0f8 100%);
+  background-size: 200% 100%;
 }
 
 /* ── UX polish: card lift on hover ── */
