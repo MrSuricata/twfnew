@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#e9edf3}
+a{color:#49286b;text-decoration:none}a:hover{color:#7A3FA8}
+</style>
+</helmet>
+<div style="padding:56px 64px 96px;font-family:Montserrat,sans-serif;color:#352e6a;display:flex;flex-direction:column;gap:52px">
+
+<div style="display:flex;flex-direction:column;gap:12px;max-width:1000px">
+  <div style="background:#ceffff;border:2px solid #9bd1e5;border-radius:999px;padding:7px 20px;align-self:flex-start;font-weight:600;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:#352e6a">Grupo B</div>
+  <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:36px;line-height:1;letter-spacing:-0.02em;color:#49286b">Nueva carga y paleta de comandos</div>
+  <div style="font-size:16px;line-height:1.55;color:#6b6688">Los dos overlays del admin. Mismos campos y atajos que hoy: el modal mantiene Ref / Cliente / Modalidad como obligatorios y el resto colapsado en "Más campos"; la paleta mantiene los grupos y los atajos de dos teclas.</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:14px">
+  <div style="display:flex;align-items:center;gap:12px"><div style="background:#f0ecf6;border-radius:8px;padding:5px 12px;font-family:Nunito,sans-serif;font-weight:900;font-size:13px;color:#49286b">B1</div><div style="font-weight:600;font-size:15px;color:#352e6a">Modal "Nueva carga" · estado inicial</div></div>
+  <div style="position:relative;width:1500px;height:1000px;border-radius:20px;overflow:hidden;box-shadow:0 30px 70px rgba(38,28,121,0.14);background:#f7f9fc">
+    <div style="position:absolute;left:0;top:0;right:0;height:64px;background:linear-gradient(120deg,#49286b 0%,#261c79 100%);display:flex;align-items:center;padding:0 30px;gap:16px"><img src="public/images/med-logo-white.svg" alt="Mediterranea" style="height:28px"><div style="padding:4px 13px;border-radius:999px;border:1px solid rgba(155,209,229,0.5);font-weight:600;font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:#9bd1e5">Admin</div></div>
+    <div style="position:absolute;left:30px;top:96px;right:30px;display:flex;flex-direction:column;gap:14px;opacity:0.5">
+      <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:30px;color:#49286b">Operaciones</div>
+      <div style="height:46px;background:#261c79;border-radius:12px 12px 0 0"></div>
+      <div style="height:54px;background:#FFFFFF;border-bottom:2px solid #eef0f8"></div>
+      <div style="height:54px;background:#FFFFFF;border-bottom:2px solid #eef0f8"></div>
+      <div style="height:54px;background:#FFFFFF;border-bottom:2px solid #eef0f8"></div>
+      <div style="height:54px;background:#FFFFFF;border-bottom:2px solid #eef0f8"></div>
+    </div>
+    <div style="position:absolute;inset:0;background:rgba(38,28,121,0.42);backdrop-filter:blur(2px)"></div>
+
+    <div style="position:absolute;left:50%;top:48px;transform:translateX(-50%);width:760px;background:#FFFFFF;border-radius:24px;box-shadow:0 40px 90px rgba(15,10,50,0.40);overflow:hidden">
+      <div style="padding:26px 32px 20px;border-bottom:2px solid #f4f5fa;display:flex;align-items:flex-start;justify-content:space-between;gap:20px">
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;align-items:center;gap:12px"><div style="width:34px;height:34px;border-radius:50%;background:#ceffff;display:flex;align-items:center;justify-content:center;font-family:Nunito,sans-serif;font-weight:900;font-size:19px;color:#49286b">＋</div><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:26px;line-height:1;color:#49286b">Nueva carga</div></div>
+          <div style="font-size:13px;line-height:1.5;color:#6b6688;max-width:600px">Solo <strong style="color:#49286b">Ref, Cliente y Modalidad</strong> son obligatorios. Si el shipper o el puerto no existen, escribilos y quedan creados. El resto va en "Más campos" o después en la grilla.</div>
+        </div>
+        <div style="flex:none;width:32px;height:32px;border-radius:50%;background:#f4f5fa;display:flex;align-items:center;justify-content:center;font-size:15px;color:#6b6688">✕</div>
+      </div>
+
+      <div style="padding:24px 32px 26px;display:flex;flex-direction:column;gap:20px">
+        <div style="display:flex;flex-direction:column;gap:9px">
+          <div style="display:flex;align-items:center;gap:6px"><div style="font-weight:700;font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:#49286b">Modalidad</div><div style="color:#e8863b;font-weight:700">*</div></div>
+          <div style="display:flex;gap:9px">
+            <div style="display:flex;align-items:center;gap:9px;padding:11px 24px;border-radius:999px;border:2px solid #e5e4f1;font-weight:600;font-size:14px;color:#6b6688"><span style="width:8px;height:8px;border-radius:50%;background:#8c7fc4"></span>LCL</div>
+            <div style="display:flex;align-items:center;gap:9px;padding:11px 24px;border-radius:999px;border:2px solid #e5e4f1;font-weight:600;font-size:14px;color:#6b6688"><span style="width:8px;height:8px;border-radius:50%;background:#9bd1e5"></span>Aéreo</div>
+            <div style="display:flex;align-items:center;gap:9px;padding:11px 24px;border-radius:999px;border:2px solid #e5e4f1;font-weight:600;font-size:14px;color:#6b6688"><span style="width:8px;height:8px;border-radius:50%;background:#e8863b"></span>Terrestre</div>
+            <div style="display:flex;align-items:center;gap:9px;padding:11px 24px;border-radius:999px;background:#49286b;font-weight:700;font-size:14px;color:#FFFFFF"><span style="width:8px;height:8px;border-radius:50%;background:#9bd1e5"></span>FCL</div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <div style="display:flex;flex-direction:column;gap:8px"><div style="display:flex;align-items:center;gap:6px"><div style="font-weight:700;font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:#49286b">Ref</div><div style="color:#e8863b;font-weight:700">*</div></div><div style="height:50px;border-radius:14px;border:2px solid #e5e4f1;background:#fbfbfe;display:flex;align-items:center;padding:0 18px;font-size:14px;color:#9a96b8">E198, A7990…</div><div style="font-size:12px;color:#49286b">Sugerida: <strong style="font-family:Nunito,sans-serif;font-weight:900">A8290</strong> — click para usar</div></div>
+          <div style="display:flex;flex-direction:column;gap:8px"><div style="display:flex;align-items:center;gap:6px"><div style="font-weight:700;font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:#49286b">Cliente / Cnee</div><div style="color:#e8863b;font-weight:700">*</div></div><div style="height:50px;border-radius:14px;border:2px solid #e5e4f1;background:#fbfbfe;display:flex;align-items:center;justify-content:space-between;padding:0 18px;font-size:14px;color:#9a96b8">Cliente <span style="font-size:11px;color:#b9b5cc">▾</span></div></div>
+          <div style="display:flex;flex-direction:column;gap:8px"><div style="font-weight:700;font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:#6b6688">Shipper</div><div style="height:50px;border-radius:14px;border:2px solid #e5e4f1;background:#fbfbfe;display:flex;align-items:center;padding:0 18px;font-size:14px;color:#9a96b8">Elegí o escribí uno nuevo…</div></div>
+          <div style="display:flex;flex-direction:column;gap:8px"><div style="font-weight:700;font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:#6b6688">Incoterm</div><div style="height:50px;border-radius:14px;border:2px solid #e5e4f1;background:#fbfbfe;display:flex;align-items:center;padding:0 18px;font-size:14px;color:#9a96b8">FOB, EXW…</div></div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <div style="display:flex;flex-direction:column;gap:8px"><div style="font-weight:700;font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:#6b6688">País de origen</div><div style="height:50px;border-radius:14px;border:2px solid #e5e4f1;background:#fbfbfe;display:flex;align-items:center;padding:0 18px;font-size:14px;color:#9a96b8">CHINA…</div></div>
+          <div style="display:flex;flex-direction:column;gap:8px"><div style="font-weight:700;font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:#6b6688">Puerto de origen (POL)</div><div style="height:50px;border-radius:14px;border:2px solid #e5e4f1;background:#fbfbfe;display:flex;align-items:center;padding:0 18px;font-size:14px;color:#9a96b8">SHANGHAI, NINGBO…</div></div>
+          <div style="display:flex;flex-direction:column;gap:8px"><div style="font-weight:700;font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:#6b6688">Puerto de destino (POD)</div><div style="height:50px;border-radius:14px;border:2px solid #e5e4f1;background:#fbfbfe;display:flex;align-items:center;padding:0 18px;font-size:14px;color:#9a96b8">MONTEVIDEO…</div></div>
+          <div style="display:flex;flex-direction:column;gap:8px"><div style="font-weight:700;font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:#6b6688">País / zona de destino</div><div style="height:50px;border-radius:14px;border:2px solid #e5e4f1;background:#fbfbfe;display:flex;align-items:center;justify-content:space-between;padding:0 18px;font-size:14px;color:#9a96b8">— <span style="font-size:11px;color:#b9b5cc">▾</span></div><div style="font-size:11px;line-height:1.4;color:#9a96b8">Es la zona del puerto de descarga: una carga a Argentina vía Montevideo va como <strong style="color:#6b6688">Uruguay</strong>.</div></div>
+          <div style="display:flex;flex-direction:column;gap:8px"><div style="font-weight:700;font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:#6b6688">Destino final</div><div style="height:50px;border-radius:14px;border:2px solid #e5e4f1;background:#fbfbfe;display:flex;align-items:center;padding:0 18px;font-size:14px;color:#9a96b8">CÓRDOBA, SAN FRANCISCO…</div></div>
+          <div style="display:flex;flex-direction:column;gap:8px"><div style="font-weight:700;font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:#6b6688">Operativo</div><div style="height:50px;border-radius:14px;border:2px solid #e5e4f1;background:#fbfbfe;display:flex;align-items:center;justify-content:space-between;padding:0 18px;font-size:14px;color:#9a96b8">— sin asignar — <span style="font-size:11px;color:#b9b5cc">▾</span></div></div>
+        </div>
+
+        <div style="border:2px dashed #d9d5ea;border-radius:14px;padding:15px 0;text-align:center;font-weight:600;font-size:14px;color:#6b6688">▾ Más campos (todos opcionales) <span style="color:#49286b">· 3 completados</span></div>
+      </div>
+
+      <div style="padding:20px 32px;background:#fbfbfe;border-top:2px solid #f4f5fa;display:flex;justify-content:flex-end;gap:10px">
+        <div style="padding:13px 28px;border-radius:999px;border:2px solid #e5e4f1;font-weight:600;font-size:14px;color:#6b6688">Cancelar</div>
+        <div style="padding:14px 30px;border-radius:999px;background:#49286b;font-weight:600;font-size:14px;color:#FFFFFF">＋ Agregar carga</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="display:flex;gap:40px;align-items:flex-start;flex-wrap:wrap">
+
+<div style="display:flex;flex-direction:column;gap:14px">
+  <div style="display:flex;align-items:center;gap:12px"><div style="background:#f0ecf6;border-radius:8px;padding:5px 12px;font-family:Nunito,sans-serif;font-weight:900;font-size:13px;color:#49286b">B2</div><div style="font-weight:600;font-size:15px;color:#352e6a">Modal · "Más campos" desplegado + aviso de datos principales</div></div>
+  <div style="width:760px;background:#FFFFFF;border-radius:24px;box-shadow:0 30px 70px rgba(38,28,121,0.18);overflow:hidden">
+    <div style="padding:22px 32px 18px;border-bottom:2px solid #f4f5fa;display:flex;align-items:center;gap:12px"><div style="width:34px;height:34px;border-radius:50%;background:#ceffff;display:flex;align-items:center;justify-content:center;font-family:Nunito,sans-serif;font-weight:900;font-size:19px;color:#49286b">＋</div><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:24px;line-height:1;color:#49286b">Nueva carga</div></div>
+    <div style="padding:22px 32px 26px;display:flex;flex-direction:column;gap:18px">
+      <div style="background:#fff8f2;border:2px solid #f3d9c4;border-radius:14px;padding:13px 18px;font-size:13px;line-height:1.45;color:#b45f16">Sin completar: <strong>Shipper, Incoterm, Puerto de destino</strong>. Tocá <strong>Guardar igual</strong> para crear la carga así.</div>
+
+      <div style="display:flex;flex-direction:column;gap:11px">
+        <div style="font-weight:700;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#9a96b8;padding-bottom:6px;border-bottom:2px solid #f4f5fa">Datos clave</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div style="display:flex;flex-direction:column;gap:6px"><div style="font-size:12px;color:#6b6688">Depósito UY</div><div style="height:42px;border-radius:11px;border:2px solid #e5e4f1;background:#fbfbfe;display:flex;align-items:center;padding:0 14px;font-size:14px;color:#9a96b8">GODILCO, PLANIR…</div></div>
+          <div style="display:flex;flex-direction:column;gap:6px"><div style="font-size:12px;color:#6b6688">Operativa</div><div style="height:42px;border-radius:11px;border:2px solid #e5e4f1;background:#fbfbfe;display:flex;align-items:center;padding:0 14px;font-size:14px;color:#9a96b8">TRASIEGO…</div></div>
+          <div style="display:flex;flex-direction:column;gap:6px"><div style="font-size:12px;color:#6b6688">Libre (máx. devolución)</div><div style="height:42px;border-radius:11px;border:2px solid #e5e4f1;background:#fbfbfe;display:flex;align-items:center;padding:0 14px;font-size:14px;color:#9a96b8">dd/mm/aaaa</div></div>
+          <div style="display:flex;flex-direction:column;gap:6px"><div style="font-size:12px;color:#6b6688">Fiscal (destino)</div><div style="height:42px;border-radius:11px;border:2px solid #e5e4f1;background:#fbfbfe;display:flex;align-items:center;padding:0 14px;font-size:14px;color:#9a96b8">LOGIFRONT, FISCALIA…</div></div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:11px">
+        <div style="font-weight:700;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#9a96b8;padding-bottom:6px;border-bottom:2px solid #f4f5fa">Fechas</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div style="display:flex;flex-direction:column;gap:6px"><div style="font-size:12px;color:#6b6688">ETD</div><div style="height:42px;border-radius:11px;border:2px solid #e5e4f1;background:#fbfbfe;display:flex;align-items:center;padding:0 14px;font-size:14px;color:#9a96b8">dd/mm/aaaa</div></div>
+          <div style="display:flex;flex-direction:column;gap:6px"><div style="font-size:12px;color:#6b6688">ETA</div><div style="height:42px;border-radius:11px;border:2px solid #e5e4f1;background:#fbfbfe;display:flex;align-items:center;padding:0 14px;font-size:14px;color:#9a96b8">dd/mm/aaaa</div></div>
+          <div style="display:flex;flex-direction:column;gap:6px"><div style="font-size:12px;color:#6b6688">Salida</div><div style="height:42px;border-radius:11px;border:2px solid #49286b;background:#FFFFFF;display:flex;align-items:center;padding:0 14px;font-family:Nunito,sans-serif;font-weight:900;font-size:14px;color:#352e6a">09/09/2026</div></div>
+          <div style="display:flex;flex-direction:column;gap:6px"><div style="font-size:12px;color:#6b6688">ETA fiscal</div><div style="height:42px;border-radius:11px;border:2px solid #e5e4f1;background:#fbfbfe;display:flex;align-items:center;padding:0 14px;font-size:14px;color:#9a96b8">dd/mm/aaaa</div><div style="font-size:11px;line-height:1.35;color:#b45f16">Al guardar se ofrece la llegada normal: miércoles 11/09/2026.</div></div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:11px">
+        <div style="font-weight:700;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#9a96b8;padding-bottom:6px;border-bottom:2px solid #f4f5fa">Carga</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <div style="grid-column:span 2;display:flex;flex-direction:column;gap:6px"><div style="font-size:12px;color:#6b6688">Contenedor(es)</div><div style="height:42px;border-radius:11px;border:2px solid #e5e4f1;background:#fbfbfe;display:flex;align-items:center;padding:0 14px;font-size:14px;color:#9a96b8">MSKU1234567, TCLU7654321…</div></div>
+          <div style="display:flex;flex-direction:column;gap:6px"><div style="font-size:12px;color:#6b6688">Tipo</div><div style="height:42px;border-radius:11px;border:2px solid #e5e4f1;background:#fbfbfe;display:flex;align-items:center;padding:0 14px;font-size:14px;color:#9a96b8">40HC, 20DRY…</div></div>
+          <div style="display:flex;flex-direction:column;gap:6px"><div style="font-size:12px;color:#6b6688">Bultos</div><div style="height:42px;border-radius:11px;border:2px solid #e5e4f1;background:#fbfbfe;display:flex;align-items:center;padding:0 14px;font-size:14px;color:#9a96b8">0</div></div>
+          <div style="display:flex;flex-direction:column;gap:6px"><div style="font-size:12px;color:#6b6688">Kg</div><div style="height:42px;border-radius:11px;border:2px solid #e5e4f1;background:#fbfbfe;display:flex;align-items:center;padding:0 14px;font-size:14px;color:#9a96b8">0</div></div>
+          <div style="display:flex;flex-direction:column;gap:6px"><div style="font-size:12px;color:#6b6688">M³</div><div style="height:42px;border-radius:11px;border:2px solid #e5e4f1;background:#fbfbfe;display:flex;align-items:center;padding:0 14px;font-size:14px;color:#9a96b8">0</div></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:9px;padding-top:4px">
+          <div style="font-weight:700;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#9a96b8">Indicadores</div>
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px">
+            <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:#352e6a">Madera <div style="height:30px;border-radius:9px;border:2px solid #e5e4f1;background:#FFFFFF;display:flex;align-items:center;gap:8px;padding:0 11px;font-size:12px;font-weight:600;color:#b45f16">A confirmar <span style="font-size:9px;color:#b9b5cc">▾</span></div></div>
+            <div style="display:flex;align-items:center;gap:7px;font-size:13px;color:#352e6a"><div style="width:16px;height:16px;border-radius:4px;border:2px solid #d9d5ea;box-sizing:border-box"></div>Telex</div>
+            <div style="display:flex;align-items:center;gap:7px;font-size:13px;color:#352e6a"><div style="width:16px;height:16px;border-radius:4px;border:2px solid #d9d5ea;box-sizing:border-box"></div>No apilable</div>
+            <div style="display:flex;align-items:center;gap:7px;font-size:13px;color:#352e6a"><div style="width:16px;height:16px;border-radius:4px;background:#49286b;display:flex;align-items:center;justify-content:center;font-size:10px;color:#FFFFFF">✓</div>Entrega en planta</div>
+            <div style="display:flex;align-items:center;gap:7px;font-size:13px;color:#352e6a"><div style="width:16px;height:16px;border-radius:4px;border:2px solid #d9d5ea;box-sizing:border-box"></div>Seguro</div>
+            <div style="display:flex;align-items:center;gap:7px;font-size:13px;color:#352e6a"><div style="width:16px;height:16px;border-radius:4px;border:2px solid #d9d5ea;box-sizing:border-box"></div>Certificada</div>
+            <div style="display:flex;align-items:center;gap:7px;font-size:13px;color:#352e6a"><div style="width:16px;height:16px;border-radius:4px;border:2px solid #d9d5ea;box-sizing:border-box"></div>Impreso</div>
+            <div style="display:flex;align-items:center;gap:7px;font-size:13px;color:#352e6a"><div style="width:16px;height:16px;border-radius:4px;border:2px solid #d9d5ea;box-sizing:border-box"></div>IMO</div>
+            <div style="display:flex;align-items:center;gap:7px;font-size:13px;color:#352e6a"><div style="width:16px;height:16px;border-radius:4px;border:2px solid #d9d5ea;box-sizing:border-box"></div>Sobredimensionada (OOG)</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="font-size:12px;line-height:1.45;color:#9a96b8">El estado de las FCL se deriva solo de las fechas (ETD/ETA/salida/arribo) — no se elige a mano.</div>
+    </div>
+    <div style="padding:20px 32px;background:#fbfbfe;border-top:2px solid #f4f5fa;display:flex;justify-content:flex-end;gap:10px"><div style="padding:13px 28px;border-radius:999px;border:2px solid #e5e4f1;font-weight:600;font-size:14px;color:#6b6688">Cancelar</div><div style="padding:14px 30px;border-radius:999px;background:#49286b;font-weight:600;font-size:14px;color:#FFFFFF">＋ Guardar igual</div></div>
+  </div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:32px">
+
+<div style="display:flex;flex-direction:column;gap:14px">
+  <div style="display:flex;align-items:center;gap:12px"><div style="background:#f0ecf6;border-radius:8px;padding:5px 12px;font-family:Nunito,sans-serif;font-weight:900;font-size:13px;color:#49286b">B3</div><div style="font-weight:600;font-size:15px;color:#352e6a">Paleta Ctrl+K · sin escribir</div></div>
+  <div style="width:640px;background:#FFFFFF;border-radius:20px;box-shadow:0 34px 80px rgba(15,10,50,0.30);overflow:hidden">
+    <div style="padding:0 22px;height:62px;border-bottom:2px solid #f4f5fa;display:flex;align-items:center;gap:14px">
+      <div style="font-size:16px;color:#9a96b8">⌕</div>
+      <div style="flex:1;font-size:16px;color:#9a96b8">Buscar operación, cliente, acción…</div>
+      <div style="background:#f4f5fa;border-radius:8px;padding:4px 10px;font-weight:700;font-size:11px;letter-spacing:0.04em;color:#6b6688">ESC</div>
+    </div>
+    <div style="padding:12px 0 8px">
+      <div style="padding:8px 22px 6px;font-weight:700;font-size:10px;letter-spacing:0.09em;text-transform:uppercase;color:#9a96b8">Navegación</div>
+      <div style="margin:0 10px;padding:12px 12px;border-radius:12px;background:#49286b;display:flex;align-items:center;justify-content:space-between"><div style="display:flex;align-items:center;gap:12px"><div style="width:22px;text-align:center;font-size:13px;color:#9bd1e5">⚡</div><div style="font-weight:700;font-size:15px;color:#FFFFFF">Hoy</div></div><div style="display:flex;gap:5px"><div style="background:rgba(255,255,255,0.18);border-radius:6px;padding:3px 8px;font-weight:700;font-size:11px;color:#FFFFFF">G</div><div style="background:rgba(255,255,255,0.18);border-radius:6px;padding:3px 8px;font-weight:700;font-size:11px;color:#FFFFFF">H</div></div></div>
+      <div style="margin:0 10px;padding:12px 12px;display:flex;align-items:center;justify-content:space-between"><div style="display:flex;align-items:center;gap:12px"><div style="width:22px;text-align:center;font-size:13px;color:#9a96b8">▤</div><div style="font-weight:600;font-size:15px;color:#352e6a">Agenda</div></div><div style="display:flex;gap:5px"><div style="background:#f4f5fa;border-radius:6px;padding:3px 8px;font-weight:700;font-size:11px;color:#6b6688">G</div><div style="background:#f4f5fa;border-radius:6px;padding:3px 8px;font-weight:700;font-size:11px;color:#6b6688">A</div></div></div>
+      <div style="margin:0 10px;padding:12px 12px;display:flex;align-items:center;justify-content:space-between"><div style="display:flex;align-items:center;gap:12px"><div style="width:22px;text-align:center;font-size:13px;color:#9a96b8">◫</div><div style="font-weight:600;font-size:15px;color:#352e6a">Operaciones</div></div><div style="display:flex;gap:5px"><div style="background:#f4f5fa;border-radius:6px;padding:3px 8px;font-weight:700;font-size:11px;color:#6b6688">G</div><div style="background:#f4f5fa;border-radius:6px;padding:3px 8px;font-weight:700;font-size:11px;color:#6b6688">C</div></div></div>
+      <div style="margin:0 10px;padding:12px 12px;display:flex;align-items:center;justify-content:space-between"><div style="display:flex;align-items:center;gap:12px"><div style="width:22px;text-align:center;font-size:13px;color:#9a96b8">◷</div><div style="font-weight:600;font-size:15px;color:#352e6a">Seguimientos</div></div><div style="display:flex;gap:5px"><div style="background:#f4f5fa;border-radius:6px;padding:3px 8px;font-weight:700;font-size:11px;color:#6b6688">G</div><div style="background:#f4f5fa;border-radius:6px;padding:3px 8px;font-weight:700;font-size:11px;color:#6b6688">S</div></div></div>
+      <div style="margin:8px 22px 4px;height:2px;background:#f4f5fa"></div>
+      <div style="padding:8px 22px 6px;font-weight:700;font-size:10px;letter-spacing:0.09em;text-transform:uppercase;color:#9a96b8">Acciones</div>
+      <div style="margin:0 10px;padding:12px 12px;display:flex;align-items:center;justify-content:space-between"><div style="display:flex;align-items:center;gap:12px"><div style="width:22px;text-align:center;font-size:13px;color:#9a96b8">＋</div><div style="font-weight:600;font-size:15px;color:#352e6a">Nueva carga</div></div><div style="display:flex;gap:5px"><div style="background:#f4f5fa;border-radius:6px;padding:3px 8px;font-weight:700;font-size:11px;color:#6b6688">N</div></div></div>
+      <div style="margin:0 10px;padding:12px 12px;display:flex;align-items:center;gap:12px"><div style="width:22px;text-align:center;font-size:13px;color:#9a96b8">↻</div><div style="font-weight:600;font-size:15px;color:#352e6a">Refrescar datos</div></div>
+    </div>
+    <div style="padding:12px 22px;background:#fbfbfe;border-top:2px solid #f4f5fa;display:flex;gap:20px;font-size:11px;color:#9a96b8"><span><strong style="color:#6b6688">↑↓</strong> navegar</span><span><strong style="color:#6b6688">↵</strong> abrir</span><span><strong style="color:#6b6688">esc</strong> cerrar</span></div>
+  </div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:14px">
+  <div style="display:flex;align-items:center;gap:12px"><div style="background:#f0ecf6;border-radius:8px;padding:5px 12px;font-family:Nunito,sans-serif;font-weight:900;font-size:13px;color:#49286b">B4</div><div style="font-weight:600;font-size:15px;color:#352e6a">Paleta · resultados por grupo</div></div>
+  <div style="width:640px;background:#FFFFFF;border-radius:20px;box-shadow:0 34px 80px rgba(15,10,50,0.30);overflow:hidden">
+    <div style="padding:0 22px;height:62px;border-bottom:2px solid #f4f5fa;display:flex;align-items:center;gap:14px">
+      <div style="font-size:16px;color:#49286b">⌕</div>
+      <div style="flex:1;font-family:Nunito,sans-serif;font-weight:900;font-size:16px;color:#352e6a">peretti</div>
+      <div style="background:#f4f5fa;border-radius:8px;padding:4px 10px;font-weight:700;font-size:11px;color:#6b6688">ESC</div>
+    </div>
+    <div style="padding:12px 0 8px">
+      <div style="padding:8px 22px 6px;display:flex;align-items:center;gap:10px"><div style="font-weight:700;font-size:10px;letter-spacing:0.09em;text-transform:uppercase;color:#9a96b8">Operaciones</div><div style="background:#f0ecf6;border-radius:999px;padding:2px 9px;font-weight:700;font-size:10px;color:#49286b">3</div></div>
+      <div style="margin:0 10px;padding:11px 12px;border-radius:12px;background:#49286b;display:flex;align-items:center;justify-content:space-between;gap:14px"><div style="display:flex;align-items:center;gap:13px"><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:15px;color:#9bd1e5;width:66px">A7828</div><div><div style="font-weight:600;font-size:14px;color:#FFFFFF">BICI PERETTI S.A.</div><div style="margin-top:2px;font-size:12px;color:rgba(255,255,255,0.6)">HAMU5081817 · ETA 12/08/2026</div></div></div><div style="background:rgba(255,255,255,0.18);border-radius:999px;padding:4px 12px;font-weight:700;font-size:10px;color:#FFFFFF">En tránsito</div></div>
+      <div style="margin:0 10px;padding:11px 12px;display:flex;align-items:center;justify-content:space-between;gap:14px"><div style="display:flex;align-items:center;gap:13px"><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:15px;color:#49286b;width:66px">A7829</div><div><div style="font-weight:600;font-size:14px;color:#352e6a">BICI PERETTI S.A.</div><div style="margin-top:2px;font-size:12px;color:#9a96b8">FANU1781141 · ETA 12/08/2026</div></div></div><div style="background:#ceffff;border-radius:999px;padding:4px 12px;font-weight:700;font-size:10px;color:#352e6a">En tránsito</div></div>
+      <div style="margin:0 10px;padding:11px 12px;display:flex;align-items:center;justify-content:space-between;gap:14px"><div style="display:flex;align-items:center;gap:13px"><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:15px;color:#49286b;width:66px">A7846</div><div><div style="font-weight:600;font-size:14px;color:#352e6a">BICI PERETTI S.A.</div><div style="margin-top:2px;font-size:12px;color:#9a96b8">HAMU3741260 · ETA 14/08/2026</div></div></div><div style="background:#fdece0;border-radius:999px;padding:4px 12px;font-weight:700;font-size:10px;color:#b45f16">Falta BL</div></div>
+      <div style="margin:8px 22px 4px;height:2px;background:#f4f5fa"></div>
+      <div style="padding:8px 22px 6px;display:flex;align-items:center;gap:10px"><div style="font-weight:700;font-size:10px;letter-spacing:0.09em;text-transform:uppercase;color:#9a96b8">Clientes</div><div style="background:#f0ecf6;border-radius:999px;padding:2px 9px;font-weight:700;font-size:10px;color:#49286b">1</div></div>
+      <div style="margin:0 10px;padding:11px 12px;display:flex;align-items:center;justify-content:space-between"><div style="display:flex;align-items:center;gap:13px"><div style="width:30px;height:30px;border-radius:50%;background:#f0ecf6;display:flex;align-items:center;justify-content:center;font-family:Nunito,sans-serif;font-weight:900;font-size:11px;color:#49286b">BP</div><div><div style="font-weight:600;font-size:14px;color:#352e6a">BICI PERETTI S.A.</div><div style="margin-top:2px;font-size:12px;color:#9a96b8">3 cargas activas · con acceso al portal</div></div></div><div style="font-size:13px;color:#c9c5d8">→</div></div>
+      <div style="margin:8px 22px 4px;height:2px;background:#f4f5fa"></div>
+      <div style="padding:8px 22px 6px;font-weight:700;font-size:10px;letter-spacing:0.09em;text-transform:uppercase;color:#9a96b8">Contenedores</div>
+      <div style="margin:0 10px;padding:11px 12px;display:flex;align-items:center;gap:13px"><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:14px;color:#49286b;width:66px">CNTR</div><div><div style="font-weight:600;font-size:14px;color:#352e6a">HLXU8446789</div><div style="margin-top:2px;font-size:12px;color:#b45f16">A7828 · libre vence 30/08</div></div></div>
+    </div>
+    <div style="padding:12px 22px;background:#fbfbfe;border-top:2px solid #f4f5fa;display:flex;gap:20px;font-size:11px;color:#9a96b8"><span><strong style="color:#6b6688">↑↓</strong> navegar</span><span><strong style="color:#6b6688">↵</strong> abrir panel</span><span><strong style="color:#6b6688">⇥</strong> cambiar de grupo</span></div>
+  </div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:14px">
+  <div style="display:flex;align-items:center;gap:12px"><div style="background:#f0ecf6;border-radius:8px;padding:5px 12px;font-family:Nunito,sans-serif;font-weight:900;font-size:13px;color:#49286b">B5</div><div style="font-weight:600;font-size:15px;color:#352e6a">Paleta · sin resultados</div></div>
+  <div style="width:640px;background:#FFFFFF;border-radius:20px;box-shadow:0 34px 80px rgba(15,10,50,0.30);overflow:hidden">
+    <div style="padding:0 22px;height:62px;border-bottom:2px solid #f4f5fa;display:flex;align-items:center;gap:14px"><div style="font-size:16px;color:#49286b">⌕</div><div style="flex:1;font-family:Nunito,sans-serif;font-weight:900;font-size:16px;color:#352e6a">A9999</div><div style="background:#f4f5fa;border-radius:8px;padding:4px 10px;font-weight:700;font-size:11px;color:#6b6688">ESC</div></div>
+    <div style="padding:44px 22px 40px;display:flex;flex-direction:column;align-items:center;gap:14px">
+      <div style="width:64px;height:64px;border-radius:50%;background:#f4f0f9;display:flex;align-items:center;justify-content:center;font-family:Nunito,sans-serif;font-weight:900;font-size:26px;color:#b9b5cc">⌕</div>
+      <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:19px;color:#49286b">Sin resultados para "A9999"</div>
+      <div style="font-size:14px;line-height:1.5;color:#6b6688;text-align:center;max-width:380px">Probá con la referencia sin letras, el nombre del cliente o el número de contenedor.</div>
+      <div style="margin-top:6px;padding:12px 26px;border-radius:999px;background:#49286b;font-weight:600;font-size:14px;color:#FFFFFF">＋ Crear carga A9999</div>
+    </div>
+  </div>
+</div>
+
+</div>
+</div>
+
+</div>
+
+</x-dc>
+</body>
+</html>

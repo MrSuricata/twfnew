@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#e9edf3}
+a{color:#49286b;text-decoration:none}a:hover{color:#7A3FA8}
+</style>
+</helmet>
+<div style="padding:56px 64px 96px;font-family:Montserrat,sans-serif;color:#352e6a;display:flex;flex-direction:column;gap:52px">
+
+<div style="display:flex;flex-direction:column;gap:12px;max-width:1000px">
+  <div style="background:#ceffff;border:2px solid #9bd1e5;border-radius:999px;padding:7px 20px;align-self:flex-start;font-weight:600;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:#352e6a">Grupo C</div>
+  <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:36px;line-height:1;letter-spacing:-0.02em;color:#49286b">Tableros de partners</div>
+  <div style="font-size:16px;line-height:1.55;color:#6b6688">Los ven terceros: son cara de la empresa. Menos densidad que el admin interno, acciones grandes y una sola cosa por hacer por fila. Marca visible en la barra, sin tabs — cada partner ve solo lo suyo.</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:14px">
+  <div style="display:flex;align-items:center;gap:12px"><div style="background:#f0ecf6;border-radius:8px;padding:5px 12px;font-family:Nunito,sans-serif;font-weight:900;font-size:13px;color:#49286b">C1</div><div style="font-weight:600;font-size:15px;color:#352e6a">Depósito · GODILCO</div></div>
+  <div style="width:1500px;background:#f7f9fc;border-radius:20px;overflow:hidden;box-shadow:0 30px 70px rgba(38,28,121,0.12)">
+    <div style="height:72px;background:linear-gradient(120deg,#49286b 0%,#261c79 100%);padding:0 36px;display:flex;align-items:center;justify-content:space-between">
+      <div style="display:flex;align-items:center;gap:18px"><img src="public/images/med-logo-white.svg" alt="Mediterranea" style="height:30px"><div style="width:1px;height:26px;background:rgba(255,255,255,0.2)"></div><div style="font-weight:600;font-size:15px;color:rgba(255,255,255,0.85)">Depósito GODILCO</div></div>
+      <div style="display:flex;align-items:center;gap:14px"><div style="width:280px;height:38px;border-radius:999px;background:rgba(255,255,255,0.10);border:1px solid rgba(255,255,255,0.18);display:flex;align-items:center;padding:0 18px;font-size:13px;color:rgba(255,255,255,0.55)">Buscar ref o contenedor…</div><div style="font-weight:600;font-size:13px;color:rgba(255,255,255,0.75)">Cerrar sesión</div></div>
+    </div>
+    <div style="padding:36px;display:flex;flex-direction:column;gap:24px">
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:32px">
+        <div><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:34px;line-height:1;color:#49286b">Tus cargas</div><div style="margin-top:10px;font-size:16px;color:#6b6688">Viernes 28 de agosto · marcá recibido cuando entra y salida cuando se despacha.</div></div>
+        <div style="display:flex;gap:10px"><div style="padding:11px 24px;border-radius:999px;background:#49286b;font-weight:600;font-size:14px;color:#FFFFFF">Por llegar · 3</div><div style="padding:11px 24px;border-radius:999px;border:2px solid #e5e4f1;font-weight:600;font-size:14px;color:#6b6688">En depósito · 7</div><div style="padding:11px 24px;border-radius:999px;border:2px solid #e5e4f1;font-weight:600;font-size:14px;color:#6b6688">Despachadas</div></div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:18px">
+        <div style="background:#FFFFFF;border-radius:22px;border:2px solid #eef0f8;padding:28px 30px"><div style="font-weight:600;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#9a96b8">Llegan hoy</div><div style="margin-top:10px;font-family:Nunito,sans-serif;font-weight:900;font-size:40px;line-height:1;color:#49286b">2</div></div>
+        <div style="background:#FFFFFF;border-radius:22px;border:2px solid #eef0f8;padding:28px 30px"><div style="font-weight:600;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#9a96b8">En depósito</div><div style="margin-top:10px;font-family:Nunito,sans-serif;font-weight:900;font-size:40px;line-height:1;color:#49286b">7</div></div>
+        <div style="background:#FFFFFF;border-radius:22px;border:2px solid #e8863b;padding:28px 30px"><div style="font-weight:600;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#e8863b">Salen mañana</div><div style="margin-top:10px;font-family:Nunito,sans-serif;font-weight:900;font-size:40px;line-height:1;color:#e8863b">3</div></div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div style="display:flex;align-items:center;gap:14px"><div style="font-weight:700;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:#9a96b8">Por llegar</div><div style="flex:1;height:2px;background:#eef0f8"></div></div>
+        <div style="background:#FFFFFF;border-radius:22px;border:2px solid #eef0f8;padding:26px 30px;display:flex;align-items:center;justify-content:space-between;gap:28px">
+          <div style="display:flex;align-items:center;gap:26px">
+            <div><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:24px;line-height:1;color:#49286b">A7994</div><div style="margin-top:7px;font-size:15px;color:#6b6688">ELDA S.R.L.</div></div>
+            <div style="width:2px;height:44px;background:#f4f5fa"></div>
+            <div><div style="font-weight:600;font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:#9a96b8">Contenedor</div><div style="margin-top:5px;font-size:15px;color:#352e6a">TGHU6242307 · 40 HC</div></div>
+            <div><div style="font-weight:600;font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:#9a96b8">Llega</div><div style="margin-top:5px;font-family:Nunito,sans-serif;font-weight:900;font-size:15px;color:#49286b">Hoy · 28/08/2026</div></div>
+            <div><div style="font-weight:600;font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:#9a96b8">Operativa</div><div style="margin-top:5px;font-size:15px;color:#352e6a">Carga a piso</div></div>
+          </div>
+          <div style="flex:none;padding:15px 32px;border-radius:999px;background:#49286b;font-weight:600;font-size:15px;color:#FFFFFF">Marcar recibido</div>
+        </div>
+        <div style="background:#FFFFFF;border-radius:22px;border:2px solid #eef0f8;padding:26px 30px;display:flex;align-items:center;justify-content:space-between;gap:28px">
+          <div style="display:flex;align-items:center;gap:26px">
+            <div><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:24px;line-height:1;color:#49286b">A8131</div><div style="margin-top:7px;font-size:15px;color:#6b6688">CHIAPERO Y ASOC. S.R.L.</div></div>
+            <div style="width:2px;height:44px;background:#f4f5fa"></div>
+            <div><div style="font-weight:600;font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:#9a96b8">Contenedor</div><div style="margin-top:5px;font-size:15px;color:#352e6a">OOCU7640248 · 40 HC</div></div>
+            <div><div style="font-weight:600;font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:#9a96b8">Llega</div><div style="margin-top:5px;font-family:Nunito,sans-serif;font-weight:900;font-size:15px;color:#49286b">08/09/2026</div></div>
+            <div><div style="font-weight:600;font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:#9a96b8">Operativa</div><div style="margin-top:5px;font-size:15px;color:#352e6a">Desconsolidado</div></div>
+          </div>
+          <div style="flex:none;padding:15px 32px;border-radius:999px;border:2px solid #e5e4f1;font-weight:600;font-size:15px;color:#9a96b8">Marcar recibido</div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div style="display:flex;align-items:center;gap:14px"><div style="font-weight:700;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:#9a96b8">En depósito</div><div style="flex:1;height:2px;background:#eef0f8"></div></div>
+        <div style="background:#FFFFFF;border-radius:22px;border:2px solid #eef0f8;overflow:hidden">
+          <div style="display:grid;grid-template-columns:120px 1.3fr 1fr 150px 1fr 200px;gap:20px;padding:18px 30px;background:#fbfbfe;border-bottom:2px solid #eef0f8;font-weight:700;font-size:11px;letter-spacing:0.06em;text-transform:uppercase;color:#9a96b8"><div>Ref</div><div>Cliente</div><div>Contenedor</div><div>Recibido</div><div>Sale a</div><div style="text-align:right">Acción</div></div>
+          <div style="display:grid;grid-template-columns:120px 1.3fr 1fr 150px 1fr 200px;gap:20px;padding:20px 30px;border-bottom:2px solid #f4f5fa;align-items:center;font-size:15px;background:#fff9f4"><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:18px;color:#49286b">A7967</div><div style="color:#352e6a">RDM · HELIT S.A.</div><div style="color:#6b6688">TLLU5948854</div><div style="color:#6b6688">27/08</div><div style="color:#b45f16;font-weight:600">Mañana 29/08</div><div style="text-align:right"><span style="display:inline-block;padding:12px 26px;border-radius:999px;background:#e8863b;font-weight:600;font-size:14px;color:#FFFFFF">Registrar salida</span></div></div>
+          <div style="display:grid;grid-template-columns:120px 1.3fr 1fr 150px 1fr 200px;gap:20px;padding:20px 30px;border-bottom:2px solid #f4f5fa;align-items:center;font-size:15px"><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:18px;color:#49286b">A7902</div><div style="color:#352e6a">HELIT S.A.</div><div style="color:#6b6688">UETU5508568</div><div style="color:#6b6688">22/08</div><div style="color:#6b6688">30/08</div><div style="text-align:right"><span style="display:inline-block;padding:12px 26px;border-radius:999px;border:2px solid #e5e4f1;font-weight:600;font-size:14px;color:#49286b">Registrar salida</span></div></div>
+          <div style="display:grid;grid-template-columns:120px 1.3fr 1fr 150px 1fr 200px;gap:20px;padding:20px 30px;border-bottom:2px solid #f4f5fa;align-items:center;font-size:15px"><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:18px;color:#49286b">A7941</div><div style="color:#352e6a">ELDA S.R.L.</div><div style="color:#6b6688">FANU1858496</div><div style="color:#6b6688">20/08</div><div style="color:#9a96b8">Sin fecha</div><div style="text-align:right"><span style="display:inline-block;padding:12px 26px;border-radius:999px;border:2px solid #e5e4f1;font-weight:600;font-size:14px;color:#49286b">Registrar salida</span></div></div>
+          <div style="display:grid;grid-template-columns:120px 1.3fr 1fr 150px 1fr 200px;gap:20px;padding:20px 30px;align-items:center;font-size:15px"><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:18px;color:#49286b">A7889</div><div style="color:#352e6a">FRONTERA LIVING S.A.</div><div style="color:#6b6688">MSNU7878739</div><div style="color:#6b6688">18/08</div><div style="color:#6b6688">02/09</div><div style="text-align:right"><span style="display:inline-block;padding:12px 26px;border-radius:999px;border:2px solid #e5e4f1;font-weight:600;font-size:14px;color:#49286b">Registrar salida</span></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:14px">
+  <div style="display:flex;align-items:center;gap:12px"><div style="background:#f0ecf6;border-radius:8px;padding:5px 12px;font-family:Nunito,sans-serif;font-weight:900;font-size:13px;color:#49286b">C2</div><div style="font-weight:600;font-size:15px;color:#352e6a">Transporte · TRANSCAL</div></div>
+  <div style="width:1500px;background:#f7f9fc;border-radius:20px;overflow:hidden;box-shadow:0 30px 70px rgba(38,28,121,0.12)">
+    <div style="height:72px;background:linear-gradient(120deg,#49286b 0%,#261c79 100%);padding:0 36px;display:flex;align-items:center;justify-content:space-between">
+      <div style="display:flex;align-items:center;gap:18px"><img src="public/images/med-logo-white.svg" alt="Mediterranea" style="height:30px"><div style="width:1px;height:26px;background:rgba(255,255,255,0.2)"></div><div style="font-weight:600;font-size:15px;color:rgba(255,255,255,0.85)">Transporte TRANSCAL</div></div>
+      <div style="font-weight:600;font-size:13px;color:rgba(255,255,255,0.75)">Cerrar sesión</div>
+    </div>
+    <div style="padding:36px;display:flex;flex-direction:column;gap:24px">
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:32px">
+        <div><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:34px;line-height:1;color:#49286b">Tus viajes</div><div style="margin-top:10px;font-size:16px;color:#6b6688">Confirmá el retiro cuando cargás y la entrega cuando descargás.</div></div>
+        <div style="display:flex;gap:10px"><div style="padding:11px 24px;border-radius:999px;background:#49286b;font-weight:600;font-size:14px;color:#FFFFFF">Asignados · 4</div><div style="padding:11px 24px;border-radius:999px;border:2px solid #e5e4f1;font-weight:600;font-size:14px;color:#6b6688">En ruta · 2</div><div style="padding:11px 24px;border-radius:999px;border:2px solid #e5e4f1;font-weight:600;font-size:14px;color:#6b6688">Entregados</div></div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:16px">
+        <div style="background:#FFFFFF;border-radius:24px;border:2px solid #e8863b;overflow:hidden">
+          <div style="padding:22px 32px;background:#fff8f2;display:flex;align-items:center;justify-content:space-between;gap:24px">
+            <div style="display:flex;align-items:center;gap:16px"><div style="background:#e8863b;border-radius:999px;padding:7px 18px;font-weight:700;font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:#FFFFFF">Retira hoy</div><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:22px;line-height:1;color:#49286b">A7967 · TLLU5948854</div></div>
+            <div style="font-size:15px;color:#b45f16">Turno 08:30 · Terminal TCP</div>
+          </div>
+          <div style="padding:26px 32px;display:flex;align-items:center;justify-content:space-between;gap:32px">
+            <div style="display:flex;align-items:center;gap:0;flex:1;max-width:760px">
+              <div style="display:flex;flex-direction:column;gap:8px;flex:none"><div style="width:26px;height:26px;border-radius:50%;background:#49286b"></div><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:16px;color:#49286b">TCP</div><div style="font-size:12px;letter-spacing:0.06em;text-transform:uppercase;color:#9a96b8">Montevideo</div></div>
+              <div style="flex:1;height:4px;background:#9bd1e5;margin:0 20px;margin-bottom:44px"></div>
+              <div style="display:flex;flex-direction:column;gap:8px;flex:none"><div style="width:26px;height:26px;border-radius:50%;background:#49286b"></div><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:16px;color:#49286b">GODILCO</div><div style="font-size:12px;letter-spacing:0.06em;text-transform:uppercase;color:#9a96b8">Depósito fiscal</div></div>
+              <div style="flex:1;height:4px;background:#e5e4f1;margin:0 20px;margin-bottom:44px"></div>
+              <div style="display:flex;flex-direction:column;gap:8px;flex:none"><div style="width:26px;height:26px;border-radius:50%;background:#ceffff;border:5px solid #49286b;box-sizing:border-box"></div><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:16px;color:#49286b">LAS VARILLAS</div><div style="font-size:12px;letter-spacing:0.06em;text-transform:uppercase;color:#9a96b8">Córdoba, AR</div></div>
+            </div>
+            <div style="flex:none;display:flex;flex-direction:column;gap:10px;align-items:stretch;min-width:230px">
+              <div style="padding:16px 32px;border-radius:999px;background:#49286b;font-weight:600;font-size:15px;color:#FFFFFF;text-align:center">Confirmar retiro</div>
+              <div style="padding:14px 32px;border-radius:999px;border:2px solid #e5e4f1;font-weight:600;font-size:14px;color:#6b6688;text-align:center">Ver documentos</div>
+            </div>
+          </div>
+          <div style="padding:18px 32px;border-top:2px solid #f4f5fa;display:flex;gap:44px">
+            <div><div style="font-weight:600;font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:#9a96b8">Cliente</div><div style="margin-top:5px;font-size:15px;color:#352e6a">RDM · HELIT S.A.</div></div>
+            <div><div style="font-weight:600;font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:#9a96b8">Carga</div><div style="margin-top:5px;font-size:15px;color:#352e6a">40 HC · 22.226,6 kg</div></div>
+            <div><div style="font-weight:600;font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:#9a96b8">Estiba</div><div style="margin-top:5px;font-size:15px;color:#352e6a">Apilable · sin madera</div></div>
+            <div><div style="font-weight:600;font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:#9a96b8">Devuelve en</div><div style="margin-top:5px;font-size:15px;color:#352e6a">STL</div></div>
+          </div>
+        </div>
+
+        <div style="background:#FFFFFF;border-radius:24px;border:2px solid #eef0f8;overflow:hidden">
+          <div style="padding:22px 32px;background:#fbfbfe;display:flex;align-items:center;justify-content:space-between;gap:24px">
+            <div style="display:flex;align-items:center;gap:16px"><div style="background:#ceffff;border-radius:999px;padding:7px 18px;font-weight:700;font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:#352e6a">En ruta</div><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:22px;line-height:1;color:#49286b">A7902 · UETU5508568</div></div>
+            <div style="font-size:15px;color:#6b6688">Retirado 26/08 · en frontera</div>
+          </div>
+          <div style="padding:26px 32px;display:flex;align-items:center;justify-content:space-between;gap:32px">
+            <div style="display:flex;align-items:center;gap:0;flex:1;max-width:760px">
+              <div style="display:flex;flex-direction:column;gap:8px;flex:none"><div style="width:26px;height:26px;border-radius:50%;background:#49286b"></div><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:16px;color:#49286b">GODILCO</div><div style="font-size:12px;letter-spacing:0.06em;text-transform:uppercase;color:#9a96b8">Montevideo</div></div>
+              <div style="flex:1;height:4px;background:#9bd1e5;margin:0 20px;margin-bottom:44px"></div>
+              <div style="display:flex;flex-direction:column;gap:8px;flex:none"><div style="width:26px;height:26px;border-radius:50%;background:#49286b;box-shadow:0 0 0 6px rgba(73,40,107,0.14)"></div><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:16px;color:#49286b">FRONTERA</div><div style="font-size:12px;letter-spacing:0.06em;text-transform:uppercase;color:#9a96b8">Paso de los Libres</div></div>
+              <div style="flex:1;height:4px;background:#e5e4f1;margin:0 20px;margin-bottom:44px"></div>
+              <div style="display:flex;flex-direction:column;gap:8px;flex:none"><div style="width:26px;height:26px;border-radius:50%;background:#e5e4f1"></div><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:16px;color:#9a96b8">CÓRDOBA</div><div style="font-size:12px;letter-spacing:0.06em;text-transform:uppercase;color:#9a96b8">Destino final</div></div>
+            </div>
+            <div style="flex:none;display:flex;flex-direction:column;gap:10px;align-items:stretch;min-width:230px">
+              <div style="padding:16px 32px;border-radius:999px;background:#49286b;font-weight:600;font-size:15px;color:#FFFFFF;text-align:center">Confirmar entrega</div>
+              <div style="padding:14px 32px;border-radius:999px;border:2px solid #e5e4f1;font-weight:600;font-size:14px;color:#6b6688;text-align:center">Ver documentos</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="background:#FFFFFF;border-radius:24px;border:2px solid #eef0f8;padding:24px 32px;display:flex;align-items:center;justify-content:space-between;gap:24px">
+          <div style="display:flex;align-items:center;gap:20px"><div style="background:#f0ecf6;border-radius:999px;padding:7px 18px;font-weight:700;font-size:11px;letter-spacing:0.07em;text-transform:uppercase;color:#49286b">Asignado</div><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:20px;color:#49286b">A8131 · OOCU7640248</div><div style="font-size:15px;color:#6b6688">Retira 08/09 · Montecon</div></div>
+          <div style="padding:13px 30px;border-radius:999px;border:2px solid #e5e4f1;font-weight:600;font-size:14px;color:#49286b">Ver detalle</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div>
+
+</x-dc>
+</body>
+</html>

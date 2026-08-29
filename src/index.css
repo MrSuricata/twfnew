@@ -211,6 +211,31 @@
   color: #49286b;
 }
 
+/* ── Panel de detalle (handoff componentes, grupo A) ──
+   Cabeceras de sección con línea al costado, la ref del título en la
+   tipografía de números y popovers redondeados. Solo bajo Mediterránea. */
+:root[data-brand="med"] [data-slot="sheet-content"] h4 {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+:root[data-brand="med"] [data-slot="sheet-content"] h4::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #eef0f8;
+}
+:root[data-brand="med"] [data-slot="sheet-title"] {
+  font-family: 'Nunito', 'Jost', sans-serif;
+  font-weight: 900;
+  font-size: 20px;
+  letter-spacing: -0.01em;
+  color: #49286b;
+}
+:root[data-brand="med"] [data-slot="popover-content"] {
+  border-radius: 18px;
+}
+
 /* Brand fonts — Jost is a free geometric face close to Gotham. */
 :root[data-brand="med"] body {
   font-family: 'Jost', 'Inter', sans-serif;

@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#e9edf3}
+a{color:#49286b;text-decoration:none}a:hover{color:#7A3FA8}
+@keyframes medshimmer{0%{background-position:-560px 0}100%{background-position:560px 0}}
+.medsk{background:linear-gradient(90deg,#eef0f8 0%,#f7f9fc 45%,#dfe7f5 60%,#eef0f8 100%);background-size:560px 100%;animation:medshimmer 1.5s linear infinite;border-radius:8px}
+</style>
+</helmet>
+<div style="padding:56px 64px 96px;font-family:Montserrat,sans-serif;color:#352e6a;display:flex;flex-direction:column;gap:52px">
+
+<div style="display:flex;flex-direction:column;gap:12px;max-width:1000px">
+  <div style="background:#ceffff;border:2px solid #9bd1e5;border-radius:999px;padding:7px 20px;align-self:flex-start;font-weight:600;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:#352e6a">Grupo E</div>
+  <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:36px;line-height:1;letter-spacing:-0.02em;color:#49286b">Transversales</div>
+  <div style="font-size:16px;line-height:1.55;color:#6b6688">Estados vacíos, carga y mobile. Son pautas, no pantallas: se aplican igual en las 15 vistas del admin.</div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:18px">
+  <div style="display:flex;align-items:center;gap:12px"><div style="background:#f0ecf6;border-radius:8px;padding:5px 12px;font-family:Nunito,sans-serif;font-weight:900;font-size:13px;color:#49286b">E1</div><div style="font-weight:600;font-size:15px;color:#352e6a">Estados vacíos · cuatro tipos</div></div>
+  <div style="background:#FFFFFF;border-radius:16px;border:2px solid #eef0f8;padding:20px 26px;max-width:1090px;font-size:14px;line-height:1.55;color:#6b6688">Todos comparten la misma anatomía: <strong style="color:#49286b">glifo en círculo de 88px</strong> (fondo según tipo) · título Nunito 900 de 22px · una línea de explicación de 15px · y <strong style="color:#49286b">como máximo una acción</strong>. Nunca un texto gris pelado. Si la lista está vacía porque el usuario filtró, la acción es limpiar el filtro; si está vacía porque no hay nada, la acción es crear.</div>
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:20px;max-width:1500px">
+
+    <div style="background:#FFFFFF;border-radius:22px;border:2px solid #eef0f8;padding:44px 30px;display:flex;flex-direction:column;align-items:center;gap:16px;text-align:center">
+      <div style="width:88px;height:88px;border-radius:50%;background:#f4f0f9;display:flex;align-items:center;justify-content:center"><div style="width:38px;height:38px;border-radius:8px;border:4px solid #c9c0dd;box-sizing:border-box"></div></div>
+      <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:22px;line-height:1.1;color:#49286b">Todavía no hay cargas</div>
+      <div style="font-size:15px;line-height:1.5;color:#6b6688">Cuando crees la primera, aparece acá con su ref, cliente y fechas.</div>
+      <div style="margin-top:6px;padding:13px 28px;border-radius:999px;background:#49286b;font-weight:600;font-size:14px;color:#FFFFFF">＋ Nueva carga</div>
+      <div style="margin-top:2px;font-weight:700;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#c9c5d8">Vacío inicial</div>
+    </div>
+
+    <div style="background:#FFFFFF;border-radius:22px;border:2px solid #eef0f8;padding:44px 30px;display:flex;flex-direction:column;align-items:center;gap:16px;text-align:center">
+      <div style="width:88px;height:88px;border-radius:50%;background:#f4f0f9;display:flex;align-items:center;justify-content:center;font-family:Nunito,sans-serif;font-weight:900;font-size:34px;color:#b9b5cc">⌕</div>
+      <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:22px;line-height:1.1;color:#49286b">Sin resultados</div>
+      <div style="font-size:15px;line-height:1.5;color:#6b6688">Ninguna carga coincide con "peretti" en Argentina. Probá quitando un filtro.</div>
+      <div style="margin-top:6px;padding:13px 28px;border-radius:999px;border:2px solid #e5e4f1;font-weight:600;font-size:14px;color:#49286b">Limpiar filtros</div>
+      <div style="margin-top:2px;font-weight:700;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#c9c5d8">Filtro sin match</div>
+    </div>
+
+    <div style="background:#FFFFFF;border-radius:22px;border:2px solid #eef0f8;padding:44px 30px;display:flex;flex-direction:column;align-items:center;gap:16px;text-align:center">
+      <div style="width:88px;height:88px;border-radius:50%;background:#e4f4ea;display:flex;align-items:center;justify-content:center;font-family:Nunito,sans-serif;font-weight:900;font-size:34px;color:#2f8f5b">✓</div>
+      <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:22px;line-height:1.1;color:#2f8f5b">Nada pendiente</div>
+      <div style="font-size:15px;line-height:1.5;color:#6b6688">No quedan checks vencidos ni salidas sin coordinar. Buen día.</div>
+      <div style="margin-top:2px;padding-top:34px;font-weight:700;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#c9c5d8">Vacío positivo</div>
+    </div>
+
+    <div style="background:#FFFFFF;border-radius:22px;border:2px solid #f3d9c4;padding:44px 30px;display:flex;flex-direction:column;align-items:center;gap:16px;text-align:center">
+      <div style="width:88px;height:88px;border-radius:50%;background:#fff3e6;display:flex;align-items:center;justify-content:center;font-family:Nunito,sans-serif;font-weight:900;font-size:34px;color:#e8863b">!</div>
+      <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:22px;line-height:1.1;color:#b45f16">No pudimos cargar los datos</div>
+      <div style="font-size:15px;line-height:1.5;color:#6b6688">Revisá la conexión. Si sigue así, avisanos y lo miramos.</div>
+      <div style="margin-top:6px;padding:13px 28px;border-radius:999px;background:#e8863b;font-weight:600;font-size:14px;color:#FFFFFF">Reintentar</div>
+      <div style="margin-top:2px;font-weight:700;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#c9c5d8">Error</div>
+    </div>
+
+  </div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:18px">
+  <div style="display:flex;align-items:center;gap:12px"><div style="background:#f0ecf6;border-radius:8px;padding:5px 12px;font-family:Nunito,sans-serif;font-weight:900;font-size:13px;color:#49286b">E2</div><div style="font-weight:600;font-size:15px;color:#352e6a">Cargando · skeletons con shimmer de marca</div></div>
+  <div style="background:#FFFFFF;border-radius:16px;border:2px solid #eef0f8;padding:20px 26px;max-width:1090px;font-size:14px;line-height:1.55;color:#6b6688">El shimmer va de <strong style="color:#49286b">#eef0f8</strong> a un destello celeste <strong style="color:#49286b">#dfe7f5</strong>, 1,5 s lineal en loop. El bloque respeta la forma del contenido real: pills siguen siendo pills, la ref sigue siendo un bloque angosto. Nunca spinners centrados — el skeleton evita el salto de layout.</div>
+  <div style="display:grid;grid-template-columns:1.5fr 1fr;gap:24px;max-width:1500px;align-items:start">
+    <div style="background:#f7f9fc;border-radius:22px;padding:26px;display:flex;flex-direction:column;gap:16px">
+      <div style="font-weight:700;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#9a96b8">Tabla</div>
+      <div style="background:#FFFFFF;border-radius:20px;border:2px solid #eef0f8;overflow:hidden">
+        <div style="display:grid;grid-template-columns:100px 1.2fr 1fr 120px 130px;gap:16px;padding:15px 26px;background:#fbfbfe;border-bottom:2px solid #eef0f8;font-weight:700;font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:#9a96b8"><div>Ref</div><div>Cliente</div><div>Contenedor</div><div>ETA</div><div style="text-align:right">Estado</div></div>
+        <div style="display:grid;grid-template-columns:100px 1.2fr 1fr 120px 130px;gap:16px;padding:18px 26px;border-bottom:2px solid #f4f5fa;align-items:center"><div class="medsk" style="height:15px;width:62px"></div><div class="medsk" style="height:13px;width:80%"></div><div class="medsk" style="height:13px;width:70%"></div><div class="medsk" style="height:13px;width:64px"></div><div style="display:flex;justify-content:flex-end"><div class="medsk" style="height:22px;width:92px;border-radius:999px"></div></div></div>
+        <div style="display:grid;grid-template-columns:100px 1.2fr 1fr 120px 130px;gap:16px;padding:18px 26px;border-bottom:2px solid #f4f5fa;align-items:center"><div class="medsk" style="height:15px;width:62px"></div><div class="medsk" style="height:13px;width:62%"></div><div class="medsk" style="height:13px;width:78%"></div><div class="medsk" style="height:13px;width:64px"></div><div style="display:flex;justify-content:flex-end"><div class="medsk" style="height:22px;width:78px;border-radius:999px"></div></div></div>
+        <div style="display:grid;grid-template-columns:100px 1.2fr 1fr 120px 130px;gap:16px;padding:18px 26px;border-bottom:2px solid #f4f5fa;align-items:center"><div class="medsk" style="height:15px;width:62px"></div><div class="medsk" style="height:13px;width:88%"></div><div class="medsk" style="height:13px;width:66%"></div><div class="medsk" style="height:13px;width:64px"></div><div style="display:flex;justify-content:flex-end"><div class="medsk" style="height:22px;width:86px;border-radius:999px"></div></div></div>
+        <div style="display:grid;grid-template-columns:100px 1.2fr 1fr 120px 130px;gap:16px;padding:18px 26px;align-items:center"><div class="medsk" style="height:15px;width:62px"></div><div class="medsk" style="height:13px;width:54%"></div><div class="medsk" style="height:13px;width:74%"></div><div class="medsk" style="height:13px;width:64px"></div><div style="display:flex;justify-content:flex-end"><div class="medsk" style="height:22px;width:70px;border-radius:999px"></div></div></div>
+      </div>
+    </div>
+    <div style="background:#f7f9fc;border-radius:22px;padding:26px;display:flex;flex-direction:column;gap:16px">
+      <div style="font-weight:700;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#9a96b8">KPIs y card</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+        <div style="background:#FFFFFF;border-radius:20px;border:2px solid #eef0f8;padding:22px 24px;display:flex;flex-direction:column;gap:12px"><div class="medsk" style="height:10px;width:70%"></div><div class="medsk" style="height:32px;width:52px"></div></div>
+        <div style="background:#FFFFFF;border-radius:20px;border:2px solid #eef0f8;padding:22px 24px;display:flex;flex-direction:column;gap:12px"><div class="medsk" style="height:10px;width:60%"></div><div class="medsk" style="height:32px;width:44px"></div></div>
+      </div>
+      <div style="background:#FFFFFF;border-radius:20px;border:2px solid #eef0f8;padding:24px;display:flex;flex-direction:column;gap:14px">
+        <div class="medsk" style="height:17px;width:56%"></div>
+        <div class="medsk" style="height:12px;width:100%"></div>
+        <div class="medsk" style="height:12px;width:82%"></div>
+        <div style="display:flex;gap:8px;margin-top:4px"><div class="medsk" style="height:26px;width:84px;border-radius:999px"></div><div class="medsk" style="height:26px;width:104px;border-radius:999px"></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:18px">
+  <div style="display:flex;align-items:center;gap:12px"><div style="background:#f0ecf6;border-radius:8px;padding:5px 12px;font-family:Nunito,sans-serif;font-weight:900;font-size:13px;color:#49286b">E3</div><div style="font-weight:600;font-size:15px;color:#352e6a">Mobile del admin · reglas y dos ejemplos</div></div>
+
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;max-width:1500px">
+    <div style="background:#FFFFFF;border-radius:20px;border:2px solid #eef0f8;padding:26px 28px"><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:17px;color:#49286b">La tabla se vuelve lista</div><div style="margin-top:10px;font-size:14px;line-height:1.5;color:#6b6688">Cada fila pasa a card: ref + estado arriba, cliente en la segunda línea, y solo 2 datos más. El resto se ve al abrir el panel.</div></div>
+    <div style="background:#FFFFFF;border-radius:20px;border:2px solid #eef0f8;padding:26px 28px"><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:17px;color:#49286b">KPIs de a dos</div><div style="margin-top:10px;font-size:14px;line-height:1.5;color:#6b6688">Grilla de 2 columnas, número a 30px. El KPI de riesgo (naranja) siempre primero.</div></div>
+    <div style="background:#FFFFFF;border-radius:20px;border:2px solid #eef0f8;padding:26px 28px"><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:17px;color:#49286b">Tabs con scroll horizontal</div><div style="margin-top:10px;font-size:14px;line-height:1.5;color:#6b6688">Las 15 pestañas no se apilan: scrollean en una sola fila con la activa siempre a la vista.</div></div>
+    <div style="background:#FFFFFF;border-radius:20px;border:2px solid #eef0f8;padding:26px 28px"><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:17px;color:#49286b">Toque mínimo 44px</div><div style="margin-top:10px;font-size:14px;line-height:1.5;color:#6b6688">Botones y filas nunca por debajo de 44px de alto. El panel de detalle pasa a pantalla completa.</div></div>
+  </div>
+
+  <div style="display:flex;gap:32px;align-items:flex-start;flex-wrap:wrap">
+
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div style="font-weight:600;font-size:14px;color:#6b6688">Hoy · 390 px</div>
+      <div style="width:390px;height:800px;border-radius:34px;overflow:hidden;background:#f7f9fc;box-shadow:0 26px 60px rgba(38,28,121,0.18);display:flex;flex-direction:column">
+        <div style="flex:none;height:58px;background:linear-gradient(120deg,#49286b 0%,#261c79 100%);padding:0 18px;display:flex;align-items:center;justify-content:space-between"><img src="public/images/med-logo-white.svg" alt="Mediterranea" style="height:22px"><div style="display:flex;gap:10px;align-items:center"><div style="width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,0.12);display:flex;align-items:center;justify-content:center;font-size:14px;color:#FFFFFF">⌕</div><div style="width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,0.12);display:flex;align-items:center;justify-content:center;font-size:14px;color:#FFFFFF">☰</div></div></div>
+        <div style="flex:none;background:#FFFFFF;border-bottom:1px solid rgba(73,40,107,0.10);padding:12px 18px 0;display:flex;gap:20px;overflow:hidden">
+          <div style="flex:none;padding:0 0 11px;border-bottom:3px solid #49286b;font-weight:700;font-size:14px;color:#49286b">Hoy</div>
+          <div style="flex:none;padding:0 0 11px;font-weight:500;font-size:14px;color:#6b6688">Agenda</div>
+          <div style="flex:none;padding:0 0 11px;display:flex;align-items:center;gap:6px;font-weight:500;font-size:14px;color:#6b6688">Seguim. <span style="background:#ceffff;border-radius:999px;padding:1px 7px;font-size:10px;font-weight:700;color:#352e6a">29</span></div>
+          <div style="flex:none;padding:0 0 11px;font-weight:500;font-size:14px;color:#c9c5d8">Analít…</div>
+        </div>
+        <div style="flex:1;padding:18px;display:flex;flex-direction:column;gap:14px;overflow:hidden">
+          <div><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:24px;line-height:1;color:#49286b">Hoy</div><div style="margin-top:5px;font-size:13px;color:#6b6688">viernes 28 de agosto</div></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div style="background:#FFFFFF;border-radius:16px;border:2px solid #e8863b;padding:16px"><div style="font-weight:600;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#e8863b">Salidas pisadas</div><div style="margin-top:6px;font-family:Nunito,sans-serif;font-weight:900;font-size:30px;line-height:1;color:#e8863b">2</div></div>
+            <div style="background:#FFFFFF;border-radius:16px;border:2px solid #eef0f8;padding:16px"><div style="font-weight:600;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#9a96b8">Retiros</div><div style="margin-top:6px;font-family:Nunito,sans-serif;font-weight:900;font-size:30px;line-height:1;color:#49286b">8</div></div>
+            <div style="background:#FFFFFF;border-radius:16px;border:2px solid #eef0f8;padding:16px"><div style="font-weight:600;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#9a96b8">Saliendo hoy</div><div style="margin-top:6px;font-family:Nunito,sans-serif;font-weight:900;font-size:30px;line-height:1;color:#49286b">3</div></div>
+            <div style="background:#FFFFFF;border-radius:16px;border:2px solid #eef0f8;padding:16px"><div style="font-weight:600;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#9a96b8">A fiscal</div><div style="margin-top:6px;font-family:Nunito,sans-serif;font-weight:900;font-size:30px;line-height:1;color:#49286b">4</div></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-top:2px"><div style="font-weight:700;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#9a96b8">Salidas pisadas</div><div style="flex:1;height:2px;background:#eef0f8"></div></div>
+          <div style="background:#FFFFFF;border-radius:16px;border:2px solid #f3d9c4;padding:16px;display:flex;flex-direction:column;gap:9px">
+            <div style="display:flex;align-items:center;justify-content:space-between"><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:17px;color:#49286b">A7994</div><div style="background:#fdece0;border-radius:999px;padding:5px 12px;font-weight:700;font-size:10px;letter-spacing:0.05em;text-transform:uppercase;color:#b45f16">Muy justa</div></div>
+            <div style="font-size:14px;color:#352e6a">ELDA S.R.L.</div>
+            <div style="font-size:12px;color:#9a96b8">sale 28/08 · buque llega 27/08</div>
+          </div>
+          <div style="background:#FFFFFF;border-radius:16px;border:2px solid #f3d9c4;padding:16px;display:flex;flex-direction:column;gap:9px">
+            <div style="display:flex;align-items:center;justify-content:space-between"><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:17px;color:#49286b">A8045</div><div style="background:#fdece0;border-radius:999px;padding:5px 12px;font-weight:700;font-size:10px;letter-spacing:0.05em;text-transform:uppercase;color:#b45f16">Muy justa</div></div>
+            <div style="font-size:14px;color:#352e6a">CHIAPERO Y ASOC. S.R.L.</div>
+            <div style="font-size:12px;color:#9a96b8">sale 09/09 · buque llega 08/09</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div style="font-weight:600;font-size:14px;color:#6b6688">Operaciones · 390 px</div>
+      <div style="width:390px;height:800px;border-radius:34px;overflow:hidden;background:#f7f9fc;box-shadow:0 26px 60px rgba(38,28,121,0.18);display:flex;flex-direction:column">
+        <div style="flex:none;height:58px;background:linear-gradient(120deg,#49286b 0%,#261c79 100%);padding:0 18px;display:flex;align-items:center;justify-content:space-between"><img src="public/images/med-logo-white.svg" alt="Mediterranea" style="height:22px"><div style="display:flex;gap:10px;align-items:center"><div style="width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,0.12);display:flex;align-items:center;justify-content:center;font-size:14px;color:#FFFFFF">⌕</div><div style="width:34px;height:34px;border-radius:50%;background:rgba(255,255,255,0.12);display:flex;align-items:center;justify-content:center;font-size:14px;color:#FFFFFF">☰</div></div></div>
+        <div style="flex:none;background:#FFFFFF;border-bottom:1px solid rgba(73,40,107,0.10);padding:12px 18px 0;display:flex;gap:20px;overflow:hidden">
+          <div style="flex:none;padding:0 0 11px;font-weight:500;font-size:14px;color:#6b6688">Checks</div>
+          <div style="flex:none;padding:0 0 11px;border-bottom:3px solid #49286b;font-weight:700;font-size:14px;color:#49286b">Operaciones</div>
+          <div style="flex:none;padding:0 0 11px;font-weight:500;font-size:14px;color:#6b6688">Camiones</div>
+          <div style="flex:none;padding:0 0 11px;font-weight:500;font-size:14px;color:#c9c5d8">Trans…</div>
+        </div>
+        <div style="flex:1;padding:18px;display:flex;flex-direction:column;gap:12px;overflow:hidden">
+          <div style="display:flex;align-items:center;justify-content:space-between"><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:24px;line-height:1;color:#49286b">Operaciones</div><div style="width:44px;height:44px;border-radius:50%;background:#49286b;display:flex;align-items:center;justify-content:center;font-family:Nunito,sans-serif;font-weight:900;font-size:20px;color:#FFFFFF">＋</div></div>
+          <div style="height:44px;border-radius:999px;border:2px solid #e5e4f1;background:#FFFFFF;display:flex;align-items:center;padding:0 18px;font-size:14px;color:#9a96b8">Buscar ref, cliente, CNTR…</div>
+          <div style="display:flex;gap:8px;overflow:hidden"><div style="flex:none;padding:9px 18px;border-radius:999px;background:#49286b;font-weight:600;font-size:13px;color:#FFFFFF">Activas 308</div><div style="flex:none;padding:9px 18px;border-radius:999px;border:2px solid #e5e4f1;font-weight:600;font-size:13px;color:#6b6688">FCL 301</div><div style="flex:none;padding:9px 18px;border-radius:999px;border:2px solid #e5e4f1;font-weight:600;font-size:13px;color:#6b6688">LCL</div></div>
+          <div style="background:#FFFFFF;border-radius:16px;border:2px solid #eef0f8;padding:15px;display:flex;flex-direction:column;gap:9px;min-height:44px">
+            <div style="display:flex;align-items:center;justify-content:space-between"><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:17px;color:#49286b">A6820</div><div style="background:#f0ecf6;border-radius:999px;padding:5px 12px;font-weight:700;font-size:10px;letter-spacing:0.05em;text-transform:uppercase;color:#49286b">Retirado</div></div>
+            <div style="font-size:14px;color:#352e6a">PAUNY SA</div>
+            <div style="display:flex;gap:14px;font-size:12px;color:#9a96b8"><span>TRHU6345230</span><span>ETA 03/09</span></div>
+          </div>
+          <div style="background:#FFFFFF;border-radius:16px;border:2px solid #f3d9c4;padding:15px;display:flex;flex-direction:column;gap:9px">
+            <div style="display:flex;align-items:center;justify-content:space-between"><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:17px;color:#49286b">A7994</div><div style="background:#fdece0;border-radius:999px;padding:5px 12px;font-weight:700;font-size:10px;letter-spacing:0.05em;text-transform:uppercase;color:#b45f16">Salida pisada</div></div>
+            <div style="font-size:14px;color:#352e6a">ELDA S.R.L.</div>
+            <div style="display:flex;gap:14px;font-size:12px;color:#9a96b8"><span>TGHU6242307</span><span>ETA 27/08</span></div>
+          </div>
+          <div style="background:#FFFFFF;border-radius:16px;border:2px solid #eef0f8;padding:15px;display:flex;flex-direction:column;gap:9px">
+            <div style="display:flex;align-items:center;justify-content:space-between"><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:17px;color:#49286b">A8045</div><div style="background:#ceffff;border-radius:999px;padding:5px 12px;font-weight:700;font-size:10px;letter-spacing:0.05em;text-transform:uppercase;color:#352e6a">En tránsito</div></div>
+            <div style="font-size:14px;color:#352e6a">CHIAPERO Y ASOC. S.R.L.</div>
+            <div style="display:flex;gap:14px;font-size:12px;color:#9a96b8"><span>FANU1858496</span><span>ETA 08/09</span></div>
+          </div>
+          <div style="background:#FFFFFF;border-radius:16px;border:2px solid #eef0f8;padding:15px;display:flex;flex-direction:column;gap:9px">
+            <div style="display:flex;align-items:center;justify-content:space-between"><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:17px;color:#49286b">A8131</div><div style="background:#ceffff;border-radius:999px;padding:5px 12px;font-weight:700;font-size:10px;letter-spacing:0.05em;text-transform:uppercase;color:#352e6a">Agendada</div></div>
+            <div style="font-size:14px;color:#352e6a">CHIAPERO Y ASOC. S.R.L.</div>
+            <div style="display:flex;gap:14px;font-size:12px;color:#9a96b8"><span>OOCU7640248</span><span>ETA 06/09</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div style="font-weight:600;font-size:14px;color:#6b6688">Panel de detalle · pantalla completa</div>
+      <div style="width:390px;height:800px;border-radius:34px;overflow:hidden;background:#f7f9fc;box-shadow:0 26px 60px rgba(38,28,121,0.18);display:flex;flex-direction:column">
+        <div style="flex:none;background:#FFFFFF;border-bottom:2px solid #eef0f8;padding:16px 18px 14px;display:flex;flex-direction:column;gap:10px">
+          <div style="display:flex;align-items:center;justify-content:space-between"><div style="display:flex;align-items:center;gap:10px"><div style="font-size:16px;color:#6b6688">←</div><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:22px;line-height:1;color:#49286b">A6820</div></div><div style="width:44px;height:44px;border-radius:50%;background:#f4f5fa;display:flex;align-items:center;justify-content:center;font-size:15px;color:#6b6688">✕</div></div>
+          <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:16px;color:#352e6a">PAUNY SA</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px"><div style="background:#f0ecf6;border-radius:999px;padding:5px 12px;font-weight:700;font-size:10px;color:#49286b">40 HC</div><div style="background:#ceffff;border-radius:999px;padding:5px 12px;font-weight:700;font-size:10px;color:#352e6a">ETA 03/09/2026</div><div style="background:#ceffff;border-radius:999px;padding:5px 12px;font-weight:700;font-size:10px;color:#352e6a">En GODILCO</div></div>
+        </div>
+        <div style="flex:none;background:#FFFFFF;border-bottom:2px solid #eef0f8;padding:0 18px;display:flex;gap:18px">
+          <div style="padding:12px 0;border-bottom:3px solid #49286b;font-weight:700;font-size:13px;color:#49286b">Datos</div>
+          <div style="padding:12px 0;font-weight:500;font-size:13px;color:#6b6688">Checks</div>
+          <div style="padding:12px 0;font-weight:500;font-size:13px;color:#6b6688">Fechas</div>
+          <div style="padding:12px 0;font-weight:500;font-size:13px;color:#6b6688">Fotos</div>
+        </div>
+        <div style="flex:1;padding:16px 18px;display:flex;flex-direction:column;gap:14px;overflow:hidden">
+          <div style="background:#FFFFFF;border-radius:14px;border:2px solid #eef0f8;overflow:hidden">
+            <div style="padding:12px 15px;border-bottom:2px solid #f4f5fa;display:flex;justify-content:space-between"><span style="font-weight:600;font-size:12px;letter-spacing:0.05em;text-transform:uppercase;color:#9a96b8">MBL</span><span style="font-family:Nunito,sans-serif;font-weight:900;font-size:14px;color:#49286b">100550172570</span></div>
+            <div style="padding:12px 15px;border-bottom:2px solid #f4f5fa;display:flex;justify-content:space-between"><span style="font-weight:600;font-size:12px;letter-spacing:0.05em;text-transform:uppercase;color:#9a96b8">Buque</span><span style="font-family:Nunito,sans-serif;font-weight:900;font-size:14px;color:#49286b">KOTA PUSAKA</span></div>
+            <div style="padding:12px 15px;display:flex;justify-content:space-between"><span style="font-weight:600;font-size:12px;letter-spacing:0.05em;text-transform:uppercase;color:#9a96b8">ETA MVD</span><span style="font-family:Nunito,sans-serif;font-weight:900;font-size:14px;color:#49286b">03/09/2026</span></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div style="background:#FFFFFF;border-radius:14px;border:2px solid #eef0f8;padding:14px"><div style="font-weight:600;font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:#9a96b8">Bultos</div><div style="margin-top:5px;font-family:Nunito,sans-serif;font-weight:900;font-size:20px;color:#49286b">28</div></div>
+            <div style="background:#FFFFFF;border-radius:14px;border:2px solid #eef0f8;padding:14px"><div style="font-weight:600;font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:#9a96b8">Peso</div><div style="margin-top:5px;font-family:Nunito,sans-serif;font-weight:900;font-size:20px;color:#49286b">22.226,6</div></div>
+          </div>
+          <div style="background:#FFFFFF;border-radius:14px;border:2px solid #eef0f8;overflow:hidden">
+            <div style="padding:12px 15px;border-bottom:2px solid #f4f5fa;display:flex;justify-content:space-between"><span style="font-size:13px;color:#352e6a">Depósito UY</span><span style="font-family:Nunito,sans-serif;font-weight:900;font-size:14px;color:#49286b">GODILCO</span></div>
+            <div style="padding:12px 15px;display:flex;justify-content:space-between"><span style="font-size:13px;color:#352e6a">Transporte</span><span style="font-family:Nunito,sans-serif;font-weight:900;font-size:14px;color:#49286b">TRANSCAL</span></div>
+          </div>
+        </div>
+        <div style="flex:none;padding:14px 18px;background:#FFFFFF;border-top:2px solid #eef0f8;display:flex;gap:10px"><div style="flex:1;height:48px;border-radius:999px;background:#49286b;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:15px;color:#FFFFFF">Editar</div><div style="flex:none;width:48px;height:48px;border-radius:50%;border:2px solid #e5e4f1;display:flex;align-items:center;justify-content:center;font-size:16px;color:#6b6688">⋯</div></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+</div>
+
+</x-dc>
+</body>
+</html>

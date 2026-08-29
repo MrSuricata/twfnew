@@ -474,9 +474,9 @@ const ContainerDatesSection = forwardRef<ContainerDatesHandle, {
     // Identidad de color: celeste como "Fechas" (son las fechas por contenedor).
     <section className="rounded-lg border border-sky-200 bg-sky-50/60 p-3">
       <div className="flex items-center justify-between mb-3">
-        <span className="text-[10px] uppercase tracking-wide font-semibold text-sky-700">
+        <h4 className="flex-1 text-[10px] uppercase tracking-wide font-semibold text-sky-700">
           Salidas y arribos por contenedor ({cntrs.length})
-        </span>
+        </h4>
       </div>
 
       <div className="space-y-3">
