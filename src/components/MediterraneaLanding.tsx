@@ -139,13 +139,19 @@ function TrackingCard() {
   const [meta, setMeta] = useState<{ status?: string; mode?: string } | null>(null)
   const [expanded, setExpanded] = useState(false)
   const [notFound, setNotFound] = useState(false)
+  const [falloRed, setFalloRed] = useState(false)
 
   const search = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!q.trim()) return
-    setLoading(true); setNotFound(false); setResult(null); setMeta(null); setExpanded(false)
+    setLoading(true); setNotFound(false); setFalloRed(false); setResult(null); setMeta(null); setExpanded(false)
+    // Límite de espera: sin esto, una consulta que queda colgada (deploy en
+    // curso, señal mala en el celular) dejaba el buscador "cargando" para
+    // siempre. Ahora a los 12 segundos corta y lo dice.
+    const corte = new AbortController()
+    const reloj = setTimeout(() => corte.abort(), 12000)
     try {
-      const res = await fetch(`/api/tracking?q=${encodeURIComponent(q.trim())}`)
+      const res = await fetch(`/api/tracking?q=${encodeURIComponent(q.trim())}`, { signal: corte.signal })
       if (res.ok) {
         const data = await res.json()
         const raw = (data.results || [])[0]
@@ -153,11 +159,13 @@ function TrackingCard() {
           setResult(processShipmentRecord(raw))
           setMeta({ status: raw.status, mode: raw.mode })
         } else setNotFound(true)
-      } else setNotFound(true)
+      } else setFalloRed(true)
     } catch {
-      setNotFound(true)
+      setFalloRed(true)
+    } finally {
+      clearTimeout(reloj)
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   // FCL → status from operativas (rich); DB rows → from the `status` column.
@@ -295,6 +303,14 @@ function TrackingCard() {
       {notFound && (
         <div className="mt-4 flex items-center gap-2 text-sm text-[#6b6688]">
           <Package size={16} /> No encontramos esa carga. Verificá la referencia o escribinos.
+        </div>
+      )}
+      {falloRed && (
+        <div className="mt-4 flex flex-wrap items-center gap-2 text-sm text-[#6b6688]">
+          <Package size={16} /> No pudimos consultar en este momento.
+          <button type="button" onClick={search} className="font-semibold text-[#49286b] underline underline-offset-2">
+            Probar de nuevo
+          </button>
         </div>
       )}
     </div>
