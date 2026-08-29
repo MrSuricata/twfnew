@@ -175,12 +175,15 @@
    `mandatory`): si el usuario frena a mitad de una sección larga, no pasa
    nada — el scroll libre sigue intacto. */
 html:has([data-snap-landing]) {
-  scroll-snap-type: y proximity;
+  scroll-snap-type: y mandatory;
 }
-/* El hero queda afuera: su punto de imán en 0 hacía que costara "despegar"
-   la página con la rueda. Las demás secciones sí ofrecen su comienzo. */
-[data-snap-landing] section:not(#top) {
+/* Cada sección ofrece su comienzo y el scroll SIEMPRE cae en uno (mandatory):
+   un gesto de rueda o de dedo lleva a la siguiente. En las secciones más
+   altas que la pantalla el scroll interno sigue libre — el imán solo actúa
+   en los bordes — y snap-stop evita saltarse secciones en un envión. */
+[data-snap-landing] section {
   scroll-snap-align: start;
+  scroll-snap-stop: always;
   scroll-margin-top: 0px;
 }
 
