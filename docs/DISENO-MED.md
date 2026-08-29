@@ -117,10 +117,18 @@ Todo el recorrido base:
 - **Menores** — 404 con papel y Nunito gigante; títulos de Términos y
   Privacidad.
 
-Fino pendiente, solo si hace falta: pantallas admin una a una contra
-`03-admin.dc.html` del handoff (Agenda, Analíticas, Checks…), y decisiones que
-cambian flujos — login unificado por perfil, fondo claro del hero — que se
-conversan antes.
+El handoff de componentes (`docs/handoff-med-componentes/`) también está
+aplicado: panel de detalle (cabeceras con línea, ref Nunito, popovers), Nueva
+carga y Ctrl+K, shimmer del sistema, shell de partners con la banda de marca y
+la página /novedades con hero de papel, filtros por categoría y tarjetas de
+color por aviso.
+
+Pendiente que NO es diseño: las acciones de los tableros de partners que
+proponen los mockups C (Marcar recibido, Registrar salida, Confirmar retiro/
+entrega, la ruta en nodos por viaje) son funcionalidad nueva — los tableros
+reales muestran la agenda filtrada, sin escrituras de partners. Si se quieren,
+es un proyecto aparte con lógica y API, no un restyling. También quedan como
+decisiones a conversar: login unificado por perfil y el fondo claro del hero.
 
 ## Una advertencia para el panel
 
