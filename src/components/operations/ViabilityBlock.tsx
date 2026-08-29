@@ -108,7 +108,7 @@ export default function ViabilityBlock({
   }
 
   return (
-    <section className="rounded-lg border bg-card p-3">
+    <section className="bloque-panel rounded-lg border bg-card p-3">
       <div className="flex items-center justify-between mb-2">
         <span className="text-[10px] uppercase tracking-wide text-muted-foreground">Datos clave de la carga</span>
         {!editable && (
@@ -395,7 +395,7 @@ function StatBox({
   }
 
   return (
-    <div ref={boxRef} className="rounded-lg border bg-background p-2.5 min-w-0 relative">
+    <div ref={boxRef} className="celda-panel rounded-lg border bg-background p-2.5 min-w-0 relative">
       <div className="text-[11px] text-muted-foreground leading-none mb-1">{label}</div>
       {editing ? (
         <>

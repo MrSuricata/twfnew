@@ -284,6 +284,39 @@
   border-radius: 18px;
 }
 
+/* Panel de detalle: los bloques quedan blancos y las celdas-dato se juntan
+   con divisores compartidos, en vez de tarjetitas sueltas (handoff grupo A).
+   El tinte semántico de una celda (fila vencida en rojo) se conserva porque
+   acá no se toca el fondo. */
+:root[data-brand="med"] [data-slot="sheet-content"] .bloque-panel {
+  background: #ffffff;
+  border-color: #eef0f8;
+  border-radius: 14px;
+}
+:root[data-brand="med"] [data-slot="sheet-content"] .grid:has(> .celda-panel) {
+  gap: 0;
+  border: 1.5px solid #eef0f8;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #ffffff;
+}
+:root[data-brand="med"] [data-slot="sheet-content"] .celda-panel {
+  border-width: 0;
+  border-radius: 0;
+  box-shadow: -1.5px -1.5px 0 0 #eef0f8;
+  padding: 10px 12px;
+}
+/* Formularios dentro de diálogos: labels de marca y campos más cómodos */
+:root[data-brand="med"] [data-slot="dialog-content"] [data-slot="label"] {
+  color: #49286b;
+  font-weight: 600;
+  font-size: 13px;
+}
+:root[data-brand="med"] [data-slot="dialog-content"] [data-slot="input"],
+:root[data-brand="med"] [data-slot="dialog-content"] [data-slot="select-trigger"] {
+  min-height: 42px;
+}
+
 /* Brand fonts — Jost is a free geometric face close to Gotham. */
 :root[data-brand="med"] body {
   font-family: 'Jost', 'Inter', sans-serif;
