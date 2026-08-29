@@ -12,7 +12,7 @@ import { toast } from 'sonner'
 import { fetchNoticiasAdmin, saveNoticia, deleteNoticia } from '@/lib/dataClient'
 import { type Noticia, rowToNoticia, esVigente, CATEGORIAS, categoriaMeta, tituloPlano } from '@/lib/noticias'
 
-// ── Editor de Novedades logísticas (Brian 28/08) ─────────────────────────
+// ── Editor del Diario logístico (Brian 28/08) ───────────────────────────
 // Vive en Admin → Contenido web. Lo cargado acá sale en la landing (sección
 // Novedades + alerta 1×/día si se marca) y en /novedades. Reglas: vigencia
 // (lo vencido se archiva solo de la portada) y SIN números de tarifas.
@@ -133,7 +133,7 @@ export default function NoticiasEditor() {
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0">
         <CardTitle className="flex items-center gap-2 text-base">
-          <Newspaper size={19} weight="duotone" /> Novedades logísticas
+          <Newspaper size={19} weight="duotone" /> Diario logístico
         </CardTitle>
         <Button size="sm" onClick={nueva}><Plus size={15} className="mr-1" /> Nueva novedad</Button>
       </CardHeader>

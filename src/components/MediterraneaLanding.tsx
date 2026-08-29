@@ -325,7 +325,7 @@ export default function MediterraneaLanding() {
 
   const navLinks = [
     { href: '#modos', label: 'Servicios' },
-    { href: '#novedades', label: 'Novedades' },
+    { href: '#novedades', label: 'Diario' },
     { href: '#cobertura', label: 'Cobertura' },
     { href: '#proceso', label: 'Cómo trabajamos' },
     { href: '#nosotros', label: 'Nosotros' },
@@ -689,7 +689,7 @@ export default function MediterraneaLanding() {
               </div>
               <div className="space-y-2">
                 <div className="text-white font-semibold mb-3">Empresa</div>
-                <a href="/novedades" className="block hover:text-white">Novedades logísticas</a>
+                <a href="/novedades" className="block hover:text-white">Diario logístico</a>
                 <a href="#cobertura" className="block hover:text-white">Cobertura</a>
                 <a href="#nosotros" className="block hover:text-white">Nosotros</a>
                 <a href="/terminos" className="block hover:text-white">Términos</a>
