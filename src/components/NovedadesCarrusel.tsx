@@ -245,17 +245,37 @@ export default function NovedadesCarrusel({ noticias }: { noticias: Noticia[] })
   const [dragging, setDragging] = useState(false)
   const [k, setK] = useState(0)                  // escala = ancho real / 1600
   const cajaRef = useRef<HTMLDivElement>(null)
+  const marcoRef = useRef<HTMLDivElement>(null)
   const x0 = useRef(0)
   const N = noticias.length
 
+  // La escala sale del ancho disponible Y del alto que queda libre en pantalla:
+  // así la tarjeta entra entera cuando el imán de scroll frena en la sección,
+  // en vez de cortarse abajo. El alto libre se mide contra la sección real
+  // (encabezado arriba, dots abajo), no con un número inventado.
   useEffect(() => {
-    const el = cajaRef.current
-    if (!el) return
-    const medir = () => setK(el.clientWidth / W)
+    const marco = marcoRef.current
+    if (!marco) return
+    const medir = () => {
+      const ancho = marco.clientWidth
+      if (!ancho) return
+      const seccion = marco.closest('section')
+      let porAlto = Infinity
+      if (seccion) {
+        const rs = seccion.getBoundingClientRect()
+        const rm = marco.getBoundingClientRect()
+        const arriba = rm.top - rs.top          // encabezado + padding superior
+        const abajo = rs.bottom - rm.bottom     // dots + padding inferior
+        const libre = window.innerHeight - arriba - abajo
+        if (libre > 240) porAlto = libre / H
+      }
+      setK(Math.min(ancho / W, porAlto))
+    }
     medir()
     const ro = new ResizeObserver(medir)
-    ro.observe(el)
-    return () => ro.disconnect()
+    ro.observe(marco)
+    window.addEventListener('resize', medir)
+    return () => { ro.disconnect(); window.removeEventListener('resize', medir) }
   }, [])
 
   // Si cambia la lista y el índice quedó afuera, volver al principio.
@@ -322,12 +342,16 @@ export default function NovedadesCarrusel({ noticias }: { noticias: Noticia[] })
 
   return (
     <div>
-      <div style={{ position: 'relative' }}>
+      <div ref={marcoRef} style={{ position: 'relative', width: '100%' }}>
         <div
           ref={cajaRef}
           onPointerDown={down}
           style={{
-            width: '100%', aspectRatio: '16 / 9', overflow: 'hidden',
+            width: k > 0 ? Math.round(W * k) : '100%',
+            height: k > 0 ? Math.round(H * k) : undefined,
+            aspectRatio: k > 0 ? undefined : '16 / 9',
+            marginInline: 'auto',
+            overflow: 'hidden',
             borderRadius: Math.round(48 * k) || 24,
             boxShadow: '0 50px 110px rgba(38,28,121,0.22)',
             cursor: N > 1 ? (dragging ? 'grabbing' : 'grab') : 'default',
@@ -356,7 +380,7 @@ export default function NovedadesCarrusel({ noticias }: { noticias: Noticia[] })
         )}
       </div>
       {N > 1 && (
-        <div style={{ display: 'flex', gap: 16, justifyContent: 'center', marginTop: 36 }}>
+        <div style={{ display: 'flex', gap: 16, justifyContent: 'center', marginTop: 22 }}>
           {noticias.map((n, ix) => (
             <button key={n.id} type="button" aria-label={`Aviso ${ix + 1} de ${N}`}
               onClick={() => { setI(ix); setDragX(0) }}
