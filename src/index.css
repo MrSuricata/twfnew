@@ -178,6 +178,11 @@
 }
 :root[data-brand="med"] [data-slot="card"] {
   border-radius: 20px;
+}
+/* Borde por defecto de las cards. Va aparte y excluyendo las que declaran un
+   borde propio (riesgo naranja, info, error, ok...): como estas reglas viven
+   fuera de las capas de Tailwind, sin la exclusión pisarían esas utilidades. */
+:root[data-brand="med"] [data-slot="card"]:not([class*="border-med-"]):not([class*="border-destructive"]):not([class*="border-amber"]) {
   border-color: #eef0f8;
 }
 :root[data-brand="med"] [data-slot="dialog-content"] {
