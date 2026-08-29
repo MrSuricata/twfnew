@@ -83,6 +83,12 @@
   --warn-suave-fg: #b45309;
   --warn-suave-bd: #fde68a;
   --borde-punteado: var(--border);
+  --st-blue-bg: #3b82f6;   --st-blue-fg: #ffffff;
+  --st-yellow-bg: #eab308; --st-yellow-fg: #000000;
+  --st-green-bg: #22c55e;  --st-green-fg: #ffffff;
+  --st-gray-bg: #6b7280;   --st-gray-fg: #ffffff;
+  --st-red-bg: #ef4444;    --st-red-fg: #ffffff;
+  --st-orange-bg: #f97316; --st-orange-fg: #ffffff;
 }
 
 /* ─── Mediterránea Carghas brand theme ───────────────────────────────
@@ -158,6 +164,12 @@
   --warn-suave-fg: #b45f16;
   --warn-suave-bd: #f3d9c4;
   --borde-punteado: #c9c5d8;
+  --st-blue-bg: #ceffff;   --st-blue-fg: #352e6a;
+  --st-yellow-bg: #fdece0; --st-yellow-fg: #b45f16;
+  --st-green-bg: #e4f4ea;  --st-green-fg: #2f8f5b;
+  --st-gray-bg: #eef0f8;   --st-gray-fg: #6b6688;
+  --st-red-bg: #d94f4f;    --st-red-fg: #ffffff;
+  --st-orange-bg: #e8863b; --st-orange-fg: #ffffff;
 }
 
 /* Tablas compartidas (shadcn): bajo Med, la cabecera clara del sistema.
@@ -213,7 +225,8 @@
   color: #49286b;
 }
 /* Números grandes de los KPI dentro de cards */
-:root[data-brand="med"] [data-slot="card"] div.text-2xl {
+:root[data-brand="med"] [data-slot="card"] div.text-2xl,
+:root[data-brand="med"] [data-slot="card"] div.text-3xl {
   font-family: 'Nunito', 'Jost', sans-serif;
   font-weight: 900;
   color: #49286b;
