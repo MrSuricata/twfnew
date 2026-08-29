@@ -456,7 +456,7 @@ export default function NewShipmentDialog({
           </div>
 
           {softWarned && faltanPrincipales.length > 0 && (
-            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-2.5 py-1.5">
+            <p className="text-xs text-[var(--warn-suave-fg)] bg-[var(--warn-suave-bg)] border border-[var(--warn-suave-bd)] rounded-xl px-3 py-2">
               Sin completar: {faltanPrincipales.map(p => p.label).join(', ')}. Tocá <strong>Guardar igual</strong> para crear la carga así.
             </p>
           )}
@@ -465,7 +465,7 @@ export default function NewShipmentDialog({
           <button
             type="button"
             onClick={() => setMoreOpen(v => !v)}
-            className="w-full flex items-center justify-center gap-1.5 rounded-md border border-dashed py-2 text-xs text-muted-foreground hover:text-foreground hover:border-primary/50 transition-colors"
+            className="w-full flex items-center justify-center gap-1.5 rounded-full border border-dashed border-[var(--borde-punteado)] py-2 text-xs text-muted-foreground hover:text-foreground hover:border-primary/50 transition-colors"
           >
             <CaretDown size={12} className={`transition-transform ${moreOpen ? 'rotate-180' : ''}`} />
             {moreOpen ? 'Ocultar campos opcionales' : 'Más campos (todos opcionales)'}
