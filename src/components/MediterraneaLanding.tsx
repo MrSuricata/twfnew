@@ -340,7 +340,7 @@ export default function MediterraneaLanding() {
   )
 
   return (
-    <div data-snap-landing className="min-h-screen overflow-x-hidden bg-white text-[#1a1530]" style={{ fontFamily: "'Jost', sans-serif" }}>
+    <div data-snap-landing className="min-h-screen overflow-x-clip bg-white text-[#1a1530]" style={{ fontFamily: "'Jost', sans-serif" }}>
       {/* ── Nav ── */}
       <header
         className={`fixed top-0 inset-x-0 z-50 transition-all duration-500 ${
