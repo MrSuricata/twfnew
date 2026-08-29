@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@700;800;900&family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#e9edf3}
+a{color:#49286b;text-decoration:none}a:hover{color:#7A3FA8}
+</style>
+</helmet>
+<div style="padding:56px 64px 96px;font-family:Montserrat,sans-serif;color:#352e6a;display:flex;flex-direction:column;gap:52px">
+
+<div style="display:flex;flex-direction:column;gap:12px;max-width:1040px">
+  <div style="background:#ceffff;border:2px solid #9bd1e5;border-radius:999px;padding:7px 20px;align-self:flex-start;font-weight:600;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:#352e6a">Grupo A</div>
+  <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:36px;line-height:1;letter-spacing:-0.02em;color:#49286b">Panel de detalle de carga</div>
+  <div style="font-size:16px;line-height:1.55;color:#6b6688">Panel lateral de 620px que se abre desde la grilla. Estructura y campos tomados de <code style="font-family:Nunito,sans-serif;font-weight:700;font-size:14px;color:#49286b">OperationDetailPanel</code>, <code style="font-family:Nunito,sans-serif;font-weight:700;font-size:14px;color:#49286b">ViabilityBlock</code>, <code style="font-family:Nunito,sans-serif;font-weight:700;font-size:14px;color:#49286b">RefChecksInline</code>, <code style="font-family:Nunito,sans-serif;font-weight:700;font-size:14px;color:#49286b">ContainerDatesSection</code>, <code style="font-family:Nunito,sans-serif;font-weight:700;font-size:14px;color:#49286b">PagosSection</code> y <code style="font-family:Nunito,sans-serif;font-weight:700;font-size:14px;color:#49286b">OperationMediaSection</code>. Nada se agregó ni se sacó: cambia la jerarquía (cabeceras de sección en vez de cards sueltas) y se conservan los colores de identidad de cada bloque — celeste para las fechas por contenedor, teal para pagos.</div>
+</div>
+
+<div style="display:flex;gap:40px;align-items:flex-start;flex-wrap:wrap">
+
+<div style="display:flex;flex-direction:column;gap:14px">
+  <div style="display:flex;align-items:center;gap:12px"><div style="background:#f0ecf6;border-radius:8px;padding:5px 12px;font-family:Nunito,sans-serif;font-weight:900;font-size:13px;color:#49286b">A1</div><div style="font-weight:600;font-size:15px;color:#352e6a">Panel completo · FCL con un contenedor</div></div>
+  <div style="width:620px;background:#f7f9fc;border-radius:18px;overflow:hidden;box-shadow:0 30px 70px rgba(38,28,121,0.18);display:flex;flex-direction:column">
+
+    <div style="flex:none;background:#FFFFFF;border-bottom:2px solid #eef0f8;padding:18px 22px 14px;display:flex;flex-direction:column;gap:11px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <div style="display:flex;align-items:center;gap:9px">
+          <div style="width:9px;height:9px;border-radius:50%;background:#49286b"></div>
+          <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:25px;line-height:1;color:#49286b">A6820</div>
+          <div style="width:30px;height:30px;border-radius:9px;border:2px solid #e5e4f1;display:flex;align-items:center;justify-content:center;font-size:13px;color:#6b6688">✎</div>
+          <div style="width:30px;height:30px;border-radius:9px;border:2px solid #e5e4f1;display:flex;align-items:center;justify-content:center;font-size:13px;color:#6b6688">⛶</div>
+          <div style="display:flex;align-items:center;gap:6px;border:2px solid #e5e4f1;border-radius:999px;padding:5px 13px;font-weight:600;font-size:12px;color:#6b6688">◉ Agregar</div>
+        </div>
+        <div style="width:30px;height:30px;border-radius:50%;background:#f4f5fa;display:flex;align-items:center;justify-content:center;font-size:15px;color:#6b6688">✕</div>
+      </div>
+      <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:19px;line-height:1;color:#352e6a">PAUNY SA</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        <div style="background:#f0ecf6;border-radius:999px;padding:5px 13px;font-weight:700;font-size:11px;letter-spacing:0.04em;color:#49286b">40 HC</div>
+        <div style="background:#f0ecf6;border-radius:999px;padding:5px 13px;font-weight:700;font-size:11px;letter-spacing:0.04em;color:#49286b">UY</div>
+        <div style="background:#ceffff;border-radius:999px;padding:5px 13px;font-weight:700;font-size:11px;letter-spacing:0.04em;color:#352e6a">ETA 03/09/2026</div>
+        <div style="background:#ceffff;border-radius:999px;padding:5px 13px;font-weight:700;font-size:11px;letter-spacing:0.04em;color:#352e6a">En GODILCO</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;padding-top:3px">
+        <div style="flex:none;width:96px;font-weight:700;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#9a96b8">Operativo</div>
+        <div style="flex:1;height:38px;border-radius:12px;border:2px solid #e5e4f1;background:#fbfbfe;display:flex;align-items:center;justify-content:space-between;padding:0 14px;font-size:14px;color:#9a96b8">— sin asignar — <span style="font-size:11px;color:#b9b5cc">▾</span></div>
+      </div>
+    </div>
+
+    <div style="flex:1;padding:20px 22px 24px;display:flex;flex-direction:column;gap:20px">
+
+      <div style="display:flex;flex-direction:column;gap:9px">
+        <div style="display:flex;align-items:center;gap:12px"><div style="font-weight:700;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#49286b">Datos rápidos</div><div style="flex:1;height:2px;background:#eef0f8"></div></div>
+        <div style="background:#FFFFFF;border-radius:16px;border:2px solid #eef0f8;overflow:hidden">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr">
+            <div style="padding:13px 16px;border-right:2px solid #f4f5fa"><div style="font-weight:600;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#9a96b8">MBL</div><div style="margin-top:4px;font-family:Nunito,sans-serif;font-weight:900;font-size:15px;color:#49286b">100550172570</div></div>
+            <div style="padding:13px 16px;border-right:2px solid #f4f5fa"><div style="font-weight:600;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#9a96b8">HBL</div><div style="margin-top:4px;font-family:Nunito,sans-serif;font-weight:900;font-size:15px;color:#c9c5d8">—</div></div>
+            <div style="padding:13px 16px"><div style="font-weight:600;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#9a96b8">Buque</div><div style="margin-top:4px;font-family:Nunito,sans-serif;font-weight:900;font-size:15px;color:#49286b">KOTA PUSAKA</div></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;border-top:2px solid #f4f5fa">
+            <div style="padding:13px 16px;border-right:2px solid #f4f5fa"><div style="font-weight:600;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#9a96b8">Terminal</div><div style="margin-top:4px;font-family:Nunito,sans-serif;font-weight:900;font-size:15px;color:#c9c5d8">—</div></div>
+            <div style="padding:13px 16px"><div style="font-weight:600;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#9a96b8">ETA Montevideo</div><div style="margin-top:4px;font-family:Nunito,sans-serif;font-weight:900;font-size:15px;color:#49286b">03/09/2026</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:9px">
+        <div style="display:flex;align-items:center;gap:12px"><div style="font-weight:700;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#9a96b8">Datos clave de la carga</div><div style="flex:1;height:2px;background:#eef0f8"></div></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+          <div style="background:#FFFFFF;border-radius:14px;border:2px solid #eef0f8;padding:12px 14px"><div style="font-weight:600;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#9a96b8">Bultos</div><div style="margin-top:4px;font-family:Nunito,sans-serif;font-weight:900;font-size:20px;color:#49286b">28</div></div>
+          <div style="background:#FFFFFF;border-radius:14px;border:2px solid #eef0f8;padding:12px 14px"><div style="font-weight:600;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#9a96b8">Peso</div><div style="margin-top:4px;font-family:Nunito,sans-serif;font-weight:900;font-size:20px;color:#49286b">22.226,6 <span style="font-family:Montserrat,sans-serif;font-weight:500;font-size:12px;color:#9a96b8">kg</span></div></div>
+          <div style="background:#FFFFFF;border-radius:14px;border:2px solid #eef0f8;padding:12px 14px"><div style="font-weight:600;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#9a96b8">Volumen</div><div style="margin-top:4px;font-family:Nunito,sans-serif;font-weight:900;font-size:20px;color:#c9c5d8">—</div></div>
+        </div>
+        <div style="background:#FFFFFF;border-radius:16px;border:2px solid #eef0f8;overflow:hidden">
+          <div style="display:grid;grid-template-columns:1fr 1fr">
+            <div style="padding:12px 16px;border-right:2px solid #f4f5fa"><div style="font-weight:600;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#9a96b8">Fiscal (destino)</div><div style="margin-top:3px;font-family:Nunito,sans-serif;font-weight:900;font-size:17px;color:#49286b">DFC</div></div>
+            <div style="padding:12px 16px"><div style="font-weight:600;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#9a96b8">Descarga (post-fiscal)</div><div style="margin-top:3px;font-family:Nunito,sans-serif;font-weight:900;font-size:17px;color:#49286b">LAS VARILLAS</div></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;border-top:2px solid #f4f5fa">
+            <div style="padding:12px 16px;border-right:2px solid #f4f5fa"><div style="font-weight:600;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#9a96b8">Depósito UY</div><div style="margin-top:3px;font-family:Nunito,sans-serif;font-weight:900;font-size:17px;color:#49286b">GODILCO</div></div>
+            <div style="padding:12px 16px"><div style="font-weight:600;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#9a96b8">Transporte</div><div style="margin-top:3px;font-family:Nunito,sans-serif;font-weight:900;font-size:17px;color:#49286b">TRANSCAL</div></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;border-top:2px solid #f4f5fa">
+            <div style="padding:12px 16px;border-right:2px solid #f4f5fa"><div style="font-weight:600;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#9a96b8">Operativa</div><div style="margin-top:3px;font-family:Nunito,sans-serif;font-weight:900;font-size:17px;color:#49286b">CARGA A PISO</div></div>
+            <div style="padding:12px 16px"><div style="font-weight:600;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#9a96b8">Desconsolidación</div><div style="margin-top:3px;font-family:Nunito,sans-serif;font-weight:900;font-size:17px;color:#c9c5d8">—</div></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;border-top:2px solid #f4f5fa;background:#f6fbf8">
+            <div style="padding:12px 16px;border-right:2px solid #eaf3ed"><div style="font-weight:600;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#7fa38d">Libre (máx. devolución)</div><div style="margin-top:3px;display:flex;align-items:center;gap:10px"><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:17px;color:#2f8f5b">DEVUELTO</div><div style="border:2px solid #cfe3d7;border-radius:999px;padding:3px 11px;font-weight:600;font-size:11px;color:#5f8a72">↺ Deshacer</div></div></div>
+            <div style="padding:12px 16px"><div style="font-weight:600;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#7fa38d">Devuelve en</div><div style="margin-top:3px;font-family:Nunito,sans-serif;font-weight:900;font-size:17px;color:#2f8f5b">STL</div></div>
+          </div>
+        </div>
+
+        <div style="padding-top:4px;display:flex;flex-direction:column;gap:7px">
+          <div style="font-weight:700;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#9a96b8">Checks documentarios</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:7px">
+            <div style="border:2px solid #cfe3d7;background:#f0f9f4;border-radius:11px;padding:9px 12px;display:flex;align-items:center;gap:9px"><div style="flex:none;width:17px;height:17px;border-radius:50%;background:#2f8f5b;display:flex;align-items:center;justify-content:center;font-family:Nunito,sans-serif;font-weight:900;font-size:10px;color:#FFFFFF">✓</div><span style="flex:1;font-weight:600;font-size:13px;color:#2f6b4a">BL entregado</span><span style="font-size:11px;color:#7fa38d">03/07/2026</span></div>
+            <div style="border:2px solid #cfe3d7;background:#f0f9f4;border-radius:11px;padding:9px 12px;display:flex;align-items:center;gap:9px"><div style="flex:none;width:17px;height:17px;border-radius:50%;background:#2f8f5b;display:flex;align-items:center;justify-content:center;font-family:Nunito,sans-serif;font-weight:900;font-size:10px;color:#FFFFFF">✓</div><span style="flex:1;font-weight:600;font-size:13px;color:#2f6b4a">Carta entregada</span><span style="font-size:11px;color:#7fa38d">03/07/2026</span></div>
+            <div style="border:2px solid #cfe3d7;background:#f0f9f4;border-radius:11px;padding:9px 12px;display:flex;align-items:center;gap:9px"><div style="flex:none;width:17px;height:17px;border-radius:50%;background:#2f8f5b;display:flex;align-items:center;justify-content:center;font-family:Nunito,sans-serif;font-weight:900;font-size:10px;color:#FFFFFF">✓</div><span style="flex:1;font-weight:600;font-size:13px;color:#2f6b4a">Docs transporte</span><span style="font-size:11px;color:#7fa38d">13/07/2026</span></div>
+            <div style="border:2px solid #cfe3d7;background:#f0f9f4;border-radius:11px;padding:9px 12px;display:flex;align-items:center;gap:9px"><div style="flex:none;width:17px;height:17px;border-radius:50%;background:#2f8f5b;display:flex;align-items:center;justify-content:center;font-family:Nunito,sans-serif;font-weight:900;font-size:10px;color:#FFFFFF">✓</div><span style="flex:1;font-weight:600;font-size:13px;color:#2f6b4a">Docs depósito</span><span style="font-size:11px;color:#7fa38d">13/07/2026</span></div>
+            <div style="border:2px solid #cfe3d7;background:#f0f9f4;border-radius:11px;padding:9px 12px;display:flex;align-items:center;gap:9px"><div style="flex:none;width:17px;height:17px;border-radius:50%;background:#2f8f5b;display:flex;align-items:center;justify-content:center;font-family:Nunito,sans-serif;font-weight:900;font-size:10px;color:#FFFFFF">✓</div><span style="flex:1;font-weight:600;font-size:13px;color:#2f6b4a">Pagos OK</span><span style="font-size:11px;color:#7fa38d">11/08/2026</span></div>
+            <div style="border:2px solid #e5e4f1;background:#FFFFFF;border-radius:11px;padding:9px 12px;display:flex;align-items:center;gap:9px"><div style="flex:none;width:17px;height:17px;border-radius:50%;border:2px solid #d9d5ea;box-sizing:border-box"></div><span style="flex:1;font-weight:500;font-size:13px;color:#9a96b8">Docs aduana</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:9px">
+        <div style="display:flex;align-items:center;gap:12px"><div style="font-weight:700;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#9a96b8">Condiciones de estiba</div><div style="flex:1;height:2px;background:#eef0f8"></div></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+          <div style="background:#FFFFFF;border-radius:14px;border:2px solid #eef0f8;padding:12px 14px;display:flex;flex-direction:column;gap:9px"><div style="font-weight:600;font-size:11px;color:#6b6688">Apilable</div><div style="display:flex;gap:5px"><div style="flex:1;padding:8px 0;text-align:center;border-radius:9px;background:#49286b;font-weight:700;font-size:12px;color:#FFFFFF">Sí</div><div style="flex:1;padding:8px 0;text-align:center;border-radius:9px;background:#f4f5fa;font-weight:600;font-size:12px;color:#9a96b8">No</div></div></div>
+          <div style="background:#FFFFFF;border-radius:14px;border:2px solid #eef0f8;padding:12px 14px;display:flex;flex-direction:column;gap:9px"><div style="font-weight:600;font-size:11px;color:#6b6688">Madera</div><div style="display:flex;gap:5px"><div style="flex:1;padding:8px 0;text-align:center;border-radius:9px;background:#f4f5fa;font-weight:600;font-size:12px;color:#9a96b8">Sí</div><div style="flex:1;padding:8px 0;text-align:center;border-radius:9px;background:#f4f5fa;font-weight:600;font-size:12px;color:#9a96b8">¿?</div><div style="flex:1;padding:8px 0;text-align:center;border-radius:9px;background:#49286b;font-weight:700;font-size:12px;color:#FFFFFF">No</div></div></div>
+          <div style="background:#FFFFFF;border-radius:14px;border:2px solid #eef0f8;padding:12px 14px;display:flex;flex-direction:column;gap:9px"><div style="font-weight:600;font-size:11px;color:#6b6688">Entrega en planta</div><div style="display:flex;gap:5px"><div style="flex:1;padding:8px 0;text-align:center;border-radius:9px;background:#f4f5fa;font-weight:600;font-size:12px;color:#9a96b8">Sí</div><div style="flex:1;padding:8px 0;text-align:center;border-radius:9px;background:#49286b;font-weight:700;font-size:12px;color:#FFFFFF">No</div></div></div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:9px">
+        <div style="display:flex;align-items:center;gap:12px"><div style="font-weight:700;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#3a7c9a">Salidas y arribos por contenedor (1)</div><div style="flex:1;height:2px;background:#d8eaf3"></div></div>
+        <div style="background:#f4fbfe;border:2px solid #d8eaf3;border-radius:16px;padding:14px">
+          <div style="background:#FFFFFF;border:2px solid #dfeef6;border-radius:13px;padding:13px 15px;display:flex;flex-direction:column;gap:11px">
+            <div style="display:flex;align-items:center;justify-content:space-between"><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:14px;letter-spacing:0.02em;color:#352e6a">TRHU6345230</div><div style="font-size:12px;color:#9a96b8">Devuelto</div></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px">
+              <div style="display:flex;flex-direction:column;gap:5px"><div style="font-size:10px;color:#9a96b8">Salida MVD</div><div style="height:36px;border-radius:10px;border:2px solid #e5e4f1;background:#FFFFFF;display:flex;align-items:center;padding:0 11px;font-family:Nunito,sans-serif;font-weight:900;font-size:13px;color:#352e6a">09/09/2026</div></div>
+              <div style="display:flex;flex-direction:column;gap:5px"><div style="font-size:10px;color:#9a96b8">Arribo fiscal</div><div style="height:36px;border-radius:10px;border:2px solid #e5e4f1;background:#FFFFFF;display:flex;align-items:center;padding:0 11px;font-family:Nunito,sans-serif;font-weight:900;font-size:13px;color:#352e6a">11/09/2026</div></div>
+              <div style="display:flex;flex-direction:column;gap:5px"><div style="font-size:10px;color:#9a96b8">Lugar de salida</div><div style="height:36px;border-radius:10px;border:2px solid #e5e4f1;background:#FFFFFF;display:flex;align-items:center;justify-content:space-between;padding:0 11px;font-size:13px;color:#352e6a">GODILCO <span style="font-size:10px;color:#b9b5cc">▾</span></div></div>
+              <div style="display:flex;flex-direction:column;gap:5px"><div style="font-size:10px;color:#9a96b8">Bultos</div><div style="height:36px;border-radius:10px;border:2px solid #e5e4f1;background:#FFFFFF;display:flex;align-items:center;padding:0 11px;font-family:Nunito,sans-serif;font-weight:900;font-size:13px;color:#352e6a">28</div></div>
+              <div style="display:flex;flex-direction:column;gap:5px"><div style="font-size:10px;color:#9a96b8">Kg</div><div style="height:36px;border-radius:10px;border:2px solid #e5e4f1;background:#FFFFFF;display:flex;align-items:center;padding:0 11px;font-family:Nunito,sans-serif;font-weight:900;font-size:13px;color:#352e6a">22.226,6</div></div>
+              <div style="display:flex;flex-direction:column;gap:5px"><div style="font-size:10px;color:#9a96b8">M³</div><div style="height:36px;border-radius:10px;border:2px solid #e5e4f1;background:#FFFFFF;display:flex;align-items:center;padding:0 11px;font-size:13px;color:#c9c5d8">—</div></div>
+            </div>
+          </div>
+          <div style="margin-top:12px;padding-top:10px;border-top:2px solid #dfeef6;display:flex;justify-content:flex-end;gap:16px;font-size:11px;color:#5c7d90">
+            <span>Total: <strong style="font-family:Nunito,sans-serif;font-weight:900;color:#352e6a">28</strong> bultos</span>
+            <span><strong style="font-family:Nunito,sans-serif;font-weight:900;color:#352e6a">22.226,6</strong> kg</span>
+            <span><strong style="font-family:Nunito,sans-serif;font-weight:900;color:#352e6a">0</strong> m³</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:9px">
+        <div style="display:flex;align-items:center;gap:12px"><div style="font-weight:700;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#2f7d78">Pagos</div><div style="flex:1;height:2px;background:#d3ebe8"></div></div>
+        <div style="background:#f2fbfa;border:2px solid #d3ebe8;border-radius:16px;overflow:hidden">
+          <div style="display:grid;grid-template-columns:1fr 1fr">
+            <div style="padding:12px 16px;border-right:2px solid #e2f2f0"><div style="font-weight:600;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#6ba39e">Forma de pago</div><div style="margin-top:3px;font-family:Nunito,sans-serif;font-weight:900;font-size:16px;color:#2f7d78">Al arribo</div></div>
+            <div style="padding:12px 16px"><div style="font-weight:600;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#6ba39e">Vencimiento</div><div style="margin-top:3px;font-family:Nunito,sans-serif;font-weight:900;font-size:16px;color:#2f7d78">11/08/2026</div></div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;border-top:2px solid #e2f2f0">
+            <div style="padding:12px 16px;border-right:2px solid #e2f2f0"><div style="font-weight:600;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#6ba39e">Flete</div><div style="margin-top:3px;font-family:Nunito,sans-serif;font-weight:900;font-size:15px;color:#2f7d78">USD 2.740</div></div>
+            <div style="padding:12px 16px;border-right:2px solid #e2f2f0"><div style="font-weight:600;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#6ba39e">Locales</div><div style="margin-top:3px;font-family:Nunito,sans-serif;font-weight:900;font-size:15px;color:#2f7d78">USD 610</div></div>
+            <div style="padding:12px 16px"><div style="font-weight:600;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#6ba39e">Devolución</div><div style="margin-top:3px;font-family:Nunito,sans-serif;font-weight:900;font-size:15px;color:#2f7d78">USD 0</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;align-items:center;gap:12px"><div style="font-weight:700;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#9a96b8">Todos los campos</div><div style="flex:1;height:2px;background:#eef0f8"></div></div>
+        <div style="background:#FFFFFF;border-radius:16px;border:2px solid #eef0f8;overflow:hidden">
+          <div style="padding:13px 16px;border-bottom:2px solid #f4f5fa;display:flex;align-items:center;justify-content:space-between"><div style="display:flex;align-items:center;gap:10px"><div style="width:8px;height:8px;border-radius:2px;background:#9bd1e5"></div><span style="font-weight:700;font-size:12px;letter-spacing:0.05em;text-transform:uppercase;color:#3a7c9a">Fechas</span></div><span style="font-size:12px;color:#b9b5cc">▾</span></div>
+          <div style="padding:13px 16px;border-bottom:2px solid #f4f5fa;display:flex;align-items:center;justify-content:space-between"><div style="display:flex;align-items:center;gap:10px"><div style="width:8px;height:8px;border-radius:2px;background:#8c7fc4"></div><span style="font-weight:700;font-size:12px;letter-spacing:0.05em;text-transform:uppercase;color:#49286b">Identificación</span></div><span style="font-size:12px;color:#b9b5cc">▾</span></div>
+          <div style="padding:13px 16px;border-bottom:2px solid #f4f5fa;display:flex;align-items:center;justify-content:space-between"><div style="display:flex;align-items:center;gap:10px"><div style="width:8px;height:8px;border-radius:2px;background:#e8863b"></div><span style="font-weight:700;font-size:12px;letter-spacing:0.05em;text-transform:uppercase;color:#b45f16">Documental</span></div><span style="font-size:12px;color:#b9b5cc">▾</span></div>
+          <div style="padding:13px 16px;border-bottom:2px solid #f4f5fa;display:flex;align-items:center;justify-content:space-between"><div style="display:flex;align-items:center;gap:10px"><div style="width:8px;height:8px;border-radius:2px;background:#2f8f5b"></div><span style="font-weight:700;font-size:12px;letter-spacing:0.05em;text-transform:uppercase;color:#2f6b4a">Ruta</span></div><span style="font-size:12px;color:#b9b5cc">▾</span></div>
+          <div style="padding:13px 16px;border-bottom:2px solid #f4f5fa;display:flex;align-items:center;justify-content:space-between"><div style="display:flex;align-items:center;gap:10px"><div style="width:8px;height:8px;border-radius:2px;background:#49286b"></div><span style="font-weight:700;font-size:12px;letter-spacing:0.05em;text-transform:uppercase;color:#49286b">Carga</span></div><span style="font-size:12px;color:#b9b5cc">▾</span></div>
+          <div style="padding:13px 16px;display:flex;align-items:center;justify-content:space-between"><div style="display:flex;align-items:center;gap:10px"><div style="width:8px;height:8px;border-radius:2px;background:#6b6688"></div><span style="font-weight:700;font-size:12px;letter-spacing:0.05em;text-transform:uppercase;color:#6b6688">Operativa</span></div><span style="font-size:12px;color:#b9b5cc">▾</span></div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:9px">
+        <div style="display:flex;align-items:center;gap:12px"><div style="font-weight:700;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#9a96b8">Sección "Ruta" abierta</div><div style="flex:1;height:2px;background:#eef0f8"></div></div>
+        <div style="background:#f4fbf7;border:2px solid #cfe3d7;border-radius:16px;padding:14px 16px;display:flex;flex-direction:column;gap:12px">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div><div style="font-weight:600;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#7fa38d">POL</div><div style="margin-top:3px;font-family:Nunito,sans-serif;font-weight:900;font-size:15px;color:#2f6b4a">NINGBO</div></div>
+            <div><div style="font-weight:600;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#7fa38d">POD</div><div style="margin-top:3px;font-family:Nunito,sans-serif;font-weight:900;font-size:15px;color:#2f6b4a">MONTEVIDEO</div></div>
+            <div><div style="font-weight:600;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#7fa38d">País</div><div style="margin-top:3px;font-family:Nunito,sans-serif;font-weight:900;font-size:15px;color:#2f6b4a">UY</div></div>
+            <div><div style="font-weight:600;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#7fa38d">Línea</div><div style="margin-top:3px;font-family:Nunito,sans-serif;font-weight:900;font-size:15px;color:#2f6b4a">EMC</div></div>
+          </div>
+          <div style="padding-top:10px;border-top:2px solid #dceee4">
+            <div style="font-weight:600;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#7fa38d;margin-bottom:7px">Indicadores</div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px"><div style="background:#e4f4ea;border-radius:999px;padding:5px 13px;font-weight:700;font-size:11px;color:#2f6b4a">Tránsito 47 d</div><div style="background:#e4f4ea;border-radius:999px;padding:5px 13px;font-weight:700;font-size:11px;color:#2f6b4a">Directo</div></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:32px">
+
+<div style="display:flex;flex-direction:column;gap:14px">
+  <div style="display:flex;align-items:center;gap:12px"><div style="background:#f0ecf6;border-radius:8px;padding:5px 12px;font-family:Nunito,sans-serif;font-weight:900;font-size:13px;color:#49286b">A2</div><div style="font-weight:600;font-size:15px;color:#352e6a">Multi-contenedor · una tarjeta por contenedor</div></div>
+  <div style="width:620px;background:#f7f9fc;border-radius:18px;overflow:hidden;box-shadow:0 30px 70px rgba(38,28,121,0.18);display:flex;flex-direction:column">
+    <div style="flex:none;background:#FFFFFF;border-bottom:2px solid #eef0f8;padding:18px 22px 14px;display:flex;flex-direction:column;gap:11px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <div style="display:flex;align-items:center;gap:9px"><div style="width:9px;height:9px;border-radius:50%;background:#49286b"></div><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:25px;line-height:1;color:#49286b">A7828</div><div style="width:30px;height:30px;border-radius:9px;border:2px solid #e5e4f1;display:flex;align-items:center;justify-content:center;font-size:13px;color:#6b6688">✎</div><div style="width:30px;height:30px;border-radius:9px;border:2px solid #e5e4f1;display:flex;align-items:center;justify-content:center;font-size:13px;color:#6b6688">⛶</div><div style="display:flex;align-items:center;gap:6px;border:2px solid #e5e4f1;border-radius:999px;padding:5px 13px;font-weight:600;font-size:12px;color:#6b6688">◉ Agregar</div></div>
+        <div style="width:30px;height:30px;border-radius:50%;background:#f4f5fa;display:flex;align-items:center;justify-content:center;font-size:15px;color:#6b6688">✕</div>
+      </div>
+      <div style="font-family:Nunito,sans-serif;font-weight:900;font-size:19px;line-height:1;color:#352e6a">BICI PERETTI S.A.</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        <div style="background:#f0ecf6;border-radius:999px;padding:5px 13px;font-weight:700;font-size:11px;color:#49286b">FCL</div>
+        <div style="background:#f0ecf6;border-radius:999px;padding:5px 13px;font-weight:700;font-size:11px;color:#49286b">AR</div>
+        <div style="background:#ceffff;border-radius:999px;padding:5px 13px;font-weight:700;font-size:11px;color:#352e6a">ETA 12/08/2026</div>
+        <div style="background:#ceffff;border-radius:999px;padding:5px 13px;font-weight:700;font-size:11px;color:#352e6a">3 contenedores</div>
+      </div>
+    </div>
+    <div style="padding:20px 22px 24px;display:flex;flex-direction:column;gap:16px">
+      <div style="background:#FFFFFF;border-radius:16px;border:2px solid #eef0f8;padding:13px 16px;display:flex;align-items:center;justify-content:space-between;gap:12px;opacity:0.75">
+        <div style="font-weight:700;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#9a96b8">Datos rápidos · datos clave · checks</div>
+        <div style="font-size:12px;color:#9a96b8">son de la carga, no del contenedor</div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:9px">
+        <div style="display:flex;align-items:center;gap:12px"><div style="font-weight:700;font-size:10px;letter-spacing:0.08em;text-transform:uppercase;color:#3a7c9a">Salidas y arribos por contenedor (3)</div><div style="flex:1;height:2px;background:#d8eaf3"></div></div>
+        <div style="background:#f4fbfe;border:2px solid #d8eaf3;border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:11px">
+
+          <div style="background:#FFFFFF;border:2px solid #dfeef6;border-radius:13px;padding:13px 15px;display:flex;flex-direction:column;gap:11px">
+            <div style="display:flex;align-items:center;justify-content:space-between"><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:14px;letter-spacing:0.02em;color:#352e6a">HAMU5081817</div><div style="font-size:12px;color:#9a96b8">Entregado</div></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px">
+              <div style="display:flex;flex-direction:column;gap:5px"><div style="font-size:10px;color:#9a96b8">Salida MVD</div><div style="height:36px;border-radius:10px;border:2px solid #e5e4f1;background:#FFFFFF;display:flex;align-items:center;padding:0 11px;font-family:Nunito,sans-serif;font-weight:900;font-size:13px;color:#352e6a">19/08/2026</div></div>
+              <div style="display:flex;flex-direction:column;gap:5px"><div style="font-size:10px;color:#9a96b8">Arribo fiscal</div><div style="height:36px;border-radius:10px;border:2px solid #e5e4f1;background:#FFFFFF;display:flex;align-items:center;padding:0 11px;font-family:Nunito,sans-serif;font-weight:900;font-size:13px;color:#352e6a">21/08/2026</div></div>
+              <div style="display:flex;flex-direction:column;gap:5px"><div style="font-size:10px;color:#9a96b8">Lugar de salida</div><div style="height:36px;border-radius:10px;border:2px solid #e5e4f1;background:#FFFFFF;display:flex;align-items:center;justify-content:space-between;padding:0 11px;font-size:13px;color:#352e6a">TCP <span style="font-size:10px;color:#b9b5cc">▾</span></div></div>
+              <div style="display:flex;flex-direction:column;gap:5px"><div style="font-size:10px;color:#9a96b8">Bultos</div><div style="height:36px;border-radius:10px;border:2px solid #e5e4f1;background:#FFFFFF;display:flex;align-items:center;padding:0 11px;font-family:Nunito,sans-serif;font-weight:900;font-size:13px;color:#352e6a">154</div></div>
+              <div style="display:flex;flex-direction:column;gap:5px"><div style="font-size:10px;color:#9a96b8">Kg</div><div style="height:36px;border-radius:10px;border:2px solid #e5e4f1;background:#FFFFFF;display:flex;align-items:center;padding:0 11px;font-family:Nunito,sans-serif;font-weight:900;font-size:13px;color:#352e6a">8.410</div></div>
+              <div style="display:flex;flex-direction:column;gap:5px"><div style="font-size:10px;color:#9a96b8">M³</div><div style="height:36px;border-radius:10px;border:2px solid #e5e4f1;background:#FFFFFF;display:flex;align-items:center;padding:0 11px;font-family:Nunito,sans-serif;font-weight:900;font-size:13px;color:#352e6a">54,2</div></div>
+            </div>
+          </div>
+
+          <div style="background:#FFFFFF;border:2px solid #f3d9c4;border-radius:13px;padding:13px 15px;display:flex;flex-direction:column;gap:11px">
+            <div style="display:flex;align-items:center;justify-content:space-between"><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:14px;letter-spacing:0.02em;color:#352e6a">HLXU8446789</div><div style="font-size:12px;color:#9a96b8">En terminal</div></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px">
+              <div style="display:flex;flex-direction:column;gap:5px"><div style="font-size:10px;color:#9a96b8">Salida MVD</div><div style="height:36px;border-radius:10px;border:2px solid #e8863b;background:#FFFFFF;display:flex;align-items:center;padding:0 11px;font-family:Nunito,sans-serif;font-weight:900;font-size:13px;color:#352e6a">30/08/2026</div><div style="font-size:10px;line-height:1.3;font-weight:600;color:#d94f4f">⏰ Sale antes de la llegada a MVD</div></div>
+              <div style="display:flex;flex-direction:column;gap:5px"><div style="font-size:10px;color:#9a96b8">Arribo fiscal</div><div style="height:36px;border-radius:10px;border:2px solid #e5e4f1;background:#FFFFFF;display:flex;align-items:center;padding:0 11px;font-family:Nunito,sans-serif;font-weight:900;font-size:13px;color:#352e6a">01/09/2026</div><div style="font-size:10px;line-height:1.3;font-weight:600;color:#b45f16">📌 Llega martes: cliente o feriado</div></div>
+              <div style="display:flex;flex-direction:column;gap:5px"><div style="font-size:10px;color:#9a96b8">Lugar de salida</div><div style="height:36px;border-radius:10px;border:2px solid #e5e4f1;background:#FFFFFF;display:flex;align-items:center;justify-content:space-between;padding:0 11px;font-size:13px;color:#9a96b8">— en terminal — <span style="font-size:10px;color:#b9b5cc">▾</span></div></div>
+              <div style="display:flex;flex-direction:column;gap:5px"><div style="font-size:10px;color:#9a96b8">Bultos</div><div style="height:36px;border-radius:10px;border:2px solid #e5e4f1;background:#FFFFFF;display:flex;align-items:center;padding:0 11px;font-family:Nunito,sans-serif;font-weight:900;font-size:13px;color:#352e6a">128</div></div>
+              <div style="display:flex;flex-direction:column;gap:5px"><div style="font-size:10px;color:#9a96b8">Kg</div><div style="height:36px;border-radius:10px;border:2px solid #e5e4f1;background:#FFFFFF;display:flex;align-items:center;padding:0 11px;font-family:Nunito,sans-serif;font-weight:900;font-size:13px;color:#352e6a">7.020</div></div>
+              <div style="display:flex;flex-direction:column;gap:5px"><div style="font-size:10px;color:#9a96b8">M³</div><div style="height:36px;border-radius:10px;border:2px solid #e5e4f1;background:#FFFFFF;display:flex;align-items:center;padding:0 11px;font-family:Nunito,sans-serif;font-weight:900;font-size:13px;color:#352e6a">48,6</div></div>
+            </div>
+          </div>
+
+          <div style="background:#FFFFFF;border:2px solid #dfeef6;border-radius:13px;padding:13px 15px;display:flex;flex-direction:column;gap:11px">
+            <div style="display:flex;align-items:center;justify-content:space-between"><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:14px;letter-spacing:0.02em;color:#352e6a">FANU1781141</div><div style="font-size:12px;color:#9a96b8">En terminal</div></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px">
+              <div style="display:flex;flex-direction:column;gap:5px"><div style="font-size:10px;color:#9a96b8">Salida MVD</div><div style="height:36px;border-radius:10px;border:2px solid #e5e4f1;background:#FFFFFF;display:flex;align-items:center;padding:0 11px;font-size:13px;color:#c9c5d8">dd/mm/aaaa</div></div>
+              <div style="display:flex;flex-direction:column;gap:5px"><div style="font-size:10px;color:#9a96b8">Arribo fiscal</div><div style="height:36px;border-radius:10px;border:2px solid #e5e4f1;background:#FFFFFF;display:flex;align-items:center;padding:0 11px;font-size:13px;color:#c9c5d8">dd/mm/aaaa</div></div>
+              <div style="display:flex;flex-direction:column;gap:5px"><div style="font-size:10px;color:#9a96b8">Lugar de salida</div><div style="height:36px;border-radius:10px;border:2px solid #e5e4f1;background:#FFFFFF;display:flex;align-items:center;justify-content:space-between;padding:0 11px;font-size:13px;color:#9a96b8">— en terminal — <span style="font-size:10px;color:#b9b5cc">▾</span></div></div>
+              <div style="display:flex;flex-direction:column;gap:5px"><div style="font-size:10px;color:#9a96b8">Bultos</div><div style="height:36px;border-radius:10px;border:2px solid #e5e4f1;background:#FFFFFF;display:flex;align-items:center;padding:0 11px;font-family:Nunito,sans-serif;font-weight:900;font-size:13px;color:#352e6a">96</div></div>
+              <div style="display:flex;flex-direction:column;gap:5px"><div style="font-size:10px;color:#9a96b8">Kg</div><div style="height:36px;border-radius:10px;border:2px solid #e5e4f1;background:#FFFFFF;display:flex;align-items:center;padding:0 11px;font-family:Nunito,sans-serif;font-weight:900;font-size:13px;color:#352e6a">5.180</div></div>
+              <div style="display:flex;flex-direction:column;gap:5px"><div style="font-size:10px;color:#9a96b8">M³</div><div style="height:36px;border-radius:10px;border:2px solid #e5e4f1;background:#FFFFFF;display:flex;align-items:center;padding:0 11px;font-family:Nunito,sans-serif;font-weight:900;font-size:13px;color:#352e6a">36,4</div></div>
+            </div>
+          </div>
+
+          <div style="padding-top:10px;border-top:2px solid #dfeef6;display:flex;justify-content:flex-end;gap:16px;font-size:11px;color:#5c7d90">
+            <span>Total: <strong style="font-family:Nunito,sans-serif;font-weight:900;color:#352e6a">378</strong> bultos</span>
+            <span><strong style="font-family:Nunito,sans-serif;font-weight:900;color:#352e6a">20.610</strong> kg</span>
+            <span><strong style="font-family:Nunito,sans-serif;font-weight:900;color:#352e6a">139,2</strong> m³</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:14px">
+  <div style="display:flex;align-items:center;gap:12px"><div style="background:#f0ecf6;border-radius:8px;padding:5px 12px;font-family:Nunito,sans-serif;font-weight:900;font-size:13px;color:#49286b">A3</div><div style="font-weight:600;font-size:15px;color:#352e6a">Fotos e informes · diálogo desde el chip Agregar</div></div>
+  <div style="width:620px;background:#FFFFFF;border-radius:20px;box-shadow:0 34px 80px rgba(15,10,50,0.28);overflow:hidden">
+    <div style="padding:20px 24px 16px;border-bottom:2px solid #f4f5fa;display:flex;align-items:flex-start;justify-content:space-between;gap:16px">
+      <div><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:21px;line-height:1;color:#49286b">Fotos e informes</div><div style="margin-top:7px;font-size:13px;color:#6b6688">A7828 · BICI PERETTI S.A.</div></div>
+      <div style="flex:none;width:30px;height:30px;border-radius:50%;background:#f4f5fa;display:flex;align-items:center;justify-content:center;font-size:14px;color:#6b6688">✕</div>
+    </div>
+    <div style="padding:18px 24px 24px;display:flex;flex-direction:column;gap:20px">
+
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <div style="font-weight:700;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#9a96b8;margin-right:2px">Contenedor</div>
+          <div style="border:2px solid #49286b;background:#f4f0f9;border-radius:999px;padding:5px 13px;font-family:Nunito,sans-serif;font-weight:900;font-size:11px;color:#352e6a">HAMU5081817 <span style="font-weight:600;color:#9a96b8">6</span></div>
+          <div style="border:2px solid #e5e4f1;border-radius:999px;padding:5px 13px;font-family:Nunito,sans-serif;font-weight:900;font-size:11px;color:#9a96b8">HLXU8446789 <span style="font-weight:600">2</span></div>
+          <div style="border:2px solid #e5e4f1;border-radius:999px;padding:5px 13px;font-family:Nunito,sans-serif;font-weight:900;font-size:11px;color:#9a96b8">FANU1781141</div>
+          <div style="border:2px solid #e5e4f1;border-radius:999px;padding:5px 13px;font-weight:600;font-size:11px;color:#9a96b8">Sin asignar <span style="font-weight:600">1</span></div>
+        </div>
+        <div style="font-size:12px;color:#6b6688">Viendo y subiendo a <strong style="font-family:Nunito,sans-serif;font-weight:900;color:#352e6a">HAMU5081817</strong>.</div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+          <div style="font-weight:700;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#9a96b8">Carga en origen (3)</div>
+          <div style="border:2px dashed #d9d5ea;border-radius:999px;padding:5px 14px;font-weight:600;font-size:11px;color:#6b6688">◉ Subir fotos (hasta 20)</div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
+          <div style="height:92px;border-radius:12px;overflow:hidden;background:#eef0f8"><img src="public/images/a7533-1.jpg" alt="" style="width:100%;height:100%;object-fit:cover;display:block"></div>
+          <div style="height:92px;border-radius:12px;overflow:hidden;background:#eef0f8"><img src="public/images/ops-warehouse.jpg" alt="" style="width:100%;height:100%;object-fit:cover;display:block"></div>
+          <div style="height:92px;border-radius:12px;overflow:hidden;background:#eef0f8"><img src="public/images/ops-truck-loaded.jpg" alt="" style="width:100%;height:100%;object-fit:cover;display:block"></div>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+          <div style="font-weight:700;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#9a96b8">Carga en Uruguay (0)</div>
+          <div style="border:2px dashed #49286b;border-radius:999px;padding:5px 14px;font-weight:600;font-size:11px;color:#49286b">◉ Subir fotos (hasta 20)</div>
+        </div>
+        <div style="font-size:13px;color:#9a96b8">Sin fotos</div>
+        <div style="height:5px;border-radius:999px;background:#f0ecf6;overflow:hidden"><div style="width:45%;height:5px;background:#49286b"></div></div>
+        <div style="font-size:11px;color:#6b6688">Subiendo 9/20…</div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+          <div style="font-weight:700;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#9a96b8">Informes PDF (2)</div>
+          <div style="border:2px dashed #d9d5ea;border-radius:999px;padding:5px 14px;font-weight:600;font-size:11px;color:#6b6688">＋ Subir PDF</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:7px">
+          <div style="border:2px solid #eef0f8;border-radius:12px;padding:11px 14px;display:flex;align-items:center;gap:12px">
+            <div style="flex:none;width:26px;height:30px;border-radius:5px;background:#fbe9e9;border:2px solid #f0cccc;box-sizing:border-box;display:flex;align-items:center;justify-content:center;font-family:Nunito,sans-serif;font-weight:900;font-size:9px;color:#d94f4f">PDF</div>
+            <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13px;color:#352e6a">Informe de trasiego A7828</div><div style="margin-top:2px;font-size:11px;color:#9a96b8">19/08/2026 · HAMU5081817</div></div>
+            <div style="width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;color:#9a96b8">⤓</div>
+            <div style="width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;color:#9a96b8">🗑</div>
+          </div>
+          <div style="border:2px solid #eef0f8;border-radius:12px;padding:11px 14px;display:flex;align-items:center;gap:12px">
+            <div style="flex:none;width:26px;height:30px;border-radius:5px;background:#fbe9e9;border:2px solid #f0cccc;box-sizing:border-box;display:flex;align-items:center;justify-content:center;font-family:Nunito,sans-serif;font-weight:900;font-size:9px;color:#d94f4f">PDF</div>
+            <div style="flex:1;min-width:0"><div style="font-weight:600;font-size:13px;color:#352e6a">Acta de observaciones</div><div style="margin-top:2px;font-size:11px;color:#9a96b8">14/08/2026 · HAMU5081817</div></div>
+            <div style="width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;color:#9a96b8">⤓</div>
+            <div style="width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;color:#9a96b8">🗑</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div style="display:flex;flex-direction:column;gap:14px">
+  <div style="display:flex;align-items:center;gap:12px"><div style="background:#f0ecf6;border-radius:8px;padding:5px 12px;font-family:Nunito,sans-serif;font-weight:900;font-size:13px;color:#49286b">A4</div><div style="font-weight:600;font-size:15px;color:#352e6a">Quick-edit de contenedor · popover desde la celda</div></div>
+  <div style="width:620px;background:#f7f9fc;border-radius:18px;padding:28px;box-shadow:0 30px 70px rgba(38,28,121,0.12);display:flex;flex-direction:column;gap:18px">
+    <div style="background:#FFFFFF;border-radius:12px;border:2px solid #eef0f8;overflow:hidden">
+      <div style="display:grid;grid-template-columns:90px 1fr 120px 110px;gap:12px;padding:11px 16px;background:#fbfbfe;border-bottom:2px solid #eef0f8;font-weight:700;font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:#9a96b8"><div>Ref</div><div>Contenedor</div><div>Salida</div><div>Fiscal</div></div>
+      <div style="display:grid;grid-template-columns:90px 1fr 120px 110px;gap:12px;padding:12px 16px;align-items:center;font-size:13px"><div style="font-family:Nunito,sans-serif;font-weight:900;color:#49286b">A7828</div><div style="color:#6b6688">HLXU8446789</div><div style="background:#f0ecf6;border-radius:8px;padding:5px 10px;font-weight:600;color:#49286b;text-align:center">30/08</div><div style="color:#c9c5d8">—</div></div>
+    </div>
+    <div style="align-self:flex-end;width:400px;background:#FFFFFF;border-radius:18px;box-shadow:0 24px 60px rgba(38,28,121,0.24);border:2px solid #eef0f8;overflow:hidden">
+      <div style="padding:15px 20px;border-bottom:2px solid #f4f5fa;display:flex;align-items:center;justify-content:space-between">
+        <div><div style="font-family:Nunito,sans-serif;font-weight:900;font-size:16px;letter-spacing:0.02em;color:#49286b">HLXU8446789</div><div style="margin-top:3px;font-size:12px;color:#9a96b8">A7828 · BICI PERETTI S.A. · En terminal</div></div>
+        <div style="font-size:14px;color:#9a96b8">✕</div>
+      </div>
+      <div style="padding:16px 20px;display:flex;flex-direction:column;gap:13px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+          <div style="display:flex;flex-direction:column;gap:6px"><div style="font-weight:600;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#9a96b8">Salida MVD</div><div style="height:40px;border-radius:11px;border:2px solid #49286b;background:#FFFFFF;display:flex;align-items:center;padding:0 13px;font-family:Nunito,sans-serif;font-weight:900;font-size:14px;color:#352e6a">30/08/2026</div></div>
+          <div style="display:flex;flex-direction:column;gap:6px"><div style="font-weight:600;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#9a96b8">Arribo fiscal</div><div style="height:40px;border-radius:11px;border:2px solid #e5e4f1;background:#fbfbfe;display:flex;align-items:center;padding:0 13px;font-size:13px;color:#9a96b8">dd/mm/aaaa</div></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px"><div style="font-weight:600;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#9a96b8">Lugar de salida</div><div style="height:40px;border-radius:11px;border:2px solid #e5e4f1;background:#fbfbfe;display:flex;align-items:center;justify-content:space-between;padding:0 13px;font-size:13px;color:#9a96b8">— en terminal — <span style="font-size:11px;color:#b9b5cc">▾</span></div></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px">
+          <div style="display:flex;flex-direction:column;gap:6px"><div style="font-weight:600;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#9a96b8">Bultos</div><div style="height:40px;border-radius:11px;border:2px solid #e5e4f1;background:#fbfbfe;display:flex;align-items:center;padding:0 13px;font-family:Nunito,sans-serif;font-weight:900;font-size:14px;color:#352e6a">128</div></div>
+          <div style="display:flex;flex-direction:column;gap:6px"><div style="font-weight:600;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#9a96b8">Kg</div><div style="height:40px;border-radius:11px;border:2px solid #e5e4f1;background:#fbfbfe;display:flex;align-items:center;padding:0 13px;font-family:Nunito,sans-serif;font-weight:900;font-size:14px;color:#352e6a">7.020</div></div>
+          <div style="display:flex;flex-direction:column;gap:6px"><div style="font-weight:600;font-size:10px;letter-spacing:0.07em;text-transform:uppercase;color:#9a96b8">M³</div><div style="height:40px;border-radius:11px;border:2px solid #e5e4f1;background:#fbfbfe;display:flex;align-items:center;padding:0 13px;font-family:Nunito,sans-serif;font-weight:900;font-size:14px;color:#352e6a">48,6</div></div>
+        </div>
+        <div style="background:#fdf1f1;border:2px solid #f0cccc;border-radius:12px;padding:11px 14px;font-size:12px;line-height:1.4;color:#b83b3b">⏰ La salida (30/08/2026) queda antes de la llegada a MVD (12/09/2026). Al guardar se pide confirmación.</div>
+      </div>
+      <div style="padding:14px 20px;border-top:2px solid #f4f5fa;display:flex;gap:9px"><div style="flex:1;padding:11px 0;text-align:center;border-radius:999px;background:#49286b;font-weight:600;font-size:13px;color:#FFFFFF">Guardar</div><div style="flex:none;padding:11px 22px;text-align:center;border-radius:999px;border:2px solid #e5e4f1;font-weight:600;font-size:13px;color:#6b6688">Abrir panel</div></div>
+    </div>
+  </div>
+</div>
+
+</div>
+</div>
+
+</div>
+
+</x-dc>
+</body>
+</html>
