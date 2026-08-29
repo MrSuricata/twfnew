@@ -497,7 +497,7 @@ export default function OperationDetailPanel({
               campos se movieron desde Documental/Fechas/Datos clave: un solo
               editor por dato. El commit de terminal conserva la
               materialización del costo default (MONTECON 618 / TCP 507,16). */}
-          <div className="rounded-lg border border-primary/25 bg-primary/[0.04] p-3">
+          <div className="bloque-panel rounded-lg border border-primary/25 bg-primary/[0.04] p-3">
             <h4 className="text-[10px] uppercase tracking-wide font-semibold mb-2 text-primary">Datos rápidos</h4>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               <FieldRow label="MBL" op={op} fieldKey="docNumber" onCommit={commit} />
@@ -816,7 +816,7 @@ function FieldRow({
   return (
     <div
       ref={boxRef}
-      className={`group rounded-lg border p-2.5 min-w-0 ${
+      className={`celda-panel group rounded-lg border p-2.5 min-w-0 ${
         segVencido ? 'border-red-300 bg-red-50' : `bg-card ${boxClass || ''}`
       } ${wide ? 'col-span-2' : ''}`}
     >
