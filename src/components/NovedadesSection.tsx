@@ -8,7 +8,7 @@ import {
 } from '@/lib/noticias'
 import NovedadesCarrusel, { conNegrita } from '@/components/NovedadesCarrusel'
 
-// ── Novedades logísticas (Brian 28/08) ───────────────────────────────────
+// ── Diario logístico (Brian 28/08) ───────────────────────────────────
 // Alerta 1×/día + carrusel de avisos en la landing + página /novedades.
 // El carrusel usa la plantilla de marca (NovedadesCarrusel); el resto sigue
 // la estética de la landing (índigo #261c79, violeta #49286b, #fbfbfe).
@@ -199,7 +199,7 @@ export default function NovedadesSection() {
         <div className="max-w-7xl mx-auto px-5 lg:px-8">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div className="max-w-2xl">
-              <p className="text-[#49286b] font-semibold text-sm tracking-widest uppercase">Novedades logísticas</p>
+              <p className="text-[#49286b] font-semibold text-sm tracking-widest uppercase">Diario logístico</p>
               <h2 className="mt-3 text-3xl lg:text-5xl font-bold tracking-tight text-[#261c79]">Lo que está pasando en la ruta.</h2>
               <p className="mt-4 text-[#5b5780] text-lg">Tifones, feriados en Asia, fletes y paros: te avisamos antes de que afecte tu carga.</p>
             </div>
@@ -255,7 +255,7 @@ export function NovedadesPage() {
             <ArrowLeft size={16} weight="bold" /> {brand.name}
           </a>
           <span className="ml-auto inline-flex items-center gap-2 text-[#9bd1e5] text-sm font-semibold">
-            <Newspaper size={17} weight="duotone" /> Novedades logísticas
+            <Newspaper size={17} weight="duotone" /> Diario logístico
           </span>
         </div>
       </header>
@@ -266,7 +266,7 @@ export function NovedadesPage() {
         <div className="absolute -top-48 -right-48 w-[360px] h-[360px] rounded-full border-[18px] border-[#9bd1e5]/60 box-border pointer-events-none" aria-hidden />
         <div className="relative max-w-5xl mx-auto px-5 lg:px-8 py-10 lg:py-14">
           <span className="inline-block rounded-full bg-[#ceffff] border-2 border-[#9bd1e5] px-4 py-1.5 text-[12px] font-semibold tracking-widest uppercase text-[#352e6a]">
-            Novedades logísticas
+            Diario logístico
           </span>
           <h1 className="titulo-med mt-4 text-3xl lg:text-5xl text-[#49286b]">Avisos y noticias de la ruta</h1>
           <div className="mt-4 w-[180px] h-1.5 bg-[#49286b]" />
