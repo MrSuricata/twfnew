@@ -16,7 +16,7 @@ import NovedadesCarrusel, { conNegrita } from '@/components/NovedadesCarrusel'
 
 const hoyISO = () => new Date().toISOString().slice(0, 10)
 
-function useNoticias(): { noticias: Noticia[]; cargado: boolean } {
+export function useNoticias(): { noticias: Noticia[]; cargado: boolean } {
   const [noticias, setNoticias] = useState<Noticia[]>([])
   const [cargado, setCargado] = useState(false)
   useEffect(() => {
