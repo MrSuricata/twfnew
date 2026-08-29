@@ -9,6 +9,7 @@ App de gestión de cargas en producción (Vite + React + TS + Tailwind 4 + Supab
 - **Supabase:** proyecto TWF `ihpsdeoexkipxmaxsmrc` · **Vercel:** proyecto `twf` (único)
 
 ## Diseño de Mediterránea — LEER ANTES DE TOCAR PANTALLAS DE MED
+`docs/METODO-DISENO.md` = CÓMO razonar cualquier tarea de diseño acá (marcas por variables, mockup≠funcionalidad, palancas de sistema, cascada vs Tailwind, verificación con datos reales). Leerlo primero.
 `docs/DISENO-MED.md` es la fuente de verdad: paleta, tipografía (Nunito 900 +
 Montserrat), piezas del sistema (pills, cards, tablas, arcos, nodos de ruta),
 tono de copy y qué falta aplicar. Los colores están como utilidades de Tailwind
