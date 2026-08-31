@@ -96,7 +96,7 @@ export const BRANDS: Record<BrandId, Brand> = {
     displayName: 'Mediterranea Carghas',
     legalName: 'Mediterranea Carghas',
     tagline: 'Logística internacional sin fronteras',
-    domains: ['mediterraneacarghas.com.ar', 'mediterraneacarghas.com', 'mediterranea.vercel.app'],
+    domains: ['mediterraneacarghas.com.ar', 'mediterraneacarghas.ar', 'mediterraneacarghas.com', 'mediterranea.vercel.app'],
     logo: {
       full: '/images/med-logo-dark.svg',
       white: '/images/med-logo-white.svg',

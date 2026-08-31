@@ -2,10 +2,14 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { getSupabase } from '../_lib/supabase.js'
 import { validate, QuoteSubmitSchema } from '../_lib/schemas.js'
 import { checkRateLimitWithConfig } from '../_lib/rateLimiter.js'
+import { pickOrigin } from '../_lib/cors.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const allowedOrigin = process.env.ALLOWED_ORIGIN || 'https://twf.uy'
+  // ALLOWED_ORIGIN admite varios origenes separados por coma: durante una
+  // mudanza de dominio conviven el nuevo y el .vercel.app viejo.
+  const allowedOrigin = pickOrigin(typeof req.headers.origin === 'string' ? req.headers.origin : undefined)
   res.setHeader('Access-Control-Allow-Origin', allowedOrigin)
+  res.setHeader('Vary', 'Origin')
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
 
