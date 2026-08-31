@@ -60,10 +60,10 @@ describe('devolución del vacío como faltante (Brian 26/08)', () => {
   }
 
   it('ANTES del arribo NO se pide (Brian 28/08: ocupaba lugar de otras cargas)', () => {
-    // eta 30/08 vs hoy 22/08: el buque todavía viaja → sin dev ni fecha.
-    const f = datosFaltantes({ ...base, dev: '' }, hoy)
+    // eta 30/08 vs hoy 22/08: el buque todavía viaja → sin dev ni libre.
+    const f = datosFaltantes({ ...base, dev: '', libre: '' }, hoy)
     expect(f.map(x => x.campo)).not.toContain('dev')
-    expect(f.map(x => x.campo)).not.toContain('devFecha')
+    expect(f.map(x => x.campo)).not.toContain('libre')
   })
 
   it('el MISMO día del arribo tampoco (arranca en ETA+1)', () => {
@@ -71,18 +71,30 @@ describe('devolución del vacío como faltante (Brian 26/08)', () => {
     expect(f.map(x => x.campo)).not.toContain('dev')
   })
 
-  it('desde ETA+1 pide lugar Y fecha de devolución', () => {
-    const f = datosFaltantes({ ...base, eta: '2026-08-21', dev: '', devFecha: '' }, hoy)
+  it('desde ETA+1 pide lugar Y libre', () => {
+    const f = datosFaltantes({ ...base, eta: '2026-08-21', dev: '', libre: '' }, hoy)
     expect(f.map(x => x.campo)).toContain('dev')
     expect(f.find(x => x.campo === 'dev')?.etiqueta).toBe('Devolución')
-    expect(f.map(x => x.campo)).toContain('devFecha')
-    expect(f.find(x => x.campo === 'devFecha')?.etiqueta).toBe('Fecha devolución')
+    expect(f.map(x => x.campo)).toContain('libre')
+    expect(f.find(x => x.campo === 'libre')?.etiqueta).toBe('Libre (máx. devolución)')
   })
 
-  it('con lugar y fecha cargados no molesta', () => {
-    const f = datosFaltantes({ ...base, eta: '2026-08-21', dev: 'STL', devFecha: '2026-09-10' }, hoy)
+  it('con lugar y libre cargados no molesta', () => {
+    const f = datosFaltantes({ ...base, eta: '2026-08-21', dev: 'STL', libre: '2026-09-10' }, hoy)
     expect(f.map(x => x.campo)).not.toContain('dev')
+    expect(f.map(x => x.campo)).not.toContain('libre')
+  })
+
+  it('NUNCA pide la fecha de devolución: al arribo el vacío todavía no volvió', () => {
+    const f = datosFaltantes({ ...base, eta: '2026-08-21', dev: 'STL', libre: '2026-09-10', devFecha: '' }, hoy)
     expect(f.map(x => x.campo)).not.toContain('devFecha')
+  })
+
+  it('un contenedor ya devuelto tiene el libre en DEVUELTO y no se pide nada', () => {
+    // La app escribe LIBRE = 'DEVUELTO' al marcar la devolución; es un valor
+    // cargado, no un vacío.
+    const f = datosFaltantes({ ...base, eta: '2026-08-21', dev: 'STL', libre: 'DEVUELTO' }, hoy)
+    expect(f.map(x => x.campo)).not.toContain('libre')
   })
 
   it('Chile queda afuera, igual que la terminal de llegada', () => {
@@ -106,19 +118,19 @@ describe('urgentes y adelantar (Brian 28/08)', () => {
   }
 
   it('llegada CON salida coordinada sigue en la tarjeta si falta la devolución', () => {
-    const u = faltantesUrgentes([{ ...completa, ref: 'A1', eta: '2026-08-20', salida: '2026-08-25', dev: '', devFecha: '' }], hoy)
+    const u = faltantesUrgentes([{ ...completa, ref: 'A1', eta: '2026-08-20', salida: '2026-08-25', dev: '', libre: '' }], hoy)
     expect(u).toHaveLength(1)
-    expect(u[0].faltantes.map(f => f.campo)).toEqual(['dev', 'devFecha'])
+    expect(u[0].faltantes.map(f => f.campo)).toEqual(['dev', 'libre'])
   })
 
   it('llegada con salida y devolución completa: fuera (como siempre)', () => {
-    const u = faltantesUrgentes([{ ...completa, ref: 'A1', eta: '2026-08-20', salida: '2026-08-25', dev: 'STL', devFecha: '2026-09-01' }], hoy)
+    const u = faltantesUrgentes([{ ...completa, ref: 'A1', eta: '2026-08-20', salida: '2026-08-25', dev: 'STL', libre: '2026-09-01' }], hoy)
     expect(u).toHaveLength(0)
   })
 
   it('adelantar: lista las que llegan después de la ventana con sus campos futuros, SIN devolución', () => {
     const fut = faltantesFuturos([
-      { ...completa, ref: 'LEJOS', eta: '2026-10-20', buque: '', dev: '', devFecha: '', descripcion: '' },
+      { ...completa, ref: 'LEJOS', eta: '2026-10-20', buque: '', dev: '', libre: '', descripcion: '' },
       { ...completa, ref: 'CERCA', eta: '2026-08-30', buque: '' },  // en ventana: no va acá
     ], hoy)
     expect(fut).toHaveLength(1)

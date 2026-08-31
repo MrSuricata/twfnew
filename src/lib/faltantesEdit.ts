@@ -65,6 +65,8 @@ export const FALTANTE_INPUTS: Partial<Record<keyof CargaCampos, FaltanteInput>> 
   terminal: { widget: 'datalist', sugerencias: 'terminales', placeholder: 'TCP / MONTECON' },
   dev: { widget: 'datalist', sugerencias: 'devoluciones', placeholder: 'STL / MPS / TCP…' },
   devFecha: { widget: 'date', placeholder: 'fecha confirmada por la naviera' },
+  // El que se pide al arribo: hasta cuándo corre el libre de sobrestadía.
+  libre: { widget: 'date', placeholder: 'hasta cuándo está libre' },
 }
 
 /** Columna real de `shipments` detrás de un campo faltante (para mostrar el
@@ -153,7 +155,7 @@ export function buildFaltantePatch(
       }
     }
     valor = final
-  } else if (campo === 'eta' || campo === 'devFecha') {
+  } else if (campo === 'eta' || campo === 'devFecha' || campo === 'libre') {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(texto) || !anioValido(texto)) {
       return { ok: false, error: 'Fecha inválida' }
     }

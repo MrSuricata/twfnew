@@ -300,6 +300,7 @@ export default function TodayDashboard({
         operativa: s.operativa, transporte: s.transporte, fiscal: s.fiscal,
         terminal: s.terminal, dev: s.dev,
         devFecha: s.dev_fecha || (Array.isArray(s.operativas) ? (s.operativas.find(o => o.DEV_FECHA)?.DEV_FECHA || '') : ''),
+        libre: s.libre || (Array.isArray(s.operativas) ? (s.operativas.find(o => o.LIBRE)?.LIBRE || '') : ''),
         salida: s.salida,
       })), [dbShipments])
   const incompletasTodas = useMemo(() => faltantesUrgentes(cargasCampos, new Date()), [cargasCampos])

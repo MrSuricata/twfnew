@@ -54,8 +54,13 @@ export interface CargaCampos {
   /** Terminal/depósito de DEVOLUCIÓN del vacío (STL/MPS/TCP…): Pagos saca de
    *  acá a QUIÉN se le paga la devolución y su costo default. */
   dev?: string | null
-  /** Fecha de devolución del vacío confirmada por la naviera. */
+  /** Fecha de devolución del vacío, una vez que ocurrió. NO es un dato que se
+   *  pueda pedir al arribo: recién existe cuando el contenedor volvió. Sirve
+   *  para medir sobrestadía contra `libre`. */
   devFecha?: string | null
+  /** Hasta cuándo el contenedor está libre de sobrestadía ("Libre (máx.
+   *  devolución)"). Este SÍ se sabe al arribo y es el que hay que pedir. */
+  libre?: string | null
   salida?: string | null
 }
 
@@ -141,11 +146,18 @@ export function datosFaltantes(c: CargaCampos, hoy: Date): CampoFaltante[] {
   // Llegada (ETA + 1 día en adelante, Brian 28/08): la devolución se reclama
   // recién con el buque en puerto — antes ocupaba lugar en la tarjeta de HOY
   // que necesitan las cargas que sí piden datos ya. Lugar (STL/MPS…) para que
-  // Pagos sepa a quién pagar, y fecha confirmada por la naviera.
+  // Pagos sepa a quién pagar, y hasta cuándo está libre.
+  //
+  // Pedía `devFecha` y estaba mal (Brian 31/08): esa es la fecha en que el
+  // vacío VOLVIÓ, y al arribo todavía no existe — por eso la tenían 5 cargas
+  // de 371 y el aviso no se apagaba nunca. Lo que sí se sabe al arribo es el
+  // libre, que es el dato que se carga en la práctica (79 cargas). No son lo
+  // mismo: el libre es el vencimiento y devFecha la devolución real, y la
+  // diferencia entre ambos es la sobrestadía.
   const llego = diasAEta !== null && diasAEta <= -1
   if (llego && m === 'fcl' && String(c.pais || '').trim().toUpperCase() !== 'CL') {
     if (vacio(c.dev)) falta('dev', 'Devolución')
-    if (vacio(c.devFecha)) falta('devFecha', 'Fecha devolución')
+    if (vacio(c.libre)) falta('libre', 'Libre (máx. devolución)')
   }
 
   // Coordinación (solo por Uruguay): con el buque encima hay que saber a qué
