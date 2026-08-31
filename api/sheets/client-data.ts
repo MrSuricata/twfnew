@@ -4,6 +4,7 @@ import { matchesClientePattern } from '../_lib/csvParser.js'
 import { getSupabase } from '../_lib/supabase.js'
 import { CLIENT_SHIPMENT_COLS, esCargaDeClienteActiva, rowToClientShipment } from '../_lib/clientShipments.js'
 import { esViaMontevideo } from '../_lib/clientDigest.js'
+import { pickOrigin } from '../_lib/cors.js'
 
 // ── Datos del PORTAL DE CLIENTES ─────────────────────────────────────────
 // Desde el flip (16/06) la web es master: este endpoint lee la TABLA, no la
@@ -16,8 +17,11 @@ import { esViaMontevideo } from '../_lib/clientDigest.js'
 // shape de salida (ver api/_lib/clientShipments.ts).
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const allowedOrigin = process.env.ALLOWED_ORIGIN || 'https://twf.uy'
+  // ALLOWED_ORIGIN admite varios origenes separados por coma: durante una
+  // mudanza de dominio conviven el nuevo y el .vercel.app viejo.
+  const allowedOrigin = pickOrigin(typeof req.headers.origin === 'string' ? req.headers.origin : undefined)
   res.setHeader('Access-Control-Allow-Origin', allowedOrigin)
+  res.setHeader('Vary', 'Origin')
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
   // Datos privados por cliente: nada de caches compartidos entre tokens.

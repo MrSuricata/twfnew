@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { getSupabase } from './_lib/supabase.js'
+import { pickOrigin } from './_lib/cors.js'
 
 // ── Novedades logísticas — endpoint PÚBLICO de la landing ────────────────
 // Devuelve solo noticias ACTIVAS y VIGENTES (activo=true y vigente_hasta vacío
@@ -7,8 +8,11 @@ import { getSupabase } from './_lib/supabase.js'
 // Cache CDN 5 minutos: la landing no golpea la DB en cada visita.
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const allowedOrigin = process.env.ALLOWED_ORIGIN || 'https://twf.uy'
+  // ALLOWED_ORIGIN admite varios origenes separados por coma: durante una
+  // mudanza de dominio conviven el nuevo y el .vercel.app viejo.
+  const allowedOrigin = pickOrigin(typeof req.headers.origin === 'string' ? req.headers.origin : undefined)
   res.setHeader('Access-Control-Allow-Origin', allowedOrigin)
+  res.setHeader('Vary', 'Origin')
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
   res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600')
 
