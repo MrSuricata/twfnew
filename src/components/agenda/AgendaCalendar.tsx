@@ -37,6 +37,8 @@ import { avisoSalida, fmtDMY } from '@/lib/salidaCheck'
 import { sugerirEtaFiscal, nombreDia } from '@/lib/transitoFiscal'
 import { isSinTelex, SIN_TELEX_MSG } from '@/lib/telexCheck'
 import { toast } from 'sonner'
+import { useEventosCalendario, AvisoCalendarioDialog } from './AvisosCalendario'
+import type { EventoCalendario } from '@/lib/calendarioEventos'
 
 interface AgendaCalendarProps {
   shipments: ParsedShipment[]
@@ -98,6 +100,25 @@ export default function AgendaCalendar({
 
   // DnD state — tracks the event being dragged for DragOverlay preview
   const [dragActiveEvent, setDragActiveEvent] = useState<CalendarEvent | null>(null)
+
+  // Avisos del día (feriados, paros): capa aparte de los eventos de carga.
+  // Solo en el admin — /api/data pide token de admin, que partners y clientes
+  // no tienen.
+  const { eventos: avisosCal, recargar: recargarAvisos } = useEventosCalendario(editable)
+  const [avisoEnEdicion, setAvisoEnEdicion] = useState<EventoCalendario | null>(null)
+  const [avisoFecha, setAvisoFecha] = useState<string | undefined>(undefined)
+  const [avisoDialogOpen, setAvisoDialogOpen] = useState(false)
+
+  const nuevoAviso = (fecha?: string) => {
+    setAvisoEnEdicion(null)
+    setAvisoFecha(fecha)
+    setAvisoDialogOpen(true)
+  }
+  const abrirAviso = (aviso: EventoCalendario) => {
+    setAvisoEnEdicion(aviso)
+    setAvisoFecha(undefined)
+    setAvisoDialogOpen(true)
+  }
 
   // PointerSensor with distance:8 so a short tap fires onClick (quick-edit),
   // and only a deliberate drag (≥8px movement) activates DnD.
@@ -486,9 +507,19 @@ export default function AgendaCalendar({
         onTogglePendingSidebar={undefined}
       />
 
-      {/* Filtro Consolidados: solo los hitos de camiones 🚛 (visible si hay camiones en la agenda) */}
-      {trucks && trucks.length > 0 && (
+      {/* Filtro Consolidados + alta de avisos del día */}
+      {(editable || (trucks && trucks.length > 0)) && (
         <div className="flex items-center gap-2">
+          {editable && (
+            <button
+              onClick={() => nuevoAviso()}
+              title="Anotar un feriado, un paro o cualquier aviso en un día"
+              className="flex items-center gap-1.5 rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs text-muted-foreground transition-all hover:shadow-sm"
+            >
+              📌 Aviso del día
+            </button>
+          )}
+          {trucks && trucks.length > 0 && (
           <button
             onClick={() => setOnlyTrucks(v => !v)}
             title="Ver solo los camiones consolidados (carga programada)"
@@ -498,6 +529,7 @@ export default function AgendaCalendar({
           >
             🚛 Consolidados{onlyTrucks ? ' · solo' : ''}
           </button>
+          )}
         </div>
       )}
 
@@ -518,6 +550,8 @@ export default function AgendaCalendar({
                   date={currentDate}
                   events={filteredEvents}
                   onSelectShipment={handleSelectShipment}
+                  avisos={avisosCal}
+                  onAbrirAviso={editable ? abrirAviso : undefined}
                 />
               )}
 
@@ -528,6 +562,8 @@ export default function AgendaCalendar({
                   onSelectShipment={handleSelectShipment}
                   onDayClick={handleDayClick}
                   editable={editable}
+                  avisos={avisosCal}
+                  onAbrirAviso={editable ? abrirAviso : undefined}
                 />
               )}
 
@@ -537,6 +573,8 @@ export default function AgendaCalendar({
                   events={filteredEvents}
                   onSelectShipment={handleSelectShipment}
                   onDayClick={handleDayClick}
+                  avisos={avisosCal}
+                  onAbrirAviso={editable ? abrirAviso : undefined}
                 />
               )}
 
@@ -583,6 +621,8 @@ export default function AgendaCalendar({
                 date={currentDate}
                 events={filteredEvents}
                 onSelectShipment={handleSelectShipment}
+                avisos={avisosCal}
+                onAbrirAviso={editable ? abrirAviso : undefined}
               />
             )}
 
@@ -601,6 +641,8 @@ export default function AgendaCalendar({
                 events={filteredEvents}
                 onSelectShipment={handleSelectShipment}
                 onDayClick={handleDayClick}
+                avisos={avisosCal}
+                onAbrirAviso={editable ? abrirAviso : undefined}
               />
             )}
 
@@ -688,6 +730,17 @@ export default function AgendaCalendar({
         sinTelexRefs={sinTelexRefs}
         cntrsByRef={cntrsByRef}
       />
+
+      {/* Alta y edición de avisos del día (feriados, paros). */}
+      {editable && (
+        <AvisoCalendarioDialog
+          abierto={avisoDialogOpen}
+          onCerrar={() => setAvisoDialogOpen(false)}
+          fecha={avisoFecha}
+          aviso={avisoEnEdicion}
+          onGuardado={recargarAvisos}
+        />
+      )}
     </div>
   )
 }

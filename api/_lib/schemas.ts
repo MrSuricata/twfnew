@@ -71,6 +71,14 @@ export const ClientRowSchema = z.object({
 })
 
 /** Noticias / avisos de la landing (sección Novedades logísticas). */
+export const EventoCalendarioSchema = z.object({
+  id: z.string().max(64).optional(),
+  fecha: z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha inválida'),
+  tipo: z.enum(['feriado', 'paro', 'aviso']).optional(),
+  titulo: z.string().trim().min(1, 'El título es obligatorio').max(200),
+  detalle: optTrimmed(1000),
+})
+
 export const NoticiaRowSchema = z.object({
   id: z.string().max(64).optional(),
   titulo: z.string().trim().min(1, 'El título es obligatorio').max(300),

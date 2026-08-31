@@ -4,6 +4,8 @@ import { useBrand } from '@/lib/brand'
 import { DAY_NAMES } from '@/lib/agendaTypes'
 import { getWeekDates, toDateKey, isToday } from '@/lib/agendaUtils'
 import AgendaEventCard from './AgendaEventCard'
+import { eventosDelDia, type EventoCalendario } from '@/lib/calendarioEventos'
+import { BandaAvisos } from './AvisosCalendario'
 
 interface AgendaWeekViewProps {
   date: Date
@@ -11,6 +13,9 @@ interface AgendaWeekViewProps {
   onSelectShipment: (event: CalendarEvent) => void
   onDayClick: (date: Date) => void
   editable?: boolean
+  /** Feriados, paros y demas: no cuelgan de una carga, son del dia. */
+  avisos?: EventoCalendario[]
+  onAbrirAviso?: (aviso: EventoCalendario) => void
 }
 
 // ─── Shared cell content ───────────────────────────────────────────────────
@@ -19,11 +24,14 @@ interface CellContentProps {
   dayEvents: CalendarEvent[]
   editable: boolean
   onSelectShipment: (event: CalendarEvent) => void
+  avisos?: EventoCalendario[]
+  onAbrirAviso?: (aviso: EventoCalendario) => void
 }
 
-function WeekDayCellContent({ dayEvents, editable, onSelectShipment }: CellContentProps) {
+function WeekDayCellContent({ dayEvents, editable, onSelectShipment, avisos = [], onAbrirAviso }: CellContentProps) {
   return (
     <div className="space-y-1.5 max-h-[600px] overflow-y-auto">
+      <BandaAvisos avisos={avisos} compacta onAbrir={onAbrirAviso} />
       {dayEvents.map(event => (
         <AgendaEventCard
           key={event.id}
@@ -33,7 +41,7 @@ function WeekDayCellContent({ dayEvents, editable, onSelectShipment }: CellConte
           draggable={editable}
         />
       ))}
-      {dayEvents.length === 0 && (
+      {dayEvents.length === 0 && avisos.length === 0 && (
         <div className="h-16 flex items-center justify-center">
           <span className="text-xs text-muted-foreground/40">—</span>
         </div>
@@ -49,9 +57,11 @@ interface DroppableWeekDayCellProps {
   dayEvents: CalendarEvent[]
   today: boolean
   onSelectShipment: (event: CalendarEvent) => void
+  avisos?: EventoCalendario[]
+  onAbrirAviso?: (aviso: EventoCalendario) => void
 }
 
-function DroppableWeekDayCell({ dateKey, dayEvents, today, onSelectShipment }: DroppableWeekDayCellProps) {
+function DroppableWeekDayCell({ dateKey, dayEvents, today, onSelectShipment, avisos, onAbrirAviso }: DroppableWeekDayCellProps) {
   const { setNodeRef, isOver } = useDroppable({ id: dateKey })
 
   return (
@@ -61,7 +71,7 @@ function DroppableWeekDayCell({ dateKey, dayEvents, today, onSelectShipment }: D
         ${today ? 'bg-accent/5' : ''}
         ${isOver ? 'bg-[#1e3a8a]/5 ring-1 ring-inset ring-[#1e3a8a]/30' : ''}`}
     >
-      <WeekDayCellContent dayEvents={dayEvents} editable={true} onSelectShipment={onSelectShipment} />
+      <WeekDayCellContent dayEvents={dayEvents} editable={true} onSelectShipment={onSelectShipment} avisos={avisos} onAbrirAviso={onAbrirAviso} />
     </div>
   )
 }
@@ -72,22 +82,24 @@ interface PlainWeekDayCellProps {
   dayEvents: CalendarEvent[]
   today: boolean
   onSelectShipment: (event: CalendarEvent) => void
+  avisos?: EventoCalendario[]
+  onAbrirAviso?: (aviso: EventoCalendario) => void
 }
 
-function PlainWeekDayCell({ dayEvents, today, onSelectShipment }: PlainWeekDayCellProps) {
+function PlainWeekDayCell({ dayEvents, today, onSelectShipment, avisos, onAbrirAviso }: PlainWeekDayCellProps) {
   return (
     <div
       className={`border-r border-border last:border-r-0 p-1.5 transition-colors
         ${today ? 'bg-accent/5' : ''}`}
     >
-      <WeekDayCellContent dayEvents={dayEvents} editable={false} onSelectShipment={onSelectShipment} />
+      <WeekDayCellContent dayEvents={dayEvents} editable={false} onSelectShipment={onSelectShipment} avisos={avisos} onAbrirAviso={onAbrirAviso} />
     </div>
   )
 }
 
 // ─── Week view ─────────────────────────────────────────────────────────────
 
-export default function AgendaWeekView({ date, events, onSelectShipment, onDayClick, editable = false }: AgendaWeekViewProps) {
+export default function AgendaWeekView({ date, events, onSelectShipment, onDayClick, editable = false, avisos = [], onAbrirAviso }: AgendaWeekViewProps) {
   const weekDates = getWeekDates(date)
   const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
 
@@ -152,6 +164,8 @@ export default function AgendaWeekView({ date, events, onSelectShipment, onDayCl
               dayEvents={dayEvents}
               today={today}
               onSelectShipment={onSelectShipment}
+              avisos={eventosDelDia(avisos, dateKey)}
+              onAbrirAviso={onAbrirAviso}
             />
           ) : (
             <PlainWeekDayCell
@@ -159,6 +173,8 @@ export default function AgendaWeekView({ date, events, onSelectShipment, onDayCl
               dayEvents={dayEvents}
               today={today}
               onSelectShipment={onSelectShipment}
+              avisos={eventosDelDia(avisos, dateKey)}
+              onAbrirAviso={onAbrirAviso}
             />
           )
         })}

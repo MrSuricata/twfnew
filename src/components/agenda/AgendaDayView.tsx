@@ -2,18 +2,24 @@ import type { CalendarEvent, EventType } from '@/lib/agendaTypes'
 import { EVENT_TYPE_CONFIG, DAY_NAMES_FULL } from '@/lib/agendaTypes'
 import { toDateKey } from '@/lib/agendaUtils'
 import AgendaEventCard from './AgendaEventCard'
+import { eventosDelDia, type EventoCalendario } from '@/lib/calendarioEventos'
+import { BandaAvisos } from './AvisosCalendario'
 
 interface AgendaDayViewProps {
   date: Date
   events: CalendarEvent[]
   onSelectShipment: (event: CalendarEvent) => void
+  /** Feriados, paros y demas: no cuelgan de una carga, son del dia. */
+  avisos?: EventoCalendario[]
+  onAbrirAviso?: (aviso: EventoCalendario) => void
 }
 
 const EVENT_ORDER: EventType[] = ['salida', 'eta_fisc', 'libre', 'descarga', 'dev']
 
-export default function AgendaDayView({ date, events, onSelectShipment }: AgendaDayViewProps) {
+export default function AgendaDayView({ date, events, onSelectShipment, avisos = [], onAbrirAviso }: AgendaDayViewProps) {
   const dateKey = toDateKey(date)
   const dayEvents = events.filter(e => e.date === dateKey)
+  const avisosDelDia = eventosDelDia(avisos, dateKey)
 
   // Group by type
   const grouped = EVENT_ORDER.map(type => ({
@@ -53,6 +59,9 @@ export default function AgendaDayView({ date, events, onSelectShipment }: Agenda
           )}
         </div>
       </div>
+
+      {/* Feriados y paros primero: condicionan todo lo de abajo. */}
+      <BandaAvisos avisos={avisosDelDia} onAbrir={onAbrirAviso} />
 
       {/* Empty state */}
       {dayEvents.length === 0 && (

@@ -1,15 +1,20 @@
 import type { CalendarEvent } from '@/lib/agendaTypes'
 import { DAY_NAMES, EVENT_TYPE_CONFIG } from '@/lib/agendaTypes'
 import { getMonthGrid, toDateKey, isToday, groupEventsByDate } from '@/lib/agendaUtils'
+import { eventosDelDia, type EventoCalendario } from '@/lib/calendarioEventos'
+import { BandaAvisos } from './AvisosCalendario'
 
 interface AgendaMonthViewProps {
   date: Date
   events: CalendarEvent[]
   onSelectShipment: (event: CalendarEvent) => void
   onDayClick: (date: Date) => void
+  /** Feriados, paros y demas: no cuelgan de una carga, son del dia. */
+  avisos?: EventoCalendario[]
+  onAbrirAviso?: (aviso: EventoCalendario) => void
 }
 
-export default function AgendaMonthView({ date, events, onDayClick }: AgendaMonthViewProps) {
+export default function AgendaMonthView({ date, events, onDayClick, avisos = [], onAbrirAviso }: AgendaMonthViewProps) {
   const year = date.getFullYear()
   const month = date.getMonth()
   const grid = getMonthGrid(year, month)
@@ -56,6 +61,9 @@ export default function AgendaMonthView({ date, events, onDayClick }: AgendaMont
                 }`}>
                   {d.getDate()}
                 </div>
+
+                {/* Feriados y paros van arriba: mandan sobre lo agendado. */}
+                <BandaAvisos avisos={eventosDelDia(avisos, dateKey)} compacta onAbrir={onAbrirAviso} />
 
                 {/* Event indicators (max 3 visible) */}
                 <div className="space-y-0.5">
