@@ -9,7 +9,11 @@ import { getClientSessionId } from './clientSession'
 
 export const TRUCKS_LIVE_CHANNEL = 'trucks-live'
 
-export type TrucksLiveKind = 'truck' | 'truck_load' | 'ref_checks'
+// 'shipment' (31/08): editar una carga (transporte, deposito, fechas…) no
+// avisaba a nadie. El que tenia la grilla abierta seguia viendo el dato viejo
+// hasta recargar la pagina, y dos personas podian tocar la misma carga sin
+// enterarse. Es el mismo timbre: avisa que cambio algo, no manda datos.
+export type TrucksLiveKind = 'truck' | 'truck_load' | 'ref_checks' | 'shipment'
 // clientId: id de sesión del browser que ORIGINÓ la escritura (el backend lo
 // copia del header X-Client-Id al payload del broadcast). Sirve para que el
 // que guarda ignore su propio timbre y no se refetchee en medio de su guardado.
@@ -28,7 +32,7 @@ export function resolveRealtimeConfig(
 export function isTrucksLiveMessage(x: unknown): x is TrucksLiveMessage {
   if (!x || typeof x !== 'object') return false
   const k = (x as { kind?: unknown }).kind
-  return k === 'truck' || k === 'truck_load' || k === 'ref_checks'
+  return k === 'truck' || k === 'truck_load' || k === 'ref_checks' || k === 'shipment'
 }
 
 /** true si el timbre lo originó ESTE browser (broadcast propio → ignorar).
