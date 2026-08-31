@@ -1198,7 +1198,11 @@ function App() {
     return <TermsPage onBack={() => navigateTo('public')} />
   }
 
+  // El Diario logístico es un producto de Mediterránea. En TWF esa URL no
+  // existe: sin este corte, transitworldforwarding.com/novedades servía el
+  // Diario de Med con la marca de TWF encima.
   if (currentView === 'novedades') {
+    if (getBrand().id !== 'med') return <NotFoundPage onGoHome={() => navigateTo('public')} />
     return <NovedadesPage />
   }
 
