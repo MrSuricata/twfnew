@@ -106,10 +106,16 @@ function Kicker({ categoria, claro }: { categoria: string; claro?: boolean }) {
   )
 }
 
-// ── Alerta al abrir la web: 1 vez por día por navegador ──────────────────
+// ── Aviso del día al abrir la web: 1 vez por día por navegador ──────────
+// Muestra el Diario completo en las mismas tarjetas de la portada, para
+// deslizar entre los avisos vigentes. Lo que dispara la aparición sigue
+// siendo que haya al menos un aviso marcado como alerta: si no, no
+// interrumpe a nadie.
 export function NovedadAlertaModal({ noticias }: { noticias: Noticia[] }) {
   const [abierta, setAbierta] = useState(false)
   const alertas = useMemo(() => alertasVigentes(noticias, hoyISO()), [noticias])
+  const vigentes = useMemo(() => noticiasVigentes(noticias, hoyISO()), [noticias])
+  const slides = useMemo(() => ordenSlides(vigentes), [vigentes])
 
   useEffect(() => {
     if (alertas.length > 0 && !alertaYaVista(hoyISO(), alertas)) setAbierta(true)
@@ -119,52 +125,55 @@ export function NovedadAlertaModal({ noticias }: { noticias: Noticia[] }) {
     marcarAlertaVista(hoyISO(), alertas)
     setAbierta(false)
   }
-  if (alertas.length === 0) return null
-  const a = alertas[0]
-
-  const otras = alertas.length - 1
+  if (alertas.length === 0 || slides.length === 0) return null
 
   return (
     <Dialog open={abierta} onOpenChange={o => { if (!o) cerrar() }}>
       <DialogContent
-        className="p-0 overflow-hidden border-0 gap-0 sm:max-w-[620px]"
+        className="p-0 overflow-hidden border-0 gap-0 sm:max-w-[880px]"
         style={{ borderRadius: 28, boxShadow: '0 60px 130px rgba(20,12,60,0.5)' }}
       >
-        <DialogTitle className="sr-only">{tituloPlano(a.titulo)}</DialogTitle>
+        <DialogTitle className="sr-only">Diario logístico — avisos del día</DialogTitle>
 
-        {/* Banda de encabezado con los arcos de la marca */}
-        <div
-          className="relative overflow-hidden flex items-center justify-between gap-4 px-6 sm:px-9 py-[26px] sm:py-[30px]"
-          style={{ background: 'linear-gradient(160deg,#49286b 0%,#352e6a 60%,#261c79 100%)' }}
-        >
-          <div className="absolute pointer-events-none rounded-full" style={{ top: -120, right: -120, width: 220, height: 220, background: 'rgba(155,209,229,0.18)' }} />
-          <div className="absolute pointer-events-none rounded-full box-border" style={{ top: -135, right: -135, width: 270, height: 270, border: '14px solid rgba(155,209,229,0.35)' }} />
-          <span className="relative rounded-full text-white uppercase" style={{ background: '#e8863b', padding: '9px 22px', fontWeight: 600, fontSize: 13, letterSpacing: '0.08em' }}>
-            {a.kicker || categoriaMeta(a.categoria).label}
+        <div className="flex items-center justify-between gap-4 px-6 sm:px-8 pt-6 pb-4">
+          <span className="rounded-full text-white uppercase" style={{ background: '#e8863b', padding: '8px 20px', fontWeight: 600, fontSize: 12, letterSpacing: '0.08em' }}>
+            Diario logístico
           </span>
-          <span className="relative" style={{ color: '#9bd1e5', fontWeight: 600, fontSize: 13, letterSpacing: '0.08em' }}>
-            {fmtFecha(a.publicadaAt)}
+          <span className="hidden sm:block" style={{ color: '#9a96b8', fontWeight: 500, fontSize: 12 }}>
+            {slides.length === 1 ? '1 aviso vigente' : `${slides.length} avisos vigentes · deslizá para verlos`}
           </span>
         </div>
 
-        <div className="flex flex-col items-start gap-4 px-6 sm:px-9 pt-7 sm:pt-8 pb-[26px] sm:pb-[30px]">
-          <h3 style={{ fontFamily: "'Nunito','Jost',sans-serif", fontWeight: 900, fontSize: 29, lineHeight: 1.05, letterSpacing: '-0.01em', color: '#49286b' }}>
-            {tituloPlano(a.titulo)}
-          </h3>
-          <div style={{ width: 120, height: 5, background: '#e8863b' }} />
-          {a.bajada && (
-            <p style={{ fontSize: 16.5, lineHeight: 1.55, color: '#352e6a' }}>
-              {conNegrita(a.bajada, { color: '#49286b' })}
-            </p>
-          )}
-          {otras > 0 && (
-            <a href="/novedades" className="rounded-full" style={{ background: '#ceffff', border: '2px solid #9bd1e5', padding: '8px 18px', fontWeight: 600, fontSize: 13, color: '#352e6a' }}>
-              + {otras} aviso{otras > 1 ? 's' : ''} más en Novedades
-            </a>
-          )}
+        {/* En pantalla grande, las tarjetas del Diario para deslizar. */}
+        <div className="hidden sm:block px-8">
+          <NovedadesCarrusel noticias={slides} />
         </div>
 
-        <div className="flex items-center gap-3 sm:gap-[18px] px-6 sm:px-9 pb-[26px] sm:pb-[30px]">
+        {/* En el celular la tarjeta 16:9 quedaría ilegible: ahí va el aviso
+            principal en formato lectura, con el resto a un toque de distancia. */}
+        <div className="sm:hidden px-6">
+          <div className="rounded-[20px] border-2 border-[#eef0f8] overflow-hidden">
+            <div className="degradado-med px-5 py-4">
+              <span className="inline-block rounded-full text-white uppercase" style={{ background: '#e8863b', padding: '6px 16px', fontWeight: 600, fontSize: 11, letterSpacing: '0.08em' }}>
+                {slides[0].kicker || categoriaMeta(slides[0].categoria).label}
+              </span>
+            </div>
+            <div className="px-5 py-4">
+              <h3 className="titulo-med text-xl text-[#49286b]">{tituloPlano(slides[0].titulo)}</h3>
+              <div className="mt-2.5 mb-3" style={{ width: 100, height: 4, background: '#e8863b' }} />
+              {slides[0].bajada && (
+                <p className="text-[15px] leading-relaxed text-[#352e6a]">{conNegrita(slides[0].bajada, { color: '#49286b' })}</p>
+              )}
+              {slides.length > 1 && (
+                <a href="/novedades" className="mt-3 inline-block rounded-full" style={{ background: '#ceffff', border: '2px solid #9bd1e5', padding: '7px 16px', fontWeight: 600, fontSize: 13, color: '#352e6a' }}>
+                  + {slides.length - 1} aviso{slides.length > 2 ? 's' : ''} más en el Diario
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 sm:gap-[18px] px-6 sm:px-8 pt-5 pb-6">
           <button
             onClick={cerrar}
             className="rounded-full text-white transition-colors"
@@ -175,7 +184,7 @@ export function NovedadAlertaModal({ noticias }: { noticias: Noticia[] }) {
             Entendido
           </button>
           <a href="/novedades" className="inline-flex items-center gap-2 whitespace-nowrap" style={{ fontWeight: 600, fontSize: 15, color: '#49286b' }}>
-            Ver novedades <ArrowRight size={15} weight="bold" />
+            Ver el Diario <ArrowRight size={15} weight="bold" />
           </a>
           <span className="ml-auto hidden sm:inline" style={{ fontWeight: 500, fontSize: 12, color: '#9a96b8' }}>1 aviso por día</span>
         </div>

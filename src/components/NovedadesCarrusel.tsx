@@ -268,6 +268,11 @@ export default function NovedadesCarrusel({ noticias }: { noticias: Noticia[] })
         const abajo = rs.bottom - rm.bottom     // dots + padding inferior
         const libre = window.innerHeight - arriba - abajo
         if (libre > 240) porAlto = libre / H
+      } else {
+        // Fuera de una sección (el aviso del día lo monta dentro del diálogo):
+        // dejamos lugar para el encabezado y los botones del propio diálogo.
+        const libre = window.innerHeight * 0.62
+        if (libre > 200) porAlto = libre / H
       }
       setK(Math.min(ancho / W, porAlto))
     }
