@@ -50,7 +50,7 @@ import { fmtDateDMY } from '@/lib/format'
 import ShipmentDetailsDialog from './ShipmentDetailsDialog'
 import AgendaCalendar from './agenda/AgendaCalendar'
 import { matchesPattern, findClientByEmail } from '@/lib/clientMatching'
-import { useBrand } from '@/lib/brand'
+import { useBrand, getBrand } from '@/lib/brand'
 import { downloadClientStatusPdf } from '@/lib/clientStatusPdf'
 
 interface ClientPortalProps {
@@ -88,8 +88,11 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
 
   // Avisos operativos vigentes (los mismos de la landing) — solo lectura.
   const { noticias: noticiasPortal } = useNoticias()
+  // El portal lo comparten las dos marcas; el Diario es solo de Mediterránea.
   const avisoPortal = useMemo(
-    () => alertasVigentes(noticiasPortal, new Date().toISOString().slice(0, 10))[0] ?? null,
+    () => (getBrand().id === 'med'
+      ? alertasVigentes(noticiasPortal, new Date().toISOString().slice(0, 10))[0] ?? null
+      : null),
     [noticiasPortal]
   )
 
