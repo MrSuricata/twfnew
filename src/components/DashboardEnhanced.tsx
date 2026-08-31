@@ -602,6 +602,12 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
               onRefreshTrucks={onRefreshTrucks}
               onCreateShipment={onCreateShipment}
               onPatchShipment={onPatchShipment}
+              onDeleteShipment={(id) => {
+                // La pestaña LCL borra por id; handleDeleteShipment solo lee
+                // dbId y ref de la operación, así que alcanza con esos dos.
+                const row = dbShipments.find(s => s.id === id)
+                if (row) onDeleteShipment?.({ dbId: row.id, ref: row.ref } as UnifiedOperation)
+              }}
             />
           </TabsContent>
 

@@ -213,6 +213,12 @@ export interface DbShipment {
   no_apilable: boolean
   oog: boolean
   desconsol_date?: string
+  /** LCL: nº de stock del depósito. Su fecha es `desconsol_date`, porque
+   *  desconsolidar ES entregar el stock. Vacío = todavía no lo dieron. */
+  stock?: string | null
+  /** LCL: 'stand_by' = el cliente pide que no salga · 'prioridad' = la quiere ya. */
+  marca_cliente?: 'stand_by' | 'prioridad' | null
+  marca_motivo?: string | null
   entrega_planta?: boolean
   imo: boolean
   tipo: string
