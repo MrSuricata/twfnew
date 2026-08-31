@@ -356,7 +356,7 @@ git commit -m "LCL: reloj de almacenaje (30 días) y días esperando camión"
 ### Task 4: Los campos nuevos en el modelo
 
 **Files:**
-- Modify: `src/lib/operationsTypes.ts` (interfaz `DbShipment` ~línea 215, `EDITABLE_FIELDS` ~línea 845)
+- Modify: `src/lib/operationsTypes.ts` (interfaz `DbShipment`, ~línea 215)
 
 - [ ] **Step 1: Sumar los campos a `DbShipment`**
 
