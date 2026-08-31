@@ -25,7 +25,7 @@ export function clientIdFromRequest(req: { headers: Record<string, string | stri
 }
 
 export async function broadcastTrucksLive(
-  kind: 'truck' | 'truck_load' | 'ref_checks',
+  kind: 'truck' | 'truck_load' | 'ref_checks' | 'shipment',
   truckId?: string,
   clientId?: string,
 ): Promise<void> {

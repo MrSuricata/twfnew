@@ -29,6 +29,8 @@ function setAuth(token: string, role: UserRole, data?: Record<string, string>) {
   _token = token
   _role = role
   _userData = data || null
+  // Token nuevo = sesión nueva: si más adelante vence, hay que avisar otra vez.
+  sesionYaAvisada = false
   // Persist only the token (not credentials) for session restore
   try { sessionStorage.setItem('twf-token', token) } catch {}
 }
@@ -219,5 +221,40 @@ export async function authFetch(url: string, options: RequestInit = {}): Promise
     headers.set('Authorization', `Bearer ${_token}`)
   }
   headers.set('X-Client-Id', getClientSessionId())
-  return fetch(url, { ...options, headers })
+  const res = await fetch(url, { ...options, headers })
+  // Sesión vencida (Brian 31/08): antes un 401 llegaba a cada llamador como un
+  // error cualquiera — "no se pudo guardar", y a veces ni eso. Lo peor es en
+  // una escritura: la edición se revierte sola y parece un bug de la app,
+  // cuando en realidad hay que volver a entrar. Se avisa UNA vez.
+  if (res.status === 401 && _token) avisarSesionVencida()
+  return res
+}
+
+// ── Sesión vencida ─────────────────────────────────────────────────
+// El aviso lo muestra la UI (este módulo no dibuja). Se arma como un aviso
+// único: varias llamadas en paralelo devuelven 401 juntas y no tiene sentido
+// apilar cinco carteles iguales.
+
+type OyenteSesion = () => void
+const oyentesSesion = new Set<OyenteSesion>()
+let sesionYaAvisada = false
+
+/** Se llama al recibir el primer 401 con token puesto. */
+function avisarSesionVencida(): void {
+  if (sesionYaAvisada) return
+  sesionYaAvisada = true
+  for (const o of oyentesSesion) {
+    try { o() } catch { /* un oyente roto no puede tumbar el fetch */ }
+  }
+}
+
+/** La UI se suscribe para mostrar el cartel. Devuelve el cleanup. */
+export function onSesionVencida(oyente: OyenteSesion): () => void {
+  oyentesSesion.add(oyente)
+  return () => { oyentesSesion.delete(oyente) }
+}
+
+/** Rearma el aviso: al volver a entrar, un 401 futuro tiene que avisar de nuevo. */
+export function resetAvisoSesion(): void {
+  sesionYaAvisada = false
 }

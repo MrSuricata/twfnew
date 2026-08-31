@@ -2267,6 +2267,10 @@ async function handleShipments(req: VercelRequest, res: VercelResponse, db: any,
     logAudit(db, payload, 'archived' in updates && Object.keys(updates).length === 1
       ? (updates.archived ? 'archivar' : 'restaurar')
       : esPago ? 'pago' : 'editar', 'shipments', updRow?.ref || id, updates)
+    // Timbre de co-edición: avisa a los demás browsers que una carga cambió,
+    // para que refetcheen. Sin esto, el que tenía la grilla abierta seguía
+    // viendo el transporte viejo hasta recargar la página (Brian 31/08).
+    void broadcastTrucksLive('shipment', undefined, clientIdFromRequest(req))
     return res.status(200).json({ updated: true })
   }
 
@@ -2288,6 +2292,7 @@ async function handleShipments(req: VercelRequest, res: VercelResponse, db: any,
     const { error } = await db.from('shipments').upsert(rows, { onConflict: 'id' })
     if (error) throw error
     logAudit(db, payload, 'crear/actualizar carga', 'shipments', rows.map(r => r.ref).filter(Boolean).join(', ') || String(rows[0]?.id || ''))
+    void broadcastTrucksLive('shipment', undefined, clientIdFromRequest(req))
     return res.status(200).json({ saved: true, count: rows.length })
   }
 

@@ -12,7 +12,7 @@ import { withRollupColumns } from '@/lib/operativasRollup'
 import { subscribeTrucksLive } from '@/lib/realtimeBus'
 import { getDemoShipments } from '@/lib/demoShipments'
 import { filterShipments } from '@/lib/sheetsSync'
-import { verifySession, clearAuth, authFetch, hasStoredToken, adoptImpersonationToken } from '@/lib/authClient'
+import { verifySession, clearAuth, authFetch, hasStoredToken, adoptImpersonationToken, onSesionVencida } from '@/lib/authClient'
 import { shouldRestoreSession } from '@/lib/authGate'
 import { loadAdminData, saveQuotes, saveDocuments, saveReports, saveClients, saveTrucks, saveTruckLoads, saveLclAir, deleteTruck as apiDeleteTruck, deleteTruckLoad as apiDeleteTruckLoad, deleteLclAir as apiDeleteLclAir, saveBilling, deleteBilling as apiDeleteBilling, saveOperators, saveOperatorAssignment, deleteOperator as apiDeleteOperator, patchDbShipment, createDbShipment, deleteDbShipment, patchFclShipment, renameShipmentRef, fetchTrucks, fetchTruckLoads } from '@/lib/dataClient'
 
@@ -178,13 +178,19 @@ function App() {
   // refresh → schedule → refresh entre useCallbacks.
   const trucksRefreshRetryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const refreshTrucksFromDbRef = useRef<() => Promise<boolean>>(() => Promise.resolve(true))
+  // Escrituras de CARGAS en vuelo. El timbre de co-edición dispara un refetch
+  // de fondo: si llega en medio de un guardado, el GET puede leer la DB antes
+  // del commit y pisar la edición optimista con datos viejos. Misma familia de
+  // guardas que ya tenían camiones y clientes.
+  const pendingShipmentWritesRef = useRef(0)
+  const lastShipmentWriteTsRef = useRef(0)
   const pendingLclAirWritesRef = useRef(0)
   const pendingBillingWritesRef = useRef(0)
 
   // ── Load data from Supabase when admin logs in ──
   // `force`: saltea el guard de "ya cargué" para refetches explícitos (rename de
   // REF, botón Refrescar post-flip). Nunca corre dos cargas en paralelo.
-  const loadDataFromDB = useCallback(async (force = false) => {
+  const loadDataFromDB = useCallback(async (force = false, opts?: { silencioso?: boolean }) => {
     if ((dbLoadedRef.current && !force) || dbLoadingRef.current) return
     dbLoadingRef.current = true
     setIsDataLoading(true)
@@ -263,12 +269,19 @@ function App() {
       saveToStorage('twf-operators', data.operators)
       setAssignments(data.assignments)
       saveToStorage('twf-operator-assignments', data.assignments)
-      setDbShipments(data.dbShipments)
-      saveToStorage('twf-db-shipments', data.dbShipments)
+      // Con una escritura de carga en vuelo, el snapshot puede ser anterior al
+      // commit: no se aplica (la edición optimista ya muestra lo correcto y el
+      // próximo refresco converge).
+      if (pendingShipmentWritesRef.current === 0) {
+        setDbShipments(data.dbShipments)
+        saveToStorage('twf-db-shipments', data.dbShipments)
+      }
 
       setDataFresh(true)
       setDbSyncError(null)
-      toast.success('Datos sincronizados desde la base de datos')
+      // El refresco por timbre es de fondo: avisar en cada cambio ajeno sería
+      // un toast cada pocos minutos.
+      if (!opts?.silencioso) toast.success('Datos sincronizados desde la base de datos')
     } catch (error) {
       console.warn('[DB] Failed to load from Supabase, using local cache:', error)
       setDataFresh(false)
@@ -658,6 +671,18 @@ function App() {
     }
   }, [])
 
+  // Sesión vencida: hasta ahora un 401 aparecía como "no se pudo guardar el
+  // cambio", que se lee como un bug de la app. El cartel no se va solo: lo que
+  // edites con la sesión caída no se guarda, y eso hay que verlo.
+  useEffect(() => onSesionVencida(() => {
+    toast.error('Tu sesión venció', {
+      id: 'sesion-vencida',
+      description: 'Volvé a entrar para seguir guardando. Los cambios que hagas ahora no se guardan.',
+      duration: Infinity,
+      action: { label: 'Volver a entrar', onClick: () => window.location.reload() },
+    })
+  }), [])
+
   // Co-edición Fase 1: "timbre" Realtime → al recibir aviso de cambio de un
   // camión/carga (de otro usuario), refetchar en vivo. Debounce para colapsar
   // ráfagas (carga múltiple) en un solo refetch. Si no hay env vars de Realtime,
@@ -665,15 +690,35 @@ function App() {
   useEffect(() => {
     if (!isAdminLoggedIn) return
     let timer: ReturnType<typeof setTimeout> | null = null
+    let timerCargas: ReturnType<typeof setTimeout> | null = null
     const unsub = subscribeTrucksLive(msg => {
       // El canal ahora lleva también timbres de ref_checks (avisos de HOY/Checks),
       // que refetchean SUS componentes por su cuenta. Acá solo interesan camiones.
+      // Cargas: refetch de fondo, sin toast. Se posterga si hay una escritura
+      // propia reciente, para no pisar la edición optimista con un snapshot
+      // anterior al commit.
+      if (msg.kind === 'shipment') {
+        if (timerCargas) clearTimeout(timerCargas)
+        timerCargas = setTimeout(function reintentar() {
+          const recien = Date.now() - lastShipmentWriteTsRef.current < 2500
+          if (pendingShipmentWritesRef.current > 0 || recien) {
+            timerCargas = setTimeout(reintentar, 1200)
+            return
+          }
+          void loadDataFromDB(true, { silencioso: true })
+        }, 600)
+        return
+      }
       if (msg.kind !== 'truck' && msg.kind !== 'truck_load') return
       if (timer) clearTimeout(timer)
       timer = setTimeout(() => { void refreshTrucksFromDb() }, 400)
     })
-    return () => { if (timer) clearTimeout(timer); unsub() }
-  }, [isAdminLoggedIn, refreshTrucksFromDb])
+    return () => {
+      if (timer) clearTimeout(timer)
+      if (timerCargas) clearTimeout(timerCargas)
+      unsub()
+    }
+  }, [isAdminLoggedIn, refreshTrucksFromDb, loadDataFromDB])
 
   const handleDeleteTruckLoad = async (id: string) => {
     trucksWriteGenRef.current += 1
@@ -815,6 +860,8 @@ function App() {
       return next
     })
     if (isAdminLoggedIn) {
+      pendingShipmentWritesRef.current += 1
+      lastShipmentWriteTsRef.current = Date.now()
       patchDbShipment(id, fields).catch(err => {
         console.warn('[DB] Failed to patch shipment:', err)
         // La DB NO guardó: revertir SOLO los campos de este patch en esta fila,
@@ -826,6 +873,9 @@ function App() {
           return next
         })
         toast.error('No se pudo guardar el cambio — se revirtió. Reintentá.', { duration: 5000 })
+      }).finally(() => {
+        pendingShipmentWritesRef.current = Math.max(0, pendingShipmentWritesRef.current - 1)
+        lastShipmentWriteTsRef.current = Date.now()
       })
     }
   }

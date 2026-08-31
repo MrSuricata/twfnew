@@ -61,3 +61,20 @@ describe('getClientSessionId', () => {
     expect(/^[\w.:-]+$/.test(a)).toBe(true) // mismo charset que valida el backend
   })
 })
+
+describe('timbre de cargas (shipment)', () => {
+  it('reconoce el aviso de carga cambiada', () => {
+    expect(isTrucksLiveMessage({ kind: 'shipment' })).toBe(true)
+  })
+
+  it('sigue rechazando basura', () => {
+    expect(isTrucksLiveMessage({ kind: 'shipments' })).toBe(false)
+    expect(isTrucksLiveMessage({ kind: '' })).toBe(false)
+  })
+
+  it('el que originó el cambio ignora su propio timbre', () => {
+    const msg = { kind: 'shipment' as const, clientId: 'br-1' }
+    expect(isOwnTrucksLiveMessage(msg, 'br-1')).toBe(true)
+    expect(isOwnTrucksLiveMessage(msg, 'joaco-2')).toBe(false)
+  })
+})
