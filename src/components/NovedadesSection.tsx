@@ -136,7 +136,7 @@ export function NovedadAlertaModal({ noticias }: { noticias: Noticia[] }) {
         <DialogTitle className="sr-only">Diario logístico — avisos del día</DialogTitle>
 
         <div className="flex items-center justify-between gap-4 px-6 sm:px-8 pt-6 pb-4">
-          <span className="rounded-full text-white uppercase" style={{ background: '#e8863b', padding: '8px 20px', fontWeight: 600, fontSize: 12, letterSpacing: '0.08em' }}>
+          <span className="rounded-full uppercase" style={{ background: '#ceffff', border: '2px solid #9bd1e5', color: '#352e6a', padding: '6px 18px', fontWeight: 600, fontSize: 12, letterSpacing: '0.08em' }}>
             Diario logístico
           </span>
           <span className="hidden sm:block" style={{ color: '#9a96b8', fontWeight: 500, fontSize: 12 }}>
@@ -157,7 +157,7 @@ export function NovedadAlertaModal({ noticias }: { noticias: Noticia[] }) {
               <span className="inline-block rounded-full text-white uppercase" style={{ background: '#e8863b', padding: '6px 16px', fontWeight: 600, fontSize: 11, letterSpacing: '0.08em' }}>
                 {slides[0].kicker || categoriaMeta(slides[0].categoria).label}
               </span>
-            </div>
+            </div>{/* único naranja de la ficha: el que marca el aviso */}
             <div className="px-5 py-4">
               <h3 className="titulo-med text-xl text-[#49286b]">{tituloPlano(slides[0].titulo)}</h3>
               <div className="mt-2.5 mb-3" style={{ width: 100, height: 4, background: '#e8863b' }} />
