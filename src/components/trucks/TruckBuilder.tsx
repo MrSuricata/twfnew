@@ -19,6 +19,8 @@ import {
   FilePdf,
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
+import { useEventosCalendario } from '@/components/agenda/AvisosCalendario'
+import { avisoParaFecha } from '@/lib/calendarioEventos'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
 import type { Truck, TruckLoad, LclAirShipment, TruckStatus } from '@/lib/truckTypes'
 import type { DbShipment, Operator } from '@/lib/operationsTypes'
@@ -105,6 +107,10 @@ export default function TruckBuilder(props: TruckBuilderProps) {
   // (mercancía peligrosa) y SIN TELEX (la naviera no liberó — no se puede
   // retirar). Los flags viven en la carga (tabla shipments). Telex aplica solo
   // a marítimo (FCL/LCL) — aéreo/terrestre no tienen.
+  // Feriados y paros anotados en el calendario: si la fecha elegida cae en
+  // uno, se avisa acá mismo. Avisa, no bloquea: a veces conviene igual.
+  const { eventos: avisosCal } = useEventosCalendario()
+
   const specialLoads = useMemo(() => {
     const byRef = new Map(dbShipments.map(s => [s.ref, s]))
     const noApilables: string[] = []
@@ -573,13 +579,19 @@ export default function TruckBuilder(props: TruckBuilderProps) {
                     if (v && specialLoads.sinTelex.length > 0) {
                       toast.warning(`🚨 Fecha de carga puesta con cargas SIN TELEX: ${specialLoads.sinTelex.join(', ')} — reclamar la liberación a la naviera.`, { duration: 8000 })
                     }
+                    const chocaCal = v ? avisoParaFecha(avisosCal, v) : null
+                    if (chocaCal) toast.warning(`📌 Ese día tiene ${chocaCal}`, { duration: 8000 })
                     updateTruck({ loadDate: v, departureDate: v })
                   }}
                 />
                 <FieldDate
                   label="Arribo a fiscal"
                   value={merged.arrivalDate}
-                  onChange={v => updateTruck({ arrivalDate: v })}
+                  onChange={v => {
+                    const chocaCal = v ? avisoParaFecha(avisosCal, v) : null
+                    if (chocaCal) toast.warning(`📌 Ese día tiene ${chocaCal}`, { duration: 8000 })
+                    updateTruck({ arrivalDate: v })
+                  }}
                 />
               </div>
 

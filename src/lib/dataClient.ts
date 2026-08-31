@@ -297,6 +297,33 @@ export async function deleteNoticia(id: string): Promise<void> {
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
 }
 
+// ── Avisos del calendario ──
+
+export async function fetchEventosCalendario(): Promise<import('./calendarioEventos').EventoCalendario[]> {
+  const res = await authFetch('/api/data/calendario-eventos')
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const data = await res.json()
+  const { parseEventoCal } = await import('./calendarioEventos')
+  return (data.eventos || []).map(parseEventoCal)
+}
+
+export async function saveEventoCalendario(e: Record<string, unknown>): Promise<void> {
+  const res = await authFetch('/api/data/calendario-eventos', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(e),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
+}
+
+export async function deleteEventoCalendario(id: string): Promise<void> {
+  const res = await authFetch(`/api/data/calendario-eventos?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+}
+
 // ── Clients ──
 
 export async function fetchClients(): Promise<ClientAccount[]> {

@@ -32,6 +32,7 @@ import {
   RefChecksUpsertSchema,
   TransporteCuotasSchema,
   NoticiaRowSchema,
+  EventoCalendarioSchema,
 } from '../_lib/schemas.js'
 import { rollupFromOperativasApi } from '../_lib/operativasRollup.js'
 import { broadcastTrucksLive, clientIdFromRequest } from '../_lib/realtimeBroadcast.js'
@@ -157,6 +158,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return handleDepositoActas(req, res, db, payload)
       case 'montecon-agenda':
         return handleMonteconAgenda(req, res, db, payload)
+      case 'calendario-eventos':
+        return handleCalendarioEventos(req, res, db, payload)
       default:
         return res.status(404).json({ error: `Unknown entity: ${entity}` })
     }
@@ -742,6 +745,61 @@ async function handleNoticias(req: VercelRequest, res: VercelResponse, db: any, 
     const { error } = await db.from('noticias').delete().eq('id', id)
     if (error) throw error
     logAudit(db, payload, 'borrar', 'noticias', id, {})
+    return res.status(200).json({ deleted: true })
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' })
+}
+
+// ── Avisos del calendario (feriados, paros, lo que frena un día) ────
+// GET    → todos (la agenda filtra por mes en el cliente; son pocas filas)
+// POST   → alta o edición (por id)
+// DELETE → borra por ?id=
+//
+// No cuelgan de ninguna carga: son del día. La agenda los cruza por fecha
+// con lo que ya está agendado, y el armado de camiones avisa si el día elegido
+// tiene alguno.
+
+async function handleCalendarioEventos(req: VercelRequest, res: VercelResponse, db: any, payload: TokenPayload | null = null) {
+  if (req.method === 'GET') {
+    const { data, error } = await db
+      .from('calendario_eventos')
+      .select('*')
+      .order('fecha', { ascending: true })
+      .limit(1000)
+    if (error) throw error
+    return res.status(200).json({ eventos: data || [] })
+  }
+
+  if (req.method === 'POST') {
+    const v = validate(EventoCalendarioSchema, req.body)
+    if (!v.ok) return res.status(400).json({ error: v.error })
+    const c = v.data
+    const row: Record<string, unknown> = {
+      fecha: c.fecha,
+      tipo: c.tipo || 'aviso',
+      titulo: c.titulo,
+      detalle: c.detalle ?? '',
+    }
+    if (c.id) {
+      const { data, error } = await db.from('calendario_eventos').update(row).eq('id', c.id).select().single()
+      if (error) throw error
+      logAudit(db, payload, 'editar', 'calendario_eventos', c.id, { titulo: row.titulo, fecha: row.fecha })
+      return res.status(200).json({ evento: data })
+    }
+    row.creado_por = auditUser(payload as any)
+    const { data, error } = await db.from('calendario_eventos').insert(row).select().single()
+    if (error) throw error
+    logAudit(db, payload, 'crear', 'calendario_eventos', String(data?.id || ''), { titulo: row.titulo, fecha: row.fecha })
+    return res.status(200).json({ evento: data })
+  }
+
+  if (req.method === 'DELETE') {
+    const id = String(req.query.id || '')
+    if (!id) return res.status(400).json({ error: 'Falta id' })
+    const { error } = await db.from('calendario_eventos').delete().eq('id', id)
+    if (error) throw error
+    logAudit(db, payload, 'borrar', 'calendario_eventos', id, {})
     return res.status(200).json({ deleted: true })
   }
 
