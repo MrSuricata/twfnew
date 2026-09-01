@@ -99,6 +99,14 @@ export default function AvailableLoadsPanel({
     return out
   }, [truckLoads, currentTruckId])
 
+  // Entrega en planta vive en shipments (también para las FCL espejo): se
+  // busca por REF para que la fila FCL muestre el mismo badge que el armador.
+  const plantaByRef = useMemo(() => {
+    const m = new Map<string, boolean>()
+    for (const s of (dbShipments || [])) m.set(String(s.ref || '').trim().toUpperCase(), !!s.entrega_planta)
+    return m
+  }, [dbShipments])
+
   const rows: AvailableRow[] = useMemo(() => {
     const out: AvailableRow[] = []
     const today = new Date()
@@ -135,6 +143,7 @@ export default function AvailableLoadsPanel({
             description: delCntr.find(o => o.DESCRIPCION)?.DESCRIPCION
               || ops.find(o => o.DESCRIPCION)?.DESCRIPCION || '',
             mvdArrival: s.ETA || '',
+            entregaPlanta: plantaByRef.get(String(s.REF || '').trim().toUpperCase()) === true,
             fcl: s,
           })
         }
@@ -197,7 +206,7 @@ export default function AvailableLoadsPanel({
     }
 
     return out
-  }, [shipments, lclAir, dbShipments, modeFilter, assignedElsewhere, inThisTruck, showArchived, onlyArrived])
+  }, [shipments, lclAir, dbShipments, modeFilter, assignedElsewhere, inThisTruck, showArchived, onlyArrived, plantaByRef])
 
   const fiscals = useMemo(() => {
     const set = new Set<string>()

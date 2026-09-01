@@ -558,6 +558,49 @@ function App() {
     }
   }
 
+  // Crear un camión CON sus cargas en una sola ventana de escritura (botón
+  // "Armar camión con estas" de las sugerencias). truck_loads.truck_id
+  // referencia a trucks(id): el POST del camión tiene que resolver ANTES del
+  // de las cargas; y todo pasa por la misma contabilidad que los demás
+  // handlers (gen/lastWrite/pending/ventana) para que un refetch del timbre
+  // Realtime no aplique un snapshot sin el camión nuevo en medio del await.
+  // Devuelve false si algo no se guardó (la UI no abre el armador).
+  const handleCreateTruckWithLoads = async (truck: Truck, loads: TruckLoad[]): Promise<boolean> => {
+    trucksWriteGenRef.current += 1
+    lastTrucksWriteTsRef.current = Date.now()
+    lastTruckLoadsWriteTsRef.current = Date.now()
+    const endWrite = trucksWriteWindowRef.current.begin()
+    const nextTrucks = [...trucks, truck]
+    const nextLoads = [...truckLoads, ...loads]
+    setTrucks(nextTrucks)
+    setTruckLoads(nextLoads)
+    saveToStorage('twf-trucks', nextTrucks)
+    saveToStorage('twf-truck-loads', nextLoads)
+    if (!isAdminLoggedIn) { endWrite(); return true }
+    pendingTrucksWritesRef.current += 1
+    pendingTruckLoadsWritesRef.current += 1
+    try {
+      await saveTrucks([truck])
+      lastTrucksWriteTsRef.current = Date.now()
+      await saveTruckLoads(loads)
+      return true
+    } catch (err: any) {
+      console.warn('[DB] Failed to create truck with loads:', err)
+      // Revertir el optimista: un borrador que no está en la DB se pierde al
+      // recargar y sus cargas quedarían "reservadas" en un camión fantasma.
+      setTrucks(prev => { const n = prev.filter(t => t.id !== truck.id); saveToStorage('twf-trucks', n); return n })
+      setTruckLoads(prev => { const n = prev.filter(l => l.truckId !== truck.id); saveToStorage('twf-truck-loads', n); return n })
+      toast.error(`⚠️ El camión NO se guardó: ${err?.message || 'error de conexión'}. Reintentá.`, { duration: 10000 })
+      return false
+    } finally {
+      pendingTrucksWritesRef.current = Math.max(0, pendingTrucksWritesRef.current - 1)
+      pendingTruckLoadsWritesRef.current = Math.max(0, pendingTruckLoadsWritesRef.current - 1)
+      lastTrucksWriteTsRef.current = Date.now()
+      lastTruckLoadsWriteTsRef.current = Date.now()
+      endWrite()
+    }
+  }
+
   const handleDeleteTruck = async (id: string) => {
     trucksWriteGenRef.current += 1
     lastTrucksWriteTsRef.current = Date.now()
@@ -871,11 +914,13 @@ function App() {
   // Devuelve false si el alta se abortó (REF duplicada y el usuario canceló) —
   // los callers (diálogo Nueva carga, armador de camiones) lo usan para no
   // seguir con el flujo post-alta (cerrar diálogo / subir la carga al camión).
-  const handleCreateShipment = (row: DbShipment): boolean => {
+  // `opts.duplicadoConfirmado`: el diálogo ya mostró el aviso de ref repetida y
+  // el usuario confirmó ahí — no se vuelve a preguntar lo mismo.
+  const handleCreateShipment = (row: DbShipment, opts: { duplicadoConfirmado?: boolean } = {}): boolean => {
     // Anti-duplicado de REF: el alta NO chequeaba (a diferencia del rename con su RPC),
     // así que crear "A7990" dos veces hacía 2 filas en silencio. Avisamos antes de crear.
     const newRef = (row.ref || '').trim().toUpperCase()
-    if (newRef && dbShipments.some(s => (s.ref || '').trim().toUpperCase() === newRef)) {
+    if (!opts.duplicadoConfirmado && newRef && dbShipments.some(s => (s.ref || '').trim().toUpperCase() === newRef)) {
       const ok = window.confirm(`Ya existe una carga con la REF "${row.ref}".\n\n¿Crearla igual? Si es una carga partida, cancelá y usá un sufijo (ej. ${row.ref} A / ${row.ref} B).`)
       if (!ok) return false
     }
@@ -1130,6 +1175,7 @@ function App() {
           onUpdateTrucks={handleUpdateTrucks}
           onDeleteTruck={handleDeleteTruck}
           onUpdateTruckLoads={handleUpdateTruckLoads}
+          onCreateTruckWithLoads={handleCreateTruckWithLoads}
           onRefreshTrucks={refreshTrucksFromDb}
           onDeleteTruckLoad={handleDeleteTruckLoad}
           onUpdateLclAir={handleUpdateLclAir}

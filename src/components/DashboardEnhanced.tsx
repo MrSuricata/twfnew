@@ -97,6 +97,8 @@ interface DashboardEnhancedProps {
   onUpdateTrucks?: (trucks: Truck[], changedIds?: string[]) => void
   onDeleteTruck?: (id: string) => void
   onUpdateTruckLoads?: (loads: TruckLoad[], changedIds?: string[]) => void
+  /** Camión nuevo con sus cargas en una sola ventana de escritura (sugerencias). */
+  onCreateTruckWithLoads?: (truck: Truck, loads: TruckLoad[]) => Promise<boolean>
   onRefreshTrucks?: () => Promise<boolean>
   onDeleteTruckLoad?: (id: string) => void
   onUpdateLclAir?: (shipments: LclAirShipment[]) => void
@@ -104,8 +106,9 @@ interface DashboardEnhancedProps {
   onUpdateBilling?: (row: BillingRecord) => void
   onClearBilling?: (ref: string) => void
   onPatchShipment?: (id: string, fields: Record<string, unknown>) => void
-  /** Devuelve false si el alta se abortó (REF duplicada y el usuario canceló). */
-  onCreateShipment?: (row: DbShipment) => boolean | void
+  /** Devuelve false si el alta se abortó (REF duplicada y el usuario canceló).
+   *  `duplicadoConfirmado`: el diálogo ya preguntó por la ref repetida. */
+  onCreateShipment?: (row: DbShipment, opts?: { duplicadoConfirmado?: boolean }) => boolean | void
   onDeleteShipment?: (op: UnifiedOperation) => void
   onPatchFclField?: (dbId: string, edits: Record<string, unknown>) => void
   onRenameRef?: (op: UnifiedOperation, newRef: string, pin: string) => Promise<void>
@@ -114,6 +117,12 @@ interface DashboardEnhancedProps {
 }
 
 const ONE_DAY_MS = 86_400_000
+
+// HOY LCL exige un PATCH real: si el dashboard se monta sin él (no debería —
+// App siempre lo pasa), el input avisa en vez de mostrar un éxito falso.
+const patchNoDisponible = (_id: string, _fields: Record<string, unknown>) => {
+  toast.error('No se pudo guardar: la edición no está disponible en esta vista.')
+}
 
 // Pestaña "Importar" oculta por pedido de Brian (02/07/2026): post-flip la web
 // es master de FCL y el import puntual desde Sheets quedó sin uso diario.
@@ -129,7 +138,7 @@ const HOY_AREAS: { id: HoyArea; label: string }[] = [
   { id: 'lcl', label: 'LCL Montevideo' },
 ]
 
-export default function DashboardEnhanced({ onLogout, isDataLoading = false, clients = [], shipments = [], documents = [], reports = [], originPhotos = [], quotes = [], trucks = [], truckLoads = [], lclAir = [], billing = [], assignments = [], dbShipments = [], dbSyncError = null, onUpdateShipments, onUpdateClients, onUpdateDocuments, onUpdateReports, onUpdateOriginPhotos, onUpdateQuotes, onUpdateTrucks, onDeleteTruck, onUpdateTruckLoads, onDeleteTruckLoad, onUpdateLclAir, onDeleteLclAir, onUpdateBilling, onClearBilling, onPatchShipment, onCreateShipment, onDeleteShipment, onPatchFclField, onRenameRef, onRefreshTrucks, onReloadFromDB }: DashboardEnhancedProps) {
+export default function DashboardEnhanced({ onLogout, isDataLoading = false, clients = [], shipments = [], documents = [], reports = [], originPhotos = [], quotes = [], trucks = [], truckLoads = [], lclAir = [], billing = [], assignments = [], dbShipments = [], dbSyncError = null, onUpdateShipments, onUpdateClients, onUpdateDocuments, onUpdateReports, onUpdateOriginPhotos, onUpdateQuotes, onUpdateTrucks, onDeleteTruck, onUpdateTruckLoads, onCreateTruckWithLoads, onDeleteTruckLoad, onUpdateLclAir, onDeleteLclAir, onUpdateBilling, onClearBilling, onPatchShipment, onCreateShipment, onDeleteShipment, onPatchFclField, onRenameRef, onRefreshTrucks, onReloadFromDB }: DashboardEnhancedProps) {
   const brand = useBrand()
   const ops = brand.capabilities.opsAdmin
   // Flip Etapa 4: post-flip las FCL viven en dbShipments. Reconstruirlas a
@@ -567,7 +576,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
                 trucks={trucks}
                 truckLoads={truckLoads}
                 isDataLoading={isDataLoading}
-                onPatchShipment={onPatchShipment}
+                onPatchShipment={onPatchShipment ?? patchNoDisponible}
                 onOpenDetail={onOpenDetail}
                 onOpenTab={setActiveTab}
               />
@@ -622,6 +631,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
               shipments={fclShipments}
               trucks={trucks}
               truckLoads={truckLoads}
+              dbShipments={dbShipments}
               editable
               onPatchShipment={onPatchShipment}
               onUpdateTrucks={onUpdateTrucks}
@@ -650,6 +660,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
               onUpdateTrucks={(t, ids) => { if (onUpdateTrucks) onUpdateTrucks(t, ids) }}
               onDeleteTruck={(id) => { if (onDeleteTruck) onDeleteTruck(id) }}
               onUpdateTruckLoads={(l, ids) => { if (onUpdateTruckLoads) onUpdateTruckLoads(l, ids) }}
+              onCreateTruckWithLoads={onCreateTruckWithLoads}
               onDeleteTruckLoad={(id) => { if (onDeleteTruckLoad) onDeleteTruckLoad(id) }}
               onUpdateLclAir={(s) => { if (onUpdateLclAir) onUpdateLclAir(s) }}
               onDeleteLclAir={(id) => { if (onDeleteLclAir) onDeleteLclAir(id) }}
@@ -711,7 +722,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
               onUpdateOriginPhotos={onUpdateOriginPhotos}
               onUpdateReports={onUpdateReports}
               onPatchShipment={(id, fields) => { if (onPatchShipment) onPatchShipment(id, fields) }}
-              onCreateShipment={(row) => onCreateShipment?.(row)}
+              onCreateShipment={(row, opts) => onCreateShipment?.(row, opts)}
               onDeleteShipment={(op) => { if (onDeleteShipment) onDeleteShipment(op) }}
               onPatchFclField={(dbId, edits) => { if (onPatchFclField) onPatchFclField(dbId, edits) }}
               onRenameRef={onRenameRef}

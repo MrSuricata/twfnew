@@ -92,7 +92,7 @@ interface OperationsGridProps {
   onUpdateReports?: (reports: OperativeReport[]) => void
   onPatchShipment: (id: string, fields: Record<string, unknown>) => void
   /** Devuelve false si el alta se abortó (REF duplicada y el usuario canceló). */
-  onCreateShipment?: (row: DbShipment) => boolean | void
+  onCreateShipment?: (row: DbShipment, opts?: { duplicadoConfirmado?: boolean }) => boolean | void
   onDeleteShipment?: (op: UnifiedOperation) => void
   onPatchFclField?: (dbId: string, edits: Record<string, unknown>) => void
   onRenameRef?: (op: UnifiedOperation, newRef: string, pin: string) => Promise<void>
@@ -1108,8 +1108,8 @@ export default function OperationsGrid({
         <NewShipmentDialog
           open={newOpen}
           onOpenChange={setNewOpen}
-          onCreate={(row) => {
-            const ok = onCreateShipment(row)
+          onCreate={(row, opts) => {
+            const ok = onCreateShipment(row, opts)
             if (ok !== false) toast.success(`Carga ${row.ref} agregada — completá lo que falte en la grilla`)
             return ok
           }}

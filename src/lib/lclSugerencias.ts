@@ -264,13 +264,13 @@ export function compararUrgencia(a: Candidata, b: Candidata): number {
 
 export type Sugerencia = 'salir' | 'esperar' | 'completar'
 
-export interface Propuesta {
+export interface Propuesta<T extends CargaLclFuente = CargaLclFuente> {
   /** `${fiscal}|${depositos.join('+')}` — estable para keys de UI. */
   id: string
   fiscal: string
   /** Depósitos UY donde carga, en orden de parada. Normalmente uno. */
   depositos: string[]
-  cargas: Candidata[]
+  cargas: Candidata<T>[]
   kg: number
   m3: number
   pkgs: number
@@ -290,12 +290,12 @@ export interface Propuesta {
 
 export interface OpcionesSugerir { limites: Limites }
 
-interface Llenado { cargas: Candidata[]; kg: number; m3: number; noEntran: string[] }
+interface Llenado<T extends CargaLclFuente = CargaLclFuente> { cargas: Candidata<T>[]; kg: number; m3: number; noEntran: string[] }
 
 /** Greedy en orden de urgencia: entra si no pasa ni kg ni m³. */
-function llenar(candidatas: Candidata[], lim: Limites, base: Llenado = { cargas: [], kg: 0, m3: 0, noEntran: [] }): Llenado {
+function llenar<T extends CargaLclFuente>(candidatas: Candidata<T>[], lim: Limites, base: Llenado<T> = { cargas: [], kg: 0, m3: 0, noEntran: [] }): Llenado<T> {
   const orden = [...candidatas].sort(compararUrgencia)
-  const out: Llenado = { cargas: [...base.cargas], kg: base.kg, m3: base.m3, noEntran: [...base.noEntran] }
+  const out: Llenado<T> = { cargas: [...base.cargas], kg: base.kg, m3: base.m3, noEntran: [...base.noEntran] }
   for (const c of orden) {
     if (out.kg + c.kg <= lim.kgMax && out.m3 + c.m3 <= lim.m3Max) {
       out.cargas.push(c); out.kg += c.kg; out.m3 += c.m3
@@ -356,7 +356,7 @@ function sugerenciaDe(urgente: boolean, ocM3: number, ocKg: number): Sugerencia 
   return 'esperar'
 }
 
-function armar(fiscal: string, depositos: string[], ll: Llenado, lim: Limites, alternativa: boolean, motivosExtra: string[] = []): Propuesta {
+function armar<T extends CargaLclFuente>(fiscal: string, depositos: string[], ll: Llenado<T>, lim: Limites, alternativa: boolean, motivosExtra: string[] = []): Propuesta<T> {
   const { motivos, urgente } = motivosDe(ll.cargas, lim)
   const ocupacionM3 = lim.m3Max > 0 ? ll.m3 / lim.m3Max : 0
   const ocupacionKg = lim.kgMax > 0 ? ll.kg / lim.kgMax : 0
@@ -401,22 +401,22 @@ function compararPropuestas(a: Propuesta, b: Propuesta): number {
  * mejor camión se gana bastante llenado, se agrega una propuesta alternativa
  * que lo dice con el costo: "Es una parada más".
  */
-export function sugerirCamiones(candidatas: Candidata[], opts: OpcionesSugerir): Propuesta[] {
+export function sugerirCamiones<T extends CargaLclFuente>(candidatas: Candidata<T>[], opts: OpcionesSugerir): Propuesta<T>[] {
   const lim = opts.limites
-  const porFiscal = new Map<string, Map<string, Candidata[]>>()
+  const porFiscal = new Map<string, Map<string, Candidata<T>[]>>()
   for (const c of candidatas) {
     // Sin depósito (ni real ni supuesto) no hay de dónde cargar: no se propone.
     if (c.deposito === SIN_DEPOSITO) continue
-    const deps = porFiscal.get(c.fiscal) ?? new Map<string, Candidata[]>()
+    const deps = porFiscal.get(c.fiscal) ?? new Map<string, Candidata<T>[]>()
     deps.set(c.deposito, [...(deps.get(c.deposito) ?? []), c])
     porFiscal.set(c.fiscal, deps)
   }
 
-  const bases: Propuesta[] = []
-  const alternativas = new Map<string, Propuesta>()   // id base → alternativa
+  const bases: Propuesta<T>[] = []
+  const alternativas = new Map<string, Propuesta<T>>()   // id base → alternativa
 
   for (const [fiscal, deps] of porFiscal) {
-    const delFiscal: Propuesta[] = []
+    const delFiscal: Propuesta<T>[] = []
     for (const [deposito, cargas] of deps) {
       const ll = llenar(cargas, lim)
       if (ll.cargas.length === 0) continue
@@ -431,7 +431,7 @@ export function sugerirCamiones(candidatas: Candidata[], opts: OpcionesSugerir):
     // propone una parada más para pasar de 82 % a 97 %.
     if (base.ocupacionM3 >= LLENO_PCT) continue
     const otros = delFiscal.filter(p => p !== base).sort((a, b) => b.m3 - a.m3)
-    let ll: Llenado = { cargas: base.cargas, kg: base.kg, m3: base.m3, noEntran: [] }
+    let ll: Llenado<T> = { cargas: base.cargas, kg: base.kg, m3: base.m3, noEntran: [] }
     const sumados: string[] = []
     for (const o of otros) {
       const antes = ll.m3
@@ -446,7 +446,7 @@ export function sugerirCamiones(candidatas: Candidata[], opts: OpcionesSugerir):
   }
 
   bases.sort(compararPropuestas)
-  const out: Propuesta[] = []
+  const out: Propuesta<T>[] = []
   for (const b of bases) {
     out.push(b)
     const alt = alternativas.get(b.id)

@@ -47,6 +47,7 @@ import {
   discardPendingArrays,
   commitPendingArrays,
   truckLoadDesdeDb,
+  toIsoDate,
 } from '@/lib/truckUtils'
 import AvailableLoadsPanel from './AvailableLoadsPanel'
 import NewShipmentDialog from '@/components/operations/NewShipmentDialog'
@@ -64,7 +65,6 @@ import {
 } from '@/components/ui/alert-dialog'
 import { fmtDateDMY } from '@/lib/format'
 import { avisoAlPublicar, type Aviso } from '@/lib/lclSugerencias'
-import { toIsoDate } from '@/lib/truckUtils'
 
 interface TruckBuilderProps {
   truck: Truck
@@ -80,7 +80,7 @@ interface TruckBuilderProps {
   onDeleteTruckLoad: (id: string) => void
   onDeleteTruck: (id: string) => void
   /** Alta real de una carga (App.handleCreateShipment). false = abortada. */
-  onCreateShipment?: (row: DbShipment) => boolean | void
+  onCreateShipment?: (row: DbShipment, opts?: { duplicadoConfirmado?: boolean }) => boolean | void
   /** PATCH de una carga — para alinear sus fechas con las del consolidado. */
   onPatchShipment?: (id: string, fields: Record<string, unknown>) => void
   /** Catálogo de clientes para el alta desde el armador (mismo que Operaciones). */
@@ -348,34 +348,20 @@ export default function TruckBuilder(props: TruckBuilderProps) {
     () => suggestNextRef([...shipments.map(s => s.REF), ...dbShipments.map(s => s.ref)]),
     [shipments, dbShipments]
   )
-  const handleCreateFromBuilder = (row: DbShipment): boolean | void => {
-    const created = onCreateShipment?.(row)
+  const handleCreateFromBuilder = (row: DbShipment, opts?: { duplicadoConfirmado?: boolean }): boolean | void => {
+    const created = onCreateShipment?.(row, opts)
     if (created === false) return false          // REF duplicada y canceló → no seguir
     if (row.mode === 'land') {
       // LoadSource no tiene 'land': las cargas terrestres no van dentro de un consolidado.
       toast.success(`${row.ref} creada — las cargas terrestres no se suben a un camión (la ves en Operaciones)`)
       return
     }
+    // Mismo mapeo shipment → línea que el botón + y las sugerencias (lo que se
+    // copia lo dice lib/datosClave.LOAD_DESDE_SHIPMENT); una FCL creada acá
+    // entra por la ref entera (todavía no tiene contenedores cargados).
     const load: TruckLoad = {
-      id: newId('load'),
-      truckId: truck.id,
+      ...truckLoadDesdeDb(truck.id, row, allMine.length, isDraft ? null : 'add'),
       sourceType: row.mode === 'fcl' ? 'fcl' : row.mode === 'air' ? 'air' : 'lcl',
-      sourceRef: row.ref,
-      cntr: '',
-      client: row.cliente || '',
-      fiscal: row.fiscal || '',
-      kg: Number(row.kg) || 0,
-      m3: Number(row.m3) || 0,
-      pkgs: Number(row.pkgs) || 0,
-      description: row.observacion || '',
-      mvdArrival: row.eta || '',
-      desconsolDate: row.desconsol_date || row.fecha_consol || '',
-      bl: row.doc_number || '',
-      stock: '',
-      wood: !!row.wood,
-      overrides: {},
-      position: allMine.length,
-      pending: isDraft ? null : 'add',
     }
     onUpdateTruckLoads([...truckLoads, load], [load.id])
     toast.success(`${row.ref} creada y agregada al camión`)

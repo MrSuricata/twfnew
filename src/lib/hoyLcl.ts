@@ -30,7 +30,6 @@ export type LclRow = Pick<DbShipment, 'id' | 'ref' | 'mode' | 'archived'> &
 
 const REF = (r: unknown): string => String(r ?? '').trim().toUpperCase()
 const txt = (v: unknown): string => String(v ?? '').trim()
-const vacio = (v: unknown): boolean => !txt(v)
 const num = (v: unknown): number => {
   const n = Number(v)
   return isFinite(n) ? n : 0

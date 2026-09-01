@@ -12,20 +12,10 @@ import type { ParsedShipment } from '@/lib/shipmentTypes'
 import { salidasProgramadas, totalCargas, SALIDAS_DIAS_ADELANTE, type SalidaProgramada } from '@/lib/partnerSalidas'
 import { formatKg, formatM3 } from '@/lib/truckUtils'
 import { fmtNum } from '@/lib/format'
+import { colorDeposito } from '@/lib/depositoColor'
 
-/**
- * Los mismos colores de depósito que usa el mail: quien lee los dos ve la
- * misma señal en el mismo lugar.
- */
-const COLOR_DEPOSITO: Record<string, string> = {
-  TCP: 'bg-red-100 text-red-800 border-red-300',
-  MONTECON: 'bg-blue-100 text-blue-800 border-blue-300',
-  GODILCO: 'bg-amber-100 text-amber-800 border-amber-300',
-  PLANIR: 'bg-green-100 text-green-800 border-green-300',
-}
-const colorDeposito = (d: string) =>
-  COLOR_DEPOSITO[d.toUpperCase()] || 'bg-slate-100 text-slate-700 border-slate-300'
-
+// Colores de depósito: los mismos del mail (lib/depositoColor, compartido
+// con las sugerencias de camión y HOY LCL).
 const DIAS = ['DOMINGO', 'LUNES', 'MARTES', 'MIÉRCOLES', 'JUEVES', 'VIERNES', 'SÁBADO']
 const MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic']
 
