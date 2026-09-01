@@ -5,6 +5,7 @@
 // ────────────────────────────────────────────────────────────────────
 
 import type { ParsedShipment } from './shipmentTypes'
+import type { DbShipment } from './operationsTypes'
 import { parseLocalDate, isValidDate } from './shipmentTypes'
 import type {
   Truck,
@@ -343,6 +344,41 @@ export function makeEmptyTruckLoad(
     overrides: {},
     position,
     pending: null,
+  }
+}
+
+/**
+ * Una carga LCL/aéreo de la tabla `shipments` como línea de camión. Es el ÚNICO
+ * mapeo DbShipment → TruckLoad: lo usan el armador (AvailableLoadsPanel) y el
+ * panel de sugerencias, así los dos suben la carga con los mismos campos.
+ * `pending` = null en borradores · 'add' en camiones publicados (overlay).
+ */
+export function truckLoadDesdeDb(
+  truckId: string,
+  s: DbShipment,
+  position: number,
+  pending: 'add' | null,
+): TruckLoad {
+  return {
+    id: newId('load'),
+    truckId,
+    sourceType: (s.mode === 'air' ? 'air' : 'lcl'),
+    sourceRef: s.ref,
+    cntr: '',
+    client: s.cliente || '',
+    fiscal: s.fiscal || '',
+    kg: Number(s.kg) || 0,
+    m3: Number(s.m3) || 0,
+    pkgs: Number(s.pkgs) || 0,
+    description: s.observacion || '',
+    mvdArrival: s.eta || '',
+    desconsolDate: s.fecha_consol || '',
+    bl: s.doc_number || '',
+    stock: '',
+    wood: !!s.wood,
+    overrides: {},
+    position,
+    pending,
   }
 }
 

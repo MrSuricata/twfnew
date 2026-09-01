@@ -46,6 +46,7 @@ import {
   getTruckHealthIssues,
   discardPendingArrays,
   commitPendingArrays,
+  truckLoadDesdeDb,
 } from '@/lib/truckUtils'
 import AvailableLoadsPanel from './AvailableLoadsPanel'
 import NewShipmentDialog from '@/components/operations/NewShipmentDialog'
@@ -57,6 +58,8 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { fmtDateDMY } from '@/lib/format'
+import { avisoAlPublicar, type Aviso } from '@/lib/lclSugerencias'
+import { toIsoDate } from '@/lib/truckUtils'
 
 interface TruckBuilderProps {
   truck: Truck
@@ -279,27 +282,7 @@ export default function TruckBuilder(props: TruckBuilderProps) {
   const addDb = (s: DbShipment) => {
     // El telex solo aplica a marítimo: un aéreo no tiene telex que liberar.
     if ((s.mode === 'fcl' || s.mode === 'lcl') && !confirmarTelexAlSumar(s.ref, s.telex ? 'SI' : '')) return
-    const load: TruckLoad = {
-      id: newId('load'),
-      truckId: truck.id,
-      sourceType: (s.mode === 'air' ? 'air' : 'lcl'),
-      sourceRef: s.ref,
-      cntr: '',
-      client: s.cliente || '',
-      fiscal: s.fiscal || '',
-      kg: Number(s.kg) || 0,
-      m3: Number(s.m3) || 0,
-      pkgs: Number(s.pkgs) || 0,
-      description: s.observacion || '',
-      mvdArrival: s.eta || '',
-      desconsolDate: s.fecha_consol || '',
-      bl: s.doc_number || '',
-      stock: '',
-      wood: !!s.wood,
-      overrides: {},
-      position: allMine.length,
-      pending: isDraft ? null : 'add',
-    }
+    const load = truckLoadDesdeDb(truck.id, s, allMine.length, isDraft ? null : 'add')
     onUpdateTruckLoads([...truckLoads, load], [load.id])
     toast.success(`${s.ref} agregado al camión`)
     // Aviso inmediato al agregar una carga especial
@@ -398,12 +381,36 @@ export default function TruckBuilder(props: TruckBuilderProps) {
   // ── Draft state + Save/Cancel ──
   const draftState = hasDraftState(truck, truckLoads)
 
+  // Aviso de previsión al publicar (spec consolidados LCL): si el camión sale
+  // con lugar y viene carga del mismo fiscal y depósito en los próximos días,
+  // se pregunta si conviene correrlo; si alguna carga tiene el almacenaje por
+  // vencer o es prioridad, dice lo contrario. Avisa, no bloquea: "Sale igual"
+  // guarda como siempre.
+  const [avisoPublicar, setAvisoPublicar] = useState<Aviso | null>(null)
+
   const handleSave = () => {
     const effLoads = effectiveTruckLoads(truckLoads, truck.id, { includePending: true })
     if (effLoads.length === 0) {
       toast.error('El camión necesita al menos una carga para guardarse')
       return
     }
+    const cambiaFecha = !!truck.pendingEdits
+      && ('departureDate' in truck.pendingEdits || 'loadDate' in truck.pendingEdits)
+    if (isDraft || cambiaFecha) {
+      const aviso = avisoAlPublicar({
+        code: merged.code,
+        refs: effLoads.map(l => l.sourceRef),
+        kg: totals.kg,
+        m3: totals.m3,
+        limites: limits,
+        departureDate: merged.departureDate || merged.loadDate || null,
+      }, dbShipments, toIsoDate(hoy))
+      if (aviso) { setAvisoPublicar(aviso); return }
+    }
+    ejecutarGuardado()
+  }
+
+  const ejecutarGuardado = () => {
     if (isDraft) {
       onUpdateTrucks(trucks.map(t => (t.id === truck.id ? { ...t, draft: false, updatedAt: Date.now() } : t)), [truck.id])
     } else {
@@ -719,6 +726,33 @@ export default function TruckBuilder(props: TruckBuilderProps) {
           />
         </Card>
       </div>
+
+      {/* Previsión al publicar: lugar libre + carga del mismo fiscal llegando
+          (o al revés: almacenaje por vencer / prioridad → sacala ahora).
+          Avisa, no bloquea. */}
+      <AlertDialog open={!!avisoPublicar} onOpenChange={(o) => { if (!o) setAvisoPublicar(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {avisoPublicar?.tipo === 'salir' ? 'Sacala ahora' : 'Sale con lugar libre'}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-sm leading-relaxed">
+              {avisoPublicar?.texto}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2">
+            <AlertDialogCancel onClick={() => setAvisoPublicar(null)}>Volver</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setAvisoPublicar(null)
+                ejecutarGuardado()
+              }}
+            >
+              Sale igual
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Choque de fechas: la carga ya tenía salida coordinada y el consolidado
           sale otro día. Se pregunta cuál manda — pisar en silencio dejaba la

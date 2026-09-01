@@ -67,7 +67,7 @@ const aFecha = (iso: string): Date => {
   return new Date(a, (m || 1) - 1, d || 1)
 }
 
-const sumarDias = (iso: string, dias: number): string => {
+export const sumarDias = (iso: string, dias: number): string => {
   const f = aFecha(iso)
   f.setDate(f.getDate() + dias)
   const mm = String(f.getMonth() + 1).padStart(2, '0')
@@ -75,7 +75,7 @@ const sumarDias = (iso: string, dias: number): string => {
   return `${f.getFullYear()}-${mm}-${dd}`
 }
 
-const diasEntre = (desdeISO: string, hastaISO: string): number =>
+export const diasEntre = (desdeISO: string, hastaISO: string): number =>
   Math.round((aFecha(hastaISO).getTime() - aFecha(desdeISO).getTime()) / MS_DIA)
 
 export interface Almacenaje {
