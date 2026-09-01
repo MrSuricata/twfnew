@@ -1119,6 +1119,8 @@ export default function OperationsGrid({
           knownPaisesOrigen={knownPaisesOrigen}
           knownOrigenes={knownOrigenes}
           knownDescargas={knownDescargas}
+          knownFiscales={knownFiscales}
+          cargasExistentes={dbShipments}
         />
       )}
 

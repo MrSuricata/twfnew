@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -20,7 +20,12 @@ import { parseCntr } from '@/lib/cntrUtils'
 import { fmtDMY } from '@/lib/salidaCheck'
 import { sugerirEtaFiscal, nombreDia } from '@/lib/transitoFiscal'
 import { canonicalizeCliente, type CatalogClient } from '@/lib/clientCatalog'
-import { matchCanonico, upperCat } from '@/lib/fuzzyCatalog'
+import {
+  camposDesdeDatosClave, buscarRefDuplicada, sufijosSugeridos, parseNum,
+  type Apilable, type LclDatosClaveState,
+} from '@/lib/lclAlta'
+import { Section, Field, ComboField, SelectField } from './formAtoms'
+import LclDatosClave from './LclDatosClave'
 
 // ── Alta de carga GUIADA ─────────────────────────────────────────────────
 // Obligatorios: Ref + Cliente + Modalidad (decisión tomada — no cambiar).
@@ -31,6 +36,14 @@ import { matchCanonico, upperCat } from '@/lib/fuzzyCatalog'
 // el primer click en Guardar avisa qué falta y el segundo guarda igual
 // (obligatorios duros siguen siendo solo Ref+Cliente+Modo).
 // El resto de los campos queda colapsado bajo "Más campos".
+//
+// LCL (pedido Brian 01/09/2026): arriba del pliegue van SOLO los 12 datos que
+// importan para una consolidada — Ref, Cliente, Fiscal, BL, Bultos, Kilos, M³,
+// Nº stock, Madera, Apilable, IMO, Entrega en planta — en ese orden, con el
+// componente compartido <LclDatosClave> (el mismo que usa el alta desde
+// Camiones). Shipper/incoterm/ruta bajan a "Más campos". FCL/aéreo/terrestre
+// conservan el layout de siempre.
+//
 // Guarda en la tabla unificada `shipments` (source='web') vía onCreate
 // (App.handleCreateShipment → POST /api/data/shipments, whitelist SHIPMENT_COLS).
 // Lo reusa también el armador de camiones (crear carga sin salir del armador).
@@ -59,7 +72,8 @@ const PAISES_ORIGEN_BASE = [
 ]
 
 // Los "datos principales" del alta (pedido 14/07): si falta alguno se avisa
-// antes de guardar (soft — el segundo click guarda igual).
+// antes de guardar (soft — el segundo click guarda igual). NO aplica a LCL:
+// ahí los datos que importan son los 12 clave y van arriba.
 const PRINCIPALES: { key: keyof FormState; label: string }[] = [
   { key: 'shipper', label: 'Shipper' },
   { key: 'incoterm', label: 'Incoterm' },
@@ -78,6 +92,8 @@ interface FormState {
   libre: string
   fiscal: string
   desconsol: string
+  /** LCL: nº de stock del depósito (vacío = todavía no lo dieron). */
+  stock: string
   // Fechas
   etd: string
   eta: string
@@ -115,6 +131,8 @@ interface FormState {
   // Indicadores
   telex: boolean
   noApilable: boolean
+  /** LCL: apilable en positivo (sin dato / sí / no) → no_apilable invertido. */
+  apilable: Apilable
   /** Madera tri-estado: null = a confirmar (default de toda carga nueva). */
   wood: boolean | null
   entregaPlanta: boolean
@@ -127,20 +145,22 @@ interface FormState {
 
 const EMPTY_FORM: FormState = {
   ref: '', cliente: '',
-  deposito: '', operativa: '', libre: '', fiscal: '', desconsol: '',
+  deposito: '', operativa: '', libre: '', fiscal: '', desconsol: '', stock: '',
   etd: '', eta: '', salida: '', etaFisc: '', seguimiento: '',
   origin: '', paisOrigen: '', dischargePort: '', destPort: '', pais: '',
   docNumber: '', buque: '', linea: '', shipper: '', agente: '', incoterm: '', clientRef: '',
   contenedor: '', tipo: '', pkgs: '', kg: '', m3: '', descripcion: '',
   transporte: '', despacho: '', dev: '', terminal: '', descarga: '', status: 'en_origen',
-  telex: false, noApilable: false, wood: null, entregaPlanta: false,
+  telex: false, noApilable: false, apilable: 'sin_dato', wood: null, entregaPlanta: false,
   seguro: false, certi: false, impresa: false, imo: false, oog: false,
 }
 
-const parseNum = (s: string): number => {
-  const n = parseFloat((s || '').replace(',', '.'))
-  return isFinite(n) ? n : 0
-}
+// Claves del form que en LCL ya se muestran arriba (datos clave): no se
+// repiten en "Más campos" ni cuentan como "opcionales completados".
+const LCL_CLAVE_KEYS = new Set<keyof FormState>([
+  'ref', 'cliente', 'fiscal', 'docNumber', 'pkgs', 'kg', 'm3', 'stock',
+  'wood', 'apilable', 'imo', 'entregaPlanta',
+])
 
 export default function NewShipmentDialog({
   open,
@@ -152,6 +172,8 @@ export default function NewShipmentDialog({
   knownPaisesOrigen = [],
   knownOrigenes = [],
   knownDescargas = [],
+  knownFiscales = [],
+  cargasExistentes = [],
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
@@ -168,6 +190,9 @@ export default function NewShipmentDialog({
   knownPaisesOrigen?: string[]
   knownOrigenes?: string[]
   knownDescargas?: string[]
+  knownFiscales?: string[]
+  /** Cargas ya existentes: aviso inline de ref repetida (activa) en LCL. */
+  cargasExistentes?: { ref: string; archived?: boolean; cliente?: string }[]
 }) {
   // Modalidad SIN default: es obligatoria y el operativo la elige a conciencia.
   const [mode, setMode] = useState<Modality | null>(null)
@@ -179,6 +204,8 @@ export default function NewShipmentDialog({
   // avisa; el 2do guarda igual (nunca bloquea — a veces el dato aún no existe).
   const [softWarned, setSoftWarned] = useState(false)
 
+  const esLcl = mode === 'lcl'
+
   const paisesOrigenOptions = useMemo(
     () => Array.from(new Set([...PAISES_ORIGEN_BASE, ...knownPaisesOrigen])).sort(),
     [knownPaisesOrigen],
@@ -186,6 +213,7 @@ export default function NewShipmentDialog({
 
   const set = <K extends keyof FormState>(key: K, value: FormState[K]) =>
     setF(prev => ({ ...prev, [key]: value }))
+  const setMany = (patch: Partial<FormState>) => setF(prev => ({ ...prev, ...patch }))
 
   const reset = () => {
     setMode(null)
@@ -206,18 +234,34 @@ export default function NewShipmentDialog({
   // null NO cuenta como cargado y NO se puede trimear (crasheaba el tab entero:
   // este memo corre aunque el diálogo esté cerrado).
   const filledCount = useMemo(() => {
-    const skip = new Set(['ref', 'cliente', 'status'])
+    const skip = new Set<keyof FormState>(['ref', 'cliente', 'status'])
+    if (esLcl) for (const k of LCL_CLAVE_KEYS) skip.add(k)
     return (Object.entries(f) as [keyof FormState, string | boolean | null][]).filter(([k, v]) => {
       if (skip.has(k)) return false
       if (v === null || v === undefined) return false
+      if (k === 'apilable') return v !== 'sin_dato'
       return typeof v === 'boolean' ? v : String(v).trim() !== ''
     }).length
-  }, [f])
+  }, [f, esLcl])
 
   const missingRef = !f.ref.trim()
   const missingCliente = !f.cliente.trim()
   const missingMode = mode === null
-  const faltanPrincipales = PRINCIPALES.filter(p => !String(f[p.key] ?? '').trim())
+  const faltanPrincipales = esLcl ? [] : PRINCIPALES.filter(p => !String(f[p.key] ?? '').trim())
+
+  // LCL: otra carga ACTIVA con la misma ref → aviso inline (no bloquea: el
+  // alta sigue y App.handleCreateShipment vuelve a confirmar).
+  const duplicada = useMemo(
+    () => (esLcl ? buscarRefDuplicada(f.ref, cargasExistentes) : null),
+    [esLcl, f.ref, cargasExistentes],
+  )
+
+  // Vista de los 12 datos clave LCL (subconjunto del form, mismos nombres).
+  const datosClave: LclDatosClaveState = {
+    ref: f.ref, cliente: f.cliente, fiscal: f.fiscal, docNumber: f.docNumber,
+    pkgs: f.pkgs, kg: f.kg, m3: f.m3, stock: f.stock,
+    wood: f.wood, apilable: f.apilable, imo: f.imo, entregaPlanta: f.entregaPlanta,
+  }
 
   const save = () => {
     if (missingMode || missingRef || missingCliente) {
@@ -258,6 +302,11 @@ export default function NewShipmentDialog({
         if (ok) { etaFiscFinal = sugerida; set('etaFisc', sugerida) }
       }
     }
+    // LCL: los 12 datos clave se traducen con la MISMA función que el alta
+    // desde Camiones (stock → desconsol_date=hoy si venía vacía, apilable →
+    // no_apilable, etc.). Se aplican al final para que manden.
+    const hoyISO = new Date().toISOString().slice(0, 10)
+    const clave = m === 'lcl' ? camposDesdeDatosClave(datosClave, hoyISO, f.desconsol) : {}
     const row = newDbShipment({
       mode: m,
       ref: f.ref.trim(),
@@ -311,6 +360,7 @@ export default function NewShipmentDialog({
       // IMO: FCL y LCL · OOG: solo FCL (misma regla del panel).
       imo: m === 'fcl' || m === 'lcl' ? f.imo : false,
       oog: m === 'fcl' ? f.oog : false,
+      ...clave,
     })
     // false = abortado (REF duplicada y canceló) → el diálogo queda abierto.
     if (onCreate(row) === false) return
@@ -320,26 +370,55 @@ export default function NewShipmentDialog({
 
   // Indicadores según modalidad (IMO solo FCL/LCL, OOG solo FCL).
   // Madera NO va acá: es tri-estado (Sí/No/a confirmar) y tiene su selector propio.
+  // En LCL, No apilable / Entrega en planta / IMO ya están arriba (datos clave).
   const flags: [string, keyof FormState][] = [
     ['Telex', 'telex'],
-    ['No apilable', 'noApilable'],
-    ['Entrega en planta', 'entregaPlanta'],
+    ...(!esLcl ? [['No apilable', 'noApilable'] as [string, keyof FormState]] : []),
+    ...(!esLcl ? [['Entrega en planta', 'entregaPlanta'] as [string, keyof FormState]] : []),
     ['Seguro', 'seguro'],
     ['Certificada', 'certi'],
     ['Impreso', 'impresa'],
-    ...(mode === 'fcl' || mode === 'lcl' ? [['IMO', 'imo'] as [string, keyof FormState]] : []),
+    ...(mode === 'fcl' ? [['IMO', 'imo'] as [string, keyof FormState]] : []),
     ...(mode === 'fcl' ? [['Sobredimensionada (OOG)', 'oog'] as [string, keyof FormState]] : []),
   ]
 
+  // Bloque "datos principales" (shipper/incoterm/ruta): arriba en FCL/aéreo/
+  // terrestre; en LCL baja a "Más campos".
+  const principalesFields = (
+    <>
+      <ComboField label="Shipper" value={f.shipper} options={knownShippers} onChange={v => set('shipper', v)} placeholder="Elegí o escribí uno nuevo…" catalogo />
+      <ComboField label="Incoterm" value={f.incoterm} options={INCOTERMS} onChange={v => set('incoterm', v.toUpperCase())} placeholder="FOB, EXW…" catalogo />
+      <ComboField label="País de origen" value={f.paisOrigen} options={paisesOrigenOptions} onChange={v => set('paisOrigen', v)} placeholder="CHINA…" catalogo />
+      <ComboField label="Puerto de origen (POL)" value={f.origin} options={knownOrigenes} onChange={v => set('origin', v)} placeholder="SHANGHAI, NINGBO…" catalogo />
+      <ComboField label="Puerto de destino (POD)" value={f.dischargePort} options={knownDescargas} onChange={v => set('dischargePort', v)} placeholder="MONTEVIDEO…" catalogo />
+      <div className="space-y-1 min-w-0">
+        <SelectField label="País / zona de destino" value={f.pais} options={PAIS_OPTIONS} onChange={v => set('pais', v)} />
+        <p className="text-[10px] text-muted-foreground leading-snug">
+          Es la zona del puerto de descarga: una carga a Argentina vía Montevideo va como <strong>Uruguay</strong>.
+        </p>
+      </div>
+      <Field label="Destino final" value={f.destPort} onChange={v => set('destPort', v)} placeholder="CÓRDOBA, SAN FRANCISCO…" />
+    </>
+  )
+
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) reset(); onOpenChange(v) }}>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent className="sm:max-w-2xl max-h-[92vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2"><Plus size={20} /> Nueva carga</DialogTitle>
           <DialogDescription>
-            <span className="text-red-600 font-semibold">*</span> Ref, cliente y modalidad son obligatorios.
-            Los demás datos principales conviene cargarlos ahora (si no existe el shipper o el puerto, escribilo y queda creado);
-            el resto va en “Más campos” o después en la grilla.
+            {esLcl ? (
+              <>
+                <span className="text-red-600 font-semibold">*</span> Ref (la tuya) y cliente son obligatorios.
+                Estos son los datos que importan para una consolidada; el resto va en “Más campos” o después en la grilla.
+              </>
+            ) : (
+              <>
+                <span className="text-red-600 font-semibold">*</span> Ref, cliente y modalidad son obligatorios.
+                Los demás datos principales conviene cargarlos ahora (si no existe el shipper o el puerto, escribilo y queda creado);
+                el resto va en “Más campos” o después en la grilla.
+              </>
+            )}
           </DialogDescription>
         </DialogHeader>
 
@@ -367,70 +446,74 @@ export default function NewShipmentDialog({
             {showErrors && missingMode && <p className="text-xs text-red-600">Elegí la modalidad de la carga</p>}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="ns-ref">Ref <span className="text-red-600">*</span></Label>
-              <Input
-                id="ns-ref"
-                value={f.ref}
-                onChange={e => set('ref', e.target.value)}
-                placeholder={mode === 'fcl' && suggestedRef ? suggestedRef : 'E198, A7990…'}
-                aria-invalid={showErrors && missingRef}
-                className={showErrors && missingRef ? 'border-red-400' : undefined}
-              />
-              {showErrors && missingRef && <p className="text-xs text-red-600">Completá la referencia</p>}
-              {mode === 'fcl' && suggestedRef && f.ref.trim() === '' && (
-                <button
-                  type="button"
-                  onClick={() => set('ref', suggestedRef)}
-                  className="text-xs text-primary hover:underline"
-                  title="Siguiente número libre detectado entre todas las cargas (FCL y aéreas comparten la numeración A)"
-                >
-                  Sugerida: <strong>{suggestedRef}</strong> — click para usar
-                </button>
-              )}
+          {esLcl ? (
+            /* ── LCL: los 12 datos clave, en el orden de Brian, y nada más arriba ── */
+            <LclDatosClave
+              idPrefix="ns-lcl"
+              value={datosClave}
+              onChange={patch => setMany(patch as Partial<FormState>)}
+              clientes={clientes}
+              knownFiscales={knownFiscales}
+              showErrors={showErrors}
+              refExtra={duplicada ? (
+                <RefDuplicadaAviso ref_={f.ref} cliente={duplicada.cliente} onUsar={v => set('ref', v)} />
+              ) : null}
+            />
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="ns-ref">Ref <span className="text-red-600">*</span></Label>
+                <Input
+                  id="ns-ref"
+                  value={f.ref}
+                  onChange={e => set('ref', e.target.value)}
+                  placeholder={mode === 'fcl' && suggestedRef ? suggestedRef : 'E198, A7990…'}
+                  aria-invalid={showErrors && missingRef}
+                  className={showErrors && missingRef ? 'border-red-400' : undefined}
+                />
+                {showErrors && missingRef && <p className="text-xs text-red-600">Completá la referencia</p>}
+                {mode === 'fcl' && suggestedRef && f.ref.trim() === '' && (
+                  <button
+                    type="button"
+                    onClick={() => set('ref', suggestedRef)}
+                    className="text-xs text-primary hover:underline"
+                    title="Siguiente número libre detectado entre todas las cargas (FCL y aéreas comparten la numeración A)"
+                  >
+                    Sugerida: <strong>{suggestedRef}</strong> — click para usar
+                  </button>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="ns-cli">Cliente / Cnee <span className="text-red-600">*</span></Label>
+                {/* Datalist con los nombres canónicos del catálogo. Texto libre
+                    permitido; si lo tipeado matchea un alias conocido, al blur se
+                    reemplaza por el nombre canónico (unificación de clientes). */}
+                <Input
+                  id="ns-cli"
+                  list="ns-cli-list"
+                  value={f.cliente}
+                  onChange={e => set('cliente', e.target.value)}
+                  onBlur={() => {
+                    const canon = canonicalizeCliente(f.cliente, clientes)
+                    if (canon !== f.cliente) set('cliente', canon)
+                  }}
+                  placeholder="Cliente"
+                  aria-invalid={showErrors && missingCliente}
+                  className={showErrors && missingCliente ? 'border-red-400' : undefined}
+                />
+                <datalist id="ns-cli-list">
+                  {[...clientes].sort((a, b) => a.name.localeCompare(b.name, 'es')).map(c => (
+                    <option key={c.name} value={c.name} />
+                  ))}
+                </datalist>
+                {showErrors && missingCliente && <p className="text-xs text-red-600">Completá el cliente</p>}
+              </div>
+              {/* ── Datos principales (pedido 14/07): siempre visibles, combos
+                  creables — el datalist sugiere lo ya usado y acepta un valor
+                  nuevo (así se "agrega" un shipper/puerto que no existe). ── */}
+              {principalesFields}
             </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="ns-cli">Cliente / Cnee <span className="text-red-600">*</span></Label>
-              {/* Datalist con los nombres canónicos del catálogo. Texto libre
-                  permitido; si lo tipeado matchea un alias conocido, al blur se
-                  reemplaza por el nombre canónico (unificación de clientes). */}
-              <Input
-                id="ns-cli"
-                list="ns-cli-list"
-                value={f.cliente}
-                onChange={e => set('cliente', e.target.value)}
-                onBlur={() => {
-                  const canon = canonicalizeCliente(f.cliente, clientes)
-                  if (canon !== f.cliente) set('cliente', canon)
-                }}
-                placeholder="Cliente"
-                aria-invalid={showErrors && missingCliente}
-                className={showErrors && missingCliente ? 'border-red-400' : undefined}
-              />
-              <datalist id="ns-cli-list">
-                {[...clientes].sort((a, b) => a.name.localeCompare(b.name, 'es')).map(c => (
-                  <option key={c.name} value={c.name} />
-                ))}
-              </datalist>
-              {showErrors && missingCliente && <p className="text-xs text-red-600">Completá el cliente</p>}
-            </div>
-            {/* ── Datos principales (pedido 14/07): siempre visibles, combos
-                creables — el datalist sugiere lo ya usado y acepta un valor
-                nuevo (así se "agrega" un shipper/puerto que no existe). ── */}
-            <ComboField label="Shipper" value={f.shipper} options={knownShippers} onChange={v => set('shipper', v)} placeholder="Elegí o escribí uno nuevo…" catalogo />
-            <ComboField label="Incoterm" value={f.incoterm} options={INCOTERMS} onChange={v => set('incoterm', v.toUpperCase())} placeholder="FOB, EXW…" catalogo />
-            <ComboField label="País de origen" value={f.paisOrigen} options={paisesOrigenOptions} onChange={v => set('paisOrigen', v)} placeholder="CHINA…" catalogo />
-            <ComboField label="Puerto de origen (POL)" value={f.origin} options={knownOrigenes} onChange={v => set('origin', v)} placeholder="SHANGHAI, NINGBO…" catalogo />
-            <ComboField label="Puerto de destino (POD)" value={f.dischargePort} options={knownDescargas} onChange={v => set('dischargePort', v)} placeholder="MONTEVIDEO…" catalogo />
-            <div className="space-y-1 min-w-0">
-              <SelectField label="País / zona de destino" value={f.pais} options={PAIS_OPTIONS} onChange={v => set('pais', v)} />
-              <p className="text-[10px] text-muted-foreground leading-snug">
-                Es la zona del puerto de descarga: una carga a Argentina vía Montevideo va como <strong>Uruguay</strong>.
-              </p>
-            </div>
-            <Field label="Destino final" value={f.destPort} onChange={v => set('destPort', v)} placeholder="CÓRDOBA, SAN FRANCISCO…" />
-          </div>
+          )}
 
           {softWarned && faltanPrincipales.length > 0 && (
             <p className="text-xs text-[var(--warn-suave-fg)] bg-[var(--warn-suave-bg)] border border-[var(--warn-suave-bd)] rounded-xl px-3 py-2">
@@ -451,19 +534,26 @@ export default function NewShipmentDialog({
 
           {moreOpen && (
             <div className="space-y-4">
+              {/* LCL: shipper/incoterm/ruta viven acá (arriba van los datos clave) */}
+              {esLcl && (
+                <Section title="Shipper y ruta">
+                  {principalesFields}
+                </Section>
+              )}
+
               {/* Datos clave */}
-              <Section title="Datos clave">
+              <Section title={esLcl ? 'Depósito y operativa' : 'Datos clave'}>
                 <ComboField label="Depósito UY" value={f.deposito} options={DEPOSITOS_UY} onChange={v => set('deposito', v)} placeholder="GODILCO, PLANIR…" catalogo />
                 <ComboField label="Operativa" value={f.operativa} options={OPERATIVA_OPTIONS} onChange={v => set('operativa', v)} placeholder="TRASIEGO…" catalogo />
                 <Field label="Libre (máx. devolución)" type="date" value={f.libre} onChange={v => set('libre', v)} />
-                <Field label="Fiscal (destino)" value={f.fiscal} onChange={v => set('fiscal', v)} placeholder="LOGIFRONT, FISCALIA…" />
+                {!esLcl && <Field label="Fiscal (destino)" value={f.fiscal} onChange={v => set('fiscal', v)} placeholder="LOGIFRONT, FISCALIA…" />}
                 <Field label="Desconsolidación" type="date" value={f.desconsol} onChange={v => set('desconsol', v)} />
               </Section>
 
               {/* Fechas */}
               <Section title="Fechas">
                 <Field label="ETD" type="date" value={f.etd} onChange={v => set('etd', v)} />
-                <Field label="ETA" type="date" value={f.eta} onChange={v => set('eta', v)} />
+                <Field label={esLcl ? 'ETA MVD' : 'ETA'} type="date" value={f.eta} onChange={v => set('eta', v)} />
                 <Field label="Salida" type="date" value={f.salida} onChange={v => set('salida', v)} />
                 <Field label="ETA fiscal" type="date" value={f.etaFisc} onChange={v => set('etaFisc', v)} />
                 <Field label="Seguimiento" type="date" value={f.seguimiento} onChange={v => set('seguimiento', v)} />
@@ -471,7 +561,7 @@ export default function NewShipmentDialog({
 
               {/* Documental (ruta y shipper/incoterm subieron a Datos principales) */}
               <Section title="Documental">
-                <Field label="Booking / BL / AWB / CRT" value={f.docNumber} onChange={v => set('docNumber', v)} placeholder="Documento" />
+                {!esLcl && <Field label="Booking / BL / AWB / CRT" value={f.docNumber} onChange={v => set('docNumber', v)} placeholder="Documento" />}
                 <Field label="Buque" value={f.buque} onChange={v => set('buque', v)} />
                 <Field label="Línea" value={f.linea} onChange={v => set('linea', v)} placeholder="MAERSK, COSCO…" />
                 <Field label="Ref cliente" value={f.clientRef} onChange={v => set('clientRef', v)} />
@@ -480,29 +570,36 @@ export default function NewShipmentDialog({
 
               {/* Carga */}
               <Section title="Carga">
-                <Field label="Contenedor(es)" value={f.contenedor} onChange={v => set('contenedor', v)} placeholder="MSKU1234567, TCLU7654321…" wide />
-                <Field label="Tipo" value={f.tipo} onChange={v => set('tipo', v)} placeholder="40HC, 20DRY…" />
-                <Field label="Bultos" value={f.pkgs} onChange={v => set('pkgs', v)} inputMode="decimal" placeholder="0" />
-                <Field label="Kg" value={f.kg} onChange={v => set('kg', v)} inputMode="decimal" placeholder="0" />
-                <Field label="M³" value={f.m3} onChange={v => set('m3', v)} inputMode="decimal" placeholder="0" />
+                {!esLcl && <Field label="Contenedor(es)" value={f.contenedor} onChange={v => set('contenedor', v)} placeholder="MSKU1234567, TCLU7654321…" wide />}
+                <Field label="Tipo" value={f.tipo} onChange={v => set('tipo', v)} placeholder={esLcl ? 'PALLETS, CAJAS…' : '40HC, 20DRY…'} />
+                {!esLcl && (
+                  <>
+                    <Field label="Bultos" value={f.pkgs} onChange={v => set('pkgs', v)} inputMode="decimal" placeholder="0" />
+                    <Field label="Kg" value={f.kg} onChange={v => set('kg', v)} inputMode="decimal" placeholder="0" />
+                    <Field label="M³" value={f.m3} onChange={v => set('m3', v)} inputMode="decimal" placeholder="0" />
+                  </>
+                )}
                 <Field label="Descripción" value={f.descripcion} onChange={v => set('descripcion', v)} placeholder="Mercadería…" wide />
                 <div className="col-span-2 space-y-1.5">
                   <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Indicadores</p>
                   <div className="flex flex-wrap gap-x-4 gap-y-2 items-center">
                     {/* Madera: tri-estado — toda carga nueva nace "A confirmar" (null),
-                        no "No": false diría confirmado sin que nadie lo haya chequeado. */}
-                    <label className="flex items-center gap-2 text-sm select-none">
-                      Madera
-                      <select
-                        value={f.wood === null ? 'confirmar' : f.wood ? 'si' : 'no'}
-                        onChange={e => set('wood', (e.target.value === 'confirmar' ? null : e.target.value === 'si') as FormState['wood'])}
-                        className={`h-7 rounded-md border border-input px-1.5 text-xs ${f.wood ? 'text-red-600 font-semibold' : f.wood === null ? 'text-amber-600 font-medium' : 'text-foreground'}`}
-                      >
-                        <option value="confirmar">A confirmar</option>
-                        <option value="si">Sí</option>
-                        <option value="no">No</option>
-                      </select>
-                    </label>
+                        no "No": false diría confirmado sin que nadie lo haya chequeado.
+                        En LCL ya está arriba, en los datos clave. */}
+                    {!esLcl && (
+                      <label className="flex items-center gap-2 text-sm select-none">
+                        Madera
+                        <select
+                          value={f.wood === null ? 'confirmar' : f.wood ? 'si' : 'no'}
+                          onChange={e => set('wood', (e.target.value === 'confirmar' ? null : e.target.value === 'si') as FormState['wood'])}
+                          className={`h-7 rounded-md border border-input px-1.5 text-xs ${f.wood ? 'text-red-600 font-semibold' : f.wood === null ? 'text-amber-600 font-medium' : 'text-foreground'}`}
+                        >
+                          <option value="confirmar">A confirmar</option>
+                          <option value="si">Sí</option>
+                          <option value="no">No</option>
+                        </select>
+                      </label>
+                    )}
                     {flags.map(([label, key]) => (
                       <label key={key} className="flex items-center gap-2 text-sm cursor-pointer select-none">
                         <input
@@ -549,113 +646,28 @@ export default function NewShipmentDialog({
   )
 }
 
-// ── Atoms ────────────────────────────────────────────────────────────────
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+/**
+ * Aviso de ref repetida (otra carga activa con la misma ref). Avisa y sugiere
+ * el sufijo de carga partida; no bloquea — a veces es a propósito.
+ * Compartido con el alta desde Camiones.
+ */
+export function RefDuplicadaAviso({ ref_, cliente, onUsar }: { ref_: string; cliente?: string; onUsar: (v: string) => void }) {
+  const sufijos = sufijosSugeridos(ref_)
   return (
-    <section>
-      <h4 className="text-[10px] uppercase tracking-wide text-muted-foreground mb-2 pb-1 border-b">{title}</h4>
-      <div className="grid grid-cols-2 gap-x-3 gap-y-2.5">{children}</div>
-    </section>
-  )
-}
-
-function Field({
-  label, value, onChange, type, placeholder, inputMode, wide,
-}: {
-  label: string
-  value: string
-  onChange: (v: string) => void
-  type?: string
-  placeholder?: string
-  inputMode?: 'decimal'
-  wide?: boolean
-}) {
-  return (
-    <div className={`space-y-1 min-w-0 ${wide ? 'col-span-2' : ''}`}>
-      <Label className="text-xs text-muted-foreground">{label}</Label>
-      <Input
-        type={type}
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        placeholder={placeholder}
-        inputMode={inputMode}
-        className="h-9 text-sm"
-      />
-    </div>
-  )
-}
-
-// Input con datalist (acepta valores nuevos, sugiere los conocidos).
-// Con `catalogo`: al salir del campo corrige typos contra los conocidos
-// ("SNA ANTONIO" → SAN ANTONIO, con aviso y "Era otro" para deshacer) y si
-// el valor es genuinamente nuevo lo normaliza a MAYÚSCULAS y avisa que se
-// agrega al catálogo. Los datos fijos (puertos, países, shippers) no
-// deberían nacer dos veces con dos grafías.
-function ComboField({
-  label, value, options, onChange, placeholder, catalogo,
-}: {
-  label: string
-  value: string
-  options: string[]
-  onChange: (v: string) => void
-  placeholder?: string
-  catalogo?: boolean
-}) {
-  const listId = `ns-list-${label.replace(/\W+/g, '-')}`
-  const avisado = useRef('')
-  const handleBlur = () => {
-    if (!catalogo) return
-    const v = value.trim()
-    if (!v) return
-    const m = matchCanonico(v, options)
-    if (m) {
-      if (m.canon !== v) onChange(m.canon)
-      if (!m.exacto && avisado.current !== m.canon) {
-        avisado.current = m.canon
-        toast.info(`«${v}» → ${m.canon}`, {
-          description: 'Corregido al valor ya conocido del catálogo.',
-          action: { label: 'Era otro', onClick: () => onChange(upperCat(v)) },
-        })
-      }
-    } else {
-      const canon = upperCat(v)
-      if (canon !== v) onChange(canon)
-      if (avisado.current !== canon) {
-        avisado.current = canon
-        toast.info(`«${canon}» es nuevo — queda agregado al catálogo`)
-      }
-    }
-  }
-  return (
-    <div className="space-y-1 min-w-0">
-      <Label className="text-xs text-muted-foreground">{label}</Label>
-      <Input list={listId} value={value} onChange={e => onChange(e.target.value)} onBlur={handleBlur} placeholder={placeholder} className="h-9 text-sm" />
-      <datalist id={listId}>
-        {options.map(o => <option key={o} value={o} />)}
-      </datalist>
-    </div>
-  )
-}
-
-function SelectField({
-  label, value, options, onChange,
-}: {
-  label: string
-  value: string
-  options: { value: string; label: string }[]
-  onChange: (v: string) => void
-}) {
-  return (
-    <div className="space-y-1 min-w-0">
-      <Label className="text-xs text-muted-foreground">{label}</Label>
-      <select
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        className="w-full h-9 px-2 rounded-md border border-border bg-card text-sm"
-      >
-        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-      </select>
+    <div className="text-[11px] text-[var(--warn-suave-fg)] bg-[var(--warn-suave-bg)] border border-[var(--warn-suave-bd)] rounded-lg px-2.5 py-1.5 space-y-1">
+      <p>
+        Ya existe una carga activa con la ref <strong>{ref_.trim()}</strong>{cliente ? ` (${cliente})` : ''}.
+        {sufijos.length > 0 && ' Si es una carga partida, usá un sufijo:'}
+      </p>
+      {sufijos.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {sufijos.map(s => (
+            <button key={s} type="button" onClick={() => onUsar(s)} className="rounded border border-current/40 px-1.5 py-0.5 font-medium hover:bg-white/40">
+              Usar {s}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
