@@ -12,6 +12,10 @@ import type { ParsedShipment } from '@/lib/shipmentTypes'
 import { parseLocalDate } from '@/lib/shipmentTypes'
 import type { AgendaView, CalendarEvent } from '@/lib/agendaTypes'
 import type { Truck, TruckLoad } from '@/lib/truckTypes'
+import type { DbShipment } from '@/lib/operationsTypes'
+import { computeTruckTotals, getTruckLimits, effectiveTruckLoads } from '@/lib/truckTypes'
+import { avisoAlPublicar } from '@/lib/lclSugerencias'
+import { hoyISO } from '@/lib/format'
 import { shipmentsToEvents, trucksToEvents, countAlertsInRange, getWeekDates, toDateKey } from '@/lib/agendaUtils'
 import { refParaCliente } from '@/lib/clientAgenda'
 
@@ -60,6 +64,9 @@ interface AgendaCalendarProps {
    *  el handleUpdateTrucks de App (optimista + POST). Sin esto, soltar un
    *  chip de camión es no-op. */
   onUpdateTrucks?: (trucks: Truck[], changedIds?: string[]) => void
+  /** Cargas de la tabla `shipments` (LCL): el aviso de previsión al mover la
+   *  salida de un camión (mismo que al publicar en el armador). */
+  dbShipments?: DbShipment[]
   /** Opens the OperationDetailPanel for the given FCL ref (navigates to operaciones tab). */
   onOpenDetail?: (ref: string) => void
   /** Refs (UPPER/trim) de cargas SIN telex — alerta 🚨 en los hitos de camiones. */
@@ -78,6 +85,7 @@ export default function AgendaCalendar({
   editable = false,
   onPatchShipment,
   onUpdateTrucks,
+  dbShipments,
   onOpenDetail,
   sinTelexRefs,
 }: AgendaCalendarProps) {
@@ -440,6 +448,22 @@ export default function AgendaCalendar({
         toast.success(`${event.ref} movido al ${fmtDateDMY(newDate!)}`, {
           action: { label: 'Deshacer', onClick: () => applyTruckFields(truckRes.truckId, prevFields) },
         })
+        // Mover la salida es poner fecha de salida: el mismo aviso de previsión
+        // que al publicar en el armador (viene carga del mismo fiscal y depósito,
+        // o algo del camión apura). No bloquea: el drag ya se hizo y tiene Deshacer.
+        if (prev && truckRes.fields.departureDate && dbShipments?.length) {
+          const cargas = effectiveTruckLoads(truckLoads || [], prev.id, { includePending: true })
+          const totals = computeTruckTotals(prev, cargas)
+          const aviso = avisoAlPublicar({
+            code: prev.code,
+            refs: cargas.map(l => l.sourceRef),
+            kg: totals.kg,
+            m3: totals.m3,
+            limites: getTruckLimits(prev.isSider),
+            departureDate: truckRes.fields.departureDate,
+          }, dbShipments, hoyISO())
+          if (aviso) toast.warning(aviso.texto, { duration: 12000 })
+        }
       } else if (newDate && newDate !== event.date && (event.type === 'salida' || event.type === 'carga')) {
         toast.warning('No se pudo mover: la salida del camión no puede quedar después de su llegada a fiscal.')
       }
@@ -487,7 +511,7 @@ export default function AgendaCalendar({
       }
     }
     onPatchShipment?.(result.dbId, fields)
-  }, [onPatchShipment, onUpdateTrucks, applyTruckFields])
+  }, [onPatchShipment, onUpdateTrucks, applyTruckFields, dbShipments, truckLoads])
 
   return (
     <div className="space-y-4">

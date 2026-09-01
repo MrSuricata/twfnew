@@ -22,12 +22,14 @@ interface TrucksManagementProps {
   onUpdateTrucks: (trucks: Truck[], changedIds?: string[]) => void
   onDeleteTruck: (id: string) => void
   onUpdateTruckLoads: (loads: TruckLoad[], changedIds?: string[]) => void
+  /** Camión nuevo con sus cargas, respetando la FK y la ventana de escritura de App. */
+  onCreateTruckWithLoads?: (truck: Truck, loads: TruckLoad[]) => Promise<boolean>
   onDeleteTruckLoad: (id: string) => void
   onUpdateLclAir: (shipments: LclAirShipment[]) => void
   onDeleteLclAir: (id: string) => void
   onRefreshTrucks?: () => Promise<boolean>
   /** Alta real de una carga (App.handleCreateShipment). false = abortada. */
-  onCreateShipment?: (row: DbShipment) => boolean | void
+  onCreateShipment?: (row: DbShipment, opts?: { duplicadoConfirmado?: boolean }) => boolean | void
   /** PATCH de una carga — para alinear sus fechas con las del consolidado. */
   onPatchShipment?: (id: string, fields: Record<string, unknown>) => void
   /** Baja de una carga (LCL/aéreo desde su pestaña). */
@@ -128,8 +130,7 @@ export default function TrucksManagement(props: TrucksManagementProps) {
             dbShipments={props.dbShipments || []}
             trucks={props.trucks}
             truckLoads={props.truckLoads}
-            onUpdateTrucks={props.onUpdateTrucks}
-            onUpdateTruckLoads={props.onUpdateTruckLoads}
+            onCreateTruckWithLoads={props.onCreateTruckWithLoads}
             onOpenBuilder={(id) => setSelectedTruckId(id)}
           />
           <TrucksList

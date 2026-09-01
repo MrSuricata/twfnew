@@ -174,3 +174,90 @@ describe('conflictoFechasConsolidado', () => {
     expect(conflictoFechasConsolidado(s, 'C1', camion({ departureDate: '', loadDate: '' }))).toBeNull()
   })
 })
+
+// ── La línea del camión y la carga: una sola fuente ─────────────────────
+import { truckLoadDesdeDb, valoresDesdeShipment, sincronizarLoad, camposQueDifieren, etiquetaCampoLoad } from './truckUtils'
+import type { DbShipment } from './operationsTypes'
+
+const db = (over: Partial<DbShipment> = {}): DbShipment => ({
+  id: 'db-1', ref: 'E163 A', mode: 'lcl', cliente: 'INELPA', fiscal: 'CLIR', kg: 1200, m3: 6.5, pkgs: 12,
+  doc_number: 'BL-77', hbl: 'HBL-OLD', stock: '13030', desconsol_date: '2026-08-25', fecha_consol: '2026-08-20',
+  eta: '2026-08-20', observacion: 'REPUESTOS', wood: true, imo: false, no_apilable: false, entrega_planta: false,
+  archived: false, agente: 'CRAFT', deposito: 'PLANIR', ...over,
+} as unknown as DbShipment)
+
+describe('truckLoadDesdeDb — la línea nace igual a la carga, sin overrides', () => {
+  it('copia lo que dice LOAD_DESDE_SHIPMENT (stock, fiscal, kg, m3, pkgs, madera, BL=doc_number)', () => {
+    const l = truckLoadDesdeDb('t1', db(), 0, null)
+    expect(l).toMatchObject({
+      sourceType: 'lcl', sourceRef: 'E163 A', client: 'INELPA', fiscal: 'CLIR', kg: 1200, m3: 6.5, pkgs: 12,
+      bl: 'BL-77', stock: '13030', wood: true, desconsolDate: '2026-08-25', mvdArrival: '2026-08-20', description: 'REPUESTOS',
+      overrides: {}, pending: null,
+    })
+  })
+
+  it('BL cae a hbl si doc_number está vacío; desconsol a fecha_consol; madera null entra como No', () => {
+    const l = truckLoadDesdeDb('t1', db({ doc_number: '', desconsol_date: '', wood: null as unknown as boolean }), 0, 'add')
+    expect(l.bl).toBe('HBL-OLD')
+    expect(l.desconsolDate).toBe('2026-08-20')
+    expect(l.wood).toBe(false)
+    expect(l.pending).toBe('add')
+  })
+
+  it('valoresDesdeShipment es lo mismo que copia la línea (misma función)', () => {
+    const v = valoresDesdeShipment(db())
+    const l = truckLoadDesdeDb('t1', db(), 0, null)
+    for (const k of Object.keys(v) as (keyof typeof v)[]) expect(l[k]).toEqual(v[k])
+  })
+})
+
+describe('sincronizarLoad — la carga manda salvo donde el usuario pisó a mano', () => {
+  // Línea creada ANTES de que alguien completara la carga en HOY LCL: nació con ceros.
+  const vieja = (over: Partial<TruckLoad> = {}): TruckLoad => ({
+    ...truckLoadDesdeDb('t1', db({ kg: 0, m3: 0, pkgs: 0, stock: '', deposito: '' }), 0, null),
+    id: 'l-1', ...over,
+  })
+
+  it('completa kg/m3/pkgs/stock desde la carga y dice qué cambió', () => {
+    const { load, campos } = sincronizarLoad(vieja(), db())
+    expect(load).toMatchObject({ kg: 1200, m3: 6.5, pkgs: 12, stock: '13030' })
+    expect(campos).toEqual(['kg', 'm3', 'pkgs', 'stock'])
+    expect(load.overrides).toEqual({})
+  })
+
+  it('respeta lo que tiene override: el valor manual queda y no se cuenta como cambio', () => {
+    const l = vieja({ kg: 999, overrides: { kg: true } })
+    const { load, campos } = sincronizarLoad(l, db())
+    expect(load.kg).toBe(999)
+    expect(load.overrides).toEqual({ kg: true })
+    expect(campos).toEqual(['m3', 'pkgs', 'stock'])
+  })
+
+  it('si ya coincide no cambia nada y devuelve la misma línea', () => {
+    const l = truckLoadDesdeDb('t1', db(), 0, null)
+    const r = sincronizarLoad(l, db())
+    expect(r.campos).toEqual([])
+    expect(r.load).toBe(l)
+  })
+})
+
+describe('camposQueDifieren — aviso "difiere de la carga" sin override', () => {
+  it('lista los campos donde la línea dice otra cosa que la carga y nadie los editó', () => {
+    const l = { ...truckLoadDesdeDb('t1', db(), 0, null), kg: 0, fiscal: 'RAFAELA' }
+    expect(camposQueDifieren(l, db())).toEqual(['fiscal', 'kg'])
+  })
+
+  it('un campo con override no difiere (es una decisión), 0 vs vacío tampoco', () => {
+    const l = { ...truckLoadDesdeDb('t1', db(), 0, null), kg: 0, overrides: { kg: true } }
+    expect(camposQueDifieren(l, db())).toEqual([])
+    const sinDatos = truckLoadDesdeDb('t1', db({ kg: null as unknown as number, wood: null as unknown as boolean }), 0, null)
+    expect(camposQueDifieren(sinDatos, db({ kg: 0, wood: false }))).toEqual([])
+  })
+
+  it('las etiquetas son las de la lista única de datos clave', () => {
+    expect(etiquetaCampoLoad('kg')).toBe('Kilos')
+    expect(etiquetaCampoLoad('stock')).toBe('Nº stock')
+    expect(etiquetaCampoLoad('bl')).toBe('BL')
+    expect(etiquetaCampoLoad('desconsolDate')).toBe('Desconsolidación')
+  })
+})

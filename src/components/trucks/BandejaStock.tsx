@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Package } from '@phosphor-icons/react'
 import type { DbShipment } from '@/lib/operationsTypes'
 import { estadoLcl } from '@/lib/lclEstados'
+import { hoyISO } from '@/lib/format'
 
 interface BandejaStockProps {
   dbShipments: DbShipment[]
@@ -25,7 +26,10 @@ interface BandejaStockProps {
 }
 
 export default function BandejaStock({ dbShipments, refsEnCamion, onPatch, embebida = false }: BandejaStockProps) {
-  const hoy = new Date().toISOString().slice(0, 10)
+  // Fecha LOCAL: con UTC, después de las 21:00 en Uruguay "hoy" ya era mañana
+  // (la fila aparecía acá pero el conteo de HOY LCL no la veía, y el
+  // desconsol_date quedaba con una fecha que no había llegado).
+  const hoy = hoyISO()
   const [borradores, setBorradores] = useState<Record<string, string>>({})
 
   const esperando = useMemo(() => dbShipments

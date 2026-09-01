@@ -26,6 +26,7 @@ import {
 } from '@/lib/lclAlta'
 import { Section, Field, ComboField, SelectField, RefDuplicadaAviso } from './formAtoms'
 import LclDatosClave from './LclDatosClave'
+import { hoyISO } from '@/lib/format'
 
 // ── Alta de carga GUIADA ─────────────────────────────────────────────────
 // Obligatorios: Ref + Cliente + Modalidad (decisión tomada — no cambiar).
@@ -159,7 +160,7 @@ const EMPTY_FORM: FormState = {
 // repiten en "Más campos" ni cuentan como "opcionales completados".
 const LCL_CLAVE_KEYS = new Set<keyof FormState>([
   'ref', 'cliente', 'fiscal', 'docNumber', 'pkgs', 'kg', 'm3', 'stock',
-  'wood', 'apilable', 'imo', 'entregaPlanta',
+  'wood', 'apilable', 'imo', 'entregaPlanta', 'eta', 'deposito',
 ])
 
 export default function NewShipmentDialog({
@@ -177,8 +178,9 @@ export default function NewShipmentDialog({
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
-  /** Devuelve false si el alta se abortó (ej: REF duplicada y el usuario canceló). */
-  onCreate: (row: DbShipment) => boolean | void
+  /** Devuelve false si el alta se abortó (ej: REF duplicada y el usuario canceló).
+   *  `duplicadoConfirmado`: este diálogo ya preguntó por la ref repetida (LCL). */
+  onCreate: (row: DbShipment, opts?: { duplicadoConfirmado?: boolean }) => boolean | void
   /** Próxima ref FCL libre (máx A#### + 1) — se ofrece al elegir modo FCL. */
   suggestedRef?: string
   /** Catálogo de clientes: alimenta el datalist del campo Cliente y la
@@ -256,11 +258,12 @@ export default function NewShipmentDialog({
     [esLcl, f.ref, cargasExistentes],
   )
 
-  // Vista de los 12 datos clave LCL (subconjunto del form, mismos nombres).
+  // Vista de los 14 datos clave LCL (subconjunto del form, mismos nombres).
   const datosClave: LclDatosClaveState = {
     ref: f.ref, cliente: f.cliente, fiscal: f.fiscal, docNumber: f.docNumber,
     pkgs: f.pkgs, kg: f.kg, m3: f.m3, stock: f.stock,
     wood: f.wood, apilable: f.apilable, imo: f.imo, entregaPlanta: f.entregaPlanta,
+    eta: f.eta, deposito: f.deposito,
   }
 
   const save = () => {
@@ -302,11 +305,18 @@ export default function NewShipmentDialog({
         if (ok) { etaFiscFinal = sugerida; set('etaFisc', sugerida) }
       }
     }
-    // LCL: los 12 datos clave se traducen con la MISMA función que el alta
+    // LCL: los 14 datos clave se traducen con la MISMA función que el alta
     // desde Camiones (stock → desconsol_date=hoy si venía vacía, apilable →
     // no_apilable, etc.). Se aplican al final para que manden.
-    const hoyISO = new Date().toISOString().slice(0, 10)
-    const clave = m === 'lcl' ? camposDesdeDatosClave(datosClave, hoyISO, f.desconsol) : {}
+    const clave = m === 'lcl' ? camposDesdeDatosClave(datosClave, hoyISO(), f.desconsol) : {}
+    // LCL con ref repetida: el aviso inline ya se vio; se confirma UNA vez acá
+    // y App no vuelve a preguntar lo mismo (duplicadoConfirmado).
+    let duplicadoConfirmado = false
+    if (duplicada) {
+      const ok = window.confirm(`Ya existe una carga activa con la ref "${f.ref.trim()}"${duplicada.cliente ? ` (${duplicada.cliente})` : ''}.\n\n¿Crearla igual? Si es una carga partida, cancelá y usá un sufijo (A / B).`)
+      if (!ok) return
+      duplicadoConfirmado = true
+    }
     const row = newDbShipment({
       mode: m,
       ref: f.ref.trim(),
@@ -363,7 +373,7 @@ export default function NewShipmentDialog({
       ...clave,
     })
     // false = abortado (REF duplicada y canceló) → el diálogo queda abierto.
-    if (onCreate(row) === false) return
+    if (onCreate(row, { duplicadoConfirmado }) === false) return
     reset()
     onOpenChange(false)
   }
@@ -542,8 +552,8 @@ export default function NewShipmentDialog({
               )}
 
               {/* Datos clave */}
-              <Section title={esLcl ? 'Depósito y operativa' : 'Datos clave'}>
-                <ComboField label="Depósito UY" value={f.deposito} options={DEPOSITOS_UY} onChange={v => set('deposito', v)} placeholder="GODILCO, PLANIR…" catalogo />
+              <Section title={esLcl ? 'Operativa' : 'Datos clave'}>
+                {!esLcl && <ComboField label="Depósito UY" value={f.deposito} options={DEPOSITOS_UY} onChange={v => set('deposito', v)} placeholder="GODILCO, PLANIR…" catalogo />}
                 <ComboField label="Operativa" value={f.operativa} options={OPERATIVA_OPTIONS} onChange={v => set('operativa', v)} placeholder="TRASIEGO…" catalogo />
                 <Field label="Libre (máx. devolución)" type="date" value={f.libre} onChange={v => set('libre', v)} />
                 {!esLcl && <Field label="Fiscal (destino)" value={f.fiscal} onChange={v => set('fiscal', v)} placeholder="LOGIFRONT, FISCALIA…" />}
@@ -553,7 +563,7 @@ export default function NewShipmentDialog({
               {/* Fechas */}
               <Section title="Fechas">
                 <Field label="ETD" type="date" value={f.etd} onChange={v => set('etd', v)} />
-                <Field label={esLcl ? 'ETA MVD' : 'ETA'} type="date" value={f.eta} onChange={v => set('eta', v)} />
+                {!esLcl && <Field label="ETA" type="date" value={f.eta} onChange={v => set('eta', v)} />}
                 <Field label="Salida" type="date" value={f.salida} onChange={v => set('salida', v)} />
                 <Field label="ETA fiscal" type="date" value={f.etaFisc} onChange={v => set('etaFisc', v)} />
                 <Field label="Seguimiento" type="date" value={f.seguimiento} onChange={v => set('seguimiento', v)} />

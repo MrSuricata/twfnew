@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import {
   refsPorCamion, lclActivas, blDe, llegadasProximas, aguardanStock,
-  listasParaCamion, camionesLcl, datosFaltantes, sumarDiasISO,
+  listasParaCamion, camionesLcl, datosFaltantes, patchFaltanteLcl, sumarDiasISO,
+  CAMPOS_FALTANTES_LCL,
   type LclRow,
 } from './hoyLcl'
+import { reclamables } from './datosClave'
 import type { Truck, TruckLoad } from './truckTypes'
 
 const HOY = '2026-09-01'
@@ -14,7 +16,7 @@ const lcl = (over: Partial<LclRow> = {}): LclRow => ({
   id: `id-${++seq}`, ref: `LCL${seq}`, mode: 'lcl', archived: false,
   cliente: 'CIUFFO', doc_number: 'BL-1', pkgs: 10, kg: 1000, m3: 5,
   stock: '', desconsol_date: '', fiscal: 'RAFAELA', deposito: 'GODILCO', eta: '2026-08-20',
-  marca_cliente: null, marca_motivo: null,
+  marca_cliente: null, marca_motivo: null, wood: false,
   ...over,
 })
 
@@ -226,6 +228,16 @@ describe('camionesLcl — camiones con carga LCL en planificación, cargados o e
     expect(r[0].info.status).toBe('in_transit')
   })
 
+  it('un camión que salió hace más de 10 días sin arribo cargado ya no es "hoy" (los importados quedaban En Frontera para siempre)', () => {
+    const viejo = camion({ code: 'C300', loadDate: '2026-08-10', departureDate: '2026-08-11' })
+    const justo = camion({ code: 'C301', loadDate: '2026-08-21', departureDate: '2026-08-22' })   // hace exactamente 10 días: todavía se ve
+    const reciente = camion({ code: 'C302', loadDate: '2026-08-28', departureDate: '2026-08-29' })
+    const sinSalir = camion({ code: 'C303', loadDate: '2026-08-01' })
+    const loads = [carga(viejo.id, 'A'), carga(justo.id, 'B'), carga(reciente.id, 'C'), carga(sinSalir.id, 'D')]
+    const r = camionesLcl([viejo, justo, reciente, sinSalir], loads, HOY_DATE)
+    expect(r.map(c => c.truck.code)).toEqual(['C301', 'C302', 'C303'])
+  })
+
   it('ocupación sobre el límite del tipo de camión; una carga marcada para quitar sigue contando', () => {
     const t = camion({ isSider: true })
     const loads = [carga(t.id, 'A', { m3: 40, kg: 12250 }), carga(t.id, 'B', { m3: 40, kg: 12250, pending: 'remove' }), carga(t.id, 'C', { pending: 'add' })]
@@ -237,34 +249,141 @@ describe('camionesLcl — camiones con carga LCL en planificación, cargados o e
   })
 })
 
+describe('lclActivas — solo las que pasan por Montevideo', () => {
+  it('sin puerto o MONTEVIDEO entran; otro puerto cargado queda afuera', () => {
+    const rows = [
+      lcl({ ref: 'SIN', discharge_port: '' }),
+      lcl({ ref: 'MVD', discharge_port: 'MONTEVIDEO' }),
+      lcl({ ref: 'BUE', discharge_port: 'BUENOS AIRES' }),
+    ]
+    expect(lclActivas(rows, new Set()).map(r => r.ref)).toEqual(['SIN', 'MVD'])
+  })
+
+  it('la fila real del bloque LCL BUENOS AIRES (dest_country AR, puerto vacío, agente CRAFT ARGENTINA) queda afuera y sin sugerencia de depósito', () => {
+    const bue = lcl({ ref: 'R84I', dest_country: 'AR', discharge_port: '', deposito: '', agente: 'CRAFT ARGENTINA', stock: '77', desconsol_date: HOY })
+    const mvd = lcl({ ref: 'E163 A', dest_country: 'UY', discharge_port: '', deposito: '', agente: 'CRAFT', stock: '78', desconsol_date: HOY })
+    const activas = lclActivas([bue, mvd], new Set())
+    expect(activas.map(r => r.ref)).toEqual(['E163 A'])
+    // Lo que se deriva de las activas no la ve: ni faltantes (chip Sugerido PLANIR) ni listas para camión.
+    expect(datosFaltantes(activas, HOY).porCarga.map(x => x.row.ref)).toEqual(['E163 A'])
+    expect(listasParaCamion(activas, HOY, new Set()).flatMap(g => g.depositos.flatMap(d => d.items.map(i => i.row.ref)))).toEqual(['E163 A'])
+  })
+})
+
+describe('listasParaCamion — depósito supuesto por agente', () => {
+  it('sin depósito pero con agente CRAFT agrupa en PLANIR y lo marca supuesto', () => {
+    const rows = [
+      lcl({ ref: 'REAL', stock: '1', desconsol_date: HOY, deposito: 'PLANIR' }),
+      lcl({ ref: 'SUP', stock: '2', desconsol_date: HOY, deposito: '', agente: 'CRAFT MULTIMODAL' }),
+      lcl({ ref: 'NADA', stock: '3', desconsol_date: HOY, deposito: '', agente: '' }),
+    ]
+    const [g] = listasParaCamion(rows, HOY, new Set())
+    expect(g.depositos.map(d => d.deposito)).toEqual(['PLANIR', null])
+    const planir = g.depositos[0]
+    expect(planir.supuesto).toBe(true)
+    expect(planir.items.map(i => [i.row.ref, i.depositoSupuesto])).toEqual([['REAL', false], ['SUP', true]])
+    expect(g.depositos[1].supuesto).toBe(false)
+  })
+})
+
 describe('datosFaltantes — carga que no está completa no viaja', () => {
+  it('reclama exactamente los datos reclamables de DATOS_CLAVE.lcl', () => {
+    expect(CAMPOS_FALTANTES_LCL.map(d => d.key)).toEqual(reclamables('lcl').map(d => d.key))
+    expect(CAMPOS_FALTANTES_LCL.map(d => d.key)).toEqual(['fiscal', 'pkgs', 'kg', 'm3', 'wood', 'eta', 'deposito'])
+  })
+
   it('agrupa por qué le falta y cuenta cargas distintas', () => {
     const rows = [
       lcl({ ref: 'OK' }),
-      lcl({ ref: 'SINBL', doc_number: '', hbl: '' }),
-      lcl({ ref: 'SINTODO', cliente: '', fiscal: '', eta: '', kg: 0, m3: 0, doc_number: '' }),
+      lcl({ ref: 'SINBL', doc_number: '', hbl: '' }),            // el BL no se reclama acá
+      lcl({ ref: 'SINTODO', fiscal: '', eta: '', kg: 0, m3: 0, pkgs: 0, wood: null, deposito: '' }),
       lcl({ ref: 'SINM3', m3: 0 }),
+      lcl({ ref: 'MADERA', wood: null }),
     ]
-    const f = datosFaltantes(rows)
+    const f = datosFaltantes(rows, HOY)
     expect(f.total).toBe(3)
     const porCampo = Object.fromEntries(f.porCampo.map(g => [g.campo, g.rows.map(r => r.ref)]))
-    expect(porCampo.cliente).toEqual(['SINTODO'])
-    expect(porCampo.eta).toEqual(['SINTODO'])
     expect(porCampo.fiscal).toEqual(['SINTODO'])
-    expect(porCampo.bl).toEqual(['SINBL', 'SINTODO'])
+    expect(porCampo.eta).toEqual(['SINTODO'])
+    expect(porCampo.pkgs).toEqual(['SINTODO'])
     expect(porCampo.kg).toEqual(['SINTODO'])
     expect(porCampo.m3).toEqual(['SINTODO', 'SINM3'])
+    expect(porCampo.wood).toEqual(['SINTODO', 'MADERA'])
+    expect(porCampo.deposito).toEqual(['SINTODO'])
+    expect(porCampo.cliente).toBeUndefined()
     expect(f.porCampo.every(g => g.label.length > 0)).toBe(true)
   })
 
+  it('IMO y entrega en planta en false no faltan; madera false tampoco', () => {
+    const f = datosFaltantes([lcl({ imo: false, entrega_planta: false, wood: false })], HOY)
+    expect(f.total).toBe(0)
+  })
+
   it('sin faltantes: lista vacía y total 0', () => {
-    const f = datosFaltantes([lcl()])
+    const f = datosFaltantes([lcl()], HOY)
     expect(f.total).toBe(0)
     expect(f.porCampo).toEqual([])
   })
 
-  it('por carga: qué le falta a cada una', () => {
-    const f = datosFaltantes([lcl({ ref: 'A', fiscal: '', m3: 0 })])
-    expect(f.porCarga[0].faltan).toEqual(['fiscal', 'm3'])
+  it('por carga: qué le falta a cada una, en el orden de la lista', () => {
+    const f = datosFaltantes([lcl({ ref: 'A', deposito: '', m3: 0, fiscal: '' })], HOY)
+    expect(f.porCarga[0].faltan.map(d => d.key)).toEqual(['fiscal', 'm3', 'deposito'])
+  })
+
+  it('primero las que ya llegaron o llegan en 7 días; después el resto; sin ETA al final', () => {
+    const rows = [
+      lcl({ ref: 'LEJOS', m3: 0, eta: '2026-09-20' }),
+      lcl({ ref: 'SINETA', m3: 0, eta: '' }),
+      lcl({ ref: 'MANANA', m3: 0, eta: '2026-09-02' }),
+      lcl({ ref: 'LLEGO', m3: 0, eta: '2026-08-25' }),
+      lcl({ ref: 'BORDE', m3: 0, eta: '2026-09-08' }),
+      lcl({ ref: 'AFUERA', m3: 0, eta: '2026-09-09' }),
+    ]
+    const f = datosFaltantes(rows, HOY)
+    expect(f.porCarga.map(x => x.row.ref)).toEqual(['LLEGO', 'MANANA', 'BORDE', 'AFUERA', 'LEJOS', 'SINETA'])
+    expect(f.porCarga.map(x => x.urgente)).toEqual([true, true, true, false, false, false])
+    expect(f.urgentes).toBe(3)
+    expect(f.porCarga[0].diasAEta).toBe(-7)
+  })
+
+  it('depósito vacío con agente CRAFT/SACO trae la sugerencia; con depósito cargado no', () => {
+    const rows = [
+      lcl({ ref: 'C', deposito: '', agente: 'CRAFT' }),
+      lcl({ ref: 'S', deposito: '', agente: 'Saco Shipping' }),
+      lcl({ ref: 'X', deposito: '', agente: 'OTRO' }),
+      lcl({ ref: 'OK', deposito: 'GODILCO', agente: 'CRAFT', m3: 0 }),
+    ]
+    const f = datosFaltantes(rows, HOY)
+    const por = Object.fromEntries(f.porCarga.map(x => [x.row.ref, x.depositoSugerido]))
+    expect(por.C).toMatchObject({ deposito: 'PLANIR', supuesto: true, agente: 'CRAFT' })
+    expect(por.S).toMatchObject({ deposito: 'TCP', supuesto: true, agente: 'SACO' })
+    expect(por.X).toBeNull()
+    expect(por.OK).toBeNull()
+  })
+})
+
+describe('patchFaltanteLcl — de lo tipeado al PATCH', () => {
+  it('números: coma decimal y punto de miles; bultos enteros; 0 o basura rebotan', () => {
+    expect(patchFaltanteLcl('kg', '1.250,5')).toEqual({ ok: true, patch: { kg: 1250.5 } })
+    expect(patchFaltanteLcl('m3', '3,2')).toEqual({ ok: true, patch: { m3: 3.2 } })
+    expect(patchFaltanteLcl('pkgs', '12,6')).toEqual({ ok: true, patch: { pkgs: 13 } })
+    expect(patchFaltanteLcl('kg', '0').ok).toBe(false)
+    expect(patchFaltanteLcl('kg', 'abc').ok).toBe(false)
+    expect(patchFaltanteLcl('pkgs', '0,4').ok).toBe(false)
+  })
+  it('fecha ISO con año razonable', () => {
+    expect(patchFaltanteLcl('eta', '2026-09-03')).toEqual({ ok: true, patch: { eta: '2026-09-03' } })
+    expect(patchFaltanteLcl('eta', '0002-09-03').ok).toBe(false)
+    expect(patchFaltanteLcl('eta', '03/09/2026').ok).toBe(false)
+  })
+  it('fiscal y depósito en mayúsculas; madera Sí/No', () => {
+    expect(patchFaltanteLcl('fiscal', ' rafaela ')).toEqual({ ok: true, patch: { fiscal: 'RAFAELA' } })
+    expect(patchFaltanteLcl('deposito', 'planir')).toEqual({ ok: true, patch: { deposito: 'PLANIR' } })
+    expect(patchFaltanteLcl('wood', 'si')).toEqual({ ok: true, patch: { wood: true } })
+    expect(patchFaltanteLcl('wood', 'No')).toEqual({ ok: true, patch: { wood: false } })
+    expect(patchFaltanteLcl('wood', 'quizás').ok).toBe(false)
+  })
+  it('vacío rebota', () => {
+    expect(patchFaltanteLcl('fiscal', '   ').ok).toBe(false)
   })
 })

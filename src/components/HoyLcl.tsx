@@ -10,24 +10,29 @@
  * Misma piel que TodayDashboard (cards accent-top, pill de conteo, variantes
  * Med por useBrand) para que el cambio de área no se sienta como otra app.
  */
-import { useMemo, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { toast } from 'sonner'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
-  Anchor, Package, Warehouse, Truck as TruckIcon, ListChecks, Warning, Star, Pause, CaretRight, Coffee,
+  Anchor, Package, Warehouse, Truck as TruckIcon, ListChecks, Star, Pause, CaretRight, Coffee, Check,
 } from '@phosphor-icons/react'
 import type { DbShipment } from '@/lib/operationsTypes'
+import { DEPOSITOS_UY } from '@/lib/operationsTypes'
 import type { Truck, TruckLoad } from '@/lib/truckTypes'
 import { TRUCK_LIMITS, TRUCK_STATUS_COLORS } from '@/lib/truckTypes'
 import {
   refsPorCamion, lclActivas, blDe, llegadasProximas, aguardanStock, listasParaCamion,
-  camionesLcl, datosFaltantes, fechaISO,
-  type LclRow, type ListaItem,
+  camionesLcl, datosFaltantes, patchFaltanteLcl, CAMPO_FALTANTE_LABEL, DIAS_CAMION_RECIENTE,
+  type LclRow, type ListaItem, type FaltantesPorCarga, type CampoFaltanteLcl,
 } from '@/lib/hoyLcl'
+import { FISCALES_BASE } from '@/lib/lclAlta'
+import type { DatoClave } from '@/lib/datosClave'
 import BandejaStock from './trucks/BandejaStock'
+import ChipDeposito from './trucks/ChipDeposito'
 import { useBrand } from '@/lib/brand'
-import { fmtDateDMY } from '@/lib/format'
+import { fmtDateDMY, hoyISO as hoyLocal } from '@/lib/format'
 import { formatKg, formatM3 } from '@/lib/truckUtils'
 
 interface HoyLclProps {
@@ -35,7 +40,9 @@ interface HoyLclProps {
   trucks?: Truck[]
   truckLoads?: TruckLoad[]
   isDataLoading?: boolean
-  onPatchShipment?: (id: string, fields: Record<string, unknown>) => void
+  /** PATCH real de `shipments` (App.handlePatchShipment). Obligatorio: la
+   *  bandeja de stock y los datos faltantes guardan desde acá. */
+  onPatchShipment: (id: string, fields: Record<string, unknown>) => void
   /** Abre la ficha completa de la carga (clave = id de la fila en shipments). */
   onOpenDetail?: (key: string) => void
   onOpenTab?: (tab: string) => void
@@ -56,7 +63,8 @@ export default function HoyLcl({
   onPatchShipment, onOpenDetail, onOpenTab,
 }: HoyLclProps) {
   const med = useBrand().id === 'med'
-  const hoyISO = fechaISO(new Date())
+  // Fecha LOCAL (misma que la bandeja de stock): con UTC, de noche "hoy" ya era mañana.
+  const hoyISO = hoyLocal()
 
   const porCamion = useMemo(() => refsPorCamion(trucks, truckLoads), [trucks, truckLoads])
   const activas = useMemo(() => lclActivas(dbShipments, porCamion.despachadas), [dbShipments, porCamion])
@@ -64,7 +72,15 @@ export default function HoyLcl({
   const esperandoStock = useMemo(() => aguardanStock(activas, hoyISO, porCamion.enCamion), [activas, hoyISO, porCamion])
   const listas = useMemo(() => listasParaCamion(activas, hoyISO, porCamion.enCamion), [activas, hoyISO, porCamion])
   const camiones = useMemo(() => camionesLcl(trucks, truckLoads, new Date()), [trucks, truckLoads])
-  const faltantes = useMemo(() => datosFaltantes(activas), [activas])
+  const faltantes = useMemo(() => datosFaltantes(activas, hoyISO, DIAS_VENTANA), [activas, hoyISO])
+  // Fiscales ya usados → datalist del input inline (misma semilla que el alta).
+  const knownFiscales = useMemo(
+    () => Array.from(new Set([...FISCALES_BASE, ...dbShipments.map(s => String(s.fiscal || '').trim().toUpperCase()).filter(Boolean)])).sort(),
+    [dbShipments],
+  )
+
+  // Qué carga de "Datos faltantes" está desplegada (una a la vez).
+  const [faltanteAbierta, setFaltanteAbierta] = useState<string | null>(null)
 
   const llegadasTotal = llegadas.reduce((n, d) => n + d.total, 0)
   const listasTotal = listas.reduce((n, g) => n + g.cargas + g.standBy, 0)
@@ -173,9 +189,9 @@ export default function HoyLcl({
       >
         <BandejaStock
           embebida
-          dbShipments={activas as DbShipment[]}
+          dbShipments={activas}
           refsEnCamion={porCamion.enCamion}
-          onPatch={(id, fields) => onPatchShipment?.(id, fields)}
+          onPatch={onPatchShipment}
         />
       </CardLcl>
 
@@ -215,7 +231,9 @@ export default function HoyLcl({
                   {g.depositos.map(d => (
                     <div key={d.deposito ?? '__sin'}>
                       <div className="flex items-center gap-2 text-[11px] text-muted-foreground mb-0.5">
-                        <span className="font-semibold uppercase">{d.deposito ?? 'sin depósito'}</span>
+                        {d.deposito
+                          ? <ChipDeposito deposito={d.deposito} supuesto={d.supuesto} className="text-[10px] h-5" />
+                          : <span className="font-semibold uppercase">sin depósito</span>}
                         <span>{formatM3(d.m3)} m³ · {formatKg(d.kg)} kg</span>
                         {g.depositos.length > 1 && d !== g.depositos[0] && <span className="italic">una parada más</span>}
                       </div>
@@ -240,7 +258,7 @@ export default function HoyLcl({
         icon={<TruckIcon size={18} weight="fill" />}
         tone="neutral"
         title="Camiones LCL"
-        subtitle="Publicados con alguna consolidada, hasta que llegan a fiscal. La ocupación es sobre el límite del tipo de camión."
+        subtitle={`Publicados con alguna consolidada, hasta que llegan a fiscal (los que salieron hace más de ${DIAS_CAMION_RECIENTE} días ya no son de hoy). La ocupación es sobre el límite del tipo de camión.`}
         count={camiones.length}
         empty="Ningún camión con carga LCL en curso."
         action={onOpenTab ? { label: 'Armar camión', onClick: () => onOpenTab('trucks') } : undefined}
@@ -285,37 +303,32 @@ export default function HoyLcl({
         icon={<ListChecks size={18} weight="fill" />}
         tone={faltantes.total > 0 ? 'destructive' : 'neutral'}
         title="Datos faltantes"
-        subtitle="LCL activas a las que les falta algo para viajar. Tocá la referencia para completar en su ficha."
+        subtitle="Bultos, kilos, m³, fiscal, madera, llegada a Montevideo y depósito de desconsolidación: tocá la carga y completalo acá mismo. Primero las que ya llegaron o llegan esta semana. IMO y entrega en planta se marcan con la tilde."
         count={faltantes.total}
-        empty="Todas las LCL activas tienen cliente, ETA, fiscal, BL, kilos y m³."
+        badges={faltantes.porCampo.map(g => ({ text: `${g.rows.length} ${g.label.toLowerCase()}`, tone: 'warn' as const }))}
+        empty="Todas las LCL activas tienen bultos, kilos, m³, fiscal, madera confirmada, llegada a Montevideo y depósito."
       >
-        <div className="space-y-2.5">
-          {faltantes.porCampo.map(g => (
-            <div key={g.campo}>
-              <div className="flex items-center gap-2 text-xs mb-1">
-                <Warning size={13} weight="fill" className={med ? 'text-med-error' : 'text-destructive'} />
-                <span className="font-semibold">{g.label}</span>
-                <span className="text-muted-foreground">· {g.rows.length}</span>
+        <div className="space-y-1">
+          {faltantes.porCarga.map((fc, i) => {
+            const primeraNoUrgente = !fc.urgente && (i === 0 || faltantes.porCarga[i - 1].urgente)
+            return (
+              <div key={fc.row.id}>
+                {primeraNoUrgente && faltantes.urgentes > 0 && (
+                  <div className="mt-2 mb-1 text-[10px] uppercase tracking-wide text-muted-foreground">Llegan más adelante</div>
+                )}
+                <FilaFaltante
+                  fc={fc}
+                  dbRow={dbShipments.find(s => s.id === fc.row.id)}
+                  expanded={faltanteAbierta === fc.row.id}
+                  onToggle={() => setFaltanteAbierta(prev => (prev === fc.row.id ? null : fc.row.id))}
+                  onPatchShipment={onPatchShipment}
+                  onOpenDetail={onOpenDetail}
+                  knownFiscales={knownFiscales}
+                  med={med}
+                />
               </div>
-              <div className="flex flex-wrap gap-1.5">
-                {g.rows.map(r => (
-                  <button
-                    key={r.id}
-                    type="button"
-                    onClick={() => onOpenDetail?.(r.id)}
-                    title={`Completar ${g.label.toLowerCase()} de ${r.ref}`}
-                    className={med
-                      ? 'inline-flex items-center gap-1 rounded-md border border-med-info-borde bg-white px-2 py-1 text-xs hover:bg-med-pastel'
-                      : 'inline-flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-xs hover:bg-muted'}
-                  >
-                    <span className="font-semibold">{r.ref}</span>
-                    {r.cliente ? <span className="text-muted-foreground truncate max-w-[10rem]">{r.cliente}</span> : null}
-                    <CaretRight size={11} className="text-muted-foreground" />
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </CardLcl>
     </div>
@@ -456,6 +469,211 @@ function RelojesLista({ it }: { it: ListaItem }) {
         <span className="text-[11px] text-muted-foreground italic">sin fecha de stock</span>
       )}
     </>
+  )
+}
+
+/**
+ * Una carga incompleta: la fila se despliega con UN input por dato faltante
+ * (mismo patrón que "Llegan con datos incompletos" de HOY FCL: borrador local,
+ * commit en blur/Enter, nunca onChange→PATCH). Los completados quedan como
+ * chip ✓ mientras la fila siga abierta para que nada se mueva bajo el foco.
+ * Madera se elige con dos botones (Sí / No), el depósito sugerido por el
+ * agente se acepta con un click, e IMO / entrega en planta son tildes que
+ * escriben al toque (false es un valor: no se reclaman).
+ */
+function FilaFaltante({ fc, dbRow, expanded, onToggle, onPatchShipment, onOpenDetail, knownFiscales, med }: {
+  fc: FaltantesPorCarga
+  dbRow?: DbShipment
+  expanded: boolean
+  onToggle: () => void
+  onPatchShipment: (id: string, fields: Record<string, unknown>) => void
+  onOpenDetail?: (key: string) => void
+  knownFiscales: string[]
+  med: boolean
+}) {
+  // Snapshot de los faltantes al ABRIR: input si sigue faltando, chip ✓ si ya
+  // se completó (si desaparecieran al instante, el layout se corre bajo el
+  // puntero). Solo importa el instante de abrir — el snapshot es a propósito.
+  const [camposPanel, setCamposPanel] = useState<DatoClave[] | null>(null)
+  useEffect(() => {
+    if (expanded) setCamposPanel(prev => prev ?? fc.faltan)
+    else setCamposPanel(null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [expanded])
+  const row = dbRow ?? (fc.row as DbShipment)
+
+  const diasLabel = fc.diasAEta === null
+    ? 'sin llegada'
+    : fc.diasAEta < 0 ? `llegó hace ${-fc.diasAEta}d` : fc.diasAEta === 0 ? 'llega hoy' : `llega en ${fc.diasAEta}d`
+
+  const patch = (fields: Record<string, unknown>, etiqueta: string, valor: string) => {
+    const previos = Object.fromEntries(Object.keys(fields).map(k => [k, (row as unknown as Record<string, unknown>)[k]]))
+    onPatchShipment(row.id, fields)
+    toast.success(`${etiqueta} guardado · ${row.ref}`, {
+      description: valor,
+      action: { label: 'Deshacer', onClick: () => onPatchShipment(row.id, previos) },
+    })
+  }
+
+  const filaCls = med
+    ? `rounded-lg border border-med-info-borde bg-white ${expanded ? '' : 'hover:bg-med-pastel/40'}`
+    : `rounded-lg border border-border/60 ${expanded ? 'bg-destructive/[0.04]' : 'bg-background/50 hover:bg-muted/60'}`
+
+  return (
+    <div className={filaCls}>
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={expanded}
+        className="w-full flex flex-wrap items-center gap-x-2.5 gap-y-1 px-3 py-2 text-left"
+      >
+        <CaretRight size={12} weight="bold" className={`shrink-0 text-muted-foreground transition-transform ${expanded ? 'rotate-90' : ''}`} />
+        <span className="ref-med text-sm font-semibold">{row.ref}</span>
+        <span className="text-xs truncate max-w-[12rem]" title={row.cliente || ''}>{row.cliente || <i className="text-muted-foreground">sin cliente</i>}</span>
+        <span className="text-xs text-amber-700 dark:text-amber-400 truncate">
+          faltan: {fc.faltan.map(d => d.label.toLowerCase()).join(', ')}
+        </span>
+        <span className={`ml-auto text-[11px] font-semibold tabular-nums ${fc.urgente ? (med ? 'text-med-error' : 'text-destructive') : 'text-muted-foreground'}`}>{diasLabel}</span>
+      </button>
+      {expanded && (
+        <div className="px-3 pb-3 pl-8">
+          <div className="flex flex-wrap items-end gap-2">
+            {(camposPanel ?? fc.faltan).map(d => {
+              const sigueFaltando = fc.faltan.some(x => x.key === d.key)
+              if (!sigueFaltando) {
+                const v = (row as unknown as Record<string, unknown>)[d.key]
+                const texto = d.key === 'wood' ? (v === true ? 'Sí' : 'No') : String(v ?? '')
+                return (
+                  <span key={d.key} className="inline-flex items-center gap-1 h-9 rounded border border-emerald-500/30 bg-emerald-500/[0.07] px-2 text-sm text-emerald-700 dark:text-emerald-400">
+                    <Check size={13} weight="bold" />
+                    <span className="text-[11px] uppercase tracking-wide opacity-70">{d.label}</span>
+                    <span className="font-medium truncate max-w-[160px]">{texto || '✓'}</span>
+                  </span>
+                )
+              }
+              if (d.key === 'wood') {
+                return (
+                  <div key={d.key} className="flex flex-col gap-0.5">
+                    <span className="text-[10px] uppercase tracking-wide text-muted-foreground leading-none">{d.label}</span>
+                    <div className="flex gap-1">
+                      <Button size="sm" variant="outline" className="h-9 px-3" onClick={() => patch({ wood: true }, d.label, 'Sí — SENASA')}>Sí</Button>
+                      <Button size="sm" variant="outline" className="h-9 px-3" onClick={() => patch({ wood: false }, d.label, 'No')}>No</Button>
+                    </div>
+                  </div>
+                )
+              }
+              return (
+                <div key={d.key} className="flex flex-col gap-1">
+                  <InputFaltante
+                    campo={d.key as CampoFaltanteLcl}
+                    dato={d}
+                    row={row}
+                    knownFiscales={knownFiscales}
+                    onCommit={(fields, valor) => patch(fields, d.label, valor)}
+                  />
+                  {d.key === 'deposito' && fc.depositoSugerido && (
+                    <button
+                      type="button"
+                      onClick={() => patch({ deposito: fc.depositoSugerido!.deposito }, d.label, `${fc.depositoSugerido!.deposito} (agente ${fc.depositoSugerido!.agente})`)}
+                      className="inline-flex items-center gap-1.5 self-start rounded-md border border-dashed border-border px-2 py-1 text-[11px] hover:bg-muted"
+                      title="Regla: las que vienen con CRAFT normalmente desconsolidan en PLANIR; las de SACO, en TCP. Se guarda solo si hacés click."
+                    >
+                      Sugerido:
+                      <ChipDeposito deposito={fc.depositoSugerido.deposito} className="text-[10px] h-5" />
+                      <span className="text-muted-foreground">(agente {fc.depositoSugerido.agente})</span>
+                    </button>
+                  )}
+                </div>
+              )
+            })}
+
+            {/* Tildes: no se reclaman, se editan */}
+            <div className="flex flex-col gap-0.5 ml-2">
+              <span className="text-[10px] uppercase tracking-wide text-muted-foreground leading-none">Marcas</span>
+              <div className="flex h-9 items-center gap-4">
+                <label className="flex items-center gap-1.5 text-xs cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={!!row.imo}
+                    onChange={e => patch({ imo: e.target.checked }, 'IMO', e.target.checked ? 'Sí' : 'No')}
+                    className="h-4 w-4 accent-primary"
+                  />
+                  IMO
+                </label>
+                <label className="flex items-center gap-1.5 text-xs cursor-pointer select-none" title="Del fiscal va directo a la planta del cliente. Dos entregas en planta en el mismo camión se pisan.">
+                  <input
+                    type="checkbox"
+                    checked={!!row.entrega_planta}
+                    onChange={e => patch({ entrega_planta: e.target.checked }, 'Entrega en planta', e.target.checked ? 'Sí' : 'No')}
+                    className="h-4 w-4 accent-primary"
+                  />
+                  🏭 Entrega en planta
+                </label>
+              </div>
+            </div>
+          </div>
+          {onOpenDetail && (
+            <button
+              type="button"
+              onClick={() => onOpenDetail(row.id)}
+              className="mt-2 text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+            >
+              Abrir ficha completa →
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Un input por dato faltante: borrador local, commit en blur/Enter, Escape limpia. */
+function InputFaltante({ campo, dato, row, knownFiscales, onCommit }: {
+  campo: CampoFaltanteLcl
+  dato: DatoClave
+  row: DbShipment
+  knownFiscales: string[]
+  onCommit: (fields: Record<string, unknown>, valor: string) => void
+}) {
+  const [draft, setDraft] = useState('')
+  const [invalido, setInvalido] = useState(false)
+  const commit = () => {
+    const texto = draft.trim()
+    if (!texto) return
+    const r = patchFaltanteLcl(campo, texto)
+    if (!r.ok) { setInvalido(true); toast.error(`${dato.label}: ${r.error}`, { description: String(row.ref) }); return }
+    setInvalido(false)
+    onCommit(r.patch, String(Object.values(r.patch)[0] ?? texto))
+  }
+  const base = 'h-9 rounded border bg-background px-1.5 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring'
+  const borde = invalido ? 'border-red-400' : 'border-input'
+  const esNumero = dato.control === 'numero'
+  const esFecha = dato.control === 'fecha'
+  const listId = dato.control === 'combo' ? `dl-faltante-lcl-${campo}-${row.id}` : undefined
+  const sugerencias = campo === 'fiscal' ? knownFiscales : campo === 'deposito' ? DEPOSITOS_UY : []
+  return (
+    <label className="flex flex-col gap-0.5 min-w-0">
+      <span className="text-[10px] uppercase tracking-wide text-muted-foreground leading-none">{CAMPO_FALTANTE_LABEL[campo] ?? dato.label}</span>
+      <input
+        type={esFecha ? 'date' : 'text'}
+        inputMode={esNumero ? 'decimal' : undefined}
+        value={draft}
+        placeholder={dato.hint ?? (esNumero ? dato.label.toLowerCase() : undefined)}
+        list={listId}
+        onChange={e => { setDraft(e.target.value); if (invalido) setInvalido(false) }}
+        onBlur={commit}
+        onKeyDown={e => {
+          if (e.key === 'Enter') { e.preventDefault(); commit() }
+          else if (e.key === 'Escape') { setDraft(''); setInvalido(false) }
+        }}
+        className={`${base} ${borde} ${esNumero ? 'w-24' : esFecha ? 'w-36' : 'w-44'}`}
+      />
+      {listId && (
+        <datalist id={listId}>
+          {sugerencias.map(v => <option key={v} value={v} />)}
+        </datalist>
+      )}
+    </label>
   )
 }
 

@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import {
-  camposDesdeDatosClave, buscarRefDuplicada, normalizarRef, sufijosSugeridos,
-  noApilableDesde, apilableDesde, LCL_DATOS_CLAVE_VACIOS, LCL_DATOS_CLAVE_ORDEN,
+  camposDesdeDatosClave, datosClaveDesdeFila, buscarRefDuplicada, normalizarRef, sufijosSugeridos,
+  noApilableDesde, apilableDesde, parseNum, LCL_DATOS_CLAVE_VACIOS, LCL_DATOS_CLAVE_ORDEN,
   type LclDatosClaveState,
 } from './lclAlta'
+import { DATOS_CLAVE } from './datosClave'
 
 const HOY = '2026-09-01'
 const datos = (over: Partial<LclDatosClaveState> = {}): LclDatosClaveState => ({
@@ -14,13 +15,38 @@ const datos = (over: Partial<LclDatosClaveState> = {}): LclDatosClaveState => ({
 })
 
 describe('camposDesdeDatosClave — el formulario se traduce igual desde los dos lados', () => {
-  it('mapea los 12 datos clave a sus columnas', () => {
-    const r = camposDesdeDatosClave(datos({ stock: '13030', wood: true, apilable: 'no', imo: true, entregaPlanta: true }), HOY)
+  it('mapea los 14 datos clave a sus columnas', () => {
+    const r = camposDesdeDatosClave(datos({
+      stock: '13030', wood: true, apilable: 'no', imo: true, entregaPlanta: true,
+      eta: '2026-09-03', deposito: 'planir',
+    }), HOY)
     expect(r).toMatchObject({
       ref: 'LCL247', cliente: 'CIUFFO', fiscal: 'RAFAELA', doc_number: 'HBL123',
       pkgs: 12, kg: 1250.5, m3: 3.2, stock: '13030',
       wood: true, no_apilable: true, imo: true, entrega_planta: true,
+      eta: '2026-09-03', deposito: 'PLANIR',
     })
+  })
+
+  it('escribe exactamente las columnas de DATOS_CLAVE.lcl (más desconsol_date)', () => {
+    const r = camposDesdeDatosClave(datos(), HOY)
+    const cols = Object.keys(r).filter(k => k !== 'desconsol_date').sort()
+    expect(cols).toEqual(DATOS_CLAVE.lcl.map(d => d.key).sort())
+  })
+
+  it('de la fila al formulario y de vuelta se conserva todo', () => {
+    const fila = {
+      ref: 'E163 A', cliente: 'INELPA', fiscal: 'CLIR', doc_number: 'BL9', pkgs: 8, kg: 640, m3: 2.5,
+      stock: '77', wood: null, no_apilable: true, imo: false, entrega_planta: true,
+      eta: '2026-08-20', deposito: 'GODILCO',
+    }
+    const f = datosClaveDesdeFila(fila)
+    expect(f).toMatchObject({ ref: 'E163 A', pkgs: '8', kg: '640', m3: '2.5', wood: null, apilable: 'no', entregaPlanta: true, eta: '2026-08-20', deposito: 'GODILCO' })
+    expect(camposDesdeDatosClave(f, HOY, '2026-08-21')).toMatchObject({ ...fila, desconsol_date: '2026-08-21' })
+  })
+
+  it('números en 0 quedan vacíos en el formulario (el 0 no es dato)', () => {
+    expect(datosClaveDesdeFila({ pkgs: 0, kg: null as unknown as number, m3: undefined })).toMatchObject({ pkgs: '', kg: '', m3: '' })
   })
 
   it('con stock y sin fecha de desconsolidación estampa HOY (desconsolidar es dar el stock)', () => {
@@ -62,12 +88,29 @@ describe('apilable ↔ no_apilable', () => {
   })
 })
 
-describe('el orden de los datos clave es el que pidió Brian', () => {
-  it('12 campos, ref primero y entrega en planta último', () => {
+describe('el orden de los datos clave es el que pidió Brian (derivado de DATOS_CLAVE.lcl)', () => {
+  it('14 campos: los 12 del alta y al final llegada a MVD y depósito', () => {
     expect(LCL_DATOS_CLAVE_ORDEN.map(c => c.label)).toEqual([
       'Ref', 'Cliente', 'Fiscal', 'BL', 'Bultos', 'Kilos', 'M³', 'Nº stock',
-      'Madera', 'Apilable', 'IMO', 'Entrega en planta',
+      'Madera', 'Apilable', 'IMO', 'Entrega en planta', 'Llegada a Montevideo', 'Depósito de desconsolidación',
     ])
+    expect(LCL_DATOS_CLAVE_ORDEN.map(c => c.col)).toEqual(DATOS_CLAVE.lcl.map(d => d.key))
+    // Cada columna tiene su clave en el estado del formulario.
+    for (const c of LCL_DATOS_CLAVE_ORDEN) expect(c.key in LCL_DATOS_CLAVE_VACIOS).toBe(true)
+  })
+})
+
+describe('parseNum — números como los tipea el equipo', () => {
+  it('coma decimal, punto de miles con coma, punto decimal solo', () => {
+    expect(parseNum('1250,5')).toBe(1250.5)
+    expect(parseNum('1.250,5')).toBe(1250.5)
+    expect(parseNum('12.500,75')).toBe(12500.75)
+    expect(parseNum('3.2')).toBe(3.2)
+    expect(parseNum('  12 ')).toBe(12)
+  })
+  it('vacío o basura → 0', () => {
+    expect(parseNum('')).toBe(0)
+    expect(parseNum('abc')).toBe(0)
   })
 })
 
