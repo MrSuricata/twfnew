@@ -49,6 +49,7 @@ interface AvailableRow {
   mvdArrival: string
   noApilable?: boolean   // ⚠️ va arriba de todo en el camión
   imo?: boolean          // ☢️ mercancía peligrosa
+  entregaPlanta?: boolean // 🏭 del fiscal directo a la planta del cliente
   fcl?: ParsedShipment
   lclAir?: LclAirShipment
   db?: DbShipment
@@ -166,6 +167,7 @@ export default function AvailableLoadsPanel({
         mvdArrival: s.eta || '',
         noApilable: !!s.no_apilable,
         imo: !!s.imo,
+        entregaPlanta: !!s.entrega_planta,
         db: s,
       })
     }
@@ -379,6 +381,7 @@ function AvailableRowCard({ row, onAdd }: { row: AvailableRow; onAdd: () => void
             <Badge variant="outline" className="h-4 text-[9px] uppercase">{row.type}</Badge>
             {row.noApilable && <Badge variant="outline" className="h-4 text-[9px] text-amber-700 border-amber-400" title="Carga NO apilable — va arriba de todo">📦 NO APILABLE</Badge>}
             {row.imo && <Badge variant="outline" className={med ? 'h-4 text-[9px] text-med-aviso-texto border-med-aviso bg-med-aviso-tinte' : 'h-4 text-[9px] text-red-700 border-red-400'} title="Mercancía peligrosa IMO">☢️ IMO</Badge>}
+            {row.entregaPlanta && <Badge variant="outline" className="h-4 text-[9px] text-violet-700 border-violet-300" title="Entrega en planta: dos en el mismo viaje se pisan">🏭 Planta</Badge>}
           </div>
           {row.cntr && (
             <p className="text-[11px] font-mono text-foreground/70 truncate mt-0.5" title="Contenedor que se sube a este camión">
