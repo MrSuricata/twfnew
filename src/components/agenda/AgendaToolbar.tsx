@@ -122,7 +122,7 @@ export default function AgendaToolbar({
             {getPeriodLabel(view, currentDate)}
           </h2>
           <p className="text-[11px] text-muted-foreground">
-            <span className="tabular-nums font-medium">{eventCount}</span> operacion{eventCount !== 1 ? 'es' : ''}
+            <span className="tabular-nums font-medium">{eventCount}</span> operaci{eventCount !== 1 ? 'ones' : 'ón'}
             {alertCount > 0 && (
               <span className={med ? 'ml-1.5 inline-flex items-center gap-1 text-med-aviso' : 'ml-1.5 inline-flex items-center gap-1 text-orange-600'}>
                 <Warning size={10} weight="fill" />

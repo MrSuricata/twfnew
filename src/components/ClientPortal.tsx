@@ -40,8 +40,7 @@ import {
 } from '@phosphor-icons/react'
 import { ParsedShipment, getShipmentStatus, generateShipmentAlerts, isShipmentCompleted, parseLocalDate } from '@/lib/shipmentTypes'
 import { statusColorToClass, getUrgencyMeta } from '@/lib/statusColors'
-import { useNoticias } from '@/components/NovedadesSection'
-import { alertasVigentes, tituloPlano } from '@/lib/noticias'
+import AvisoOperativo from '@/components/AvisoOperativo'
 import { ClientAccount, OperativeReport, OriginPhoto } from '@/lib/quotationTypes'
 import { authFetch } from '@/lib/authClient'
 import { fetchClientReports, fetchClientOriginPhotos } from '@/lib/dataClient'
@@ -50,7 +49,7 @@ import { fmtDateDMY } from '@/lib/format'
 import ShipmentDetailsDialog from './ShipmentDetailsDialog'
 import AgendaCalendar from './agenda/AgendaCalendar'
 import { matchesPattern, findClientByEmail } from '@/lib/clientMatching'
-import { useBrand, getBrand } from '@/lib/brand'
+import { useBrand } from '@/lib/brand'
 import { downloadClientStatusPdf } from '@/lib/clientStatusPdf'
 
 interface ClientPortalProps {
@@ -85,16 +84,6 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
   const [serverReports, setServerReports] = useState<OperativeReport[]>([])
   const [serverPhotos, setServerPhotos] = useState<OriginPhoto[]>([])
   const [isLoadingData, setIsLoadingData] = useState(true)
-
-  // Avisos operativos vigentes (los mismos de la landing) — solo lectura.
-  const { noticias: noticiasPortal } = useNoticias()
-  // El portal lo comparten las dos marcas; el Diario es solo de Mediterránea.
-  const avisoPortal = useMemo(
-    () => (getBrand().id === 'med'
-      ? alertasVigentes(noticiasPortal, new Date().toISOString().slice(0, 10))[0] ?? null
-      : null),
-    [noticiasPortal]
-  )
 
   // ── Filter states ──
   const [filterStatus, setFilterStatus] = useState('__all__')
@@ -484,19 +473,7 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
 
         {!(isLoadingData && serverShipments.length === 0) && (
         <>
-        {avisoPortal && (
-          <div className="degradado-med relative overflow-hidden rounded-[20px] p-6 mb-6 text-white">
-            <div className="absolute -bottom-24 -right-24 w-56 h-56 rounded-full border-[14px] border-white/15 pointer-events-none" aria-hidden />
-            <span className="inline-block rounded-full border-2 border-[#9bd1e5] px-4 py-1 text-[11px] font-semibold tracking-widest uppercase text-[#9bd1e5]">
-              Aviso operativo
-            </span>
-            <h3 className="titulo-med mt-2.5 text-xl lg:text-2xl text-white">{tituloPlano(avisoPortal.titulo)}</h3>
-            {avisoPortal.bajada && <p className="mt-1.5 text-sm text-white/80 max-w-2xl">{avisoPortal.bajada.replace(/\*\*/g, '')}</p>}
-            <a href="/novedades" target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center rounded-full bg-[#ceffff] px-5 py-2 text-sm font-semibold text-[#352e6a]">
-              Ver aviso completo →
-            </a>
-          </div>
-        )}
+        <AvisoOperativo className="mb-6" />
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
           <Card>

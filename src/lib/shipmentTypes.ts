@@ -21,6 +21,10 @@ export interface OperativasRecord {
   CLIENTE_OP: string     // Client name from Operativas
   TIPO: string           // Container type: 40HQ, 20DV, etc.
   WOOD: string           // Wood marking (SI/NO)
+  /** Carga peligrosa (SI/NO). Manda en el orden de estiba y en la frontera. */
+  IMO?: string
+  /** No se puede estibar nada encima (SI/NO). */
+  NO_APILABLE?: string
   TRANSPORTE: string     // Transport/trasiego provider
   HORARIO: string        // Schedule
   LUGAR_SALIDA?: string  // Por contenedor: TCP | MONTECON | GODILCO | PLANIR | '' (vacío = en terminal de arribo)
