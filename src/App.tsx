@@ -7,14 +7,14 @@ import { Truck, TruckLoad, LclAirShipment } from '@/lib/truckTypes'
 import { getBrand } from '@/lib/brand'
 import { canApplyTrucksRefresh, createTrucksWriteWindow } from '@/lib/trucksRefreshGuard'
 import { BillingRecord } from '@/lib/billingTypes'
-import { Operator, OperatorAssignment, DbShipment, UnifiedOperation, dbFclToParsedShipment } from '@/lib/operationsTypes'
+import { OperatorAssignment, DbShipment, UnifiedOperation, dbFclToParsedShipment } from '@/lib/operationsTypes'
 import { withRollupColumns } from '@/lib/operativasRollup'
 import { subscribeTrucksLive } from '@/lib/realtimeBus'
 import { getDemoShipments } from '@/lib/demoShipments'
 import { filterShipments } from '@/lib/sheetsSync'
 import { verifySession, clearAuth, authFetch, hasStoredToken, adoptImpersonationToken, onSesionVencida } from '@/lib/authClient'
 import { shouldRestoreSession } from '@/lib/authGate'
-import { loadAdminData, saveQuotes, saveDocuments, saveReports, saveClients, saveTrucks, saveTruckLoads, saveLclAir, deleteTruck as apiDeleteTruck, deleteTruckLoad as apiDeleteTruckLoad, deleteLclAir as apiDeleteLclAir, saveBilling, deleteBilling as apiDeleteBilling, saveOperators, saveOperatorAssignment, deleteOperator as apiDeleteOperator, patchDbShipment, createDbShipment, deleteDbShipment, patchFclShipment, renameShipmentRef, fetchTrucks, fetchTruckLoads } from '@/lib/dataClient'
+import { loadAdminData, saveQuotes, saveDocuments, saveReports, saveClients, saveTrucks, saveTruckLoads, saveLclAir, deleteTruck as apiDeleteTruck, deleteTruckLoad as apiDeleteTruckLoad, deleteLclAir as apiDeleteLclAir, saveBilling, deleteBilling as apiDeleteBilling, patchDbShipment, createDbShipment, deleteDbShipment, patchFclShipment, renameShipmentRef, fetchTrucks, fetchTruckLoads } from '@/lib/dataClient'
 
 import Login from './components/Login'
 import ClientLogin from './components/ClientLogin'
@@ -132,7 +132,6 @@ function App() {
   const [truckLoads, setTruckLoads] = useState<TruckLoad[]>(() => loadFromStorage('twf-truck-loads', []))
   const [lclAir, setLclAir] = useState<LclAirShipment[]>(() => loadFromStorage('twf-lcl-air', []))
   const [billing, setBilling] = useState<BillingRecord[]>(() => loadFromStorage('twf-billing', []))
-  const [operators, setOperators] = useState<Operator[]>(() => loadFromStorage('twf-operators', []))
   const [assignments, setAssignments] = useState<OperatorAssignment[]>(() => loadFromStorage('twf-operator-assignments', []))
   const [dbShipments, setDbShipments] = useState<DbShipment[]>(() => loadFromStorage('twf-db-shipments', []))
 
@@ -265,8 +264,6 @@ function App() {
         saveToStorage('twf-billing', data.billing)
       }
 
-      setOperators(data.operators)
-      saveToStorage('twf-operators', data.operators)
       setAssignments(data.assignments)
       saveToStorage('twf-operator-assignments', data.assignments)
       // Con una escritura de carga en vuelo, el snapshot puede ser anterior al
@@ -815,28 +812,6 @@ function App() {
     }
   }
 
-  // ── Operators + assignments (TAREA C) ──
-  const handleUpdateOperators = (updated: Operator[]) => {
-    setOperators(updated)
-    saveToStorage('twf-operators', updated)
-    if (isAdminLoggedIn && updated.length > 0) {
-      saveOperators(updated).catch(err => {
-        console.warn('[DB] Failed to save operators:', err)
-        toast.warning('Error al sincronizar operativos', { duration: 4000 })
-      })
-    }
-  }
-
-  const handleDeleteOperator = async (id: string) => {
-    const next = operators.filter(o => o.id !== id)
-    setOperators(next)
-    saveToStorage('twf-operators', next)
-    if (isAdminLoggedIn) {
-      try { await apiDeleteOperator(id) }
-      catch (err) { console.warn('[DB] Failed to delete operator:', err); toast.error('No se pudo borrar el operativo') }
-    }
-  }
-
   // Patch a DB shipment row (operator_id, or future inline cell edits).
   const handlePatchShipment = (id: string, fields: Record<string, unknown>) => {
     // Si el patch trae el array por contenedor, recomputar las columnas sueltas
@@ -954,21 +929,6 @@ function App() {
       .catch(err => {
         toast.error(err?.message || 'No se pudo eliminar la carga', { duration: 6000 })
       })
-  }
-
-  // Assign an operativo to a ref (overlay). operatorId=null clears it.
-  const handleAssignOperator = (ref: string, operatorId: string | null) => {
-    const next = (() => {
-      const i = assignments.findIndex(a => a.ref === ref)
-      const row: OperatorAssignment = { ref, operatorId, updatedAt: new Date().toISOString() }
-      if (i >= 0) { const c = [...assignments]; c[i] = row; return c }
-      return [...assignments, row]
-    })()
-    setAssignments(next)
-    saveToStorage('twf-operator-assignments', next)
-    if (isAdminLoggedIn) {
-      saveOperatorAssignment(ref, operatorId).catch(err => { console.warn('[DB] Failed to save assignment:', err); toast.error('No se pudo guardar la asignación de operativo') })
-    }
   }
 
   const handleUpdateQuotes = (updated: QuoteFormData[]) => {
@@ -1158,7 +1118,6 @@ function App() {
           truckLoads={truckLoads}
           lclAir={lclAir}
           billing={billing}
-          operators={operators}
           assignments={assignments}
           dbShipments={dbShipments}
           dbSyncError={dbSyncError}
@@ -1177,9 +1136,6 @@ function App() {
           onDeleteLclAir={handleDeleteLclAir}
           onUpdateBilling={handleUpdateBilling}
           onClearBilling={handleClearBilling}
-          onUpdateOperators={handleUpdateOperators}
-          onDeleteOperator={handleDeleteOperator}
-          onAssignOperator={handleAssignOperator}
           onPatchShipment={handlePatchShipment}
           onCreateShipment={handleCreateShipment}
           onDeleteShipment={handleDeleteShipment}

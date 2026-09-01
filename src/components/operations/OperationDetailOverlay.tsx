@@ -20,7 +20,6 @@ import {
   deriveKnownValues,
   indexAssignments,
   buildTruckByRef,
-  type Operator,
   type OperatorAssignment,
   type DbShipment,
   type UnifiedOperation,
@@ -40,7 +39,6 @@ export interface OperationDetailOverlayProps {
   dbShipments: DbShipment[]
   trucks: Truck[]
   truckLoads: TruckLoad[]
-  operators: Operator[]
   assignments: OperatorAssignment[]
   /** Fotos de carga + informes PDF → sección "Fotos e informes" del panel. */
   originPhotos?: OriginPhoto[]
@@ -49,7 +47,6 @@ export interface OperationDetailOverlayProps {
   onUpdateReports?: (reports: OperativeReport[]) => void
   onPatch: (id: string, fields: Record<string, unknown>) => void
   onPatchFcl?: (dbId: string, edits: Record<string, unknown>) => void
-  onAssignOperator: (ref: string, operatorId: string | null) => void
   onRenameRef?: (op: UnifiedOperation, newRef: string, pin: string) => Promise<void>
   onClose: () => void
 }
@@ -60,7 +57,6 @@ export default function OperationDetailOverlay({
   dbShipments,
   trucks,
   truckLoads,
-  operators,
   assignments,
   originPhotos,
   reports,
@@ -68,7 +64,6 @@ export default function OperationDetailOverlay({
   onUpdateReports,
   onPatch,
   onPatchFcl,
-  onAssignOperator,
   onRenameRef,
   onClose,
 }: OperationDetailOverlayProps) {
@@ -96,12 +91,6 @@ export default function OperationDetailOverlay({
     () => (op?.dbId ? dbShipments.find(s => s.id === op.dbId) ?? null : null),
     [dbShipments, op],
   )
-
-  const operatorById = useMemo(() => {
-    const m = new Map<string, Operator>()
-    for (const o of operators) m.set(o.id, o)
-    return m
-  }, [operators])
 
   const hoy = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d }, [])
 
@@ -148,21 +137,12 @@ export default function OperationDetailOverlay({
     [op, operations, cuotas, hoy],
   )
 
-  // Asignación de operativo: igual que la grilla — filas DB patchean operator_id;
-  // FCL espejo / no-DB usan el overlay por ref.
-  const assignOp = (o: UnifiedOperation, operatorId: string | null) => {
-    if (o.source === 'db' && o.dbId) onPatch(o.dbId, { operator_id: operatorId })
-    else onAssignOperator(o.ref, operatorId)
-  }
-
   // OperationDetailPanel ya maneja op=null (renderiza un Sheet cerrado), así que
   // es seguro montarlo siempre; el overlay "se abre" cuando detailKey resuelve una op.
   return (
     <OperationDetailPanel
       op={op}
       truckStatus={op ? truckByRef.get(op.ref) : undefined}
-      operators={operators}
-      operatorById={operatorById}
       hoy={hoy}
       knownDepositos={knownDepositos}
       knownTransportes={knownTransportes}
@@ -179,7 +159,6 @@ export default function OperationDetailOverlay({
       reports={reports}
       onUpdateOriginPhotos={onUpdateOriginPhotos}
       onUpdateReports={onUpdateReports}
-      onAssign={assignOp}
       onPatch={onPatch}
       onPatchFcl={onPatchFcl}
       onRenameRef={onRenameRef}

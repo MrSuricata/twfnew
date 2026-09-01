@@ -16,7 +16,6 @@ interface TrucksManagementProps {
   dbShipments?: DbShipment[]
   shipments: ParsedShipment[]
   /** Operativos para el alta de carga desde el armador (diálogo Nueva carga). */
-  operators?: Operator[]
   onUpdateTrucks: (trucks: Truck[], changedIds?: string[]) => void
   onDeleteTruck: (id: string) => void
   onUpdateTruckLoads: (loads: TruckLoad[], changedIds?: string[]) => void
@@ -93,7 +92,6 @@ export default function TrucksManagement(props: TrucksManagementProps) {
         lclAir={props.lclAir}
         dbShipments={props.dbShipments || []}
         shipments={props.shipments}
-        operators={props.operators}
         onBack={() => setSelectedTruckId(null)}
         onUpdateTrucks={props.onUpdateTrucks}
         onUpdateTruckLoads={props.onUpdateTruckLoads}

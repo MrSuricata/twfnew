@@ -11,9 +11,9 @@ import {
 } from '@/components/ui/dialog'
 import { Plus, CaretDown } from '@phosphor-icons/react'
 import { toast } from 'sonner'
-import type { DbShipment, Modality, Operator } from '@/lib/operationsTypes'
+import type { DbShipment, Modality } from '@/lib/operationsTypes'
 import {
-  newDbShipment, operatorsForMode, MODALITY_LABELS, MODALITY_COLORS,
+  newDbShipment, MODALITY_LABELS, MODALITY_COLORS,
   DEPOSITOS_UY, STATUS_OPTIONS,
 } from '@/lib/operationsTypes'
 import { parseCntr } from '@/lib/cntrUtils'
@@ -72,7 +72,6 @@ const PRINCIPALES: { key: keyof FormState; label: string }[] = [
 interface FormState {
   ref: string
   cliente: string
-  operatorId: string
   // Datos clave
   deposito: string
   operativa: string
@@ -127,7 +126,7 @@ interface FormState {
 }
 
 const EMPTY_FORM: FormState = {
-  ref: '', cliente: '', operatorId: '',
+  ref: '', cliente: '',
   deposito: '', operativa: '', libre: '', fiscal: '', desconsol: '',
   etd: '', eta: '', salida: '', etaFisc: '', seguimiento: '',
   origin: '', paisOrigen: '', dischargePort: '', destPort: '', pais: '',
@@ -146,7 +145,6 @@ const parseNum = (s: string): number => {
 export default function NewShipmentDialog({
   open,
   onOpenChange,
-  operators,
   onCreate,
   suggestedRef = '',
   clientes = [],
@@ -157,7 +155,6 @@ export default function NewShipmentDialog({
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
-  operators: Operator[]
   /** Devuelve false si el alta se abortó (ej: REF duplicada y el usuario canceló). */
   onCreate: (row: DbShipment) => boolean | void
   /** Próxima ref FCL libre (máx A#### + 1) — se ofrece al elegir modo FCL. */
@@ -202,21 +199,14 @@ export default function NewShipmentDialog({
     setMode(m)
     // FCL nace con destino UY (mismo default de newDbShipment) — editable en Ruta.
     if (m === 'fcl' && !f.pais) set('pais', 'UY')
-    // Si el operativo elegido no atiende la nueva modalidad, se limpia.
-    if (f.operatorId && !operatorsForMode(operators, m).some(o => o.id === f.operatorId)) {
-      set('operatorId', '')
-    }
   }
-
-  // Sin modalidad elegida todavía → todos los operativos activos.
-  const eligibleOps = mode ? operatorsForMode(operators, mode) : operators.filter(o => o.active)
 
   // Cuántos campos opcionales ya tienen algo (hint en el toggle colapsado).
   // OJO: wood es boolean | null (null = "a confirmar", el default del alta) —
   // null NO cuenta como cargado y NO se puede trimear (crasheaba el tab entero:
   // este memo corre aunque el diálogo esté cerrado).
   const filledCount = useMemo(() => {
-    const skip = new Set(['ref', 'cliente', 'operatorId', 'status'])
+    const skip = new Set(['ref', 'cliente', 'status'])
     return (Object.entries(f) as [keyof FormState, string | boolean | null][]).filter(([k, v]) => {
       if (skip.has(k)) return false
       if (v === null || v === undefined) return false
@@ -272,7 +262,6 @@ export default function NewShipmentDialog({
       mode: m,
       ref: f.ref.trim(),
       cliente: f.cliente.trim(),
-      operator_id: f.operatorId || null,
       client_ref: f.clientRef.trim(),
       shipper: f.shipper.trim(),
       agente: f.agente.trim(),
@@ -441,18 +430,6 @@ export default function NewShipmentDialog({
               </p>
             </div>
             <Field label="Destino final" value={f.destPort} onChange={v => set('destPort', v)} placeholder="CÓRDOBA, SAN FRANCISCO…" />
-            <div className="space-y-1.5">
-              <Label htmlFor="ns-op">Operativo</Label>
-              <select
-                id="ns-op"
-                value={f.operatorId}
-                onChange={e => set('operatorId', e.target.value)}
-                className="w-full h-9 px-2 rounded-md border border-border bg-card text-sm"
-              >
-                <option value="">— sin asignar —</option>
-                {eligibleOps.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
-              </select>
-            </div>
           </div>
 
           {softWarned && faltanPrincipales.length > 0 && (
