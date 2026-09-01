@@ -45,7 +45,7 @@ import {
   COST_STYLES,
 } from '@/lib/truckTypes'
 import { formatKg, formatM3, discardPendingArrays } from '@/lib/truckUtils'
-import { nextTruckCode } from '@/lib/dataClient'
+import { codigoNuevoCamion } from './nuevoCamion'
 import { makeEmptyTruck } from '@/lib/truckUtils'
 import { useBrand } from '@/lib/brand'
 
@@ -116,21 +116,7 @@ export default function TrucksList({
     if (creating) return
     setCreating(true)
     try {
-      // Try to get the next code from the server (atomic counter).
-      let code = ''
-      try {
-        code = await nextTruckCode('C')
-      } catch (err) {
-        // Fallback: compute next from local data if API isn't reachable.
-        const localMax = trucks
-          .map(t => {
-            const m = /^C(\d+)$/.exec(t.code || '')
-            return m ? parseInt(m[1], 10) : 0
-          })
-          .reduce((max, n) => Math.max(max, n), 429)
-        code = `C${localMax + 1}`
-        console.warn('[TrucksList] nextTruckCode fallback used:', code, err)
-      }
+      const code = await codigoNuevoCamion(trucks)
       const truck = makeEmptyTruck(code)
       onUpdateTrucks([...trucks, truck], [truck.id])
       toast.success(`Camión ${code} creado`)

@@ -46,17 +46,25 @@ import {
   getTruckHealthIssues,
   discardPendingArrays,
   commitPendingArrays,
+  truckLoadDesdeDb,
 } from '@/lib/truckUtils'
 import AvailableLoadsPanel from './AvailableLoadsPanel'
 import NewShipmentDialog from '@/components/operations/NewShipmentDialog'
+import type { CatalogClient } from '@/lib/clientCatalog'
 import { isSinTelex, mensajeConfirmarSinTelex } from '@/lib/telexCheck'
 import { exportTruckPdf } from '@/lib/truckExport'
 import { conflictoFechasConsolidado, type ConflictoFechas } from '@/lib/truckUtils'
+import {
+  conflictoEntregaPlanta, conflictoEntregaPlantaEnCamion, mensajeConflictoEntregaPlanta,
+  type CargaPlanta,
+} from '@/lib/entregaPlanta'
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { fmtDateDMY } from '@/lib/format'
+import { avisoAlPublicar, type Aviso } from '@/lib/lclSugerencias'
+import { toIsoDate } from '@/lib/truckUtils'
 
 interface TruckBuilderProps {
   truck: Truck
@@ -75,10 +83,18 @@ interface TruckBuilderProps {
   onCreateShipment?: (row: DbShipment) => boolean | void
   /** PATCH de una carga — para alinear sus fechas con las del consolidado. */
   onPatchShipment?: (id: string, fields: Record<string, unknown>) => void
+  /** Catálogo de clientes para el alta desde el armador (mismo que Operaciones). */
+  clients?: CatalogClient[]
 }
 
 export default function TruckBuilder(props: TruckBuilderProps) {
-  const { truck, trucks, truckLoads, lclAir, dbShipments, shipments, onBack, onUpdateTrucks, onUpdateTruckLoads, onDeleteTruckLoad, onDeleteTruck, onCreateShipment, onPatchShipment } = props
+  const { truck, trucks, truckLoads, lclAir, dbShipments, shipments, onBack, onUpdateTrucks, onUpdateTruckLoads, onDeleteTruckLoad, onDeleteTruck, onCreateShipment, onPatchShipment, clients = [] } = props
+
+  // Fiscales ya usados en las cargas → combo del alta (igual que LclAirManager).
+  const knownFiscales = useMemo(
+    () => Array.from(new Set(dbShipments.map(s => String(s.fiscal || '').trim().toUpperCase()).filter(Boolean))),
+    [dbShipments],
+  )
 
   const isDraft = truck.draft
   // Lo que se VE y EDITA: el camión con el overlay aplicado.
@@ -110,20 +126,49 @@ export default function TruckBuilder(props: TruckBuilderProps) {
   // uno, se avisa acá mismo. Avisa, no bloquea: a veces conviene igual.
   const { eventos: avisosCal } = useEventosCalendario()
 
+  // Entrega en planta vive en la carga (shipments.entrega_planta), no en la
+  // línea del camión: se busca por ref normalizada.
+  const plantaByRef = useMemo(() => {
+    const m = new Map<string, boolean>()
+    for (const s of dbShipments) m.set(String(s.ref || '').trim().toUpperCase(), !!s.entrega_planta)
+    return m
+  }, [dbShipments])
+  const esPlanta = (ref: string) => plantaByRef.get(String(ref || '').trim().toUpperCase()) === true
+
+  // Las cargas del camión vistas por la regla de entrega en planta.
+  const cargasPlanta: CargaPlanta[] = useMemo(
+    () => loads.map(l => ({
+      ref: l.sourceRef, cliente: l.client, fiscal: l.fiscal,
+      entregaPlanta: plantaByRef.get(String(l.sourceRef || '').trim().toUpperCase()) === true,
+    })),
+    [loads, plantaByRef],
+  )
+
   const specialLoads = useMemo(() => {
     const byRef = new Map(dbShipments.map(s => [s.ref, s]))
     const noApilables: string[] = []
     const imos: string[] = []
     const sinTelex: string[] = []
+    const plantas: string[] = []
     for (const l of loads) {
       const s = byRef.get(l.sourceRef)
       if (!s) continue
       if (s.no_apilable) noApilables.push(l.sourceRef)
       if (s.imo) imos.push(l.sourceRef)
+      if (s.entrega_planta) plantas.push(l.sourceRef)
       if ((s.mode === 'fcl' || s.mode === 'lcl') && !s.telex) sinTelex.push(l.sourceRef)
     }
-    return { noApilables, imos, sinTelex }
-  }, [loads, dbShipments])
+    // Dos entregas en planta que se pisan (otro cliente, u otro fiscal del mismo).
+    const conflictoPlanta = conflictoEntregaPlantaEnCamion(cargasPlanta)
+    return { noApilables, imos, sinTelex, plantas, conflictoPlanta }
+  }, [loads, dbShipments, cargasPlanta])
+
+  // Regla de Brian (01/09): "no pueden pisarse las entregas en planta". Se
+  // avisa al SUMAR la carga; no bloquea — quien arma el camión decide.
+  const avisarEntregaPlanta = (nueva: CargaPlanta) => {
+    const c = conflictoEntregaPlanta(cargasPlanta, nueva)
+    if (c) toast.warning(`🏭 ${mensajeConflictoEntregaPlanta(c)}`, { duration: 9000 })
+  }
 
   // ── Truck-level update helpers ──
   const updateTruck = (patch: Partial<Truck>) => {
@@ -247,6 +292,7 @@ export default function TruckBuilder(props: TruckBuilderProps) {
     }
     onUpdateTruckLoads([...truckLoads, load], [load.id])
     toast.success(`${s.REF} agregado al camión`)
+    avisarEntregaPlanta({ ref: s.REF, cliente: prefill.client, fiscal: prefill.fiscal, entregaPlanta: esPlanta(s.REF) })
   }
 
   const addLclAir = (s: LclAirShipment) => {
@@ -279,32 +325,13 @@ export default function TruckBuilder(props: TruckBuilderProps) {
   const addDb = (s: DbShipment) => {
     // El telex solo aplica a marítimo: un aéreo no tiene telex que liberar.
     if ((s.mode === 'fcl' || s.mode === 'lcl') && !confirmarTelexAlSumar(s.ref, s.telex ? 'SI' : '')) return
-    const load: TruckLoad = {
-      id: newId('load'),
-      truckId: truck.id,
-      sourceType: (s.mode === 'air' ? 'air' : 'lcl'),
-      sourceRef: s.ref,
-      cntr: '',
-      client: s.cliente || '',
-      fiscal: s.fiscal || '',
-      kg: Number(s.kg) || 0,
-      m3: Number(s.m3) || 0,
-      pkgs: Number(s.pkgs) || 0,
-      description: s.observacion || '',
-      mvdArrival: s.eta || '',
-      desconsolDate: s.fecha_consol || '',
-      bl: s.doc_number || '',
-      stock: '',
-      wood: !!s.wood,
-      overrides: {},
-      position: allMine.length,
-      pending: isDraft ? null : 'add',
-    }
+    const load = truckLoadDesdeDb(truck.id, s, allMine.length, isDraft ? null : 'add')
     onUpdateTruckLoads([...truckLoads, load], [load.id])
     toast.success(`${s.ref} agregado al camión`)
     // Aviso inmediato al agregar una carga especial
     if (s.no_apilable) toast.warning(`📦 ${s.ref} es NO APILABLE — va arriba de todo`, { duration: 6000 })
     if (s.imo) toast.warning(`☢️ ${s.ref} lleva mercancía peligrosa (IMO)`, { duration: 6000 })
+    avisarEntregaPlanta({ ref: s.ref, cliente: s.cliente, fiscal: s.fiscal, entregaPlanta: !!s.entrega_planta })
     // Madera "a confirmar" (null) entra al camión como No — confirmarla ANTES
     // de imprimir el plan (WOOD=SI dispara SENASA en frontera).
     if (s.wood === null) toast.warning(`🪵 ${s.ref}: madera sin confirmar — confirmala en la carga antes de imprimir el plan`, { duration: 8000 })
@@ -354,6 +381,7 @@ export default function TruckBuilder(props: TruckBuilderProps) {
     toast.success(`${row.ref} creada y agregada al camión`)
     if (row.no_apilable) toast.warning(`📦 ${row.ref} es NO APILABLE — va arriba de todo`, { duration: 6000 })
     if (row.imo) toast.warning(`☢️ ${row.ref} lleva mercancía peligrosa (IMO)`, { duration: 6000 })
+    avisarEntregaPlanta({ ref: row.ref, cliente: row.cliente, fiscal: row.fiscal, entregaPlanta: !!row.entrega_planta })
   }
 
   // ── Re-sync FCL load from current planilla data ──
@@ -398,12 +426,36 @@ export default function TruckBuilder(props: TruckBuilderProps) {
   // ── Draft state + Save/Cancel ──
   const draftState = hasDraftState(truck, truckLoads)
 
+  // Aviso de previsión al publicar (spec consolidados LCL): si el camión sale
+  // con lugar y viene carga del mismo fiscal y depósito en los próximos días,
+  // se pregunta si conviene correrlo; si alguna carga tiene el almacenaje por
+  // vencer o es prioridad, dice lo contrario. Avisa, no bloquea: "Sale igual"
+  // guarda como siempre.
+  const [avisoPublicar, setAvisoPublicar] = useState<Aviso | null>(null)
+
   const handleSave = () => {
     const effLoads = effectiveTruckLoads(truckLoads, truck.id, { includePending: true })
     if (effLoads.length === 0) {
       toast.error('El camión necesita al menos una carga para guardarse')
       return
     }
+    const cambiaFecha = !!truck.pendingEdits
+      && ('departureDate' in truck.pendingEdits || 'loadDate' in truck.pendingEdits)
+    if (isDraft || cambiaFecha) {
+      const aviso = avisoAlPublicar({
+        code: merged.code,
+        refs: effLoads.map(l => l.sourceRef),
+        kg: totals.kg,
+        m3: totals.m3,
+        limites: limits,
+        departureDate: merged.departureDate || merged.loadDate || null,
+      }, dbShipments, toIsoDate(hoy))
+      if (aviso) { setAvisoPublicar(aviso); return }
+    }
+    ejecutarGuardado()
+  }
+
+  const ejecutarGuardado = () => {
     if (isDraft) {
       onUpdateTrucks(trucks.map(t => (t.id === truck.id ? { ...t, draft: false, updatedAt: Date.now() } : t)), [truck.id])
     } else {
@@ -469,8 +521,16 @@ export default function TruckBuilder(props: TruckBuilderProps) {
       </div>
 
       {/* Alerts */}
-      {(totals.overKg || totals.overM3 || totals.multifiscal || healthIssues.length > 0 || specialLoads.noApilables.length > 0 || specialLoads.imos.length > 0 || specialLoads.sinTelex.length > 0) && (
+      {(totals.overKg || totals.overM3 || totals.multifiscal || healthIssues.length > 0 || specialLoads.noApilables.length > 0 || specialLoads.imos.length > 0 || specialLoads.sinTelex.length > 0 || specialLoads.conflictoPlanta) && (
         <div className="space-y-2">
+          {specialLoads.conflictoPlanta && (
+            <AlertBanner kind="warning">
+              <Warning size={16} weight="fill" />
+              🏭 Dos entregas en planta en el mismo viaje se pisan: {specialLoads.conflictoPlanta.a.ref}
+              {specialLoads.conflictoPlanta.a.cliente ? ` (${specialLoads.conflictoPlanta.a.cliente})` : ''} y {specialLoads.conflictoPlanta.b.ref}
+              {specialLoads.conflictoPlanta.b.cliente ? ` (${specialLoads.conflictoPlanta.b.cliente})` : ''}. Conviene que una salga en otro camión.
+            </AlertBanner>
+          )}
           {specialLoads.sinTelex.length > 0 && (
             <AlertBanner kind="error">
               <Warning size={16} weight="fill" />
@@ -689,6 +749,7 @@ export default function TruckBuilder(props: TruckBuilderProps) {
                         <LoadRow
                           key={l.id}
                           load={l}
+                          planta={esPlanta(l.sourceRef)}
                           onChange={(patch, fields) => updateLoad(l.id, patch, fields)}
                           onResync={() => resyncFcl(l)}
                           onRemove={() => removeLoad(l)}
@@ -719,6 +780,33 @@ export default function TruckBuilder(props: TruckBuilderProps) {
           />
         </Card>
       </div>
+
+      {/* Previsión al publicar: lugar libre + carga del mismo fiscal llegando
+          (o al revés: almacenaje por vencer / prioridad → sacala ahora).
+          Avisa, no bloquea. */}
+      <AlertDialog open={!!avisoPublicar} onOpenChange={(o) => { if (!o) setAvisoPublicar(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {avisoPublicar?.tipo === 'salir' ? 'Sacala ahora' : 'Sale con lugar libre'}
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-sm leading-relaxed">
+              {avisoPublicar?.texto}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2">
+            <AlertDialogCancel onClick={() => setAvisoPublicar(null)}>Volver</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                setAvisoPublicar(null)
+                ejecutarGuardado()
+              }}
+            >
+              Sale igual
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Choque de fechas: la carga ya tenía salida coordinada y el consolidado
           sale otro día. Se pregunta cuál manda — pisar en silencio dejaba la
@@ -801,6 +889,9 @@ export default function TruckBuilder(props: TruckBuilderProps) {
           onOpenChange={setNewCargoOpen}
           onCreate={handleCreateFromBuilder}
           suggestedRef={suggestedRef}
+          cargasExistentes={dbShipments}
+          clientes={clients}
+          knownFiscales={knownFiscales}
         />
       )}
 
@@ -851,12 +942,15 @@ function CostPerM3Indicator({ truck, truckLoads }: { truck: Truck; truckLoads: T
 
 function LoadRow({
   load,
+  planta,
   onChange,
   onResync,
   onRemove,
   onUndoRemove,
 }: {
   load: TruckLoad
+  /** La carga tiene entrega en planta (shipments.entrega_planta). */
+  planta?: boolean
   onChange: (patch: Partial<TruckLoad>, fields: string[]) => void
   onResync: () => void
   onRemove: () => void
@@ -874,6 +968,9 @@ function LoadRow({
           <span className={`font-medium ${isRemoved ? 'line-through' : ''}`}>{load.sourceRef}</span>
           {isNew && (
             <span className="text-[9px] font-bold bg-blue-100 text-blue-700 rounded px-1 py-0.5 uppercase tracking-wide">NUEVA</span>
+          )}
+          {planta && (
+            <Badge variant="outline" className="h-4 text-[9px] border-violet-300 text-violet-700" title="Entrega en planta: del fiscal va directo a la planta del cliente. Dos en el mismo viaje se pisan.">🏭 Planta</Badge>
           )}
         </div>
         <div className="text-[10px] text-muted-foreground uppercase">

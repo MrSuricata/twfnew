@@ -4,11 +4,13 @@ import { Truck as TruckIcon, Boat, Package } from '@phosphor-icons/react'
 import type { Truck, TruckLoad, LclAirShipment } from '@/lib/truckTypes'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
 import type { DbShipment, Operator } from '@/lib/operationsTypes'
+import type { CatalogClient } from '@/lib/clientCatalog'
 import TrucksList from './TrucksList'
 import TruckBuilder from './TruckBuilder'
 import LclAirManager from './LclAirManager'
 import BandejaStock from './BandejaStock'
 import { refsPorCamion as derivarRefsPorCamion } from '@/lib/hoyLcl'
+import SugerenciasCamion from './SugerenciasCamion'
 
 interface TrucksManagementProps {
   trucks: Truck[]
@@ -30,6 +32,10 @@ interface TrucksManagementProps {
   onPatchShipment?: (id: string, fields: Record<string, unknown>) => void
   /** Baja de una carga (LCL/aéreo desde su pestaña). */
   onDeleteShipment?: (id: string) => void
+  /** Catálogo de clientes (el mismo que usa Operaciones): el alta desde
+   *  Camiones canonicaliza el nombre igual que desde Operaciones, así no
+   *  aparecen grafías nuevas que rompan scoping/portal/regla de planta. */
+  clients?: CatalogClient[]
 }
 
 export default function TrucksManagement(props: TrucksManagementProps) {
@@ -85,6 +91,7 @@ export default function TrucksManagement(props: TrucksManagementProps) {
         onDeleteTruck={props.onDeleteTruck}
         onCreateShipment={props.onCreateShipment}
         onPatchShipment={props.onPatchShipment}
+        clients={props.clients}
       />
     )
   }
@@ -114,7 +121,17 @@ export default function TrucksManagement(props: TrucksManagementProps) {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="trucks">
+        <TabsContent value="trucks" className="space-y-4">
+          {/* Arriba de la lista y plegable: propone qué LCL con stock subir
+              juntas y arma el borrador con un click. No toca el flujo de abajo. */}
+          <SugerenciasCamion
+            dbShipments={props.dbShipments || []}
+            trucks={props.trucks}
+            truckLoads={props.truckLoads}
+            onUpdateTrucks={props.onUpdateTrucks}
+            onUpdateTruckLoads={props.onUpdateTruckLoads}
+            onOpenBuilder={(id) => setSelectedTruckId(id)}
+          />
           <TrucksList
             trucks={props.trucks}
             truckLoads={props.truckLoads}
@@ -134,6 +151,7 @@ export default function TrucksManagement(props: TrucksManagementProps) {
             onPatch={props.onPatchShipment || (() => {})}
             onCreate={props.onCreateShipment}
             onDelete={props.onDeleteShipment || (() => {})}
+            clientes={props.clients}
           />
         </TabsContent>
 
