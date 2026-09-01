@@ -12,13 +12,23 @@ import { proximasSinCoordinar } from '@/lib/partnerProximas'
 import { formatKg, formatM3 } from '@/lib/truckUtils'
 import { fmtDateDMY } from '@/lib/format'
 
+/**
+ * Cuántas filas se muestran antes de pedir "ver todas". El panel es un
+ * calendario: si esta tarjeta ocupa la pantalla entera, el trabajo de la
+ * semana queda abajo del pliegue y nadie lo ve.
+ */
+const TOPE_FILAS = 8
+
 export default function ProximasSinCoordinar({ shipments }: { shipments: ParsedShipment[] }) {
   const [abierto, setAbierto] = useState(true)
+  const [verTodas, setVerTodas] = useState(false)
   const filas = useMemo(() => proximasSinCoordinar(shipments, new Date()), [shipments])
 
   if (filas.length === 0) return null
 
   const llegadas = filas.filter(f => f.diasAEta < 0).length
+  const visibles = verTodas ? filas : filas.slice(0, TOPE_FILAS)
+  const ocultas = filas.length - visibles.length
 
   return (
     <section className="rounded-xl border border-border bg-card overflow-hidden">
@@ -51,7 +61,7 @@ export default function ProximasSinCoordinar({ shipments }: { shipments: ParsedS
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {filas.map((f, i) => (
+              {visibles.map((f, i) => (
                 <tr key={`${f.ref}-${f.cntr}-${i}`} className="hover:bg-muted/30">
                   <td className="px-3 py-2 font-semibold whitespace-nowrap">
                     {f.ref}
@@ -85,9 +95,19 @@ export default function ProximasSinCoordinar({ shipments }: { shipments: ParsedS
               ))}
             </tbody>
           </table>
-          <p className="px-3 py-2 text-[11px] text-muted-foreground border-t border-border">
-            Todavía no tienen fecha de carga asignada. Cuando se coordinen aparecen en el calendario de abajo.
-          </p>
+          <div className="flex items-center justify-between gap-3 border-t border-border px-3 py-2">
+            <p className="text-[11px] text-muted-foreground">
+              Todavía no tienen fecha de carga asignada. Cuando se coordinen aparecen en el calendario de abajo.
+            </p>
+            {(ocultas > 0 || verTodas) && (
+              <button
+                onClick={() => setVerTodas(v => !v)}
+                className="shrink-0 text-xs font-semibold text-primary hover:underline"
+              >
+                {verTodas ? 'Ver menos' : `Ver las ${ocultas} restantes`}
+              </button>
+            )}
+          </div>
         </div>
       )}
     </section>
