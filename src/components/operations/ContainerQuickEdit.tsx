@@ -14,7 +14,7 @@ import { getShipmentStatus } from '@/lib/shipmentTypes'
 import { buildPerContainerPatch, applyLugarSalida, lugarOrDeposito } from '@/lib/operationsTypes'
 import { isSalidaBeforeArrival, avisoSalida, fmtDMY, etaVigente } from '@/lib/salidaCheck'
 import { sugerirEtaFiscal, nombreDia } from '@/lib/transitoFiscal'
-import { isSinTelex, SIN_TELEX_MSG } from '@/lib/telexCheck'
+import { isSinTelex, mensajeConfirmarSinTelex } from '@/lib/telexCheck'
 import { fmtDateDMY } from '@/lib/format'
 import { isLibreDevuelto, libreDevueltoToggle, LIBRE_DEVUELTO } from '@/lib/libreDevuelto'
 
@@ -311,11 +311,18 @@ export default function ContainerQuickEdit({
         propagated = applyLugarSalida(propagated, lugarVal)
         fields.operativas = propagated
       }
-      await onPatch(shipment.__dbId!, fields)
-      // Aviso (no bloquea): se coordinó una salida con el telex sin liberar.
+      // Sin telex se pregunta ANTES de guardar: agendar igual es una decisión.
       if (salida !== prevSalida && (salida || '').trim() && isSinTelex(currentOp.TLX)) {
-        toast.warning(`🚨 ${shipment.REF} — ${SIN_TELEX_MSG}`)
+        const seguir = window.confirm(
+          mensajeConfirmarSinTelex({ ref: shipment.REF, cntr: currentOp.CNTR_OP, fecha: salida }),
+        )
+        if (!seguir) {
+          // Recommit posible: el usuario puede corregir la fecha y reintentar.
+          lastCommittedRef.current = serializedPrevio
+          return
+        }
       }
+      await onPatch(shipment.__dbId!, fields)
       // NO cerrar al guardar: el usuario edita varios campos (salida → arribo →
       // lugar) en el mismo modal. El cierre lo manejan "Listo" y Escape. Cerrar
       // en cada commit (vía onBlur) hacía que al pasar de un campo a otro se

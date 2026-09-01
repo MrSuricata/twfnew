@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { hasTelex, isSinTelex, needsTelexAlert } from './telexCheck'
+import { hasTelex, isSinTelex, needsTelexAlert, mensajeConfirmarSinTelex } from './telexCheck'
 
 describe('hasTelex / isSinTelex', () => {
   it('SI (con espacios o minúsculas) cuenta como liberado', () => {
@@ -39,5 +39,34 @@ describe('needsTelexAlert', () => {
     expect(needsTelexAlert({ tlx: '', fecha: '' })).toBe(false)
     expect(needsTelexAlert({ tlx: '', fecha: '   ' })).toBe(false)
     expect(needsTelexAlert({ tlx: '', fecha: null })).toBe(false)
+  })
+})
+
+describe('mensajeConfirmarSinTelex — el popup al agendar', () => {
+  it('dice la ref y pregunta si se agenda igual', () => {
+    const m = mensajeConfirmarSinTelex({ ref: 'A7996', fecha: '2026-09-03' })
+    expect(m).toContain('A7996')
+    expect(m).toContain('03/09/2026')
+    expect(m).toContain('¿Agendar igual?')
+  })
+
+  it('incluye el contenedor cuando se sabe cuál es', () => {
+    expect(mensajeConfirmarSinTelex({ ref: 'A7996', cntr: 'MSKU1234567', fecha: '2026-09-03' }))
+      .toContain('MSKU1234567')
+  })
+
+  it('sin contenedor no deja la línea vacía', () => {
+    expect(mensajeConfirmarSinTelex({ ref: 'A7996', fecha: '2026-09-03' }))
+      .not.toContain('Contenedor:')
+  })
+
+  it('explica la consecuencia, no solo que falta el dato', () => {
+    expect(mensajeConfirmarSinTelex({ ref: 'A7996', fecha: '2026-09-03' }))
+      .toContain('no se puede retirar')
+  })
+
+  it('una fecha que no es ISO se muestra tal cual, sin romper', () => {
+    expect(mensajeConfirmarSinTelex({ ref: 'A7996', fecha: 'a confirmar' }))
+      .toContain('a confirmar')
   })
 })
