@@ -9,6 +9,12 @@
  *
  * El estado tampoco se elige más: sale de los datos (ver `lclEstados`). El
  * desplegable manual dejó cuatro cargas congeladas en "en origen" desde junio.
+ *
+ * Alta (Brian 01/09/2026): la ref la escribe el operativo (se sugiere la
+ * autogenerada pero se puede pisar) y el formulario pide los mismos 12 datos
+ * clave que el alta LCL desde Operaciones — mismo componente <LclDatosClave>,
+ * misma traducción a columnas (`camposDesdeDatosClave`). Si ya hay otra carga
+ * activa con esa ref, avisa y sugiere el sufijo A/B; no bloquea.
  */
 import { useMemo, useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
@@ -30,6 +36,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
 import {
@@ -49,6 +56,7 @@ import {
   PencilSimple,
   Boat,
   Airplane,
+  Factory,
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import type { DbShipment, Modality } from '@/lib/operationsTypes'
@@ -58,6 +66,13 @@ import { nextTruckCode } from '@/lib/dataClient'
 import {
   estadoLcl, almacenaje, ESTADO_LCL_LABEL, ESTADOS_LCL, type EstadoLcl,
 } from '@/lib/lclEstados'
+import {
+  camposDesdeDatosClave, buscarRefDuplicada, apilableDesde, noApilableDesde,
+  LCL_DATOS_CLAVE_VACIOS, type LclDatosClaveState, type Apilable,
+} from '@/lib/lclAlta'
+import type { CatalogClient } from '@/lib/clientCatalog'
+import LclDatosClave from '@/components/operations/LclDatosClave'
+import { RefDuplicadaAviso } from '@/components/operations/NewShipmentDialog'
 
 type ModalidadLcl = Extract<Modality, 'lcl' | 'air'>
 
@@ -71,6 +86,8 @@ interface LclAirManagerProps {
   onPatch: (id: string, fields: Record<string, unknown>) => void
   onCreate?: (row: DbShipment) => boolean | void
   onDelete: (id: string) => void
+  /** Catálogo de clientes para el datalist del alta (opcional). */
+  clientes?: CatalogClient[]
 }
 
 type ModalityFilter = 'all' | ModalidadLcl
@@ -79,13 +96,14 @@ type StatusFilter = 'all' | EstadoLcl
 const REF = (r: unknown) => String(r ?? '').trim().toUpperCase()
 
 export default function LclAirManager({
-  dbShipments, refsEnCamion, refsDespachadas, onPatch, onCreate, onDelete,
+  dbShipments, refsEnCamion, refsDespachadas, onPatch, onCreate, onDelete, clientes = [],
 }: LclAirManagerProps) {
   const [search, setSearch] = useState('')
   const [modalityFilter, setModalityFilter] = useState<ModalityFilter>('all')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [editing, setEditing] = useState<DbShipment | null>(null)
-  const [editingEsNueva, setEditingEsNueva] = useState(false)
+  // Alta: modalidad + ref sugerida (editable en el diálogo).
+  const [alta, setAlta] = useState<{ modality: ModalidadLcl; refSugerida: string } | null>(null)
   const [pendingDelete, setPendingDelete] = useState<DbShipment | null>(null)
 
   const hoy = new Date().toISOString().slice(0, 10)
@@ -119,6 +137,14 @@ export default function LclAirManager({
       .sort((a, b) => String(a.s.eta || '').localeCompare(String(b.s.eta || '')))
   }, [todas, search, modalityFilter, statusFilter, refsEnCamion, refsDespachadas, hoy])
 
+  // Fiscales ya usados en las LCL/aéreas → combo del alta.
+  const knownFiscales = useMemo(
+    () => Array.from(new Set(todas.map(s => String(s.fiscal || '').trim().toUpperCase()).filter(Boolean))),
+    [todas],
+  )
+
+  // La ref autogenerada es solo una SUGERENCIA: el operativo escribe la suya
+  // (antes no se podía — Brian 01/09).
   const handleNew = async (modality: ModalidadLcl) => {
     let ref = ''
     try {
@@ -135,28 +161,29 @@ export default function LclAirManager({
       ref = `${prefix}-${String(max + 1).padStart(4, '0')}`
       console.warn('[LclAir] nextTruckCode fallback used:', ref, err)
     }
-    setEditingEsNueva(true)
-    setEditing(newDbShipment({ mode: modality, ref, source: 'web' }))
+    setAlta({ modality, refSugerida: ref })
+  }
+
+  const crear = (row: DbShipment) => {
+    if (onCreate?.(row) === false) return   // ref repetida y canceló → sigue abierto
+    toast.success(`${row.ref} creada`)
+    setAlta(null)
   }
 
   const guardar = (draft: DbShipment) => {
-    if (editingEsNueva) {
-      if (onCreate?.(draft) === false) return
-      toast.success(`${draft.ref} creado`)
-    } else {
-      onPatch(draft.id, {
-        cliente: draft.cliente, origin: draft.origin, hbl: draft.hbl || '',
-        fiscal: draft.fiscal, eta: draft.eta, desconsol_date: draft.desconsol_date || '',
-        pkgs: draft.pkgs, kg: draft.kg, m3: draft.m3,
-        observacion: draft.observacion, notes: draft.notes, wood: draft.wood,
-        stock: draft.stock || '',
-        marca_cliente: draft.marca_cliente ?? null,
-        marca_motivo: draft.marca_motivo || '',
-      })
-      toast.success(`${draft.ref} actualizado`)
-    }
+    onPatch(draft.id, {
+      cliente: draft.cliente, origin: draft.origin, hbl: draft.hbl || '',
+      doc_number: draft.doc_number || '',
+      fiscal: draft.fiscal, eta: draft.eta, desconsol_date: draft.desconsol_date || '',
+      pkgs: draft.pkgs, kg: draft.kg, m3: draft.m3,
+      observacion: draft.observacion, notes: draft.notes, wood: draft.wood,
+      no_apilable: !!draft.no_apilable, imo: !!draft.imo, entrega_planta: !!draft.entrega_planta,
+      stock: draft.stock || '',
+      marca_cliente: draft.marca_cliente ?? null,
+      marca_motivo: draft.marca_motivo || '',
+    })
+    toast.success(`${draft.ref} actualizado`)
     setEditing(null)
-    setEditingEsNueva(false)
   }
 
   return (
@@ -265,6 +292,11 @@ export default function LclAirManager({
                       <td className="px-3 py-2">
                         <div className="flex flex-wrap items-center gap-1">
                           <Badge variant="outline" className="text-[10px]">{ESTADO_LCL_LABEL[estado]}</Badge>
+                          {s.entrega_planta && (
+                            <Badge variant="outline" className="text-[10px] border-violet-300 text-violet-700" title="Entrega en planta: del fiscal va directo a la planta del cliente">
+                              🏭 Planta
+                            </Badge>
+                          )}
                           {s.marca_cliente === 'stand_by' && (
                             <Badge variant="outline" className="text-[10px] border-amber-300 text-amber-700" title={s.marca_motivo || ''}>
                               Stand by
@@ -290,7 +322,7 @@ export default function LclAirManager({
                       </td>
                       <td className="px-3 py-2">
                         <div className="flex items-center gap-1 justify-end">
-                          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => { setEditingEsNueva(false); setEditing(s) }} title="Editar">
+                          <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={() => setEditing(s)} title="Editar">
                             <PencilSimple size={12} />
                           </Button>
                           <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setPendingDelete(s)}>
@@ -307,11 +339,24 @@ export default function LclAirManager({
         </Card>
       )}
 
+      {/* Alta: ref propia + los 12 datos clave */}
+      {alta && (
+        <AltaLclAirDialog
+          modality={alta.modality}
+          refSugerida={alta.refSugerida}
+          cargas={dbShipments}
+          clientes={clientes}
+          knownFiscales={knownFiscales}
+          onCancel={() => setAlta(null)}
+          onSave={crear}
+        />
+      )}
+
       {/* Editor dialog */}
       {editing && (
         <LclAirEditor
           shipment={editing}
-          onCancel={() => { setEditing(null); setEditingEsNueva(false) }}
+          onCancel={() => setEditing(null)}
           onSave={guardar}
         />
       )}
@@ -343,6 +388,78 @@ export default function LclAirManager({
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  )
+}
+
+// ── Alta dialog ──
+// Pide exactamente lo mismo que el alta LCL de Operaciones (NewShipmentDialog
+// en modo LCL): es la intención de Brian — que sea lo mismo desde los dos lados.
+
+function AltaLclAirDialog({
+  modality, refSugerida, cargas, clientes, knownFiscales, onCancel, onSave,
+}: {
+  modality: ModalidadLcl
+  refSugerida: string
+  cargas: DbShipment[]
+  clientes: CatalogClient[]
+  knownFiscales: string[]
+  onCancel: () => void
+  onSave: (row: DbShipment) => void
+}) {
+  const [f, setF] = useState<LclDatosClaveState>({ ...LCL_DATOS_CLAVE_VACIOS, ref: refSugerida })
+  const [showErrors, setShowErrors] = useState(false)
+  const onChange = (patch: Partial<LclDatosClaveState>) => setF(prev => ({ ...prev, ...patch }))
+
+  // Otra carga ACTIVA con la misma ref (mayúsculas/espacios no cuentan).
+  // Avisa y sugiere sufijo — no bloquea la edición ni el guardado.
+  const duplicada = useMemo(() => buscarRefDuplicada(f.ref, cargas), [f.ref, cargas])
+
+  const guardar = () => {
+    const faltan = [!f.ref.trim() ? 'Ref' : null, !f.cliente.trim() ? 'Cliente' : null].filter(Boolean)
+    if (faltan.length) {
+      setShowErrors(true)
+      toast.error(`Faltan campos obligatorios: ${faltan.join(', ')}`)
+      return
+    }
+    const hoy = new Date().toISOString().slice(0, 10)
+    onSave(newDbShipment({ mode: modality, source: 'web', ...camposDesdeDatosClave(f, hoy) }))
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onCancel()}>
+      <DialogContent className="max-w-2xl max-h-[92vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            {modality === 'lcl'
+              ? <Boat weight="fill" className="text-primary" />
+              : <Airplane weight="fill" className="text-primary" />}
+            Nueva carga {modality === 'lcl' ? 'LCL' : 'aérea'}
+          </DialogTitle>
+          <DialogDescription>
+            <span className="text-red-600 font-semibold">*</span> Ref (la tuya) y cliente son obligatorios.
+            La ref sugerida es <strong>{refSugerida}</strong>; podés escribir la que uses vos.
+          </DialogDescription>
+        </DialogHeader>
+
+        <LclDatosClave
+          idPrefix="alta-lcl"
+          value={f}
+          onChange={onChange}
+          clientes={clientes}
+          knownFiscales={knownFiscales}
+          showErrors={showErrors}
+          refPlaceholder={refSugerida}
+          refExtra={duplicada ? (
+            <RefDuplicadaAviso ref_={f.ref} cliente={duplicada.cliente} onUsar={v => onChange({ ref: v })} />
+          ) : null}
+        />
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onCancel}>Cancelar</Button>
+          <Button onClick={guardar} className="gap-1.5"><Plus size={14} /> Crear carga</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -387,6 +504,9 @@ function LclAirEditor({
           </Field>
           <Field label="MBL / HBL">
             <Input value={draft.hbl || ''} onChange={e => update({ hbl: e.target.value })} />
+          </Field>
+          <Field label="BL">
+            <Input value={draft.doc_number || ''} onChange={e => update({ doc_number: e.target.value })} placeholder="Nº de BL" />
           </Field>
           <Field label="Destino fiscal">
             <Input value={draft.fiscal} onChange={e => update({ fiscal: e.target.value })} placeholder="CACEC, RAFAELA, MARE…" />
@@ -469,6 +589,27 @@ function LclAirEditor({
           <div className="flex items-center gap-2">
             <Switch id="wood" checked={draft.wood === true} onCheckedChange={(v) => update({ wood: v })} />
             <Label htmlFor="wood" className="text-sm cursor-pointer">Embalaje con madera (SENASA)</Label>
+          </div>
+          <Field label="Apilable">
+            <select
+              value={apilableDesde(draft.no_apilable)}
+              onChange={e => update({ no_apilable: noApilableDesde(e.target.value as Apilable) })}
+              className="w-full h-9 px-2 rounded-md border border-border bg-card text-sm"
+            >
+              <option value="sin_dato">Sin dato</option>
+              <option value="si">Sí</option>
+              <option value="no">No — va arriba de todo</option>
+            </select>
+          </Field>
+          <div className="flex items-center gap-2">
+            <Switch id="imo" checked={!!draft.imo} onCheckedChange={(v) => update({ imo: v })} />
+            <Label htmlFor="imo" className="text-sm cursor-pointer">IMO (mercancía peligrosa)</Label>
+          </div>
+          <div className="flex items-center gap-2">
+            <Switch id="planta" checked={!!draft.entrega_planta} onCheckedChange={(v) => update({ entrega_planta: v })} />
+            <Label htmlFor="planta" className="text-sm cursor-pointer flex items-center gap-1">
+              <Factory size={14} /> Entrega en planta
+            </Label>
           </div>
         </div>
 
