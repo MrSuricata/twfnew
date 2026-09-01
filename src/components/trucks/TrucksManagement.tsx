@@ -8,6 +8,7 @@ import TrucksList from './TrucksList'
 import TruckBuilder from './TruckBuilder'
 import LclAirManager from './LclAirManager'
 import BandejaStock from './BandejaStock'
+import { refsPorCamion as derivarRefsPorCamion } from '@/lib/hoyLcl'
 
 interface TrucksManagementProps {
   trucks: Truck[]
@@ -37,24 +38,9 @@ export default function TrucksManagement(props: TrucksManagementProps) {
   // Refs que ya viajan en un camión publicado y refs cuyo camión ya salió. Mismo
   // criterio que AvailableLoadsPanel: camión no borrador, con fecha, y cargas
   // que no estén marcadas para agregar en un borrador de edición.
+  // La derivación vive en hoyLcl.ts (la comparte HOY LCL): una sola fuente.
   const { trucks, truckLoads } = props
-  const refsPorCamion = useMemo(() => {
-    const enCamion = new Set<string>()
-    const despachadas = new Set<string>()
-    for (const t of trucks) {
-      if (t.draft) continue
-      const publicado = !!(t.loadDate || t.departureDate)
-      if (!publicado) continue
-      for (const l of truckLoads) {
-        if (l.truckId !== t.id || l.pending === 'add') continue
-        const r = String(l.sourceRef || '').trim().toUpperCase()
-        if (!r) continue
-        enCamion.add(r)
-        if (t.departureDate) despachadas.add(r)
-      }
-    }
-    return { enCamion, despachadas }
-  }, [trucks, truckLoads])
+  const refsPorCamion = useMemo(() => derivarRefsPorCamion(trucks, truckLoads), [trucks, truckLoads])
 
   const lclCount = useMemo(
     () => (props.dbShipments || []).filter(s => (s.mode === 'lcl' || s.mode === 'air') && !s.archived).length,
