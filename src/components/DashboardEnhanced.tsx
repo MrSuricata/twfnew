@@ -67,7 +67,7 @@ import { ParsedShipment } from '@/lib/shipmentTypes'
 import { ClientAccount, ShipmentDocument, OperativeReport, OriginPhoto, QuoteFormData } from '@/lib/quotationTypes'
 import { Truck, TruckLoad, LclAirShipment } from '@/lib/truckTypes'
 import { BillingRecord, buildBillableItems, indexBilling } from '@/lib/billingTypes'
-import { Operator, OperatorAssignment, DbShipment, UnifiedOperation } from '@/lib/operationsTypes'
+import { OperatorAssignment, DbShipment, UnifiedOperation } from '@/lib/operationsTypes'
 import Breadcrumbs from './Breadcrumbs'
 
 interface DashboardEnhancedProps {
@@ -84,7 +84,6 @@ interface DashboardEnhancedProps {
   truckLoads?: TruckLoad[]
   lclAir?: LclAirShipment[]
   billing?: BillingRecord[]
-  operators?: Operator[]
   assignments?: OperatorAssignment[]
   dbShipments?: DbShipment[]
   dbSyncError?: string | null
@@ -103,9 +102,6 @@ interface DashboardEnhancedProps {
   onDeleteLclAir?: (id: string) => void
   onUpdateBilling?: (row: BillingRecord) => void
   onClearBilling?: (ref: string) => void
-  onUpdateOperators?: (operators: Operator[]) => void
-  onDeleteOperator?: (id: string) => void
-  onAssignOperator?: (ref: string, operatorId: string | null) => void
   onPatchShipment?: (id: string, fields: Record<string, unknown>) => void
   /** Devuelve false si el alta se abortó (REF duplicada y el usuario canceló). */
   onCreateShipment?: (row: DbShipment) => boolean | void
@@ -123,7 +119,7 @@ const ONE_DAY_MS = 86_400_000
 // Para reactivarla: poner en true (el componente ExcelImport sigue intacto).
 const SHOW_IMPORT_TAB = false
 
-export default function DashboardEnhanced({ onLogout, isDataLoading = false, clients = [], shipments = [], documents = [], reports = [], originPhotos = [], quotes = [], trucks = [], truckLoads = [], lclAir = [], billing = [], operators = [], assignments = [], dbShipments = [], dbSyncError = null, onUpdateShipments, onUpdateClients, onUpdateDocuments, onUpdateReports, onUpdateOriginPhotos, onUpdateQuotes, onUpdateTrucks, onDeleteTruck, onUpdateTruckLoads, onDeleteTruckLoad, onUpdateLclAir, onDeleteLclAir, onUpdateBilling, onClearBilling, onUpdateOperators, onDeleteOperator, onAssignOperator, onPatchShipment, onCreateShipment, onDeleteShipment, onPatchFclField, onRenameRef, onRefreshTrucks, onReloadFromDB }: DashboardEnhancedProps) {
+export default function DashboardEnhanced({ onLogout, isDataLoading = false, clients = [], shipments = [], documents = [], reports = [], originPhotos = [], quotes = [], trucks = [], truckLoads = [], lclAir = [], billing = [], assignments = [], dbShipments = [], dbSyncError = null, onUpdateShipments, onUpdateClients, onUpdateDocuments, onUpdateReports, onUpdateOriginPhotos, onUpdateQuotes, onUpdateTrucks, onDeleteTruck, onUpdateTruckLoads, onDeleteTruckLoad, onUpdateLclAir, onDeleteLclAir, onUpdateBilling, onClearBilling, onPatchShipment, onCreateShipment, onDeleteShipment, onPatchFclField, onRenameRef, onRefreshTrucks, onReloadFromDB }: DashboardEnhancedProps) {
   const brand = useBrand()
   const ops = brand.capabilities.opsAdmin
   // Flip Etapa 4: post-flip las FCL viven en dbShipments. Reconstruirlas a
@@ -592,7 +588,6 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
               lclAir={lclAir}
               dbShipments={dbShipments}
               shipments={fclShipments}
-              operators={operators}
               onUpdateTrucks={(t, ids) => { if (onUpdateTrucks) onUpdateTrucks(t, ids) }}
               onDeleteTruck={(id) => { if (onDeleteTruck) onDeleteTruck(id) }}
               onUpdateTruckLoads={(l, ids) => { if (onUpdateTruckLoads) onUpdateTruckLoads(l, ids) }}
@@ -650,21 +645,17 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
               dbShipments={dbShipments}
               trucks={trucks}
               truckLoads={truckLoads}
-              operators={operators}
               assignments={assignments}
               clients={clients}
               originPhotos={originPhotos}
               reports={reports}
               onUpdateOriginPhotos={onUpdateOriginPhotos}
               onUpdateReports={onUpdateReports}
-              onAssignOperator={(ref, opId) => { if (onAssignOperator) onAssignOperator(ref, opId) }}
               onPatchShipment={(id, fields) => { if (onPatchShipment) onPatchShipment(id, fields) }}
               onCreateShipment={(row) => onCreateShipment?.(row)}
               onDeleteShipment={(op) => { if (onDeleteShipment) onDeleteShipment(op) }}
               onPatchFclField={(dbId, edits) => { if (onPatchFclField) onPatchFclField(dbId, edits) }}
               onRenameRef={onRenameRef}
-              onUpdateOperators={(o) => { if (onUpdateOperators) onUpdateOperators(o) }}
-              onDeleteOperator={(id) => { if (onDeleteOperator) onDeleteOperator(id) }}
               selectedUid={detailUid}
               onSelectedUidChange={setDetailUid}
             />
@@ -755,7 +746,6 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
           dbShipments={dbShipments || []}
           trucks={trucks || []}
           truckLoads={truckLoads || []}
-          operators={operators || []}
           assignments={assignments || []}
           originPhotos={originPhotos}
           reports={reports}
@@ -763,7 +753,6 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
           onUpdateReports={onUpdateReports}
           onPatch={(id, fields) => { if (onPatchShipment) onPatchShipment(id, fields) }}
           onPatchFcl={(id, edits) => { if (onPatchFclField) onPatchFclField(id, edits) }}
-          onAssignOperator={(ref, opId) => { if (onAssignOperator) onAssignOperator(ref, opId) }}
           onRenameRef={onRenameRef}
           onClose={() => setOverlayDetailKey(null)}
         />

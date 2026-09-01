@@ -66,7 +66,6 @@ interface TruckBuilderProps {
   dbShipments: DbShipment[]
   shipments: ParsedShipment[]
   /** Operativos para el alta de carga desde el armador. */
-  operators?: Operator[]
   onBack: () => void
   onUpdateTrucks: (trucks: Truck[], changedIds?: string[]) => void
   onUpdateTruckLoads: (loads: TruckLoad[], changedIds?: string[]) => void
@@ -79,7 +78,7 @@ interface TruckBuilderProps {
 }
 
 export default function TruckBuilder(props: TruckBuilderProps) {
-  const { truck, trucks, truckLoads, lclAir, dbShipments, shipments, operators, onBack, onUpdateTrucks, onUpdateTruckLoads, onDeleteTruckLoad, onDeleteTruck, onCreateShipment, onPatchShipment } = props
+  const { truck, trucks, truckLoads, lclAir, dbShipments, shipments, onBack, onUpdateTrucks, onUpdateTruckLoads, onDeleteTruckLoad, onDeleteTruck, onCreateShipment, onPatchShipment } = props
 
   const isDraft = truck.draft
   // Lo que se VE y EDITA: el camión con el overlay aplicado.
@@ -800,7 +799,6 @@ export default function TruckBuilder(props: TruckBuilderProps) {
         <NewShipmentDialog
           open={newCargoOpen}
           onOpenChange={setNewCargoOpen}
-          operators={operators || []}
           onCreate={handleCreateFromBuilder}
           suggestedRef={suggestedRef}
         />

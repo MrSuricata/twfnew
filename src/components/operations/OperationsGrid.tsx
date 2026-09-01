@@ -15,8 +15,6 @@ import {
   Airplane,
   Truck as TruckIcon,
   Stack,
-  UsersThree,
-  MagicWand,
   ClipboardText,
   DownloadSimple,
   FilePdf,
@@ -38,14 +36,13 @@ import {
   DialogDescription,
 } from '@/components/ui/dialog'
 import { toast } from 'sonner'
-import OperatorsManager from './OperatorsManager'
 import PasteImportDialog from './PasteImportDialog'
 import NewShipmentDialog from './NewShipmentDialog'
 import SplitShipmentDialog from './SplitShipmentDialog'
 import OperationDetailPanel from './OperationDetailPanel'
 import VesselEtaDialog from './VesselEtaDialog'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
-import type { Operator, OperatorAssignment, Modality, UnifiedOperation, DbShipment } from '@/lib/operationsTypes'
+import type { OperatorAssignment, Modality, UnifiedOperation, DbShipment } from '@/lib/operationsTypes'
 import type { Truck, TruckLoad } from '@/lib/truckTypes'
 import type { OriginPhoto, OperativeReport } from '@/lib/quotationTypes'
 import type { CatalogClient } from '@/lib/clientCatalog'
@@ -62,7 +59,6 @@ import {
   isOperationActive,
   isSeguimientoVencido,
   alertaSalidaDirecto,
-  operatorsForMode,
   buildTruckByRef,
   suggestNextRef,
   OPERATION_COLUMNS,
@@ -85,7 +81,6 @@ interface OperationsGridProps {
   dbShipments: DbShipment[]
   trucks?: Truck[]
   truckLoads?: TruckLoad[]
-  operators: Operator[]
   assignments: OperatorAssignment[]
   /** Catálogo de clientes → datalist + canonicalización del campo Cliente
    *  (alta y panel de detalle). */
@@ -95,15 +90,12 @@ interface OperationsGridProps {
   reports?: OperativeReport[]
   onUpdateOriginPhotos?: (photos: OriginPhoto[]) => void
   onUpdateReports?: (reports: OperativeReport[]) => void
-  onAssignOperator: (ref: string, operatorId: string | null) => void
   onPatchShipment: (id: string, fields: Record<string, unknown>) => void
   /** Devuelve false si el alta se abortó (REF duplicada y el usuario canceló). */
   onCreateShipment?: (row: DbShipment) => boolean | void
   onDeleteShipment?: (op: UnifiedOperation) => void
   onPatchFclField?: (dbId: string, edits: Record<string, unknown>) => void
   onRenameRef?: (op: UnifiedOperation, newRef: string, pin: string) => Promise<void>
-  onUpdateOperators: (operators: Operator[]) => void
-  onDeleteOperator: (id: string) => void
   /** Controlled detail-panel uid. If provided together with onSelectedUidChange,
    *  the parent owns the state; otherwise the internal state is used (backward-compat). */
   selectedUid?: string | null
@@ -151,21 +143,17 @@ export default function OperationsGrid({
   dbShipments,
   trucks,
   truckLoads,
-  operators,
   assignments,
   clients = [],
   originPhotos,
   reports,
   onUpdateOriginPhotos,
   onUpdateReports,
-  onAssignOperator,
   onPatchShipment,
   onCreateShipment,
   onDeleteShipment,
   onPatchFclField,
   onRenameRef,
-  onUpdateOperators,
-  onDeleteOperator,
   selectedUid: controlledSelectedUid,
   onSelectedUidChange,
 }: OperationsGridProps) {
@@ -179,7 +167,6 @@ export default function OperationsGrid({
   const [kgMax, setKgMax] = useState('')
   const [m3Min, setM3Min] = useState('')
   const [m3Max, setM3Max] = useState('')
-  const [operatorFilter, setOperatorFilter] = useState<string>('all')
   // "Solo activas" (ON por defecto): oculta devueltas+en fiscal / terminadas.
   const [activeOnly, setActiveOnly] = useState<boolean>(() => {
     try { const s = localStorage.getItem(ACTIVE_ONLY_KEY); if (s != null) return s === '1' } catch { /* ignore */ }
@@ -189,7 +176,6 @@ export default function OperationsGrid({
     try { localStorage.setItem(ACTIVE_ONLY_KEY, activeOnly ? '1' : '0') } catch { /* ignore */ }
     if (prefsReady.current) saveUserPrefsDebounced({ opsActiveOnly: activeOnly })
   }, [activeOnly])
-  const [managerOpen, setManagerOpen] = useState(false)
   const [pasteOpen, setPasteOpen] = useState(false)
   const [newOpen, setNewOpen] = useState(false)
   // Dividir carga en A/B (tijera del panel de detalle).
@@ -450,14 +436,6 @@ export default function OperationsGrid({
     [trucks, truckLoads, hoy],
   )
 
-  // Unified operator assignment: DB rows patch shipments.operator_id;
-  // FCL (cache) rows use the operator_assignments overlay by ref.
-  // useCallback → stable ref so memoized rows don't re-render on sort/scroll.
-  const assignOp = useCallback((op: UnifiedOperation, operatorId: string | null) => {
-    if (op.source === 'db' && op.dbId) onPatchShipment(op.dbId, { operator_id: operatorId })
-    else onAssignOperator(op.ref, operatorId)
-  }, [onPatchShipment, onAssignOperator])
-
   // Abrir confirmación de eliminado (estable para las filas memoizadas).
   const requestDelete = useCallback((op: UnifiedOperation) => {
     setDeleteConfirm('')
@@ -484,21 +462,6 @@ export default function OperationsGrid({
     for (const o of visibleOps) { const z = o.pais || 'OTRO'; c[z] = (c[z] || 0) + 1 }
     return c
   }, [visibleOps])
-
-  // Auto-assign: for unassigned refs whose mode has exactly ONE eligible
-  // operator, assign it (e.g. aéreo/terrestre → Fabián). FCL/LCL have many
-  // operators → skipped (no way to guess which).
-  const handleAutoAssign = () => {
-    let count = 0
-    for (const op of operations) {
-      if (op.operatorId) continue
-      const eligible = operatorsForMode(operators, op.mode)
-      if (eligible.length === 1) { assignOp(op, eligible[0].id); count++ }
-    }
-    toast[count > 0 ? 'success' : 'info'](
-      count > 0 ? `${count} carga${count === 1 ? '' : 's'} auto-asignada${count === 1 ? '' : 's'}` : 'No hay cargas para auto-asignar: solo aplica a modos con un único operativo (aéreo/terrestre)'
-    )
-  }
 
   // Campos pendientes por ETAPA (lib datosFaltantes): uid → "Bultos, Kg, …".
   // Solo cargas activas — completar datos de una carga cerrada no es tarea.
@@ -533,14 +496,13 @@ export default function OperationsGrid({
       if (segFilter && !isSeguimientoVencido(o, truckByRef.get(o.ref)?.status, today)) return false
       if (pisadaFilter && alertaSalidaDirecto(o, today) !== 'pisada') return false
       if (faltanFilter && !faltantesPorUid.has(o.uid)) return false
-      if (operatorFilter !== 'all' && (o.operatorId || '') !== operatorFilter) return false
       if (q) {
         const blob = `${o.ref} ${o.clientRef} ${o.cliente} ${o.cntr} ${o.docNumber} ${o.fiscal} ${o.descripcion} ${o.transporte}`.toLowerCase()
         if (!blob.includes(q)) return false
       }
       return true
     })
-  }, [visibleOps, modeFilter, zonaFilter, originFilter, destFilter, kgMin, kgMax, m3Min, m3Max, segFilter, pisadaFilter, faltanFilter, faltantesPorUid, truckByRef, operatorFilter, deferredSearch])
+  }, [visibleOps, modeFilter, zonaFilter, originFilter, destFilter, kgMin, kgMax, m3Min, m3Max, segFilter, pisadaFilter, faltanFilter, faltantesPorUid, truckByRef, deferredSearch])
 
   const pesoVolActivo = !!(kgMin || kgMax || m3Min || m3Max)
 
@@ -623,16 +585,9 @@ export default function OperationsGrid({
     return sum
   }, [cols, colWidths])
 
-  const operatorById = useMemo(() => {
-    const m = new Map<string, Operator>()
-    for (const o of operators) m.set(o.id, o)
-    return m
-  }, [operators])
-
   // Plain-text value of a cell (for CSV export).
   const cellText = (op: UnifiedOperation, key: string): string => {
     switch (key) {
-      case 'operator': return op.operatorId ? (operatorById.get(op.operatorId)?.name || '') : ''
       // Tri-estado: null = a confirmar debe distinguirse de No en el CSV y el orden.
       case 'wood': return op.wood ? 'SI' : op.wood === null ? 'A CONFIRMAR' : ''
       case 'noApilable': return op.noApilable ? 'SI' : ''
@@ -727,11 +682,11 @@ export default function OperationsGrid({
       return c * sign
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtered, sort, operatorById])
+  }, [filtered, sort])
 
   // Reset SINCRONO al cambiar filtros/orden: si fuera useEffect, el primer
   // render post-filtro montaría rowLimit viejo (el lag que vinimos a matar).
-  const filterSig = JSON.stringify([search, modeFilter, zonaFilter, originFilter, destFilter, kgMin, kgMax, m3Min, m3Max, segFilter, operatorFilter, activeOnly, showArchived, sort])
+  const filterSig = JSON.stringify([search, modeFilter, zonaFilter, originFilter, destFilter, kgMin, kgMax, m3Min, m3Max, segFilter, activeOnly, showArchived, sort])
   const [prevFilterSig, setPrevFilterSig] = useState(filterSig)
   if (filterSig !== prevFilterSig) {
     setPrevFilterSig(filterSig)
@@ -936,27 +891,6 @@ export default function OperationsGrid({
           </PopoverContent>
         </Popover>
 
-        {/* Operator filter */}
-        <select
-          value={operatorFilter}
-          onChange={e => setOperatorFilter(e.target.value)}
-          className="h-9 px-3 rounded-md border border-border bg-card text-sm"
-        >
-          <option value="all">Todos los operativos</option>
-          <option value="">Sin asignar</option>
-          {operators.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
-        </select>
-
-        {/* Auto-assign by mode */}
-        <Button variant="outline" size="sm" className="h-9" onClick={handleAutoAssign} title="Asigna operativo automáticamente a las cargas cuyo modo tiene un solo operativo (aéreo/terrestre)">
-          <MagicWand size={16} className="mr-1.5" /> Auto-asignar
-        </Button>
-
-        {/* Manage operators */}
-        <Button variant="outline" size="sm" className="h-9" onClick={() => setManagerOpen(true)}>
-          <UsersThree size={16} className="mr-1.5" /> Operativos
-        </Button>
-
         {/* Bulk paste from Excel */}
         <Button variant="outline" size="sm" className="h-9" onClick={() => setPasteOpen(true)} title="Pegar un bloque desde Excel para actualizar varias cargas a la vez">
           <ClipboardText size={16} className="mr-1.5" /> Pegar desde planilla
@@ -1109,15 +1043,12 @@ export default function OperationsGrid({
                 key={op.uid}
                 op={op}
                 cols={cols}
-                operators={operators}
-                operatorById={operatorById}
                 truckStatus={truckByRef.get(op.ref)}
                 hoy={hoy}
                 faltantes={faltantesPorUid.get(op.uid)}
                 zebra={i % 2 === 1}
                 expanded={expandedUid === op.uid}
                 onToggleExpand={toggleExpand}
-                onAssign={assignOp}
                 onPatch={onPatchShipment}
                 onDelete={requestDelete}
                 onOpen={setSelectedUid}
@@ -1142,10 +1073,7 @@ export default function OperationsGrid({
           <OperationCard
             key={op.uid}
             op={op}
-            operators={operators}
-            operatorById={operatorById}
             truckStatus={truckByRef.get(op.ref)}
-            onAssign={assignOp}
             onOpen={setSelectedUid}
           />
         ))}
@@ -1169,14 +1097,6 @@ export default function OperationsGrid({
         <LockSimple size={12} className="inline align-[-2px] mr-1" /><strong>Hacé clic en una carga</strong> para ver y editar el detalle, o en la flechita junto a la ref para ver el resumen acá. Salida y arribo fiscal se editan por contenedor; LIBRE y operativa en “Datos clave de la carga”. La REF se cambia desde el detalle, con PIN.
       </p>
 
-      <OperatorsManager
-        open={managerOpen}
-        onOpenChange={setManagerOpen}
-        operators={operators}
-        onUpdateOperators={onUpdateOperators}
-        onDeleteOperator={onDeleteOperator}
-      />
-
       <PasteImportDialog
         open={pasteOpen}
         onOpenChange={setPasteOpen}
@@ -1188,7 +1108,6 @@ export default function OperationsGrid({
         <NewShipmentDialog
           open={newOpen}
           onOpenChange={setNewOpen}
-          operators={operators}
           onCreate={(row) => {
             const ok = onCreateShipment(row)
             if (ok !== false) toast.success(`Carga ${row.ref} agregada — completá lo que falte en la grilla`)
@@ -1324,8 +1243,6 @@ export default function OperationsGrid({
       <OperationDetailPanel
         op={selectedOp}
         truckStatus={selectedOp ? truckByRef.get(selectedOp.ref) : undefined}
-        operators={operators}
-        operatorById={operatorById}
         hoy={hoy}
         knownDepositos={knownDepositos}
         knownTransportes={knownTransportes}
@@ -1343,7 +1260,6 @@ export default function OperationsGrid({
         reports={reports}
         onUpdateOriginPhotos={onUpdateOriginPhotos}
         onUpdateReports={onUpdateReports}
-        onAssign={assignOp}
         onPatch={onPatchShipment}
         onPatchFcl={onPatchFclField}
         onRenameRef={onRenameRef}
@@ -1379,23 +1295,18 @@ export default function OperationsGrid({
 const OperationRow = memo(function OperationRow({
   op,
   cols,
-  operators,
-  operatorById,
   truckStatus,
   hoy,
   faltantes,
   zebra,
   expanded,
   onToggleExpand,
-  onAssign,
   onPatch,
   onDelete,
   onOpen,
 }: {
   op: UnifiedOperation
   cols: typeof OPERATION_COLUMNS
-  operators: Operator[]
-  operatorById: Map<string, Operator>
   truckStatus?: TruckRefInfo
   hoy: Date
   /** "Bultos, Kg, M³" — campos pendientes según la etapa (lib datosFaltantes). */
@@ -1406,13 +1317,10 @@ const OperationRow = memo(function OperationRow({
   /** Resumen expandido debajo de la fila (chevron junto a la Ref). */
   expanded: boolean
   onToggleExpand: (uid: string) => void
-  onAssign: (op: UnifiedOperation, operatorId: string | null) => void
   onPatch: (id: string, fields: Record<string, unknown>) => void
   onDelete?: (op: UnifiedOperation) => void
   onOpen: (uid: string) => void
 }) {
-  const eligible = operatorsForMode(operators, op.mode)
-  const assigned = op.operatorId ? operatorById.get(op.operatorId) : null
   // Seguimiento vencido: 7+ días sin actualizar y la carga sigue activa.
   const segVencido = isSeguimientoVencido(op, truckStatus?.status, hoy)
   // Ventana de retiro del contenedor directo: pisada (salida ≤ ETA) o fuera (> ETA+2).
@@ -1449,19 +1357,6 @@ const OperationRow = memo(function OperationRow({
               </span>
             )}
           </span>
-        )
-      case 'operator':
-        return (
-          <select
-            value={op.operatorId || ''}
-            onChange={e => onAssign(op, e.target.value || null)}
-            onClick={e => e.stopPropagation()}
-            className="h-6 max-w-[130px] text-xs rounded border border-transparent hover:border-border bg-transparent px-1 cursor-pointer focus:border-primary"
-            style={assigned ? { color: assigned.color || undefined } : undefined}
-          >
-            <option value="">— sin asignar —</option>
-            {eligible.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
-          </select>
         )
       case 'wood':
         // Semáforo: SÍ = rojo (dispara SENASA) · ¿? = ámbar (a confirmar) · No = vacío.
@@ -1703,22 +1598,13 @@ const CARD_FIELDS: { key: keyof UnifiedOperation; label: string }[] = [
 
 const OperationCard = memo(function OperationCard({
   op,
-  operators,
-  operatorById,
   truckStatus,
-  onAssign,
   onOpen,
 }: {
   op: UnifiedOperation
-  operators: Operator[]
-  operatorById: Map<string, Operator>
   truckStatus?: TruckRefInfo
-  onAssign: (op: UnifiedOperation, operatorId: string | null) => void
   onOpen: (uid: string) => void
 }) {
-  const eligible = operatorsForMode(operators, op.mode)
-  const assigned = op.operatorId ? operatorById.get(op.operatorId) : null
-
   const renderVal = (key: keyof UnifiedOperation) => {
     const num = key === 'pkgs' || key === 'kg' || key === 'm3'
     const raw = (op as unknown as Record<string, unknown>)[key]
@@ -1741,20 +1627,6 @@ const OperationCard = memo(function OperationCard({
         ) : (
           op.status && <Badge variant="outline" className={`text-[10px] ${statusBadgeClass(STATUS_LABEL[op.status] || op.status)}`}>{STATUS_LABEL[op.status] || op.status}</Badge>
         )}
-      </div>
-
-      {/* Operativo */}
-      <div className="mt-2">
-        <select
-          value={op.operatorId || ''}
-          onChange={e => onAssign(op, e.target.value || null)}
-          onClick={e => e.stopPropagation()}
-          className="w-full h-8 text-sm rounded-md border border-border bg-card px-2"
-          style={assigned ? { color: assigned.color || undefined } : undefined}
-        >
-          <option value="">— sin asignar —</option>
-          {eligible.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
-        </select>
       </div>
 
       {/* Fields */}

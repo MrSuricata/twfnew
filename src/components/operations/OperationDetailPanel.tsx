@@ -7,10 +7,10 @@ import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { LockSimple, Truck as TruckIcon, Archive, ArrowCounterClockwise, Trash, Plus, X, PencilSimple, Check, Camera, ArrowsSplit } from '@phosphor-icons/react'
 import { toast } from 'sonner'
-import type { DbShipment, Operator, UnifiedOperation } from '@/lib/operationsTypes'
+import type { DbShipment, UnifiedOperation } from '@/lib/operationsTypes'
 import {
   EDITABLE_FIELDS, EDITABLE_FCL_FIELDS, MODALITY_COLORS, MODALITY_LABELS,
-  STATUS_LABEL, STATUS_OPTIONS, operatorsForMode, isSeguimientoVencido, alertaSalidaDirecto,
+  STATUS_LABEL, STATUS_OPTIONS, isSeguimientoVencido, alertaSalidaDirecto,
   buildPerContainerPatch, statusBadgeClass,
 } from '@/lib/operationsTypes'
 import { fmtDateDMY } from '@/lib/format'
@@ -168,8 +168,6 @@ function editModeFor(op: UnifiedOperation, key: keyof UnifiedOperation): EditMod
 export default function OperationDetailPanel({
   op,
   truckStatus,
-  operators,
-  operatorById,
   hoy,
   knownDepositos = [],
   knownTransportes = [],
@@ -187,7 +185,6 @@ export default function OperationDetailPanel({
   reports,
   onUpdateOriginPhotos,
   onUpdateReports,
-  onAssign,
   onPatch,
   onPatchFcl,
   onRenameRef,
@@ -197,8 +194,6 @@ export default function OperationDetailPanel({
 }: {
   op: UnifiedOperation | null
   truckStatus?: TruckRefInfo
-  operators: Operator[]
-  operatorById: Map<string, Operator>
   hoy: Date
   knownDepositos?: string[]
   /** Catálogo de clientes → datalist + canonicalización del campo Cliente. */
@@ -228,7 +223,6 @@ export default function OperationDetailPanel({
   reports?: OperativeReport[]
   onUpdateOriginPhotos?: (photos: OriginPhoto[]) => void
   onUpdateReports?: (reports: OperativeReport[]) => void
-  onAssign: (op: UnifiedOperation, operatorId: string | null) => void
   onPatch: (id: string, fields: Record<string, unknown>) => void
   onPatchFcl?: (dbId: string, edits: Record<string, unknown>) => void
   onRenameRef?: (op: UnifiedOperation, newRef: string, pin: string) => Promise<void>
@@ -350,8 +344,6 @@ export default function OperationDetailPanel({
     // Mantener el input abierto para carga rápida múltiple
   }
 
-  const assigned = op.operatorId ? operatorById.get(op.operatorId) : null
-  const eligible = operatorsForMode(operators, op.mode)
   // Nombres canónicos del catálogo → datalist del campo Cliente.
   const clienteOptions = knownClientes.map(c => c.name).filter(Boolean).sort((a, b) => a.localeCompare(b, 'es'))
   // El estado de la FCL es DERIVADO (de las fechas de operativa) — read-only, como
@@ -477,20 +469,6 @@ export default function OperationDetailPanel({
         </SheetHeader>
 
         <div className="p-4 space-y-4 text-sm">
-          {/* Operativo asignado */}
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] uppercase tracking-wide text-muted-foreground w-24 shrink-0">Operativo</span>
-            <select
-              value={op.operatorId || ''}
-              onChange={e => onAssign(op, e.target.value || null)}
-              className="h-7 flex-1 text-xs rounded border border-border bg-card px-1.5"
-              style={assigned ? { color: assigned.color || undefined } : undefined}
-            >
-              <option value="">— sin asignar —</option>
-              {eligible.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
-            </select>
-          </div>
-
           {/* Bloque de viabilidad */}
           {/* Fila rápida (Brian 22/08): lo que se necesita ver al ABRIR la
               ficha, antes de scrollear — MBL/HBL/Buque/Terminal/ETA. Los

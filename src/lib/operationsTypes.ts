@@ -748,7 +748,6 @@ export const OPERATION_COLUMNS: ColumnDef[] = [
   { key: 'ref', label: 'Ref', defaultOn: true, sticky: true, stickyLeft: 0, w: 'w-[134px] max-w-[134px]' },
   { key: 'cliente', label: 'Cliente / Cnee', defaultOn: true, sticky: true, stickyLeft: STICKY_REF_W, wrap: true, w: 'w-[150px] max-w-[150px]' },
   { key: 'clientRef', label: 'Ref Cliente', defaultOn: false, w: 'max-w-[90px]' },
-  { key: 'operator', label: 'Operativo', defaultOn: true },
   { key: 'shipper', label: 'Shipper', defaultOn: false, wrap: true, w: 'max-w-[120px]' },
   { key: 'agente', label: 'Agente', defaultOn: false, wrap: true, w: 'max-w-[110px]' },
   { key: 'incoterm', label: 'Incoterm', defaultOn: false, w: 'max-w-[72px]' },
