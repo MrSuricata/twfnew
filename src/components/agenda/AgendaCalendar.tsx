@@ -35,7 +35,7 @@ import { dropPatch, dropPatchTruck } from './agendaDnd'
 import { fmtDateDMY } from '@/lib/format'
 import { avisoSalida, fmtDMY } from '@/lib/salidaCheck'
 import { sugerirEtaFiscal, nombreDia } from '@/lib/transitoFiscal'
-import { isSinTelex, SIN_TELEX_MSG } from '@/lib/telexCheck'
+import { isSinTelex, mensajeConfirmarSinTelex } from '@/lib/telexCheck'
 import { toast } from 'sonner'
 import { useEventosCalendario, AvisoCalendarioDialog } from './AvisosCalendario'
 import type { EventoCalendario } from '@/lib/calendarioEventos'
@@ -459,9 +459,14 @@ export default function AgendaCalendar({
       )
       if (!ok) return
     }
-    // Aviso (no bloquea): se movió la salida de una carga cuyo telex sigue sin liberar.
+    // Sin telex la naviera no libera el contenedor: se pregunta ANTES de dejar
+    // la salida puesta (Brian 31/08). Antes era un toast que salía después de
+    // guardar, cuando la decisión ya estaba tomada.
     if (event?.type === 'salida' && newDate && isSinTelex(event.op?.TLX)) {
-      toast.warning(`🚨 ${event.ref} — ${SIN_TELEX_MSG}`)
+      const seguir = window.confirm(
+        mensajeConfirmarSinTelex({ ref: event.ref, cntr: event.cntr, fecha: newDate }),
+      )
+      if (!seguir) return
     }
     // Arrastrar la salida a otro día = moverla sin tocar el fiscal → ofrecer la
     // llegada normal (salida+2, finde → lunes), igual que la ficha y el quick-edit.

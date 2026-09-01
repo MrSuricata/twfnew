@@ -10,7 +10,7 @@ import { getShipmentStatus } from '@/lib/shipmentTypes'
 import { parseCntr } from '@/lib/cntrUtils'
 import { isSalidaBeforeArrival, avisoSalida, fmtDMY, etaVigente } from '@/lib/salidaCheck'
 import { sugerirEtaFiscal, llegadaFiscalAtipica, nombreDia } from '@/lib/transitoFiscal'
-import { isSinTelex, SIN_TELEX_MSG } from '@/lib/telexCheck'
+import { isSinTelex, mensajeConfirmarSinTelex } from '@/lib/telexCheck'
 import { toast } from 'sonner'
 
 /** Handle imperativo que el panel usa para forzar el commit de los borradores
@@ -334,6 +334,25 @@ const ContainerDatesSection = forwardRef<ContainerDatesHandle, {
           if (!ok) skip.add(w.idx)
         }
       }
+      // Sin telex: se pregunta UNA vez por carga (el telex es de la carga, no
+      // del contenedor) y si se rechaza no se agenda ninguna de las salidas
+      // nuevas. Antes era un toast posterior al guardado.
+      if (isSinTelex(op.tlx)) {
+        const conSalidaNueva: number[] = []
+        for (let i = 0; i < cntrs.length; i++) {
+          if (skip.has(i)) continue
+          if ((drafts[`${cntrs[i]}-${i}-SALIDA`] || '').trim()) conSalidaNueva.push(i)
+        }
+        if (conSalidaNueva.length > 0) {
+          const idx0 = conSalidaNueva[0]
+          const seguir = window.confirm(mensajeConfirmarSinTelex({
+            ref: op.ref,
+            cntr: conSalidaNueva.length === 1 ? cntrs[idx0] : '',
+            fecha: drafts[`${cntrs[idx0]}-${idx0}-SALIDA`] || '',
+          }))
+          if (!seguir) for (const i of conSalidaNueva) skip.add(i)
+        }
+      }
       // Salida movida sin tocar el fiscal → ofrecer la llegada normal (salida+2,
       // fin de semana → lunes). Si acepta, se agrega como draft y se recomputa
       // junto con los skips en UNA pasada (regla Brian 13/08).
@@ -357,11 +376,6 @@ const ContainerDatesSection = forwardRef<ContainerDatesHandle, {
       }
       setDrafts({}) // limpiar SIEMPRE (incluye los rechazados: se descartan)
       if (!next) return false
-      // Aviso (no bloquea): quedó una salida coordinada con el telex sin liberar.
-      const flushedSalida = Object.entries(drafts).some(([k, v]) => k.endsWith('-SALIDA') && (v || '').trim())
-      if (flushedSalida && isSinTelex(op.tlx)) {
-        toast.warning(`🚨 ${op.ref} — ${SIN_TELEX_MSG}`)
-      }
       onCommitOperativas(next)
       return true
     },
@@ -427,9 +441,13 @@ const ContainerDatesSection = forwardRef<ContainerDatesHandle, {
       }
     }
     setDrafts(prev => { const next = { ...prev }; delete next[k]; return next })
-    // Aviso (no bloquea): se coordinó una salida pero el telex sigue sin liberar.
+    // Sin telex se pregunta ANTES de dejar la salida. Si dice que no, el draft
+    // ya se limpió y el campo vuelve al valor guardado: no se agendó nada.
     if (field === 'SALIDA' && value.trim() && isSinTelex(op.tlx)) {
-      toast.warning(`🚨 ${op.ref} — ${SIN_TELEX_MSG}`)
+      const seguir = window.confirm(
+        mensajeConfirmarSinTelex({ ref: op.ref, cntr: cntrs[i], fecha: value }),
+      )
+      if (!seguir) return
     }
     onCommitOperativas(buildNextOperativas(cntrs, existing, op, i, patch))
   }

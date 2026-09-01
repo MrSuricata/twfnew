@@ -49,7 +49,7 @@ import {
 } from '@/lib/truckUtils'
 import AvailableLoadsPanel from './AvailableLoadsPanel'
 import NewShipmentDialog from '@/components/operations/NewShipmentDialog'
-import { isSinTelex, SIN_TELEX_MSG } from '@/lib/telexCheck'
+import { isSinTelex, mensajeConfirmarSinTelex } from '@/lib/telexCheck'
 import { exportTruckPdf } from '@/lib/truckExport'
 import { conflictoFechasConsolidado, type ConflictoFechas } from '@/lib/truckUtils'
 import {
@@ -172,7 +172,20 @@ export default function TruckBuilder(props: TruckBuilderProps) {
 
   // cntr = contenedor elegido de esa carga. Un camión lleva UNO: si la carga
   // tiene varios, se agrega una línea por contenedor (Brian 06/08/2026).
+  // Sin telex la carga no se puede retirar de la terminal: se pregunta ANTES de
+  // subirla al camión (Brian 31/08). Antes era un toast posterior, con la carga
+  // ya adentro. true = seguir.
+  const confirmarTelexAlSumar = (ref: string, tlx: string | undefined | null, cntr?: string): boolean => {
+    if (!isSinTelex(tlx)) return true
+    return window.confirm(mensajeConfirmarSinTelex({
+      ref,
+      cntr,
+      fecha: merged.departureDate || merged.loadDate || '',
+    }))
+  }
+
   const addFcl = (s: ParsedShipment, cntr = '') => {
+    if (!confirmarTelexAlSumar(s.REF, s.operativas?.[0]?.TLX, cntr)) return
     const choque = conflictoFechasConsolidado(s, cntr, merged)
     if (choque) {
       setConflicto({ shipment: s, cntr, datos: choque })
@@ -235,8 +248,6 @@ export default function TruckBuilder(props: TruckBuilderProps) {
     }
     onUpdateTruckLoads([...truckLoads, load], [load.id])
     toast.success(`${s.REF} agregado al camión`)
-    // Sin telex la carga no se puede retirar de la terminal.
-    if (isSinTelex(s.operativas?.[0]?.TLX)) toast.warning(`🚨 ${s.REF} — ${SIN_TELEX_MSG}`, { duration: 8000 })
   }
 
   const addLclAir = (s: LclAirShipment) => {
@@ -267,6 +278,8 @@ export default function TruckBuilder(props: TruckBuilderProps) {
 
   // Add an LCL/aéreo load from the unified `shipments` table.
   const addDb = (s: DbShipment) => {
+    // El telex solo aplica a marítimo: un aéreo no tiene telex que liberar.
+    if ((s.mode === 'fcl' || s.mode === 'lcl') && !confirmarTelexAlSumar(s.ref, s.telex ? 'SI' : '')) return
     const load: TruckLoad = {
       id: newId('load'),
       truckId: truck.id,
@@ -296,8 +309,6 @@ export default function TruckBuilder(props: TruckBuilderProps) {
     // Madera "a confirmar" (null) entra al camión como No — confirmarla ANTES
     // de imprimir el plan (WOOD=SI dispara SENASA en frontera).
     if (s.wood === null) toast.warning(`🪵 ${s.ref}: madera sin confirmar — confirmala en la carga antes de imprimir el plan`, { duration: 8000 })
-    // Sin telex la carga no se puede retirar del depósito/terminal.
-    if ((s.mode === 'fcl' || s.mode === 'lcl') && !s.telex) toast.warning(`🚨 ${s.ref} — ${SIN_TELEX_MSG}`, { duration: 8000 })
   }
 
   // ── Crear carga desde el armador ──

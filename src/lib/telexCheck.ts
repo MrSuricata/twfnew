@@ -37,3 +37,39 @@ export function needsTelexAlert(args: {
 /** Texto estándar del aviso (mismo mensaje en toasts, banners y tooltips). */
 export const SIN_TELEX_MSG =
   'SIN TELEX: la naviera todavía no liberó el documento — sin telex no se puede retirar el contenedor.'
+
+/**
+ * Texto del popup que pregunta si se agenda igual una carga sin telex.
+ *
+ * Hasta el 31/08/2026 esto era un toast que salía DESPUÉS de guardar: te
+ * enterabas cuando la salida ya estaba puesta. Brian pidió que pregunte antes,
+ * porque agendar sin telex es una decisión, no una notificación.
+ *
+ * Vive acá y no en el componente para que el mensaje sea el mismo en los tres
+ * lugares donde se agenda: la Agenda (arrastrando), el quick-edit y la ficha.
+ */
+export function mensajeConfirmarSinTelex(args: {
+  ref: string
+  /** Contenedor concreto, cuando se sabe cuál se está moviendo. */
+  cntr?: string | null
+  /** Fecha de salida que se está por dejar. */
+  fecha: string
+}): string {
+  const f = (args.fecha || '').trim()
+  // La fecha llega ISO desde la agenda y a veces como texto libre ('a
+  // confirmar') desde la planilla: se muestra tal cual si no es una fecha.
+  const fechaTxt = /^\d{4}-\d{2}-\d{2}$/.test(f)
+    ? `${f.slice(8, 10)}/${f.slice(5, 7)}/${f.slice(0, 4)}`
+    : f
+  const cntr = (args.cntr || '').trim()
+  return [
+    `🚨 ${args.ref} no tiene el telex liberado.`,
+    '',
+    cntr ? `Contenedor: ${cntr}` : null,
+    `Salida: ${fechaTxt || '—'}`,
+    '',
+    'Sin telex la naviera no libera el contenedor y no se puede retirar de la terminal.',
+    '',
+    '¿Agendar igual?',
+  ].filter(l => l !== null).join('\n')
+}
