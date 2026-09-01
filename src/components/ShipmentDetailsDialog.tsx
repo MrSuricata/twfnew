@@ -64,6 +64,11 @@ export default function ShipmentDetailsDialog({
   onUpdateOriginPhotos,
   highlightCntr = null,
 }: ShipmentDetailsDialogProps) {
+  // Cliente y partner ven la ficha, no la editan: sin esto los campos de la
+  // pestaña General se podían tipear y lo escrito se perdía al cerrar, porque
+  // el botón Guardar no existe en esas vistas (auditoría 01/09).
+  const soloLectura = clientView || partnerView
+
   const [editedShipment, setEditedShipment] = useState<ParsedShipment | null>(null)
   const highlightedCntrRef = useRef<HTMLDivElement | null>(null)
 
@@ -836,6 +841,7 @@ export default function ShipmentDetailsDialog({
               <div className="space-y-2">
                 <Label htmlFor="ref">Referencia *</Label>
                 <Input
+                  readOnly={soloLectura}
                   id="ref"
                   value={editedShipment.REF}
                   onChange={(e) => updateField('REF', e.target.value)}
@@ -846,6 +852,7 @@ export default function ShipmentDetailsDialog({
               <div className="space-y-2">
                 <Label htmlFor="cliente">Cliente *</Label>
                 <Input
+                  readOnly={soloLectura}
                   id="cliente"
                   value={editedShipment.CLIENTE}
                   onChange={(e) => updateField('CLIENTE', e.target.value)}
@@ -858,6 +865,7 @@ export default function ShipmentDetailsDialog({
                   ETD (Fecha de Salida)
                 </Label>
                 <Input
+                  readOnly={soloLectura}
                   id="etd"
                   type="date"
                   value={editedShipment.ETD}
@@ -871,6 +879,7 @@ export default function ShipmentDetailsDialog({
                   ETA (Fecha de Llegada)
                 </Label>
                 <Input
+                  readOnly={soloLectura}
                   id="eta"
                   type="date"
                   value={editedShipment.ETA}
@@ -881,6 +890,7 @@ export default function ShipmentDetailsDialog({
               <div className="space-y-2">
                 <Label htmlFor="ft">Free Time (días)</Label>
                 <Input
+                  readOnly={soloLectura}
                   id="ft"
                   type="number"
                   value={editedShipment.FT}
@@ -894,6 +904,7 @@ export default function ShipmentDetailsDialog({
                   Libre Hasta
                 </Label>
                 <Input
+                  readOnly={soloLectura}
                   id="libre-hasta"
                   type="date"
                   value={editedShipment.LIBRE_HASTA}
@@ -904,6 +915,7 @@ export default function ShipmentDetailsDialog({
               <div className="space-y-2">
                 <Label htmlFor="mbl">MBL / BL Master</Label>
                 <Input
+                  readOnly={soloLectura}
                   id="mbl"
                   value={editedShipment.MBL}
                   onChange={(e) => updateField('MBL', e.target.value)}
@@ -914,6 +926,7 @@ export default function ShipmentDetailsDialog({
               <div className="space-y-2">
                 <Label htmlFor="n">Número de Contenedores</Label>
                 <Input
+                  readOnly={soloLectura}
                   id="n"
                   type="number"
                   value={editedShipment.N}
