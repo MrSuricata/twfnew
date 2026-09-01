@@ -1,6 +1,7 @@
 import { Warehouse } from '@phosphor-icons/react'
 import AgendaCalendar from '@/components/agenda/AgendaCalendar'
 import PartnerDashboardShell from '@/components/PartnerDashboardShell'
+import ProximasSinCoordinar from '@/components/ProximasSinCoordinar'
 import { ParsedShipment } from '@/lib/shipmentTypes'
 
 interface DepotDashboardProps {
@@ -18,7 +19,10 @@ export default function DepotDashboard({ shipments, depotName, userName, onLogou
       userName={userName}
       onLogout={onLogout}
     >
-      <AgendaCalendar shipments={shipments} depotFilter={depotName} partnerView={true} />
+      <div className="space-y-4">
+        <ProximasSinCoordinar shipments={shipments} />
+        <AgendaCalendar shipments={shipments} depotFilter={depotName} partnerView={true} />
+      </div>
     </PartnerDashboardShell>
   )
 }
