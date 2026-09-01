@@ -19,9 +19,12 @@ interface BandejaStockProps {
   /** Refs que ya viajan en un camión: no entran a la bandeja. */
   refsEnCamion: Set<string>
   onPatch: (id: string, fields: Record<string, unknown>) => void
+  /** Dentro de otra card (HOY LCL): sin marco ni título propios, solo las filas.
+   *  El contenedor ya muestra el conteo y el estado vacío. */
+  embebida?: boolean
 }
 
-export default function BandejaStock({ dbShipments, refsEnCamion, onPatch }: BandejaStockProps) {
+export default function BandejaStock({ dbShipments, refsEnCamion, onPatch, embebida = false }: BandejaStockProps) {
   const hoy = new Date().toISOString().slice(0, 10)
   const [borradores, setBorradores] = useState<Record<string, string>>({})
 
@@ -53,6 +56,7 @@ export default function BandejaStock({ dbShipments, refsEnCamion, onPatch }: Ban
   }
 
   if (esperando.length === 0) {
+    if (embebida) return null
     return (
       <div className="rounded-xl border border-border bg-card p-10 text-center">
         <Package size={32} className="mx-auto mb-3 opacity-40" />
@@ -64,13 +68,15 @@ export default function BandejaStock({ dbShipments, refsEnCamion, onPatch }: Ban
   }
 
   return (
-    <div className="rounded-xl border border-border bg-card overflow-hidden">
-      <div className="border-b border-border px-4 py-3">
-        <h3 className="text-sm font-semibold">Aguarda stock · {esperando.length}</h3>
-        <p className="text-xs text-muted-foreground mt-0.5">
-          Llegaron y el depósito todavía no dio el stock. Al cargarlo quedan listas para camión.
-        </p>
-      </div>
+    <div className={embebida ? '' : 'rounded-xl border border-border bg-card overflow-hidden'}>
+      {!embebida && (
+        <div className="border-b border-border px-4 py-3">
+          <h3 className="text-sm font-semibold">Aguarda stock · {esperando.length}</h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Llegaron y el depósito todavía no dio el stock. Al cargarlo quedan listas para camión.
+          </p>
+        </div>
+      )}
       <div className="divide-y divide-border">
         {esperando.map(s => {
           const dias = diasEsperandoStock(s)

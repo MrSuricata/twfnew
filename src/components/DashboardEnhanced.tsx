@@ -39,6 +39,7 @@ import TeamManager from './TeamManager'
 import HelpGuide from './HelpGuide'
 
 import TodayDashboard from './TodayDashboard'
+import HoyLcl from './HoyLcl'
 import MiRendimientoPanel from './MiRendimientoPanel'
 import DepositoPanel from './DepositoPanel'
 import SeguimientosBoard from './SeguimientosBoard'
@@ -119,6 +120,15 @@ const ONE_DAY_MS = 86_400_000
 // Para reactivarla: poner en true (el componente ExcelImport sigue intacto).
 const SHOW_IMPORT_TAB = false
 
+// Áreas de la pantalla HOY. Se persiste la elección por navegador; el
+// home_area='lcl' de admin_users la fuerza al entrar.
+type HoyArea = 'fcl' | 'lcl'
+const HOY_AREA_KEY = 'twf-hoy-area'
+const HOY_AREAS: { id: HoyArea; label: string }[] = [
+  { id: 'fcl', label: 'Uruguay FCL' },
+  { id: 'lcl', label: 'LCL Montevideo' },
+]
+
 export default function DashboardEnhanced({ onLogout, isDataLoading = false, clients = [], shipments = [], documents = [], reports = [], originPhotos = [], quotes = [], trucks = [], truckLoads = [], lclAir = [], billing = [], assignments = [], dbShipments = [], dbSyncError = null, onUpdateShipments, onUpdateClients, onUpdateDocuments, onUpdateReports, onUpdateOriginPhotos, onUpdateQuotes, onUpdateTrucks, onDeleteTruck, onUpdateTruckLoads, onDeleteTruckLoad, onUpdateLclAir, onDeleteLclAir, onUpdateBilling, onClearBilling, onPatchShipment, onCreateShipment, onDeleteShipment, onPatchFclField, onRenameRef, onRefreshTrucks, onReloadFromDB }: DashboardEnhancedProps) {
   const brand = useBrand()
   const ops = brand.capabilities.opsAdmin
@@ -167,8 +177,26 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
     // a la que se entra tipeando /mirendimiento (no se ve en la barra).
     const validas = new Set(['hoy', 'seguimientos', 'agenda', 'analytics', 'operaciones', 'checks', 'trucks', 'transportes', 'quotes', 'billing', 'pagos', 'contenido', 'clients', 'partners', 'rendimiento', 'deposito'])
     if (area === 'equipo' && getAdminLevel() === 'owner') return 'equipo'
+    // 'lcl' no es una pestaña: es el área LCL de HOY (ver hoyArea abajo).
+    if (area === 'lcl') return 'hoy'
     return validas.has(area) ? area : brandDefault
   })
+  // Área de la pantalla HOY: "Uruguay FCL" (TodayDashboard, la de Brian) o
+  // "LCL Montevideo" (HoyLcl, la del equipo de consolidados). El home_area del
+  // usuario manda al entrar (el equipo LCL arranca en la suya aunque haya
+  // cambiado antes); sin home_area vale la última elección en este navegador.
+  const [hoyArea, setHoyArea] = useState<HoyArea>(() => {
+    if (getAdminHomeArea() === 'lcl') return 'lcl'
+    try {
+      const v = localStorage.getItem(HOY_AREA_KEY)
+      if (v === 'fcl' || v === 'lcl') return v
+    } catch { /* sin storage: default */ }
+    return 'fcl'
+  })
+  const cambiarHoyArea = useCallback((a: HoyArea) => {
+    setHoyArea(a)
+    try { localStorage.setItem(HOY_AREA_KEY, a) } catch { /* ignorar */ }
+  }, [])
   // Sub-pestaña de "Contenido web" (Casos de éxito / Testimonios). Vive acá para
   // que la CommandPalette pueda abrir directo la sub-pestaña correcta.
   const [contenidoTab, setContenidoTab] = useState<'casos' | 'testimonios' | 'novedades'>('novedades')
@@ -514,23 +542,53 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
             </>)}
           </TabsList>
 
-          <TabsContent value="hoy">
-            <TodayDashboard
-              shipments={fclShipments}
-              dbShipments={dbShipments}
-              isDataLoading={isDataLoading}
-              trucks={trucks}
-              truckLoads={truckLoads}
-              documents={documents}
-              reports={reports}
-              originPhotos={originPhotos}
-              onUpdateShipments={onUpdateShipments}
-              onUpdateOriginPhotos={onUpdateOriginPhotos}
-              onPatchShipment={onPatchShipment}
-              onOpenDetail={onOpenDetail}
-              clients={clients}
-              onOpenTab={setActiveTab}
-            />
+          <TabsContent value="hoy" className="space-y-4">
+            {/* Selector de área de HOY: alterna sin recargar; TodayDashboard
+                queda intacto para FCL. */}
+            <div className="flex flex-wrap items-center gap-2">
+              <div role="tablist" aria-label="Área de HOY" className="inline-flex rounded-lg border border-border bg-muted/40 p-0.5">
+                {HOY_AREAS.map(a => (
+                  <button
+                    key={a.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={hoyArea === a.id}
+                    onClick={() => cambiarHoyArea(a.id)}
+                    className={`h-8 px-3 rounded-md text-sm font-semibold transition-colors ${hoyArea === a.id ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+                  >
+                    {a.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {hoyArea === 'lcl' ? (
+              <HoyLcl
+                dbShipments={dbShipments}
+                trucks={trucks}
+                truckLoads={truckLoads}
+                isDataLoading={isDataLoading}
+                onPatchShipment={onPatchShipment}
+                onOpenDetail={onOpenDetail}
+                onOpenTab={setActiveTab}
+              />
+            ) : (
+              <TodayDashboard
+                shipments={fclShipments}
+                dbShipments={dbShipments}
+                isDataLoading={isDataLoading}
+                trucks={trucks}
+                truckLoads={truckLoads}
+                documents={documents}
+                reports={reports}
+                originPhotos={originPhotos}
+                onUpdateShipments={onUpdateShipments}
+                onUpdateOriginPhotos={onUpdateOriginPhotos}
+                onPatchShipment={onPatchShipment}
+                onOpenDetail={onOpenDetail}
+                clients={clients}
+                onOpenTab={setActiveTab}
+              />
+            )}
           </TabsContent>
 
           <TabsContent value="deposito">
