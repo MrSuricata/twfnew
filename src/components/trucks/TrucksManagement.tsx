@@ -8,6 +8,7 @@ import TrucksList from './TrucksList'
 import TruckBuilder from './TruckBuilder'
 import LclAirManager from './LclAirManager'
 import BandejaStock from './BandejaStock'
+import SugerenciasCamion from './SugerenciasCamion'
 
 interface TrucksManagementProps {
   trucks: Truck[]
@@ -128,7 +129,17 @@ export default function TrucksManagement(props: TrucksManagementProps) {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="trucks">
+        <TabsContent value="trucks" className="space-y-4">
+          {/* Arriba de la lista y plegable: propone qué LCL con stock subir
+              juntas y arma el borrador con un click. No toca el flujo de abajo. */}
+          <SugerenciasCamion
+            dbShipments={props.dbShipments || []}
+            trucks={props.trucks}
+            truckLoads={props.truckLoads}
+            onUpdateTrucks={props.onUpdateTrucks}
+            onUpdateTruckLoads={props.onUpdateTruckLoads}
+            onOpenBuilder={(id) => setSelectedTruckId(id)}
+          />
           <TrucksList
             trucks={props.trucks}
             truckLoads={props.truckLoads}
