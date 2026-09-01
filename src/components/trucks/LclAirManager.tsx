@@ -72,7 +72,7 @@ import {
 } from '@/lib/lclAlta'
 import type { CatalogClient } from '@/lib/clientCatalog'
 import LclDatosClave from '@/components/operations/LclDatosClave'
-import { RefDuplicadaAviso } from '@/components/operations/NewShipmentDialog'
+import { RefDuplicadaAviso } from '@/components/operations/formAtoms'
 
 type ModalidadLcl = Extract<Modality, 'lcl' | 'air'>
 
@@ -502,11 +502,23 @@ function LclAirEditor({
           <Field label="Origen">
             <Input value={draft.origin} onChange={e => update({ origin: e.target.value })} placeholder="Shanghai, Ningbo, …" />
           </Field>
-          <Field label="MBL / HBL">
-            <Input value={draft.hbl || ''} onChange={e => update({ hbl: e.target.value })} />
-          </Field>
+          {/* Un solo campo para el BL: doc_number (lo que escribe el alta y lee
+              el armador). La columna hbl es vieja: se muestra solo si trae valor
+              y doc_number está vacío, para que el operativo la pase a BL. */}
           <Field label="BL">
             <Input value={draft.doc_number || ''} onChange={e => update({ doc_number: e.target.value })} placeholder="Nº de BL" />
+            {!!draft.hbl && !draft.doc_number && (
+              <div className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                <span>Viejo MBL/HBL: <strong className="text-foreground">{draft.hbl}</strong></span>
+                <button
+                  type="button"
+                  className="rounded border px-1.5 py-0.5 font-medium hover:bg-muted"
+                  onClick={() => update({ doc_number: draft.hbl })}
+                >
+                  Usar como BL
+                </button>
+              </div>
+            )}
           </Field>
           <Field label="Destino fiscal">
             <Input value={draft.fiscal} onChange={e => update({ fiscal: e.target.value })} placeholder="CACEC, RAFAELA, MARE…" />

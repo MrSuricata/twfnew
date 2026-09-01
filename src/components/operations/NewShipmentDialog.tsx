@@ -21,10 +21,10 @@ import { fmtDMY } from '@/lib/salidaCheck'
 import { sugerirEtaFiscal, nombreDia } from '@/lib/transitoFiscal'
 import { canonicalizeCliente, type CatalogClient } from '@/lib/clientCatalog'
 import {
-  camposDesdeDatosClave, buscarRefDuplicada, sufijosSugeridos, parseNum,
+  camposDesdeDatosClave, buscarRefDuplicada, parseNum,
   type Apilable, type LclDatosClaveState,
 } from '@/lib/lclAlta'
-import { Section, Field, ComboField, SelectField } from './formAtoms'
+import { Section, Field, ComboField, SelectField, RefDuplicadaAviso } from './formAtoms'
 import LclDatosClave from './LclDatosClave'
 
 // ── Alta de carga GUIADA ─────────────────────────────────────────────────
@@ -643,31 +643,5 @@ export default function NewShipmentDialog({
         </div>
       </DialogContent>
     </Dialog>
-  )
-}
-
-/**
- * Aviso de ref repetida (otra carga activa con la misma ref). Avisa y sugiere
- * el sufijo de carga partida; no bloquea — a veces es a propósito.
- * Compartido con el alta desde Camiones.
- */
-export function RefDuplicadaAviso({ ref_, cliente, onUsar }: { ref_: string; cliente?: string; onUsar: (v: string) => void }) {
-  const sufijos = sufijosSugeridos(ref_)
-  return (
-    <div className="text-[11px] text-[var(--warn-suave-fg)] bg-[var(--warn-suave-bg)] border border-[var(--warn-suave-bd)] rounded-lg px-2.5 py-1.5 space-y-1">
-      <p>
-        Ya existe una carga activa con la ref <strong>{ref_.trim()}</strong>{cliente ? ` (${cliente})` : ''}.
-        {sufijos.length > 0 && ' Si es una carga partida, usá un sufijo:'}
-      </p>
-      {sufijos.length > 0 && (
-        <div className="flex flex-wrap gap-1.5">
-          {sufijos.map(s => (
-            <button key={s} type="button" onClick={() => onUsar(s)} className="rounded border border-current/40 px-1.5 py-0.5 font-medium hover:bg-white/40">
-              Usar {s}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
   )
 }

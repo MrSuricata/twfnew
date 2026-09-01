@@ -49,6 +49,7 @@ import {
 } from '@/lib/truckUtils'
 import AvailableLoadsPanel from './AvailableLoadsPanel'
 import NewShipmentDialog from '@/components/operations/NewShipmentDialog'
+import type { CatalogClient } from '@/lib/clientCatalog'
 import { isSinTelex, mensajeConfirmarSinTelex } from '@/lib/telexCheck'
 import { exportTruckPdf } from '@/lib/truckExport'
 import { conflictoFechasConsolidado, type ConflictoFechas } from '@/lib/truckUtils'
@@ -79,10 +80,18 @@ interface TruckBuilderProps {
   onCreateShipment?: (row: DbShipment) => boolean | void
   /** PATCH de una carga — para alinear sus fechas con las del consolidado. */
   onPatchShipment?: (id: string, fields: Record<string, unknown>) => void
+  /** Catálogo de clientes para el alta desde el armador (mismo que Operaciones). */
+  clients?: CatalogClient[]
 }
 
 export default function TruckBuilder(props: TruckBuilderProps) {
-  const { truck, trucks, truckLoads, lclAir, dbShipments, shipments, onBack, onUpdateTrucks, onUpdateTruckLoads, onDeleteTruckLoad, onDeleteTruck, onCreateShipment, onPatchShipment } = props
+  const { truck, trucks, truckLoads, lclAir, dbShipments, shipments, onBack, onUpdateTrucks, onUpdateTruckLoads, onDeleteTruckLoad, onDeleteTruck, onCreateShipment, onPatchShipment, clients = [] } = props
+
+  // Fiscales ya usados en las cargas → combo del alta (igual que LclAirManager).
+  const knownFiscales = useMemo(
+    () => Array.from(new Set(dbShipments.map(s => String(s.fiscal || '').trim().toUpperCase()).filter(Boolean))),
+    [dbShipments],
+  )
 
   const isDraft = truck.draft
   // Lo que se VE y EDITA: el camión con el overlay aplicado.
@@ -847,6 +856,8 @@ export default function TruckBuilder(props: TruckBuilderProps) {
           onCreate={handleCreateFromBuilder}
           suggestedRef={suggestedRef}
           cargasExistentes={dbShipments}
+          clientes={clients}
+          knownFiscales={knownFiscales}
         />
       )}
 

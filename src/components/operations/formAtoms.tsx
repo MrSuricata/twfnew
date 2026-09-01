@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import { matchCanonico, upperCat } from '@/lib/fuzzyCatalog'
+import { sufijosSugeridos } from '@/lib/lclAlta'
 
 export function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -127,6 +128,33 @@ export function SelectField({
       >
         {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
+    </div>
+  )
+}
+
+/**
+ * Aviso de ref repetida (otra carga activa con la misma ref). Avisa y sugiere
+ * el sufijo de carga partida; no bloquea — a veces es a propósito.
+ * Lo usan el alta de Operaciones (NewShipmentDialog) y el de Camiones
+ * (LclAirManager); vive acá para que trucks no dependa de operations.
+ */
+export function RefDuplicadaAviso({ ref_, cliente, onUsar }: { ref_: string; cliente?: string; onUsar: (v: string) => void }) {
+  const sufijos = sufijosSugeridos(ref_)
+  return (
+    <div className="text-[11px] text-[var(--warn-suave-fg)] bg-[var(--warn-suave-bg)] border border-[var(--warn-suave-bd)] rounded-lg px-2.5 py-1.5 space-y-1">
+      <p>
+        Ya existe una carga activa con la ref <strong>{ref_.trim()}</strong>{cliente ? ` (${cliente})` : ''}.
+        {sufijos.length > 0 && ' Si es una carga partida, usá un sufijo:'}
+      </p>
+      {sufijos.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {sufijos.map(s => (
+            <button key={s} type="button" onClick={() => onUsar(s)} className="rounded border border-current/40 px-1.5 py-0.5 font-medium hover:bg-white/40">
+              Usar {s}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
