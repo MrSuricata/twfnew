@@ -1,6 +1,7 @@
 import { Truck } from '@phosphor-icons/react'
 import AgendaCalendar from '@/components/agenda/AgendaCalendar'
 import PartnerDashboardShell from '@/components/PartnerDashboardShell'
+import ProximasSinCoordinar from '@/components/ProximasSinCoordinar'
 import { ParsedShipment } from '@/lib/shipmentTypes'
 
 interface TransportDashboardProps {
@@ -18,7 +19,13 @@ export default function TransportDashboard({ shipments, transportName, userName,
       userName={userName}
       onLogout={onLogout}
     >
-      <AgendaCalendar shipments={shipments} transportFilter={transportName} partnerView={true} />
+      <div className="space-y-4">
+        {/* Primero lo que todavía no tiene fecha: es con lo que el transporte
+            reserva unidad y chofer. El calendario de abajo muestra lo ya
+            coordinado. */}
+        <ProximasSinCoordinar shipments={shipments} />
+        <AgendaCalendar shipments={shipments} transportFilter={transportName} partnerView={true} />
+      </div>
     </PartnerDashboardShell>
   )
 }
