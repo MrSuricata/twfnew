@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
-  candidatasLcl, sugerirCamiones, previsionPorFiscal, avisoAlPublicar,
+  candidatasLcl, candidatasSinDeposito, sugerirCamiones, previsionPorFiscal, avisoAlPublicar,
+  depositoSugerido, LLENO_PCT,
   type CargaLclFuente,
 } from './lclSugerencias'
 import { TRUCK_LIMITS } from './truckTypes'
@@ -61,8 +62,24 @@ describe('candidatasLcl — solo lo que puede subir a un camión hoy', () => {
       lcl({ ref: 'E7', fiscal: ' rafaela ', deposito: 'planir', marca_cliente: 'prioridad' }),
       lcl({ ref: 'E8', fiscal: '', deposito: null }),
     ], ctx())
-    expect(c[0]).toMatchObject({ fiscal: 'RAFAELA', deposito: 'PLANIR', prioridad: true })
-    expect(c[1]).toMatchObject({ fiscal: 'SIN FISCAL', deposito: 'SIN DEPÓSITO' })
+    expect(c[0]).toMatchObject({ fiscal: 'RAFAELA', deposito: 'PLANIR', prioridad: true, depositoSupuesto: false })
+    expect(c[1]).toMatchObject({ fiscal: 'SIN FISCAL', deposito: 'SIN DEPÓSITO', depositoSupuesto: false })
+  })
+
+  it('sin depósito pero con agente: entra con el depósito supuesto y marcado', () => {
+    const c = candidatasLcl([
+      lcl({ ref: 'CR', deposito: '', agente: 'CRAFT MULTIMODAL' }),
+      lcl({ ref: 'SA', deposito: null, agente: 'saco shipping' }),
+      lcl({ ref: 'NO', deposito: '', agente: 'OTRO' }),
+      lcl({ ref: 'REAL', deposito: 'GODILCO', agente: 'CRAFT' }),
+    ], ctx())
+    expect(c.map(x => [x.ref, x.deposito, x.depositoSupuesto, x.agenteDeposito])).toEqual([
+      ['CR', 'PLANIR', true, 'CRAFT'],
+      ['SA', 'TCP', true, 'SACO'],
+      ['NO', 'SIN DEPÓSITO', false, null],
+      ['REAL', 'GODILCO', false, null],
+    ])
+    expect(candidatasSinDeposito(c).map(x => x.ref)).toEqual(['NO'])
   })
 
   it('kg/m3/pkgs en texto se convierten; basura queda en 0', () => {
@@ -73,7 +90,60 @@ describe('candidatasLcl — solo lo que puede subir a un camión hoy', () => {
   })
 })
 
+describe('depositoSugerido — regla CRAFT→PLANIR, SACO→TCP', () => {
+  it('con depósito cargado devuelve el real y supuesto=false (el agente no manda)', () => {
+    expect(depositoSugerido('CRAFT', 'godilco')).toEqual({ deposito: 'GODILCO', supuesto: false })
+    expect(depositoSugerido('', ' TCP ')).toEqual({ deposito: 'TCP', supuesto: false })
+  })
+  it('sin depósito, el agente sugiere (contiene CRAFT / SACO, sin importar mayúsculas)', () => {
+    expect(depositoSugerido('Craft Multimodal', '')).toEqual({ deposito: 'PLANIR', supuesto: true, agente: 'CRAFT' })
+    expect(depositoSugerido('SACO SHIPPING', null)).toEqual({ deposito: 'TCP', supuesto: true, agente: 'SACO' })
+  })
+  it('sin depósito ni agente conocido → null', () => {
+    expect(depositoSugerido('', '')).toBeNull()
+    expect(depositoSugerido(null, undefined)).toBeNull()
+    expect(depositoSugerido('TRANS-CHINA', '')).toBeNull()
+  })
+})
+
 describe('sugerirCamiones — un camión por (fiscal, depósito), greedy por urgencia', () => {
+  it('las sin depósito ni agente no entran a ninguna propuesta', () => {
+    const cands = candidatasLcl([
+      lcl({ ref: 'OK', deposito: 'GODILCO' }),
+      lcl({ ref: 'HUERFANA', deposito: '', agente: '' }),
+    ], ctx())
+    const p = sugerirCamiones(cands, { limites: STD })
+    expect(p).toHaveLength(1)
+    expect(p[0].cargas.map(c => c.ref)).toEqual(['OK'])
+    expect(p[0].depositoSupuesto).toBe(false)
+  })
+
+  it('la carga con depósito supuesto entra a la propuesta de ese depósito y el motivo lo dice', () => {
+    const cands = candidatasLcl([
+      lcl({ ref: 'P1', deposito: 'PLANIR' }),
+      lcl({ ref: 'C1', deposito: '', agente: 'CRAFT' }),
+      lcl({ ref: 'G1', deposito: 'GODILCO' }),
+    ], ctx())
+    const p = sugerirCamiones(cands, { limites: STD }).filter(x => !x.alternativa)
+    const planir = p.find(x => x.depositos[0] === 'PLANIR')!
+    expect(planir.cargas.map(c => c.ref).sort()).toEqual(['C1', 'P1'])
+    expect(planir.depositoSupuesto).toBe(true)
+    expect(planir.motivos).toContain('Depósito supuesto por agente CRAFT (sin cargar): C1')
+    const godilco = p.find(x => x.depositos[0] === 'GODILCO')!
+    expect(godilco.depositoSupuesto).toBe(false)
+  })
+
+  it('no propone la parada extra si el camión base ya está al 80 %', () => {
+    const cands = candidatasLcl([
+      lcl({ ref: 'G1', deposito: 'GODILCO', m3: 51, kg: 5000 }),   // 82 %
+      lcl({ ref: 'P1', deposito: 'PLANIR', m3: 10, kg: 1000 }),
+    ], ctx())
+    const p = sugerirCamiones(cands, { limites: STD })
+    const base = p.find(x => !x.alternativa && x.depositos[0] === 'GODILCO')!
+    expect(base.ocupacionM3).toBeGreaterThanOrEqual(LLENO_PCT)
+    expect(p.some(x => x.alternativa)).toBe(false)
+  })
+
   it('agrupa por fiscal y dentro por depósito', () => {
     const cands = candidatasLcl([
       lcl({ ref: 'R1', fiscal: 'RAFAELA', deposito: 'GODILCO' }),
@@ -206,13 +276,13 @@ describe('sugerirCamiones — un camión por (fiscal, depósito), greedy por urg
 })
 
 describe('previsionPorFiscal — lo que hay hoy y lo que llega, por depósito', () => {
-  it('arma la tabla RAFAELA: stock hoy por depósito y llegadas por día (tengan stock o no)', () => {
+  it('arma la tabla RAFAELA: stock hoy por depósito y llegadas por día (lo que no tiene stock se reparte por ETA)', () => {
     const rows = [
       lcl({ ref: 'G1', deposito: 'GODILCO', m3: 22 }),
       lcl({ ref: 'P1', deposito: 'PLANIR', m3: 6 }),
       lcl({ ref: 'L1', deposito: 'GODILCO', m3: 18, eta: '2026-09-03', stock: '', desconsol_date: '' }),
       lcl({ ref: 'L2', deposito: 'PLANIR', m3: 12, eta: '2026-09-04', stock: '', desconsol_date: '' }),
-      lcl({ ref: 'L3', deposito: 'GODILCO', m3: 9, eta: '2026-09-05', stock: '9999', desconsol_date: '' }),
+      lcl({ ref: 'L3', deposito: 'GODILCO', m3: 9, eta: '2026-09-05', stock: '', desconsol_date: '' }),
       lcl({ ref: 'LEJOS', deposito: 'GODILCO', m3: 50, eta: '2026-09-20', stock: '' }),
       lcl({ ref: 'OTRO', fiscal: 'CACEC', m3: 7 }),
     ]
@@ -242,6 +312,20 @@ describe('previsionPorFiscal — lo que hay hoy y lo que llega, por depósito', 
     const rows = [lcl({ ref: 'EN', m3: 11 }), lcl({ ref: 'FUERA', m3: 4 })]
     const [raf] = previsionPorFiscal(rows, { hoy: HOY, dias: 7, refsEnCamion: new Set(['EN']) })
     expect(raf.conStock.total).toBe(4)
+  })
+
+  it('con stock y ETA futura es "con stock" (lo mismo que ve sugerirCamiones), no una llegada', () => {
+    const rows = [lcl({ ref: 'RARA', m3: 9, eta: '2026-09-05', stock: '9999', desconsol_date: '' })]
+    const [raf] = previsionPorFiscal(rows, { hoy: HOY, dias: 7 })
+    expect(raf.conStock.total).toBe(9)
+    expect(raf.totalVentana).toBe(0)
+    expect(candidatasLcl(rows, ctx()).map(c => c.ref)).toEqual(['RARA'])
+  })
+
+  it('el depósito supuesto por agente también agrupa en la previsión', () => {
+    const rows = [lcl({ ref: 'C', m3: 5, deposito: '', agente: 'CRAFT' })]
+    const [raf] = previsionPorFiscal(rows, { hoy: HOY, dias: 7 })
+    expect(raf.conStock.porDeposito).toEqual({ PLANIR: 5 })
   })
 
   it('sin LCL no hay filas', () => {
@@ -280,6 +364,18 @@ describe('avisoAlPublicar — avisa, no bloquea', () => {
       lcl({ ref: 'L1', m3: 18, eta: '2026-09-02', stock: '' }),
     ]
     expect(avisoAlPublicar(camion({ m3: 50 }), rows, HOY)).toBeNull()
+  })
+
+  it('dos fiscales y dos depósitos en el camión: el cruce (fiscal de una, depósito de otra) no cuenta', () => {
+    const camion = [
+      lcl({ ref: 'A', fiscal: 'RAFAELA', deposito: 'GODILCO', m3: 10 }),
+      lcl({ ref: 'B', fiscal: 'CACEC', deposito: 'PLANIR', m3: 10 }),
+    ]
+    const cruzada = lcl({ ref: 'X', fiscal: 'RAFAELA', deposito: 'PLANIR', m3: 8, eta: '2026-09-03', stock: '', desconsol_date: '' })
+    const mismaPareja = lcl({ ref: 'Y', fiscal: 'CACEC', deposito: 'PLANIR', m3: 8, eta: '2026-09-03', stock: '', desconsol_date: '' })
+    const cam = { code: 'C1', refs: ['A', 'B'], kg: 2000, m3: 20, limites: STD, departureDate: null }
+    expect(avisoAlPublicar(cam, [...camion, cruzada], HOY)).toBeNull()
+    expect(avisoAlPublicar(cam, [...camion, mismaPareja], HOY)?.tipo).toBe('esperar')
   })
 
   it('lo que llega es de otro depósito o de otro fiscal → sin aviso', () => {

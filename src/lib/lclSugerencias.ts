@@ -2,10 +2,18 @@
  * Sugerencias para armar camión con LCL (Brian 31/08/2026: "que recomiende
  * cargas LCL para armar camión").
  *
- * El eje es el FISCAL argentino: allá descarga el camión. El depósito uruguayo
- * va adentro, porque el camión carga en uno solo normalmente; sumar un segundo
- * depósito "se evita pero se hace si conviene" — acá se propone marcando que
- * es una parada más.
+ * La unidad de una propuesta es (FISCAL argentino, DEPÓSITO uruguayo): allá
+ * descarga el camión, acá carga. Brian (01/09): "el depósito de
+ * desconsolidación normalmente va a ser el depósito del cual salga el camión".
+ * Sumar un segundo depósito "se evita pero se hace si conviene" — se propone
+ * marcando que es una parada más.
+ *
+ * Depósito sin cargar: "normalmente las que desconsolidan en PLANIR vienen con
+ * el agente CRAFT y las de TCP con el agente SACO". Es un normalmente, no una
+ * verdad: la carga entra a la propuesta del depósito SUPUESTO por el agente,
+ * marcada como tal, y en HOY se ofrece con un click — nunca se escribe sola.
+ * Sin agente ni depósito, la carga no se propone: va a la lista "sin
+ * depósito, completar antes de armar".
  *
  * Los tres relojes que apuran una carga (spec consolidados LCL):
  *   - almacenaje: 30 días desde la desconsolidación (lclEstados.almacenaje)
@@ -34,6 +42,8 @@ export interface CargaLclFuente {
   archived?: boolean | null
   fiscal?: string | null
   deposito?: string | null
+  /** Agente de origen (CRAFT, SACO…): sugiere el depósito cuando falta. */
+  agente?: string | null
   kg?: number | string | null
   m3?: number | string | null
   pkgs?: number | string | null
@@ -116,14 +126,50 @@ const textoAlmacenaje = (r: string, a: Almacenaje): string => {
   return `${r}: almacenaje vence en ${a.diasRestantes} días`
 }
 
+// ── Depósito sugerido por agente ───────────────────────────────────────
+
+/** Regla de Brian (01/09/2026): agente → depósito de desconsolidación. Es
+ *  "normalmente": se sugiere, nunca se escribe sin un click. */
+export const DEPOSITO_POR_AGENTE: readonly { agente: string; deposito: string }[] = [
+  { agente: 'CRAFT', deposito: 'PLANIR' },
+  { agente: 'SACO', deposito: 'TCP' },
+]
+
+export interface DepositoSugerido {
+  deposito: string
+  /** true = no está cargado, se supone por el agente. */
+  supuesto: boolean
+  /** El agente que lo sugiere (solo cuando supuesto). */
+  agente?: string
+}
+
+/**
+ * Depósito a usar para agrupar/proponer: el real si está cargado (supuesto
+ * false); si no, el que sugiere el agente (supuesto true); null si no hay
+ * ni uno ni otro.
+ */
+export function depositoSugerido(agente: unknown, deposito: unknown): DepositoSugerido | null {
+  const real = norm(deposito)
+  if (real) return { deposito: real, supuesto: false }
+  const ag = norm(agente)
+  if (!ag) return null
+  const regla = DEPOSITO_POR_AGENTE.find(r => ag.includes(r.agente))
+  return regla ? { deposito: regla.deposito, supuesto: true, agente: regla.agente } : null
+}
+
 // ── Candidatas ─────────────────────────────────────────────────────────
 
-export interface Candidata {
+export interface Candidata<T extends CargaLclFuente = CargaLclFuente> {
   id?: string
   ref: string
   cliente: string
   fiscal: string
+  /** Depósito real o supuesto por agente; SIN_DEPOSITO si no hay ninguno. */
   deposito: string
+  /** true = el depósito no está cargado y se supone por el agente. */
+  depositoSupuesto: boolean
+  /** Agente que justifica el supuesto (CRAFT / SACO). */
+  agenteDeposito: string | null
   kg: number
   m3: number
   pkgs: number
@@ -135,7 +181,7 @@ export interface Candidata {
   diasEsperando: number | null
   almacenaje: Almacenaje | null
   /** La fila original, para que la UI la suba al camión con el flujo existente. */
-  fuente: CargaLclFuente
+  fuente: T
 }
 
 export interface ContextoCandidatas {
@@ -144,14 +190,17 @@ export interface ContextoCandidatas {
   refsEnCamion: Set<string>
 }
 
-const aCandidata = (s: CargaLclFuente, hoy: string): Candidata => {
+const aCandidata = <T extends CargaLclFuente>(s: T, hoy: string): Candidata<T> => {
   const base = { ref: s.ref, eta: s.eta, stock: s.stock, desconsol: s.desconsol_date }
+  const dep = depositoSugerido(s.agente, s.deposito)
   return {
     id: s.id,
     ref: String(s.ref || '').trim(),
     cliente: String(s.cliente || '').trim(),
     fiscal: norm(s.fiscal) || SIN_FISCAL,
-    deposito: norm(s.deposito) || SIN_DEPOSITO,
+    deposito: dep?.deposito ?? SIN_DEPOSITO,
+    depositoSupuesto: !!dep?.supuesto,
+    agenteDeposito: dep?.agente ?? null,
     kg: aNumero(s.kg),
     m3: aNumero(s.m3),
     pkgs: aNumero(s.pkgs),
@@ -170,8 +219,8 @@ const aCandidata = (s: CargaLclFuente, hoy: string): Candidata => {
  * LCL que HOY pueden subir a un camión: activas, con stock, sin stand by del
  * cliente y fuera de todo camión.
  */
-export function candidatasLcl(shipments: CargaLclFuente[], ctx: ContextoCandidatas): Candidata[] {
-  const out: Candidata[] = []
+export function candidatasLcl<T extends CargaLclFuente>(shipments: T[], ctx: ContextoCandidatas): Candidata<T>[] {
+  const out: Candidata<T>[] = []
   for (const s of shipments) {
     if (!esLcl(s)) continue
     if (norm(s.marca_cliente) === 'STAND_BY') continue
@@ -185,6 +234,12 @@ export function candidatasLcl(shipments: CargaLclFuente[], ctx: ContextoCandidat
     out.push(aCandidata(s, ctx.hoy))
   }
   return out
+}
+
+/** Las candidatas que no tienen depósito ni agente que lo sugiera: no entran
+ *  a ninguna propuesta hasta que alguien complete el depósito. */
+export function candidatasSinDeposito<T extends CargaLclFuente>(candidatas: Candidata<T>[]): Candidata<T>[] {
+  return candidatas.filter(c => c.deposito === SIN_DEPOSITO)
 }
 
 // ── Orden de urgencia ──────────────────────────────────────────────────
@@ -227,6 +282,8 @@ export interface Propuesta {
   sugerencia: Sugerencia
   /** true = la misma propuesta sumando otro depósito (una parada más). */
   alternativa: boolean
+  /** Alguna carga entró con el depósito SUPUESTO por su agente (no cargado). */
+  depositoSupuesto: boolean
   /** Refs del mismo (fiscal, depósito) que no entraron por kg/m³. */
   noEntran: string[]
 }
@@ -269,6 +326,17 @@ function motivosDe(cargas: Candidata[], lim: Limites): { motivos: string[]; urge
   const pctKg = lim.kgMax > 0 ? kg / lim.kgMax : 0
   if (pctM3 >= LLENO_PCT) motivos.push(`Camión al ${Math.round(pctM3 * 100)} % en volumen`)
   else if (pctKg >= LLENO_PCT) motivos.push(`Camión al ${Math.round(pctKg * 100)} % en peso`)
+  const supuestas = cargas.filter(c => c.depositoSupuesto)
+  if (supuestas.length) {
+    const porAgente = new Map<string, string[]>()
+    for (const c of supuestas) {
+      const ag = c.agenteDeposito || 'agente'
+      porAgente.set(ag, [...(porAgente.get(ag) ?? []), c.ref])
+    }
+    for (const [ag, refs] of porAgente) {
+      motivos.push(`Depósito supuesto por agente ${ag} (sin cargar): ${refs.join(', ')}`)
+    }
+  }
   const especiales: string[] = []
   const imo = cargas.filter(c => c.imo).length
   const noAp = cargas.filter(c => c.no_apilable).length
@@ -305,6 +373,7 @@ function armar(fiscal: string, depositos: string[], ll: Llenado, lim: Limites, a
     motivos: [...motivosExtra, ...motivos],
     sugerencia: sugerenciaDe(urgente, ocupacionM3, ocupacionKg),
     alternativa,
+    depositoSupuesto: ll.cargas.some(c => c.depositoSupuesto),
     noEntran: ll.noEntran,
   }
 }
@@ -336,6 +405,8 @@ export function sugerirCamiones(candidatas: Candidata[], opts: OpcionesSugerir):
   const lim = opts.limites
   const porFiscal = new Map<string, Map<string, Candidata[]>>()
   for (const c of candidatas) {
+    // Sin depósito (ni real ni supuesto) no hay de dónde cargar: no se propone.
+    if (c.deposito === SIN_DEPOSITO) continue
     const deps = porFiscal.get(c.fiscal) ?? new Map<string, Candidata[]>()
     deps.set(c.deposito, [...(deps.get(c.deposito) ?? []), c])
     porFiscal.set(c.fiscal, deps)
@@ -356,6 +427,9 @@ export function sugerirCamiones(candidatas: Candidata[], opts: OpcionesSugerir):
     // ¿Vale la pena la parada extra? Se prueba sobre el camión más lleno del fiscal.
     if (delFiscal.length < 2) continue
     const base = [...delFiscal].sort((a, b) => b.m3 - a.m3)[0]
+    // Si el camión base ya "está" (≥ LLENO_PCT), la sugerencia es salir: no se
+    // propone una parada más para pasar de 82 % a 97 %.
+    if (base.ocupacionM3 >= LLENO_PCT) continue
     const otros = delFiscal.filter(p => p !== base).sort((a, b) => b.m3 - a.m3)
     let ll: Llenado = { cargas: base.cargas, kg: base.kg, m3: base.m3, noEntran: [] }
     const sumados: string[] = []
@@ -446,10 +520,13 @@ export function previsionPorFiscal(shipments: CargaLclFuente[], opts: OpcionesPr
     const standBy = norm(s.marca_cliente) === 'STAND_BY'
     const eta = String(s.eta || '').slice(0, 10)
     // Primero se decide a qué columna va; la fila del fiscal se crea solo si aporta algo.
-    // La ETA futura manda sobre el stock: "lo que llega" es previsión, tenga stock o no.
+    // El ESTADO manda: si tiene stock es disponible hoy (aunque la ETA cargada
+    // sea futura — dato viejo o stock anticipado); es lo mismo que ve
+    // sugerirCamiones, así la misma carga no aparece en una propuesta y a la
+    // vez como "llega el jueves". Solo lo que no tiene stock se reparte por ETA.
     let destino: 'conStock' | 'sinStock' | 'llegada' | null = null
-    if (eta > opts.hoy) { if (eta <= ultimo) destino = 'llegada' }
-    else if (estado === 'con_stock' && !standBy) destino = 'conStock'
+    if (estado === 'con_stock') { if (!standBy) destino = 'conStock' }
+    else if (eta > opts.hoy) { if (eta <= ultimo) destino = 'llegada' }
     else if (estado === 'aguarda_stock') destino = 'sinStock'
     if (!destino) continue
     const f = fila(c.fiscal)
@@ -502,6 +579,10 @@ export function avisoAlPublicar(camion: CamionParaAviso, shipments: CargaLclFuen
 
   const fiscales = [...new Set(enCamion.map(c => c.fiscal))]
   const depositos = [...new Set(enCamion.map(c => c.deposito))]
+  // Pares REALES (fiscal, depósito) de las cargas del camión: con dos fiscales
+  // y dos depósitos, el producto cruzado (fiscal de una con depósito de otra)
+  // no es "mismo fiscal y mismo depósito".
+  const pares = new Set(enCamion.map(c => `${c.fiscal}|${c.deposito}`))
   const ocM3 = camion.limites.m3Max > 0 ? camion.m3 / camion.limites.m3Max : 1
   if (ocM3 >= LLENO_PCT) return null
 
@@ -516,7 +597,7 @@ export function avisoAlPublicar(camion: CamionParaAviso, shipments: CargaLclFuen
     if (!r || refsCamion.has(r)) continue
     if (norm(s.marca_cliente) === 'STAND_BY') continue
     const c = aCandidata(s, hoy)
-    if (!fiscales.includes(c.fiscal) || !depositos.includes(c.deposito)) continue
+    if (!pares.has(`${c.fiscal}|${c.deposito}`)) continue
     const estado = estadoLcl({ ref: s.ref, eta: s.eta, stock: s.stock, desconsol: s.desconsol_date }, hoy)
     if (estado === 'con_stock') { disponibles.push(c); continue }
     const eta = String(s.eta || '').slice(0, 10)

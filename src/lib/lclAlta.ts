@@ -1,5 +1,5 @@
 /**
- * Alta de una LCL: los datos que importan (Brian, 01/09/2026).
+ * Alta y edición de una LCL: los datos que importan (Brian, 01/09/2026).
  *
  * "Los datos más importantes para UNA LCL: REFERENCIA, CLIENTE, EL FISCAL, BL,
  * BULTOS, KILOS, METROS CUBICOS, NUMERO STOCK, SI TIENE MADERA O NO, SI ES
@@ -8,9 +8,11 @@
  * Este módulo es la parte pura: el mismo formulario se abre desde Operaciones
  * y desde Camiones, y los dos tienen que guardar exactamente lo mismo. Acá vive
  * la traducción del formulario a columnas de `shipments` y la validación de
- * ref repetida. Sin React.
+ * ref repetida. La LISTA de datos (orden, etiquetas, qué se reclama) vive en
+ * lib/datosClave — acá solo se traduce. Sin React.
  */
 import type { DbShipment } from '@/lib/operationsTypes'
+import { DATOS_CLAVE } from '@/lib/datosClave'
 
 /** Apilable se pregunta en positivo ("¿es apilable?") pero la columna es
  *  `no_apilable`. 'sin_dato' = nadie lo confirmó → no se marca nada. */
@@ -32,6 +34,10 @@ export interface LclDatosClaveState {
   apilable: Apilable
   imo: boolean
   entregaPlanta: boolean
+  /** Llegada a Montevideo (columna eta). */
+  eta: string
+  /** Depósito de desconsolidación (columna deposito). */
+  deposito: string
 }
 
 /** Fiscales argentinos frecuentes (medidos en la base el 31/08/2026). Semilla
@@ -41,26 +47,30 @@ export const FISCALES_BASE = ['RAFAELA', 'MARE', 'CACEC', 'DFC', 'ZOFRACOR', 'CL
 export const LCL_DATOS_CLAVE_VACIOS: LclDatosClaveState = {
   ref: '', cliente: '', fiscal: '', docNumber: '', pkgs: '', kg: '', m3: '',
   stock: '', wood: null, apilable: 'sin_dato', imo: false, entregaPlanta: false,
+  eta: '', deposito: '',
 }
 
-/** Etiquetas en el orden que pidió Brian — el formulario las recorre así. */
-export const LCL_DATOS_CLAVE_ORDEN: { key: keyof LclDatosClaveState; label: string }[] = [
-  { key: 'ref', label: 'Ref' },
-  { key: 'cliente', label: 'Cliente' },
-  { key: 'fiscal', label: 'Fiscal' },
-  { key: 'docNumber', label: 'BL' },
-  { key: 'pkgs', label: 'Bultos' },
-  { key: 'kg', label: 'Kilos' },
-  { key: 'm3', label: 'M³' },
-  { key: 'stock', label: 'Nº stock' },
-  { key: 'wood', label: 'Madera' },
-  { key: 'apilable', label: 'Apilable' },
-  { key: 'imo', label: 'IMO' },
-  { key: 'entregaPlanta', label: 'Entrega en planta' },
-]
+/** Columna de `shipments` → clave del formulario (solo cambian las que no
+ *  se llaman igual). */
+export const FORM_KEY_DE_COLUMNA: Record<string, keyof LclDatosClaveState> = {
+  ref: 'ref', cliente: 'cliente', fiscal: 'fiscal', doc_number: 'docNumber',
+  pkgs: 'pkgs', kg: 'kg', m3: 'm3', stock: 'stock', wood: 'wood',
+  no_apilable: 'apilable', imo: 'imo', entrega_planta: 'entregaPlanta',
+  eta: 'eta', deposito: 'deposito',
+}
 
+/** Etiquetas en el orden que pidió Brian — DERIVADAS de la lista única
+ *  (lib/datosClave): el formulario las recorre así. */
+export const LCL_DATOS_CLAVE_ORDEN: { key: keyof LclDatosClaveState; label: string; col: string }[] =
+  DATOS_CLAVE.lcl.map(d => ({ key: FORM_KEY_DE_COLUMNA[d.key], label: d.label, col: d.key }))
+
+/** "1250,5" → 1250.5 · "1.250,5" → 1250.5 (si hay coma, el punto es de
+ *  miles) · "3.2" → 3.2 · basura → 0. */
 export const parseNum = (s: string): number => {
-  const n = parseFloat(String(s ?? '').replace(',', '.'))
+  const t = String(s ?? '').trim()
+  if (!t) return 0
+  const limpio = t.includes(',') ? t.replace(/\./g, '').replace(',', '.') : t
+  const n = parseFloat(limpio)
   return isFinite(n) ? n : 0
 }
 
@@ -97,6 +107,29 @@ export function camposDesdeDatosClave(
     no_apilable: noApilableDesde(s.apilable),
     imo: s.imo,
     entrega_planta: s.entregaPlanta,
+    eta: s.eta.trim(),
+    deposito: s.deposito.trim().toUpperCase(),
+  }
+}
+
+/** Inverso: una fila existente → estado del formulario (para editarla). */
+export function datosClaveDesdeFila(row: Partial<DbShipment>): LclDatosClaveState {
+  const num = (v: unknown): string => (v === null || v === undefined || v === '' || Number(v) === 0) ? '' : String(v)
+  return {
+    ref: String(row.ref ?? ''),
+    cliente: String(row.cliente ?? ''),
+    fiscal: String(row.fiscal ?? ''),
+    docNumber: String(row.doc_number ?? ''),
+    pkgs: num(row.pkgs),
+    kg: num(row.kg),
+    m3: num(row.m3),
+    stock: String(row.stock ?? ''),
+    wood: row.wood === true ? true : row.wood === false ? false : null,
+    apilable: apilableDesde(row.no_apilable),
+    imo: !!row.imo,
+    entregaPlanta: !!row.entrega_planta,
+    eta: String(row.eta ?? '').slice(0, 10),
+    deposito: String(row.deposito ?? ''),
   }
 }
 

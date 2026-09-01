@@ -8,6 +8,7 @@ import { hashPassword } from '../_lib/password.js'
 import { matchesClientePattern } from '../_lib/csvParser.js'
 import { buildClientDigest } from '../_lib/clientDigest.js'
 import { CLIENT_SHIPMENT_COLS } from '../_lib/clientShipments.js'
+import { SHIPMENT_COLS } from '../_lib/shipmentCols.js'
 import {
   validate,
   QuoteRowSchema,
@@ -2138,27 +2139,8 @@ async function handleOperators(req: VercelRequest, res: VercelResponse, db: any)
 // POST   /api/data/shipments            → upsert filas completas
 // DELETE /api/data/shipments?id=xxx     → borrar
 
-const SHIPMENT_COLS = new Set([
-  'ref','client_ref','mode','agente','cliente','shipper','incoterm','pkgs','kg','m3',
-  'doc_number','hbl','origin','origin_country','etd','eta','seguimiento','contenedor','buque','linea','transbordo',
-  'seguro','certi','telex','impresa','despacho','deposito','fecha_consol','transporte','camion','dev_fecha',
-  'dest_country','discharge_port','dest_port','fiscal','wood','no_apilable','oog','imo','tipo','ftl_ltl','costo_extra','observacion','status',
-  'operator_id','notes','archived','source','desconsol_date','entrega_planta',
-  'libre','salida','eta_fiscal','operativa','descarga','dev','terminal','n_cntr','origin_ref',
-  // LCL: stock del depósito (su fecha es desconsol_date, porque desconsolidar
-  // ES entregar el stock) + marca del cliente (stand_by = no la saques todavía ·
-  // prioridad = sacala ya) con su motivo.
-  'stock','marca_cliente','marca_motivo',
-  // Pagos: monto_* = ESTIMADO por rubro (null=sin datos · >0=previsto · 0=pagado
-  // solo como convención legacy de la SG) + forma de pago override + fecha de
-  // pago + pago_*_monto = lo que FINALMENTE se pagó (Brian 26/08). Los
-  // pago_*_by NO están acá a propósito: los estampa el server desde el token
-  // (el cliente no puede falsificar quién pagó).
-  'monto_flete','monto_locales','monto_terminal','monto_devolucion','forma_pago',
-  'pago_flete_at','pago_locales_at','pago_terminal_at','pago_devolucion_at',
-  'pago_flete_monto','pago_locales_monto','pago_terminal_monto','pago_devolucion_monto',
-  'operativas',
-])
+// Whitelist de columnas: vive en api/_lib/shipmentCols.ts para que el
+// frontend la testee (src/lib/datosClave.test.ts).
 
 // Scoping por cliente para usuarios level=admin acotados: solo ven las cargas cuyo
 // CLIENTE matchea su patrón (clientePattern del JWT). Owner / tokens sin patrón → ven

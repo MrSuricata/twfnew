@@ -21,3 +21,19 @@ export function fmtHorasAtraso(horas: number): string {
   if (horas < 48) return `+${Math.round(horas)}h`
   return `+${Math.round(horas / 24)}d`
 }
+
+/** Date → YYYY-MM-DD en hora LOCAL (misma regla que truckUtils.toIsoDate). */
+export function fechaISOLocal(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
+/**
+ * HOY como YYYY-MM-DD en hora LOCAL. Es el único helper para "la fecha de hoy"
+ * en pantallas y estampas (desconsol_date, filtros de bandeja): con
+ * `new Date().toISOString()` (UTC) después de las 21:00 en Uruguay ya era
+ * mañana y la bandeja de stock estampaba una fecha que no había llegado.
+ */
+export function hoyISO(): string {
+  return fechaISOLocal(new Date())
+}

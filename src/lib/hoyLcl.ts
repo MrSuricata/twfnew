@@ -14,6 +14,9 @@ import type { DbShipment } from './operationsTypes'
 import type { Truck, TruckLoad, TruckStatus, TruckTotals } from './truckTypes'
 import { computeTruckTotals, deriveTruckDisplayInfo, effectiveTruckLoads } from './truckTypes'
 import { estadoLcl, almacenaje, diasEsperando, type Almacenaje } from './lclEstados'
+import { depositoSugerido, type DepositoSugerido } from './lclSugerencias'
+import { reclamables, datosQueFaltan, type DatoClave } from './datosClave'
+import { parseNum } from './lclAlta'
 
 /** Lo mínimo de una fila `shipments` que estas derivaciones necesitan. Es un
  *  subconjunto de DbShipment para que los tests no tengan que armar la fila
@@ -22,7 +25,7 @@ export type LclRow = Pick<DbShipment, 'id' | 'ref' | 'mode' | 'archived'> &
   Partial<Pick<DbShipment,
     'cliente' | 'doc_number' | 'hbl' | 'pkgs' | 'kg' | 'm3' | 'stock' | 'desconsol_date' |
     'fiscal' | 'deposito' | 'eta' | 'marca_cliente' | 'marca_motivo' | 'wood' |
-    'entrega_planta' | 'imo' | 'no_apilable'
+    'entrega_planta' | 'imo' | 'no_apilable' | 'agente' | 'discharge_port'
   >>
 
 const REF = (r: unknown): string => String(r ?? '').trim().toUpperCase()
@@ -78,9 +81,18 @@ export function refsPorCamion(trucks: Truck[], loads: TruckLoad[]): { enCamion: 
 
 // ── Universo ────────────────────────────────────────────────────────────
 
-/** LCL vivas para Montevideo: no archivadas y cuyo camión no salió todavía. */
+/** Puerto de descarga que NO es Montevideo (cargado y sin MONTEVIDEO/MVD). */
+const otroPuerto = (discharge: unknown): boolean => {
+  const p = txt(discharge).toUpperCase()
+  return !!p && !/MONTEVIDEO|MVD/.test(p)
+}
+
+/** LCL vivas para Montevideo: no archivadas y cuyo camión no salió todavía.
+ *  Hoy todas las LCL vienen por MVD (discharge_port vacío o MONTEVIDEO); si
+ *  algún día llega una a otro puerto (Buenos Aires), queda afuera de este HOY
+ *  solo cuando el puerto está cargado y no es Montevideo. */
 export function lclActivas<T extends LclRow>(rows: T[], refsDespachadas: Set<string>): T[] {
-  return rows.filter(s => s.mode === 'lcl' && !s.archived && !refsDespachadas.has(REF(s.ref)))
+  return rows.filter(s => s.mode === 'lcl' && !s.archived && !refsDespachadas.has(REF(s.ref)) && !otroPuerto(s.discharge_port))
 }
 
 /** El BL puede venir en `doc_number` (alta guiada) o en `hbl` (registro LCL). */
@@ -167,11 +179,15 @@ export interface ListaItem {
   diasEsperando: number | null
   almacenaje: Almacenaje | null
   marca: 'stand_by' | 'prioridad' | null
+  /** El depósito de la fila no está cargado: se supone por el agente (CRAFT→PLANIR, SACO→TCP). */
+  depositoSupuesto: boolean
 }
 
 export interface GrupoDeposito {
-  /** null = sin depósito cargado. */
+  /** null = sin depósito cargado ni agente que lo sugiera. */
   deposito: string | null
+  /** Alguna carga del grupo entró con el depósito supuesto por agente. */
+  supuesto: boolean
   items: ListaItem[]
   /** Totales de las candidatas (sin las stand by). */
   m3: number
@@ -208,12 +224,16 @@ export function listasParaCamion(rows: LclRow[], hoyISO: string, refsEnCamion: S
   const porFiscal = new Map<string | null, Map<string | null, ListaItem[]>>()
   for (const row of candidatas) {
     const fiscal = txt(row.fiscal).toUpperCase() || null
-    const deposito = txt(row.deposito).toUpperCase() || null
+    // Mismo criterio que las sugerencias de camión: depósito real, o el que
+    // sugiere el agente (marcado), o "sin depósito".
+    const dep = depositoSugerido(row.agente, row.deposito)
+    const deposito = dep?.deposito ?? null
     const item: ListaItem = {
       row,
       diasEsperando: diasEsperando({ ref: row.ref, stock: row.stock, desconsol: row.desconsol_date }, hoyISO),
       almacenaje: almacenaje({ ref: row.ref, desconsol: row.desconsol_date }, hoyISO),
       marca: row.marca_cliente ?? null,
+      depositoSupuesto: !!dep?.supuesto,
     }
     const deps = porFiscal.get(fiscal) || new Map<string | null, ListaItem[]>()
     const arr = deps.get(deposito) || []
@@ -230,6 +250,7 @@ export function listasParaCamion(rows: LclRow[], hoyISO: string, refsEnCamion: S
       const cand = items.filter(i => i.marca !== 'stand_by')
       depositos.push({
         deposito,
+        supuesto: items.some(i => i.depositoSupuesto),
         items,
         m3: cand.reduce((s, i) => s + num(i.row.m3), 0),
         kg: cand.reduce((s, i) => s + num(i.row.kg), 0),
@@ -294,21 +315,28 @@ export function camionesLcl(trucks: Truck[], loads: TruckLoad[], hoy: Date): Cam
 }
 
 // ── Card 5: datos faltantes ─────────────────────────────────────────────
+//
+// QUÉ se reclama lo dice la lista única lib/datosClave (DATOS_CLAVE.lcl con
+// reclamable=true): bultos, kilos, m³, fiscal, madera sin confirmar, llegada
+// a Montevideo y depósito de desconsolidación. IMO y entrega en planta son
+// tildes (false es un valor) — se muestran para editarlas, no se reclaman.
 
-export type CampoFaltanteLcl = 'cliente' | 'eta' | 'fiscal' | 'bl' | 'kg' | 'm3'
+/** Columnas reclamables de una LCL (subconjunto de DATOS_CLAVE.lcl). */
+export type CampoFaltanteLcl = 'fiscal' | 'pkgs' | 'kg' | 'm3' | 'wood' | 'eta' | 'deposito'
 
+/** Los datos que se reclaman, en el orden de la lista única. */
+export const CAMPOS_FALTANTES_LCL: DatoClave[] = reclamables('lcl')
+
+/** Etiqueta corta "Sin …" para el título/contadores. */
 export const CAMPO_FALTANTE_LABEL: Record<CampoFaltanteLcl, string> = {
-  cliente: 'Sin cliente',
-  eta: 'Sin ETA a Montevideo',
   fiscal: 'Sin destino fiscal',
-  bl: 'Sin BL',
+  pkgs: 'Sin bultos',
   kg: 'Sin kilos',
   m3: 'Sin m³',
+  wood: 'Madera a confirmar',
+  eta: 'Sin llegada a Montevideo',
+  deposito: 'Sin depósito de desconsolidación',
 }
-
-/** Orden en que se muestran: primero lo que impide identificar la carga,
- *  después lo que impide armar el camión. */
-export const CAMPOS_FALTANTES_LCL: CampoFaltanteLcl[] = ['cliente', 'eta', 'fiscal', 'bl', 'kg', 'm3']
 
 export interface FaltantesPorCampo {
   campo: CampoFaltanteLcl
@@ -318,45 +346,117 @@ export interface FaltantesPorCampo {
 
 export interface FaltantesPorCarga {
   row: LclRow
-  faltan: CampoFaltanteLcl[]
+  /** Datos clave que faltan, en el orden de la lista. */
+  faltan: DatoClave[]
+  /** Ya llegó (eta pasada) o llega dentro de la ventana: va primero. */
+  urgente: boolean
+  /** Días hasta la llegada (negativo = ya llegó); null sin ETA. */
+  diasAEta: number | null
+  /** Depósito que sugiere el agente cuando el campo está vacío (chip con click). */
+  depositoSugerido: DepositoSugerido | null
 }
 
 export interface DatosFaltantes {
+  /** Contadores por tipo de dato, en el orden de la lista (solo los que tienen algo). */
   porCampo: FaltantesPorCampo[]
+  /** Una entrada por carga incompleta: primero las urgentes (llegaron o llegan en la ventana). */
   porCarga: FaltantesPorCarga[]
   /** Cargas distintas con algo que completar. */
   total: number
+  /** Cuántas de esas ya llegaron o llegan en la ventana. */
+  urgentes: number
 }
 
-export function faltantesDe(row: LclRow): CampoFaltanteLcl[] {
-  const f: CampoFaltanteLcl[] = []
-  if (vacio(row.cliente)) f.push('cliente')
-  if (vacio(row.eta)) f.push('eta')
-  if (vacio(row.fiscal)) f.push('fiscal')
-  if (!blDe(row)) f.push('bl')
-  if (num(row.kg) <= 0) f.push('kg')
-  if (num(row.m3) <= 0) f.push('m3')
-  return f
+export function faltantesDe(row: LclRow): DatoClave[] {
+  return datosQueFaltan('lcl', row as unknown as Record<string, unknown>)
 }
 
-export function datosFaltantes(rows: LclRow[]): DatosFaltantes {
+/**
+ * Qué le falta a cada LCL activa. Orden: primero las que ya llegaron y las que
+ * llegan dentro de `diasVentana` (la más próxima a llegar / la que más hace que
+ * llegó primero); después el resto por ETA; sin ETA al final de cada bloque.
+ */
+export function datosFaltantes(rows: LclRow[], hoyISO: string, diasVentana = 7): DatosFaltantes {
   const porCarga: FaltantesPorCarga[] = []
   const porCampo = new Map<CampoFaltanteLcl, LclRow[]>()
   for (const row of rows) {
     const faltan = faltantesDe(row)
     if (faltan.length === 0) continue
-    porCarga.push({ row, faltan })
-    for (const c of faltan) {
+    const eta = txt(row.eta).slice(0, 10)
+    const diasAEta = eta ? diasEntre(hoyISO, eta) : null
+    const urgente = diasAEta !== null && diasAEta <= diasVentana
+    const dep = depositoSugerido(row.agente, row.deposito)
+    porCarga.push({
+      row, faltan, urgente, diasAEta,
+      depositoSugerido: dep && dep.supuesto ? dep : null,
+    })
+    for (const d of faltan) {
+      const c = d.key as CampoFaltanteLcl
       const arr = porCampo.get(c) || []
       arr.push(row)
       porCampo.set(c, arr)
     }
   }
+  porCarga.sort((a, b) => {
+    if (a.urgente !== b.urgente) return a.urgente ? -1 : 1
+    const da = a.diasAEta ?? Number.POSITIVE_INFINITY, db = b.diasAEta ?? Number.POSITIVE_INFINITY
+    if (da !== db) return da - db
+    return String(a.row.ref).localeCompare(String(b.row.ref))
+  })
   return {
     porCampo: CAMPOS_FALTANTES_LCL
+      .map(d => d.key as CampoFaltanteLcl)
       .filter(c => porCampo.has(c))
       .map(c => ({ campo: c, label: CAMPO_FALTANTE_LABEL[c], rows: porCampo.get(c)! })),
     porCarga,
     total: porCarga.length,
+    urgentes: porCarga.filter(x => x.urgente).length,
+  }
+}
+
+// ── Completar inline: del texto tipeado al PATCH ───────────────────────
+
+export type PatchFaltante =
+  | { ok: true; patch: Record<string, unknown> }
+  | { ok: false; error: string }
+
+const anioValido = (iso: string): boolean => {
+  const y = Number(iso.slice(0, 4))
+  return y >= 2015 && y <= 2100
+}
+
+/**
+ * Valida lo tipeado en la card "Datos faltantes" y arma el patch de
+ * `shipments`. Puro: la UI llama onPatchShipment con el resultado.
+ *  - pkgs/kg/m3: número > 0 ("1.250,5" → 1250.5; bultos redondeados)
+ *  - eta: YYYY-MM-DD con año razonable
+ *  - fiscal/deposito: texto en MAYÚSCULAS
+ *  - wood: 'si' | 'no' → true | false (no hay forma de volver a "a confirmar" desde acá)
+ */
+export function patchFaltanteLcl(campo: CampoFaltanteLcl, crudo: string): PatchFaltante {
+  const texto = String(crudo ?? '').trim()
+  if (!texto) return { ok: false, error: 'Vacío' }
+  switch (campo) {
+    case 'pkgs':
+    case 'kg':
+    case 'm3': {
+      const n = parseNum(texto)
+      const final = campo === 'pkgs' ? Math.round(n) : n
+      if (!Number.isFinite(final) || final <= 0) return { ok: false, error: 'Número inválido' }
+      return { ok: true, patch: { [campo]: final } }
+    }
+    case 'eta': {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(texto) || !anioValido(texto)) return { ok: false, error: 'Fecha inválida' }
+      return { ok: true, patch: { eta: texto } }
+    }
+    case 'wood': {
+      const v = texto.toLowerCase()
+      if (v === 'si' || v === 'sí' || v === 'true') return { ok: true, patch: { wood: true } }
+      if (v === 'no' || v === 'false') return { ok: true, patch: { wood: false } }
+      return { ok: false, error: 'Madera: Sí o No' }
+    }
+    case 'fiscal':
+    case 'deposito':
+      return { ok: true, patch: { [campo]: texto.toUpperCase() } }
   }
 }

@@ -6,6 +6,7 @@
 
 import type { ParsedShipment } from './shipmentTypes'
 import type { DbShipment } from './operationsTypes'
+import { LOAD_DESDE_SHIPMENT } from './datosClave'
 import { parseLocalDate, isValidDate } from './shipmentTypes'
 import type {
   Truck,
@@ -349,8 +350,11 @@ export function makeEmptyTruckLoad(
 
 /**
  * Una carga LCL/aéreo de la tabla `shipments` como línea de camión. Es el ÚNICO
- * mapeo DbShipment → TruckLoad: lo usan el armador (AvailableLoadsPanel) y el
- * panel de sugerencias, así los dos suben la carga con los mismos campos.
+ * mapeo DbShipment → TruckLoad: lo usan el armador (TruckBuilder.addDb y el
+ * alta desde el armador) y el panel de sugerencias, así todos suben la carga
+ * con los mismos campos. QUÉ se copia lo dice lib/datosClave.LOAD_DESDE_SHIPMENT
+ * (la lista única de datos clave): la fuente es la shipment y el load nace sin
+ * overrides — `overrides` marca después lo que el usuario pisó a mano.
  * `pending` = null en borradores · 'add' en camiones publicados (overlay).
  */
 export function truckLoadDesdeDb(
@@ -359,23 +363,34 @@ export function truckLoadDesdeDb(
   position: number,
   pending: 'add' | null,
 ): TruckLoad {
+  const fila = s as unknown as Record<string, unknown>
+  const primero = (campo: string): unknown => {
+    for (const col of LOAD_DESDE_SHIPMENT[campo] ?? []) {
+      const v = fila[col]
+      if (v !== null && v !== undefined && String(v).trim() !== '') return v
+    }
+    return undefined
+  }
+  const texto = (campo: string): string => String(primero(campo) ?? '').trim()
+  const numero = (campo: string): number => Number(primero(campo)) || 0
   return {
     id: newId('load'),
     truckId,
     sourceType: (s.mode === 'air' ? 'air' : 'lcl'),
     sourceRef: s.ref,
     cntr: '',
-    client: s.cliente || '',
-    fiscal: s.fiscal || '',
-    kg: Number(s.kg) || 0,
-    m3: Number(s.m3) || 0,
-    pkgs: Number(s.pkgs) || 0,
-    description: s.observacion || '',
-    mvdArrival: s.eta || '',
-    desconsolDate: s.fecha_consol || '',
-    bl: s.doc_number || '',
-    stock: '',
-    wood: !!s.wood,
+    client: texto('client'),
+    fiscal: texto('fiscal'),
+    kg: numero('kg'),
+    m3: numero('m3'),
+    pkgs: numero('pkgs'),
+    description: texto('description'),
+    mvdArrival: texto('mvdArrival'),
+    desconsolDate: texto('desconsolDate'),
+    bl: texto('bl'),
+    stock: texto('stock'),
+    // Madera "a confirmar" (null) entra como No; el armador avisa al sumarla.
+    wood: primero('wood') === true,
     overrides: {},
     position,
     pending,
