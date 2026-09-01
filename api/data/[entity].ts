@@ -1213,6 +1213,27 @@ async function handleShipmentsCache(req: VercelRequest, res: VercelResponse, db:
 async function handlePartnerShipments(req: VercelRequest, res: VercelResponse, db: any, payload: any) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
 
+  // Revocación efectiva (auditoría 01/09): el JWT dura 12 h y sólo se validaba
+  // la firma, así que un partner dado de baja seguía entrando hasta medio día,
+  // y si le cambiabas el transporte seguía viendo el viejo. Se relee la fila
+  // en cada pedido: la baja y el cambio de alcance valen al instante.
+  // Si la consulta falla NO se cierra la puerta (un hipo de la DB no puede
+  // dejar al partner afuera): se sigue con el alcance del token.
+  let alcanceVivo: string | null = null
+  const emailToken = String(payload?.email || '').trim().toLowerCase()
+  if (emailToken) {
+    const { data: fila, error: errFila } = await db.from('partner_users')
+      .select('active, filter_value')
+      .eq('email', emailToken)
+      .maybeSingle()
+    if (!errFila) {
+      if (!fila || fila.active === false) {
+        return res.status(403).json({ error: 'Tu acceso fue desactivado. Escribinos para reactivarlo.' })
+      }
+      alcanceVivo = String(fila.filter_value || '').trim() || null
+    }
+  }
+
   // La web es master desde el flip (16/06): SIEMPRE se lee la tabla `shipments`.
   // Auditoría 26/08 — dos agujeros cerrados:
   //  1. `.eq('source','fcl')` solo traía las horneadas del cutover: las cargas
@@ -1250,8 +1271,45 @@ async function handlePartnerShipments(req: VercelRequest, res: VercelResponse, d
   })
   const syncedAt = new Date().toISOString()
   // Support both legacy (depotName/transportName) and new (filterValue) JWT payloads.
-  const rawFilter: string = payload.filterValue || payload.depotName || payload.transportName || ''
+  // El alcance FRESCO de la DB manda sobre el del token (ver revocación arriba).
+  const rawFilter: string = alcanceVivo || payload.filterValue || payload.depotName || payload.transportName || ''
   const filterValueUpper = rawFilter.trim().toUpperCase()
+
+  // Lista blanca de la operativa: lo que el partner necesita para operar y nada
+  // más. Antes el item del JSONB viajaba VERBATIM — hoy no filtra plata porque
+  // el SELECT no la trae, pero cualquier campo sensible que alguien agregue
+  // mañana adentro de operativas saldría solo. Mismo criterio que el portal de
+  // clientes (api/_lib/clientShipments.ts).
+  const opSegura = (op: any, rolEsTransporte: boolean) => ({
+    CNTR_OP: op.CNTR_OP || '',
+    DEPOSITO: op.DEPOSITO || '',
+    // El transporte ajeno NO se muestra: en una operativa compartida
+    // ("MARITIMA / URUGUAY") viajaba el string entero y el partner leía el
+    // nombre del otro. Se devuelve sólo el suyo.
+    TRANSPORTE: rolEsTransporte ? rawFilter.trim() : (op.TRANSPORTE || ''),
+    SALIDA: op.SALIDA || '',
+    LUGAR_SALIDA: op.LUGAR_SALIDA || '',
+    ETA_FISC: op.ETA_FISC || '',
+    ETA_OP: op.ETA_OP || '',
+    OPERATIVA: op.OPERATIVA || '',
+    FISCAL: op.FISCAL || '',
+    DESCARGA: op.DESCARGA || '',
+    DEV: op.DEV || '',
+    LIBRE: op.LIBRE || '',
+    HORARIO: op.HORARIO || '',
+    PKGS: op.PKGS ?? 0,
+    KG: op.KG ?? 0,
+    M3: op.M3 ?? 0,
+    TIPO: op.TIPO || '',
+    // Marcas que cambian cómo se carga el camión: madera dispara SENASA en
+    // frontera, IMO y no apilable mandan en el orden de estiba.
+    WOOD: op.WOOD || '',
+    IMO: op.IMO || '',
+    NO_APILABLE: op.NO_APILABLE || '',
+    TLX: op.TLX || '',
+    // Descripción de la mercadería: la necesitan para saber qué cargan.
+    DESCRIPCION: op.DESCRIPCION || '',
+  })
   const filtered = allShipments.map((shipment: any) => {
     const operativas: any[] = shipment.operativas || []
     const matchingOps = operativas.filter((op: any) => {
@@ -1275,7 +1333,8 @@ async function handlePartnerShipments(req: VercelRequest, res: VercelResponse, d
     const safe = { ...shipment }
     delete safe.C_TERMINAL; delete safe.C_DEV; delete safe.LOCALES
     delete safe.FLETE; delete safe.FORMA_DE_PAGO; delete safe.VTO
-    return { ...safe, operativas: matchingOps }
+    const esTransporte = payload.role === 'transport'
+    return { ...safe, operativas: matchingOps.map((op: any) => opSegura(op, esTransporte)) }
   }).filter(Boolean)
 
   return res.status(200).json({ shipments: filtered, syncedAt })
