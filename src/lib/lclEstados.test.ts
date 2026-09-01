@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  estadoLcl, almacenaje, diasEsperando, ALMACENAJE_DIAS, ESTADO_LCL_LABEL,
+  estadoLcl, almacenaje, diasEsperando, esLclMontevideo, ALMACENAJE_DIAS, ESTADO_LCL_LABEL,
   type CargaLcl,
 } from './lclEstados'
 
@@ -105,5 +105,39 @@ describe('diasEsperando — hace cuánto está lista y sin salir', () => {
 
   it('con stock pero sin fecha no se puede contar', () => {
     expect(diasEsperando({ ref: 'LCL247', stock: '13030', desconsol: '' }, HOY)).toBeNull()
+  })
+})
+
+describe('esLclMontevideo — el universo de HOY LCL y de las sugerencias de camión', () => {
+  it('LCL activa sin puerto o con MONTEVIDEO entra', () => {
+    expect(esLclMontevideo({ mode: 'lcl', archived: false })).toBe(true)
+    expect(esLclMontevideo({ mode: 'LCL', archived: false, discharge_port: 'MONTEVIDEO', dest_country: 'UY' })).toBe(true)
+    expect(esLclMontevideo({ mode: 'lcl', discharge_port: 'Puerto de Montevideo (MVD)' })).toBe(true)
+  })
+
+  it('la fila real del bloque LCL BUENOS AIRES (dest_country AR, puerto vacío) queda afuera', () => {
+    expect(esLclMontevideo({ mode: 'lcl', archived: false, dest_country: 'AR', discharge_port: '', })).toBe(false)
+    expect(esLclMontevideo({ mode: 'lcl', dest_country: ' ar ' })).toBe(false)
+    expect(esLclMontevideo({ mode: 'lcl', dest_country: 'ARGENTINA' })).toBe(false)
+  })
+
+  it('puerto BUENOS AIRES / BUE queda afuera aunque el país no esté cargado', () => {
+    expect(esLclMontevideo({ mode: 'lcl', discharge_port: 'BUENOS AIRES' })).toBe(false)
+    expect(esLclMontevideo({ mode: 'lcl', discharge_port: 'Buenos Aires, AR' })).toBe(false)
+    expect(esLclMontevideo({ mode: 'lcl', discharge_port: 'BUE' })).toBe(false)
+  })
+
+  it('otro puerto cargado que no es Montevideo también queda afuera (regla tolerante ya existente)', () => {
+    expect(esLclMontevideo({ mode: 'lcl', discharge_port: 'SANTOS' })).toBe(false)
+  })
+
+  it('una LCL a Córdoba vía Montevideo tiene dest_country UY por convención: entra', () => {
+    expect(esLclMontevideo({ mode: 'lcl', dest_country: 'UY', discharge_port: '' })).toBe(true)
+  })
+
+  it('FCL, aéreo y archivadas no son del universo', () => {
+    expect(esLclMontevideo({ mode: 'fcl' })).toBe(false)
+    expect(esLclMontevideo({ mode: 'air' })).toBe(false)
+    expect(esLclMontevideo({ mode: 'lcl', archived: true })).toBe(false)
   })
 })

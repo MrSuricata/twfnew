@@ -47,7 +47,11 @@ import {
   discardPendingArrays,
   commitPendingArrays,
   truckLoadDesdeDb,
+  camposQueDifieren,
+  sincronizarLoad,
+  etiquetaCampoLoad,
   toIsoDate,
+  type CampoDesdeShipment,
 } from '@/lib/truckUtils'
 import AvailableLoadsPanel from './AvailableLoadsPanel'
 import NewShipmentDialog from '@/components/operations/NewShipmentDialog'
@@ -134,6 +138,29 @@ export default function TruckBuilder(props: TruckBuilderProps) {
     return m
   }, [dbShipments])
   const esPlanta = (ref: string) => plantaByRef.get(String(ref || '').trim().toUpperCase()) === true
+
+  // La carga LCL/aéreo detrás de una línea del camión (por ref). Las FCL viven
+  // en la planilla (resyncFcl); acá solo las filas de `shipments`.
+  const shipmentDeLoad = (l: TruckLoad): DbShipment | undefined => {
+    if (l.sourceType === 'fcl') return undefined
+    const r = String(l.sourceRef || '').trim().toUpperCase()
+    return dbShipments.find(s => (s.mode === 'lcl' || s.mode === 'air') && String(s.ref || '').trim().toUpperCase() === r)
+  }
+  // Líneas que dicen otra cosa que su carga sin que nadie las haya editado:
+  // nacieron antes de que HOY LCL completara kg/m³/stock. Se avisa, no se
+  // pisa solo — el operativo toca ↻ y la carga manda (los overrides quedan).
+  const difierenPorLoad = useMemo(() => {
+    const m = new Map<string, CampoDesdeShipment[]>()
+    for (const l of truckLoads) {
+      if (l.truckId !== truck.id || l.sourceType === 'fcl') continue
+      const r = String(l.sourceRef || '').trim().toUpperCase()
+      const s = dbShipments.find(x => (x.mode === 'lcl' || x.mode === 'air') && String(x.ref || '').trim().toUpperCase() === r)
+      if (!s) continue
+      const campos = camposQueDifieren(l, s)
+      if (campos.length) m.set(l.id, campos)
+    }
+    return m
+  }, [truckLoads, truck.id, dbShipments])
 
   // Las cargas del camión vistas por la regla de entrega en planta.
   const cargasPlanta: CargaPlanta[] = useMemo(
@@ -398,6 +425,27 @@ export default function TruckBuilder(props: TruckBuilderProps) {
     onUpdateTruckLoads(next, [load.id])
     toast.success(`${load.sourceRef} re-sincronizado desde planilla`)
   }
+
+  // ── Re-sincronizar una línea LCL/aéreo desde la carga (`shipments`) ──
+  // La carga es la fuente; el load solo guarda lo que el usuario pisó
+  // (overrides). Toma de la shipment los campos SIN override y deja los
+  // manuales como están — distinto de resyncFcl, que borra los overrides.
+  const resyncLcl = (load: TruckLoad) => {
+    const s = shipmentDeLoad(load)
+    if (!s) {
+      toast.error(`${load.sourceRef} no está en las cargas LCL/aéreas (¿se archivó o cambió la ref?)`)
+      return
+    }
+    const r = sincronizarLoad(load, s)
+    if (r.campos.length === 0) {
+      toast.info(`${load.sourceRef} ya dice lo mismo que la carga`)
+      return
+    }
+    onUpdateTruckLoads(truckLoads.map(l => (l.id === load.id ? r.load : l)), [load.id])
+    toast.success(`${load.sourceRef}: ${r.campos.map(etiquetaCampoLoad).join(', ')} tomados de la carga`)
+  }
+
+  const resync = (load: TruckLoad) => (load.sourceType === 'fcl' ? resyncFcl(load) : resyncLcl(load))
 
   const removeLoad = (l: TruckLoad) => {
     if (isDraft || l.pending === 'add') { onDeleteTruckLoad(l.id); return }
@@ -705,9 +753,19 @@ export default function TruckBuilder(props: TruckBuilderProps) {
           {/* Loads table */}
           <Card>
             <CardContent className="p-0">
-              <div className="px-4 py-3 border-b flex items-center justify-between">
+              <div className="px-4 py-3 border-b flex items-center justify-between gap-3">
                 <h3 className="font-semibold text-sm">Cargas en el camión</h3>
-                <span className="text-xs text-muted-foreground">{loads.length} {loads.length === 1 ? 'ref' : 'refs'}</span>
+                <div className="flex items-center gap-2">
+                  {difierenPorLoad.size > 0 && (
+                    <span
+                      className="text-[11px] text-amber-700 bg-amber-50 border border-amber-200 rounded px-1.5 py-0.5"
+                      title="Líneas con datos distintos a los de la carga y sin edición manual. Tocá ↻ en la fila para tomar los datos de la carga."
+                    >
+                      ⚠ {difierenPorLoad.size} {difierenPorLoad.size === 1 ? 'difiere' : 'difieren'} de la carga
+                    </span>
+                  )}
+                  <span className="text-xs text-muted-foreground">{loads.length} {loads.length === 1 ? 'ref' : 'refs'}</span>
+                </div>
               </div>
               {allMine.length === 0 ? (
                 <div className="px-4 py-12 text-center text-sm text-muted-foreground">
@@ -736,8 +794,9 @@ export default function TruckBuilder(props: TruckBuilderProps) {
                           key={l.id}
                           load={l}
                           planta={esPlanta(l.sourceRef)}
+                          difiere={difierenPorLoad.get(l.id)}
                           onChange={(patch, fields) => updateLoad(l.id, patch, fields)}
-                          onResync={() => resyncFcl(l)}
+                          onResync={() => resync(l)}
                           onRemove={() => removeLoad(l)}
                           onUndoRemove={() => undoRemoveLoad(l)}
                         />
@@ -929,6 +988,7 @@ function CostPerM3Indicator({ truck, truckLoads }: { truck: Truck; truckLoads: T
 function LoadRow({
   load,
   planta,
+  difiere,
   onChange,
   onResync,
   onRemove,
@@ -937,6 +997,8 @@ function LoadRow({
   load: TruckLoad
   /** La carga tiene entrega en planta (shipments.entrega_planta). */
   planta?: boolean
+  /** Campos (sin override) en los que la línea dice otra cosa que la carga. */
+  difiere?: CampoDesdeShipment[]
   onChange: (patch: Partial<TruckLoad>, fields: string[]) => void
   onResync: () => void
   onRemove: () => void
@@ -957,6 +1019,16 @@ function LoadRow({
           )}
           {planta && (
             <Badge variant="outline" className="h-4 text-[9px] border-violet-300 text-violet-700" title="Entrega en planta: del fiscal va directo a la planta del cliente. Dos en el mismo viaje se pisan.">🏭 Planta</Badge>
+          )}
+          {difiere && difiere.length > 0 && !isRemoved && (
+            <Badge
+              variant="outline"
+              className="h-4 text-[9px] border-amber-300 text-amber-700 bg-amber-50 cursor-pointer"
+              title={`Difiere de la carga en: ${difiere.map(etiquetaCampoLoad).join(', ')} (sin edición manual). Click para tomar los datos de la carga.`}
+              onClick={onResync}
+            >
+              ≠ carga
+            </Badge>
           )}
         </div>
         <div className="text-[10px] text-muted-foreground uppercase">
@@ -1051,11 +1123,17 @@ function LoadRow({
             </Button>
           ) : (
             <>
-              {load.sourceType === 'fcl' && (
-                <Button size="sm" variant="ghost" className="h-7 w-7 p-0" onClick={onResync} title="Re-sincronizar desde planilla">
-                  <ArrowsClockwise size={12} />
-                </Button>
-              )}
+              <Button
+                size="sm"
+                variant="ghost"
+                className={`h-7 w-7 p-0 ${difiere && difiere.length ? 'text-amber-600 hover:text-amber-700' : ''}`}
+                onClick={onResync}
+                title={load.sourceType === 'fcl'
+                  ? 'Re-sincronizar desde planilla'
+                  : 'Tomar los datos de la carga (respeta lo editado a mano)'}
+              >
+                <ArrowsClockwise size={12} />
+              </Button>
               <Button size="sm" variant="ghost" className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={onRemove} title="Quitar del camión">
                 <Trash size={12} />
               </Button>

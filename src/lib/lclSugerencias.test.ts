@@ -82,6 +82,19 @@ describe('candidatasLcl — solo lo que puede subir a un camión hoy', () => {
     expect(candidatasSinDeposito(c).map(x => x.ref)).toEqual(['NO'])
   })
 
+  it('una LCL de Buenos Aires (dest_country AR, puerto vacío, agente CRAFT ARGENTINA) no es candidata: no pasa por Montevideo ni se le supone PLANIR', () => {
+    const bue = lcl({ ref: 'R84I', dest_country: 'AR', discharge_port: '', deposito: '', agente: 'CRAFT ARGENTINA' })
+    const mvd = lcl({ ref: 'E163 A', dest_country: 'UY', deposito: '', agente: 'CRAFT' })
+    const c = candidatasLcl([bue, mvd], ctx())
+    expect(c.map(x => x.ref)).toEqual(['E163 A'])
+    expect(sugerirCamiones(c, { limites: STD }).flatMap(p => p.cargas.map(x => x.ref))).toEqual(['E163 A'])
+    expect(previsionPorFiscal([bue, mvd], { hoy: HOY, dias: 7 }).flatMap(f => Object.keys(f.conStock.porDeposito))).toEqual(['PLANIR'])
+    expect(previsionPorFiscal([bue], { hoy: HOY, dias: 7 })).toEqual([])
+    // Tampoco cuenta como "llega" o "con stock" para el aviso al publicar.
+    const camion = { refs: ['E163 A'], kg: 1000, m3: 5, limites: STD }
+    expect(avisoAlPublicar(camion, [mvd, lcl({ ref: 'R85I', dest_country: 'AR', deposito: 'PLANIR', fiscal: 'RAFAELA' })], HOY)).toBeNull()
+  })
+
   it('kg/m3/pkgs en texto se convierten; basura queda en 0', () => {
     const c = candidatasLcl([lcl({ kg: '1.500' as unknown as number, m3: 'x' as unknown as number, pkgs: null })], ctx())
     expect(c[0].kg).toBe(1500)

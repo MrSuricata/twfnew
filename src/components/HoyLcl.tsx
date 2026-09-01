@@ -24,7 +24,7 @@ import type { Truck, TruckLoad } from '@/lib/truckTypes'
 import { TRUCK_LIMITS, TRUCK_STATUS_COLORS } from '@/lib/truckTypes'
 import {
   refsPorCamion, lclActivas, blDe, llegadasProximas, aguardanStock, listasParaCamion,
-  camionesLcl, datosFaltantes, patchFaltanteLcl, CAMPO_FALTANTE_LABEL,
+  camionesLcl, datosFaltantes, patchFaltanteLcl, CAMPO_FALTANTE_LABEL, DIAS_CAMION_RECIENTE,
   type LclRow, type ListaItem, type FaltantesPorCarga, type CampoFaltanteLcl,
 } from '@/lib/hoyLcl'
 import { FISCALES_BASE } from '@/lib/lclAlta'
@@ -258,7 +258,7 @@ export default function HoyLcl({
         icon={<TruckIcon size={18} weight="fill" />}
         tone="neutral"
         title="Camiones LCL"
-        subtitle="Publicados con alguna consolidada, hasta que llegan a fiscal. La ocupación es sobre el límite del tipo de camión."
+        subtitle={`Publicados con alguna consolidada, hasta que llegan a fiscal (los que salieron hace más de ${DIAS_CAMION_RECIENTE} días ya no son de hoy). La ocupación es sobre el límite del tipo de camión.`}
         count={camiones.length}
         empty="Ningún camión con carga LCL en curso."
         action={onOpenTab ? { label: 'Armar camión', onClick: () => onOpenTab('trucks') } : undefined}

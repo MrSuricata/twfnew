@@ -6,7 +6,7 @@
 
 import type { ParsedShipment } from './shipmentTypes'
 import type { DbShipment } from './operationsTypes'
-import { LOAD_DESDE_SHIPMENT } from './datosClave'
+import { LOAD_DESDE_SHIPMENT, etiquetaDe } from './datosClave'
 import { parseLocalDate, isValidDate } from './shipmentTypes'
 import type {
   Truck,
@@ -348,6 +348,61 @@ export function makeEmptyTruckLoad(
   }
 }
 
+/** Campos del TruckLoad que se copian de la carga (claves de LOAD_DESDE_SHIPMENT). */
+export type CampoDesdeShipment =
+  'client' | 'fiscal' | 'kg' | 'm3' | 'pkgs' | 'description' | 'mvdArrival' | 'desconsolDate' | 'bl' | 'stock' | 'wood'
+
+export type ValoresDesdeShipment = Pick<TruckLoad, CampoDesdeShipment>
+
+/** Orden estable para listar cambios/diferencias (el de la lista única). */
+const CAMPOS_DESDE_SHIPMENT = Object.keys(LOAD_DESDE_SHIPMENT) as CampoDesdeShipment[]
+
+/** Etiqueta en español de un campo de la línea, la misma que usa la lista
+ *  única de datos clave ('kg' → 'Kilos'); los internos que no están en la
+ *  lista tienen la suya. */
+export function etiquetaCampoLoad(campo: CampoDesdeShipment): string {
+  const propias: Partial<Record<CampoDesdeShipment, string>> = {
+    bl: 'BL', mvdArrival: 'Llegada a Montevideo', desconsolDate: 'Desconsolidación', description: 'Descripción',
+  }
+  const propia = propias[campo]
+  if (propia) return propia
+  const col = LOAD_DESDE_SHIPMENT[campo]?.[0]
+  return col ? etiquetaDe('lcl', col) : campo
+}
+
+/**
+ * Lo que la línea de camión dice de una carga LCL/aéreo, leído de la fila
+ * `shipments` según lib/datosClave.LOAD_DESDE_SHIPMENT. Es la ÚNICA lectura
+ * shipment → campos del load: la usan truckLoadDesdeDb (al subir la carga),
+ * sincronizarLoad (re-sincronizar) y camposQueDifieren (aviso en el armador).
+ */
+export function valoresDesdeShipment(s: DbShipment): ValoresDesdeShipment {
+  const fila = s as unknown as Record<string, unknown>
+  const primero = (campo: string): unknown => {
+    for (const col of LOAD_DESDE_SHIPMENT[campo] ?? []) {
+      const v = fila[col]
+      if (v !== null && v !== undefined && String(v).trim() !== '') return v
+    }
+    return undefined
+  }
+  const texto = (campo: string): string => String(primero(campo) ?? '').trim()
+  const numero = (campo: string): number => Number(primero(campo)) || 0
+  return {
+    client: texto('client'),
+    fiscal: texto('fiscal'),
+    kg: numero('kg'),
+    m3: numero('m3'),
+    pkgs: numero('pkgs'),
+    description: texto('description'),
+    mvdArrival: texto('mvdArrival'),
+    desconsolDate: texto('desconsolDate'),
+    bl: texto('bl'),
+    stock: texto('stock'),
+    // Madera "a confirmar" (null) entra como No; el armador avisa al sumarla.
+    wood: primero('wood') === true,
+  }
+}
+
 /**
  * Una carga LCL/aéreo de la tabla `shipments` como línea de camión. Es el ÚNICO
  * mapeo DbShipment → TruckLoad: lo usan el armador (TruckBuilder.addDb y el
@@ -363,38 +418,50 @@ export function truckLoadDesdeDb(
   position: number,
   pending: 'add' | null,
 ): TruckLoad {
-  const fila = s as unknown as Record<string, unknown>
-  const primero = (campo: string): unknown => {
-    for (const col of LOAD_DESDE_SHIPMENT[campo] ?? []) {
-      const v = fila[col]
-      if (v !== null && v !== undefined && String(v).trim() !== '') return v
-    }
-    return undefined
-  }
-  const texto = (campo: string): string => String(primero(campo) ?? '').trim()
-  const numero = (campo: string): number => Number(primero(campo)) || 0
   return {
     id: newId('load'),
     truckId,
     sourceType: (s.mode === 'air' ? 'air' : 'lcl'),
     sourceRef: s.ref,
     cntr: '',
-    client: texto('client'),
-    fiscal: texto('fiscal'),
-    kg: numero('kg'),
-    m3: numero('m3'),
-    pkgs: numero('pkgs'),
-    description: texto('description'),
-    mvdArrival: texto('mvdArrival'),
-    desconsolDate: texto('desconsolDate'),
-    bl: texto('bl'),
-    stock: texto('stock'),
-    // Madera "a confirmar" (null) entra como No; el armador avisa al sumarla.
-    wood: primero('wood') === true,
+    ...valoresDesdeShipment(s),
     overrides: {},
     position,
     pending,
   }
+}
+
+const mismoValor = (a: unknown, b: unknown): boolean => {
+  if (typeof a === 'number' || typeof b === 'number') return (Number(a) || 0) === (Number(b) || 0)
+  if (typeof a === 'boolean' || typeof b === 'boolean') return !!a === !!b
+  return String(a ?? '').trim() === String(b ?? '').trim()
+}
+
+/**
+ * Campos de la línea que dicen otra cosa que la carga SIN que nadie los haya
+ * editado a mano (sin override). Es el caso de las líneas creadas antes de que
+ * HOY LCL completara la carga (kg=0, stock vacío…): el plan y el aviso de
+ * previsión usan esos ceros. Con override no difiere: es una decisión.
+ */
+export function camposQueDifieren(load: TruckLoad, s: DbShipment): CampoDesdeShipment[] {
+  const v = valoresDesdeShipment(s)
+  const ov = load.overrides || {}
+  return CAMPOS_DESDE_SHIPMENT.filter(k => !ov[k] && !mismoValor(load[k], v[k]))
+}
+
+/**
+ * Re-sincroniza la línea con la carga: toma de la shipment los campos sin
+ * override y deja intactos los que el usuario pisó (los overrides se
+ * conservan). Pura: devuelve la línea nueva (la misma si no cambió nada) y
+ * qué campos cambiaron, para el toast.
+ */
+export function sincronizarLoad(load: TruckLoad, s: DbShipment): { load: TruckLoad; campos: CampoDesdeShipment[] } {
+  const campos = camposQueDifieren(load, s)
+  if (campos.length === 0) return { load, campos }
+  const v = valoresDesdeShipment(s)
+  const patch: Record<string, unknown> = {}
+  for (const k of campos) patch[k] = v[k]
+  return { load: { ...load, ...(patch as Partial<TruckLoad>) }, campos }
 }
 
 /** Cancelar el overlay de un camión publicado: limpia pendingEdits, saca las

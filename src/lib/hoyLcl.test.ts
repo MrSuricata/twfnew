@@ -228,6 +228,16 @@ describe('camionesLcl — camiones con carga LCL en planificación, cargados o e
     expect(r[0].info.status).toBe('in_transit')
   })
 
+  it('un camión que salió hace más de 10 días sin arribo cargado ya no es "hoy" (los importados quedaban En Frontera para siempre)', () => {
+    const viejo = camion({ code: 'C300', loadDate: '2026-08-10', departureDate: '2026-08-11' })
+    const justo = camion({ code: 'C301', loadDate: '2026-08-21', departureDate: '2026-08-22' })   // hace exactamente 10 días: todavía se ve
+    const reciente = camion({ code: 'C302', loadDate: '2026-08-28', departureDate: '2026-08-29' })
+    const sinSalir = camion({ code: 'C303', loadDate: '2026-08-01' })
+    const loads = [carga(viejo.id, 'A'), carga(justo.id, 'B'), carga(reciente.id, 'C'), carga(sinSalir.id, 'D')]
+    const r = camionesLcl([viejo, justo, reciente, sinSalir], loads, HOY_DATE)
+    expect(r.map(c => c.truck.code)).toEqual(['C301', 'C302', 'C303'])
+  })
+
   it('ocupación sobre el límite del tipo de camión; una carga marcada para quitar sigue contando', () => {
     const t = camion({ isSider: true })
     const loads = [carga(t.id, 'A', { m3: 40, kg: 12250 }), carga(t.id, 'B', { m3: 40, kg: 12250, pending: 'remove' }), carga(t.id, 'C', { pending: 'add' })]
@@ -239,7 +249,7 @@ describe('camionesLcl — camiones con carga LCL en planificación, cargados o e
   })
 })
 
-describe('lclActivas — puerto de descarga', () => {
+describe('lclActivas — solo las que pasan por Montevideo', () => {
   it('sin puerto o MONTEVIDEO entran; otro puerto cargado queda afuera', () => {
     const rows = [
       lcl({ ref: 'SIN', discharge_port: '' }),
@@ -247,6 +257,16 @@ describe('lclActivas — puerto de descarga', () => {
       lcl({ ref: 'BUE', discharge_port: 'BUENOS AIRES' }),
     ]
     expect(lclActivas(rows, new Set()).map(r => r.ref)).toEqual(['SIN', 'MVD'])
+  })
+
+  it('la fila real del bloque LCL BUENOS AIRES (dest_country AR, puerto vacío, agente CRAFT ARGENTINA) queda afuera y sin sugerencia de depósito', () => {
+    const bue = lcl({ ref: 'R84I', dest_country: 'AR', discharge_port: '', deposito: '', agente: 'CRAFT ARGENTINA', stock: '77', desconsol_date: HOY })
+    const mvd = lcl({ ref: 'E163 A', dest_country: 'UY', discharge_port: '', deposito: '', agente: 'CRAFT', stock: '78', desconsol_date: HOY })
+    const activas = lclActivas([bue, mvd], new Set())
+    expect(activas.map(r => r.ref)).toEqual(['E163 A'])
+    // Lo que se deriva de las activas no la ve: ni faltantes (chip Sugerido PLANIR) ni listas para camión.
+    expect(datosFaltantes(activas, HOY).porCarga.map(x => x.row.ref)).toEqual(['E163 A'])
+    expect(listasParaCamion(activas, HOY, new Set()).flatMap(g => g.depositos.flatMap(d => d.items.map(i => i.row.ref)))).toEqual(['E163 A'])
   })
 })
 

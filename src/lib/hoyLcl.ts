@@ -13,7 +13,7 @@
 import type { DbShipment } from './operationsTypes'
 import type { Truck, TruckLoad, TruckStatus, TruckTotals } from './truckTypes'
 import { computeTruckTotals, deriveTruckDisplayInfo, effectiveTruckLoads } from './truckTypes'
-import { estadoLcl, almacenaje, diasEsperando, type Almacenaje } from './lclEstados'
+import { estadoLcl, almacenaje, diasEsperando, esLclMontevideo, type Almacenaje } from './lclEstados'
 import { depositoSugerido, type DepositoSugerido } from './lclSugerencias'
 import { reclamables, datosQueFaltan, type DatoClave } from './datosClave'
 import { parseNum } from './lclAlta'
@@ -25,7 +25,7 @@ export type LclRow = Pick<DbShipment, 'id' | 'ref' | 'mode' | 'archived'> &
   Partial<Pick<DbShipment,
     'cliente' | 'doc_number' | 'hbl' | 'pkgs' | 'kg' | 'm3' | 'stock' | 'desconsol_date' |
     'fiscal' | 'deposito' | 'eta' | 'marca_cliente' | 'marca_motivo' | 'wood' |
-    'entrega_planta' | 'imo' | 'no_apilable' | 'agente' | 'discharge_port'
+    'entrega_planta' | 'imo' | 'no_apilable' | 'agente' | 'discharge_port' | 'dest_country'
   >>
 
 const REF = (r: unknown): string => String(r ?? '').trim().toUpperCase()
@@ -80,18 +80,13 @@ export function refsPorCamion(trucks: Truck[], loads: TruckLoad[]): { enCamion: 
 
 // ── Universo ────────────────────────────────────────────────────────────
 
-/** Puerto de descarga que NO es Montevideo (cargado y sin MONTEVIDEO/MVD). */
-const otroPuerto = (discharge: unknown): boolean => {
-  const p = txt(discharge).toUpperCase()
-  return !!p && !/MONTEVIDEO|MVD/.test(p)
-}
-
-/** LCL vivas para Montevideo: no archivadas y cuyo camión no salió todavía.
- *  Hoy todas las LCL vienen por MVD (discharge_port vacío o MONTEVIDEO); si
- *  algún día llega una a otro puerto (Buenos Aires), queda afuera de este HOY
- *  solo cuando el puerto está cargado y no es Montevideo. */
+/** LCL vivas para Montevideo: las del universo `esLclMontevideo` (LCL, no
+ *  archivada, ni país AR ni puerto que no sea Montevideo — el bloque LCL
+ *  BUENOS AIRES de la planilla no pasa por acá) cuyo camión no salió todavía.
+ *  Mismo criterio que las sugerencias de camión: una carga que HOY no ve,
+ *  tampoco se propone. */
 export function lclActivas<T extends LclRow>(rows: T[], refsDespachadas: Set<string>): T[] {
-  return rows.filter(s => s.mode === 'lcl' && !s.archived && !refsDespachadas.has(REF(s.ref)) && !otroPuerto(s.discharge_port))
+  return rows.filter(s => esLclMontevideo(s) && !refsDespachadas.has(REF(s.ref)))
 }
 
 /** El BL puede venir en `doc_number` (alta guiada) o en `hbl` (registro LCL). */
@@ -294,9 +289,15 @@ export interface CamionLcl {
 
 const ORDEN_STATUS: Record<TruckStatus, number> = { in_transit: 0, loaded: 1, planning: 2, delivered: 3 }
 
-/** Camiones publicados con alguna carga LCL que todavía no llegaron a fiscal. */
+/** Un camión que salió hace más de esto sin arribo cargado ya no es "hoy":
+ *  los importados sin arrival_date quedaban "En Frontera" para siempre. */
+export const DIAS_CAMION_RECIENTE = 10
+
+/** Camiones publicados con alguna carga LCL que todavía no llegaron a fiscal
+ *  y que salieron hace poco (o no salieron). */
 export function camionesLcl(trucks: Truck[], loads: TruckLoad[], hoy: Date): CamionLcl[] {
   const dia = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate())
+  const hoyISO = fechaISO(dia)
   const out: CamionLcl[] = []
   for (const t of trucks) {
     if (!t || t.draft) continue
@@ -305,6 +306,8 @@ export function camionesLcl(trucks: Truck[], loads: TruckLoad[], hoy: Date): Cam
     if (lclRefs.length === 0) continue
     const info = deriveTruckDisplayInfo(t, dia)
     if (info.status === 'delivered') continue
+    const salida = txt(t.departureDate).slice(0, 10)
+    if (salida && diasEntre(salida, hoyISO) > DIAS_CAMION_RECIENTE) continue
     out.push({ truck: t, info, loads: mine, lclRefs, totals: computeTruckTotals(t, mine) })
   }
   return out.sort((a, b) =>

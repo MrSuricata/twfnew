@@ -31,6 +31,40 @@ export interface ContextoCamion {
 
 const vacio = (v: string | null | undefined): boolean => !String(v ?? '').trim()
 
+// ── Universo: qué LCL pasa por Montevideo ──────────────────────────────
+
+/** Lo mínimo de una fila `shipments` para decidir si es del universo LCL
+ *  Montevideo. DbShipment lo cumple; los tests usan objetos sueltos. */
+export interface FilaLclUniverso {
+  mode?: string | null
+  archived?: boolean | null
+  /** País destino: 'AR' = bloque "LCL BUENOS AIRES" de la planilla (no toca
+   *  Montevideo). Una LCL a Córdoba VÍA Montevideo lleva 'UY' por convención. */
+  dest_country?: string | null
+  /** Puerto de descarga. Vacío = Montevideo (convención de la app). */
+  discharge_port?: string | null
+}
+
+/**
+ * ÚNICO criterio de "LCL por Montevideo": lo usan HOY LCL (lclActivas), las
+ * sugerencias de camión (candidatas, previsión, aviso al publicar) y el panel.
+ * Visto en producción (01/09/2026): las LCL del bloque BUENOS AIRES tienen
+ * dest_country='AR' y discharge_port vacío, así que mirar solo el puerto no
+ * alcanza. Queda afuera si:
+ *   - no es LCL o está archivada,
+ *   - dest_country es AR/ARGENTINA,
+ *   - o el puerto está cargado y no es Montevideo (BUENOS AIRES, BUE, otro).
+ */
+export function esLclMontevideo(row: FilaLclUniverso): boolean {
+  if (String(row.mode ?? '').trim().toUpperCase() !== 'LCL') return false
+  if (row.archived) return false
+  const pais = String(row.dest_country ?? '').trim().toUpperCase()
+  if (pais === 'AR' || pais === 'ARGENTINA') return false
+  const puerto = String(row.discharge_port ?? '').trim().toUpperCase()
+  if (puerto && !/MONTEVIDEO|MVD/.test(puerto)) return false
+  return true
+}
+
 export const ESTADO_LCL_LABEL: Record<EstadoLcl, string> = {
   en_viaje: 'En viaje',
   aguarda_stock: 'Aguarda stock',

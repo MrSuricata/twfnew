@@ -26,7 +26,7 @@
  * Nada de acá bloquea: son propuestas y avisos.
  */
 import {
-  estadoLcl, almacenaje, diasEsperando, sumarDias,
+  estadoLcl, almacenaje, diasEsperando, sumarDias, esLclMontevideo,
   type Almacenaje,
 } from './lclEstados'
 
@@ -40,6 +40,10 @@ export interface CargaLclFuente {
   cliente?: string | null
   mode?: string | null
   archived?: boolean | null
+  /** País destino y puerto de descarga: deciden si pasa por Montevideo
+   *  (lclEstados.esLclMontevideo). Las LCL de Buenos Aires no se proponen. */
+  dest_country?: string | null
+  discharge_port?: string | null
   fiscal?: string | null
   deposito?: string | null
   /** Agente de origen (CRAFT, SACO…): sugiere el depósito cuando falta. */
@@ -96,7 +100,8 @@ export const aNumero = (v: unknown): number => {
   return Number.isFinite(n) ? n : 0
 }
 
-const esLcl = (s: CargaLclFuente): boolean => norm(s.mode) === 'LCL' && !s.archived
+/** Mismo universo que HOY LCL: LCL activa que pasa por Montevideo. */
+const esLcl = (s: CargaLclFuente): boolean => esLclMontevideo(s)
 
 const fmtM3 = (n: number): string => {
   const r = Math.round(n * 10) / 10

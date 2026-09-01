@@ -26,6 +26,7 @@ import type { Truck, TruckLoad } from '@/lib/truckTypes'
 import { TRUCK_LIMITS } from '@/lib/truckTypes'
 import { makeEmptyTruck, truckLoadDesdeDb, formatKg, formatM3 } from '@/lib/truckUtils'
 import { hoyISO } from '@/lib/format'
+import { esLclMontevideo } from '@/lib/lclEstados'
 import ChipDeposito from './ChipDeposito'
 import {
   candidatasLcl, candidatasSinDeposito, sugerirCamiones, previsionPorFiscal,
@@ -108,7 +109,7 @@ export default function SugerenciasCamion({
       const r = REF(l.sourceRef)
       if (!r || vistas.has(r)) continue
       const s = dbShipments.find(x => REF(x.ref) === r)
-      if (!s || s.mode !== 'lcl' || s.archived || !String(s.stock || '').trim()) continue
+      if (!s || !esLclMontevideo(s) || !String(s.stock || '').trim()) continue
       vistas.add(r)
       out.push({ ref: s.ref, truck: t })
     }
