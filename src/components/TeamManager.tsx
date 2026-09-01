@@ -57,6 +57,8 @@ interface AdminUser {
 // (widget LCL, resumen), se agregan acá.
 const HOME_AREAS: { value: string; label: string }[] = [
   { value: '', label: 'HOY (default)' },
+  // No es una pestaña: abre HOY en el área LCL Montevideo (equipo de consolidados).
+  { value: 'lcl', label: 'HOY LCL Montevideo' },
   { value: 'seguimientos', label: 'Seguimientos' },
   { value: 'agenda', label: 'Agenda' },
   { value: 'operaciones', label: 'Operaciones' },
