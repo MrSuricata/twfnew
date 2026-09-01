@@ -1544,7 +1544,9 @@ function IncompletaRow({ u, dbRow, expanded, onToggle, onPatchShipment, onOpenDe
     // u.faltantes solo importa en el instante de abrir — el snapshot es a propósito.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expanded])
-  const diasLabel = u.diasAEta < 0 ? `llegó hace ${-u.diasAEta}d` : u.diasAEta === 0 ? 'llega hoy' : `en ${u.diasAEta}d`
+  const diasLabel = u.diasAEta === null
+    ? 'sin ETA'
+    : u.diasAEta < 0 ? `llegó hace ${-u.diasAEta}d` : u.diasAEta === 0 ? 'llega hoy' : `en ${u.diasAEta}d`
   const header = (
     <>
       <span className="ref-med text-sm shrink-0 min-w-[64px]">{u.carga.ref}</span>

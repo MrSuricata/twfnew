@@ -247,13 +247,44 @@ describe('datosFaltantes — exigencia por etapa', () => {
     expect(datosFaltantes(completa, HOY)).toEqual([])
   })
 
-  it('archivadas y no marítimas quedan afuera', () => {
+  it('archivadas quedan afuera', () => {
     expect(datosFaltantes(carga({ archived: true, cliente: '' }), HOY)).toEqual([])
-    expect(datosFaltantes(carga({ mode: 'air', cliente: '' }), HOY)).toEqual([])
+  })
+
+  // Cambio 01/09 (plan por áreas de Brian): los BÁSICOS (cliente/país/ETA) se
+  // reclaman en TODOS los modos — un aéreo o terrestre sin cliente era
+  // invisible para siempre. Las ventanas de embarque/checks/coordinación
+  // siguen siendo solo marítimas.
+  it('aéreo/terrestre reclaman los básicos, pero no las ventanas marítimas', () => {
+    const f = datosFaltantes(carga({ mode: 'air', cliente: '', eta: '2026-09-03', buque: '' }), HOY)
+    expect(f.map(x => x.campo)).toContain('cliente')
+    expect(f.map(x => x.campo)).not.toContain('buque')
+    const t = datosFaltantes(carga({ mode: 'terrestre', cliente: '', pais: '', eta: '' }), HOY)
+    expect(t.map(x => x.campo)).toEqual(expect.arrayContaining(['cliente', 'pais', 'eta']))
+    expect(t.map(x => x.campo)).not.toContain('cntr')
   })
 })
 
 describe('faltantesUrgentes — la tarjeta de HOY', () => {
+  it('una carga SIN ETA con faltantes aparece, con diasAEta null y al final', () => {
+    // El agujero viejo: sin ETA no entraba a ninguna lista — la carga más rota
+    // era la más invisible (9 FCL sin país ni ETA medidas el 01/09).
+    const u = faltantesUrgentes([
+      { ...carga({ eta: '', pais: '' }), ref: 'ROTA' },
+      { ...carga({ eta: '2026-08-23', terminal: '' }), ref: 'LLEGA' },
+    ], HOY)
+    expect(u.map(x => x.carga.ref)).toEqual(['LLEGA', 'ROTA'])
+    const rota = u.find(x => x.carga.ref === 'ROTA')!
+    expect(rota.diasAEta).toBeNull()
+    expect(rota.faltantes.map(f => f.campo)).toEqual(expect.arrayContaining(['pais', 'eta']))
+  })
+
+  it('sin ETA solo se piden los básicos: no abre las etapas del viaje', () => {
+    const u = faltantesUrgentes([{ ...carga({ eta: '', buque: '', deposito: '' }), ref: 'NUEVA' }], HOY)
+    expect(u).toHaveLength(1)
+    expect(u[0].faltantes.map(f => f.campo)).toEqual(['eta'])
+  })
+
   it('solo llegan-pronto o llegadas sin salida, ordenadas por llegada', () => {
     const cargas = [
       { ...carga({ eta: '2026-08-22' }), ref: 'CERCA' },                       // en 5 días, incompleta

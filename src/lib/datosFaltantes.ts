@@ -91,7 +91,6 @@ export const CLIENTES_CON_REF_PROPIA = /CHIAPERO|VMG/i
 export function datosFaltantes(c: CargaCampos, hoy: Date): CampoFaltante[] {
   if (c.archived) return []
   const m = String(c.mode || '').toLowerCase()
-  if (m !== 'fcl' && m !== 'lcl') return []
 
   const h = medianoche(hoy).getTime()
   const eta = parseLocalDate(String(c.eta || '').trim())
@@ -104,10 +103,15 @@ export function datosFaltantes(c: CargaCampos, hoy: Date): CampoFaltante[] {
   const out: CampoFaltante[] = []
   const falta = (campo: keyof CargaCampos, etiqueta: string) => out.push({ campo, etiqueta })
 
-  // Siempre: sin esto la carga ni se puede identificar/planificar.
+  // Siempre y en TODOS los modos: sin esto la carga ni se puede identificar
+  // ni asignar a un área (el país es el eje de las agendas por área — plan
+  // 01/09). Un aéreo o terrestre sin cliente era invisible para siempre.
   if (vacio(c.cliente)) falta('cliente', 'Cliente')
   if (vacio(c.pais)) falta('pais', 'País')
   if (!eta) falta('eta', 'ETA')
+
+  // Las ventanas de embarque/checks/coordinación/llegada son marítimas.
+  if (m !== 'fcl' && m !== 'lcl') return out
 
   // Embarcada: el viaje existe, estos datos ya viajaron en el pre-alerta.
   if (embarcada || ventanaChecks) {
@@ -182,8 +186,9 @@ export const resumenFaltantes = (f: CampoFaltante[]): string => f.map(x => x.eti
 export interface FaltanteUrgente {
   carga: CargaCampos & { dbId?: string | null; ref?: string | null }
   faltantes: CampoFaltante[]
-  /** Días hasta la llegada (negativo = ya llegó). */
-  diasAEta: number
+  /** Días hasta la llegada (negativo = ya llegó). null = SIN ETA: la carga
+   *  más rota de todas — antes ni aparecía (9 FCL sin país ni ETA, 01/09). */
+  diasAEta: number | null
 }
 
 /**
@@ -199,7 +204,14 @@ export function faltantesUrgentes(
   const out: FaltanteUrgente[] = []
   for (const c of cargas) {
     const eta = parseLocalDate(String(c.eta || '').trim())
-    if (!eta) continue
+    if (!eta) {
+      // Sin ETA no hay ventana que aplicar: se reclaman solo los básicos
+      // (cliente/país/eta — datosFaltantes sin ETA no abre ninguna etapa).
+      // Antes el continue la hacía invisible en todas las listas.
+      const faltantes = datosFaltantes(c, hoy)
+      if (faltantes.length > 0) out.push({ carga: c, faltantes, diasAEta: null })
+      continue
+    }
     const dias = Math.round((medianoche(eta).getTime() - h) / MS_DIA)
     if (dias > FALTANTES_DIAS_COORDINACION) continue
     // Piso: llegadas de hace más de 14 días son deuda histórica, no trabajo de
@@ -214,7 +226,13 @@ export function faltantesUrgentes(
     if (dias < 0 && !vacio(c.salida) && !faltantes.some(f => f.campo === 'dev' || f.campo === 'devFecha')) continue
     out.push({ carga: c, faltantes, diasAEta: dias })
   }
-  return out.sort((a, b) => a.diasAEta - b.diasAEta)
+  // Con ETA primero (por llegada más próxima); las sin ETA al final — son
+  // trabajo de completado, no de coordinación del día.
+  return out.sort((a, b) => {
+    if (a.diasAEta === null) return b.diasAEta === null ? 0 : 1
+    if (b.diasAEta === null) return -1
+    return a.diasAEta - b.diasAEta
+  })
 }
 
 /**
@@ -242,5 +260,7 @@ export function faltantesFuturos(
     if (faltantes.length === 0) continue
     out.push({ carga: c, faltantes, diasAEta: dias })
   }
-  return out.sort((a, b) => a.diasAEta - b.diasAEta)
+  // Acá diasAEta nunca es null (las sin ETA viven en lo urgente), pero el
+  // tipo compartido obliga al guard.
+  return out.sort((a, b) => (a.diasAEta ?? 0) - (b.diasAEta ?? 0))
 }
