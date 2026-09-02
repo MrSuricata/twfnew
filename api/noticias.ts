@@ -23,17 +23,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const db = getSupabase()
     const { data, error } = await db
       .from('noticias')
-      .select('id, titulo, bajada, cuerpo, categoria, imagen_url, alerta, publicada_at, vigente_hasta, estilo, kicker, kicker_extra, subtitulo, mensaje, link_url')
+      .select('id, titulo, bajada, cuerpo, categoria, imagen_url, alerta, publicada_at, updated_at, vigente_hasta, estilo, kicker, kicker_extra, subtitulo, mensaje, link_url')
       .eq('activo', true)
       .order('publicada_at', { ascending: false })
       .limit(60)
     if (error) throw error
 
     const hoy = new Date().toISOString().slice(0, 10)
-    const vigentes = (data || []).filter((n: { vigente_hasta?: string }) => {
-      const v = String(n.vigente_hasta || '').slice(0, 10)
-      return !/^\d{4}-\d{2}-\d{2}$/.test(v) || v >= hoy
-    })
+    // Lo último que subimos o ACTUALIZAMOS va primero: una nota editada hoy
+    // (el paso que se cerró, el aviso que cambió) tiene que abrir el diario
+    // aunque se haya publicado la semana pasada (Brian 02/09).
+    const recencia = (n: { publicada_at?: string; updated_at?: string }) => {
+      const p = String(n.publicada_at || '')
+      const u = String(n.updated_at || '')
+      return u > p ? u : p
+    }
+    const vigentes = (data || [])
+      .filter((n: { vigente_hasta?: string }) => {
+        const v = String(n.vigente_hasta || '').slice(0, 10)
+        return !/^\d{4}-\d{2}-\d{2}$/.test(v) || v >= hoy
+      })
+      .sort((a: Record<string, string>, b: Record<string, string>) => recencia(b).localeCompare(recencia(a)))
     return res.status(200).json({ noticias: vigentes })
   } catch {
     // La landing nunca se rompe por las noticias: sección vacía y listo.

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   esVigente, noticiasVigentes, alertasVigentes, claveAlertas, rowToNoticia, categoriaMeta,
-  estiloSlide, tituloPartes, tituloPlano, linkNoticia, ordenSlides, type Noticia,
+  estiloSlide, tituloPartes, tituloPlano, linkNoticia, ordenSlides, recencia, type Noticia,
 } from './noticias'
 
 const HOY = '2026-08-28'
@@ -31,6 +31,17 @@ describe('vigencia — la portada nunca muestra notas viejas', () => {
       noticia({ id: 'vencida', vigenteHasta: '2026-08-01' }),
     ], HOY)
     expect(out.map(n => n.id)).toEqual(['nueva', 'vieja'])
+  })
+  it('una nota ACTUALIZADA hoy sube, aunque se haya publicado antes (Brian 02/09)', () => {
+    const out = noticiasVigentes([
+      noticia({ id: 'nueva', publicadaAt: '2026-08-28T09:00:00Z' }),
+      noticia({ id: 'vieja-actualizada', publicadaAt: '2026-08-20T09:00:00Z', actualizadaAt: '2026-08-28T18:00:00Z' }),
+    ], HOY)
+    expect(out.map(n => n.id)).toEqual(['vieja-actualizada', 'nueva'])
+  })
+  it('sin fecha de edición manda la de publicación', () => {
+    expect(recencia({ publicadaAt: '2026-08-20T09:00:00Z', actualizadaAt: '' })).toBe('2026-08-20T09:00:00Z')
+    expect(recencia({ publicadaAt: '2026-08-20T09:00:00Z', actualizadaAt: '2026-08-01T09:00:00Z' })).toBe('2026-08-20T09:00:00Z')
   })
 })
 
@@ -95,7 +106,7 @@ describe('carrusel de portada', () => {
       noticia({ id: 'nota-a' }),
     ]
     expect(ordenSlides(vigentes).map(n => n.id))
-      .toEqual(['aviso-nuevo', 'aviso-viejo', 'nota-a', 'nota-b', 'nota-c'])
+      .toEqual(['aviso-nuevo', 'aviso-viejo', 'nota-c', 'nota-b', 'nota-a'])
   })
   it('corta en los 6 más recientes antes de ordenar', () => {
     const muchas = Array.from({ length: 9 }, (_, i) => noticia({ id: `n${i}` }))

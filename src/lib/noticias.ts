@@ -16,6 +16,9 @@ export interface Noticia {
   alerta: boolean
   activo: boolean
   publicadaAt: string       // ISO timestamp
+  /** Última edición (ISO). Una nota actualizada vuelve arriba: lo último que
+   *  tocamos es lo primero que se ve (Brian 02/09). */
+  actualizadaAt: string
   /** '' = sin vencimiento. 'YYYY-MM-DD' = última fecha en portada. */
   vigenteHasta: string
   // ── Slide del carrusel de portada (todos opcionales, con fallback) ──
@@ -82,11 +85,20 @@ export function esVigente(n: Pick<Noticia, 'activo' | 'vigenteHasta'>, hoyISO: s
   return v >= hoyISO
 }
 
-/** Vigentes, más nuevas primero. */
+/** Cuán reciente es una nota: la más nueva entre publicación y última edición.
+ *  Actualizar el Cristo Redentor a "cerrado" tiene que subirla, aunque la nota
+ *  se haya publicado la semana pasada. */
+export function recencia(n: Pick<Noticia, 'publicadaAt' | 'actualizadaAt'>): string {
+  const p = String(n.publicadaAt || '')
+  const a = String(n.actualizadaAt || '')
+  return a > p ? a : p
+}
+
+/** Vigentes, lo último que subimos o actualizamos primero. */
 export function noticiasVigentes<T extends Noticia>(list: T[], hoyISO: string): T[] {
   return list
     .filter(n => esVigente(n, hoyISO))
-    .sort((a, b) => String(b.publicadaAt).localeCompare(String(a.publicadaAt)))
+    .sort((a, b) => recencia(b).localeCompare(recencia(a)))
 }
 
 /** Las que se muestran como alerta al abrir la web. */
@@ -94,11 +106,12 @@ export function alertasVigentes<T extends Noticia>(list: T[], hoyISO: string): T
   return noticiasVigentes(list, hoyISO).filter(n => n.alerta)
 }
 
-/** Orden del carrusel de portada: los avisos abren (el más nuevo primero) y
- *  atrás va el resto en orden cronológico. Lo urgente no queda al final. */
+/** Orden del carrusel de portada: los avisos abren y atrás el resto, todo de
+ *  más nuevo a más viejo (Brian 02/09: "que se vean primeras las últimas
+ *  subidas"). Antes el resto iba invertido y la nota más vieja abría el bloque. */
 export function ordenSlides<T extends Noticia>(vigentes: T[], max = 6): T[] {
   const top = vigentes.slice(0, max)
-  return [...top.filter(n => n.alerta), ...top.filter(n => !n.alerta).reverse()]
+  return [...top.filter(n => n.alerta), ...top.filter(n => !n.alerta)]
 }
 
 const LS_KEY = 'med_novedad_alerta_vista'
@@ -132,6 +145,7 @@ export function rowToNoticia(r: Record<string, unknown>): Noticia {
     alerta: !!r.alerta,
     activo: r.activo !== false,
     publicadaAt: s(r.publicada_at ?? r.publicadaAt),
+    actualizadaAt: s(r.updated_at ?? r.actualizadaAt),
     vigenteHasta: s(r.vigente_hasta ?? r.vigenteHasta),
     estilo: s(r.estilo),
     kicker: s(r.kicker),
