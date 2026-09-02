@@ -67,14 +67,14 @@ describe('cargasMontecon — quién entra y cómo se ordena', () => {
     expect(cargasMontecon([carga({ eta: 'CONFIRMAR' })], [], HOY)).toEqual([])
   })
 
-  it('las que hay que REAGENDAR van primero — son el fuego', () => {
+  it('REAGENDAR queda en su lugar por ETA (se ve en rojo + chip del header), ya no salta arriba (Brian 02/09)', () => {
     const l = cargasMontecon([
       carga({ ref: 'OK', eta: '2026-08-23' }),
       carga({ ref: 'MOVIDA', eta: '2026-08-26' }),
       carga({ ref: 'NUEVA', eta: '2026-08-24' }),
     ], [agenda('OK', '2026-08-23'), agenda('MOVIDA', '2026-08-24')], HOY)
     expect(l.map(c => c.ref + ':' + c.estado)).toEqual(
-      ['MOVIDA:reagendar', 'NUEVA:sin_agendar', 'OK:agendada'])
+      ['OK:agendada', 'NUEVA:sin_agendar', 'MOVIDA:reagendar'])
   })
 
   it('la fila de agenda de una carga fuera de ventana no rompe nada', () => {
@@ -184,7 +184,7 @@ describe('cargasMontecon — TCP sin turnos (Brian 26/08)', () => {
     expect(avisada).toEqual([])
   })
 
-  it('orden completo: reagendar → TCP por retirar → sin agendar → agendada → TCP por llegar → retirado', () => {
+  it('orden = llegada del buque, Montecon y TCP mezcladas; retiradas al fondo (Brian 02/09)', () => {
     const l = cargasMontecon([
       carga({ ref: 'MOVIDA', eta: '2026-08-26' }),
       tcp({ ref: 'RETIRAR', eta: '2026-08-21' }),
@@ -198,7 +198,7 @@ describe('cargasMontecon — TCP sin turnos (Brian 26/08)', () => {
       { ref: 'RETIRADA', eta_agendada: '', retirado_at: '2026-08-21T14:00:00.000Z' },
     ], HOY)
     expect(l.map(c => c.ref + ':' + c.estado)).toEqual([
-      'MOVIDA:reagendar', 'RETIRAR:retirar', 'NUEVA:sin_agendar', 'OK:agendada', 'VIENE:por_llegar', 'RETIRADA:retirado',
+      'RETIRAR:retirar', 'OK:agendada', 'VIENE:por_llegar', 'NUEVA:sin_agendar', 'MOVIDA:reagendar', 'RETIRADA:retirado',
     ])
   })
 })

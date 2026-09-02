@@ -134,9 +134,9 @@ const yaSalio = (c: CargaMonteconInput, hoy: string): boolean => {
  * Las cargas FCL a retirar de terminal: MONTECON (con su estado de agenda de
  * turnos) y TCP (sin turnos — 'por_llegar' mientras viene, 'retirar' cuando
  * el buque llegó). Misma ventana para las dos terminales.
- * Orden: reagendar (el fuego) → TCP llegadas por retirar → sin agendar →
- * agendadas → TCP por llegar → al FONDO las retiradas pendientes de avisar al
- * cliente. Una fila de agenda de una carga fuera de ventana queda inocua.
+ * Orden: por llegada del buque (ETA), Montecon y TCP mezcladas; al FONDO las
+ * retiradas pendientes de avisar al cliente. Una fila de agenda de una carga
+ * fuera de ventana queda inocua.
  */
 export function cargasMontecon(
   cargas: CargaMonteconInput[],
@@ -215,8 +215,12 @@ export function cargasMontecon(
     })
   }
 
-  const rango = (e: EstadoAgenda) =>
-    e === 'reagendar' ? 0 : e === 'retirar' ? 1 : e === 'sin_agendar' ? 2 : e === 'agendada' ? 3 : e === 'por_llegar' ? 4 : 5
+  // Orden = llegada del buque (Brian 02/09: "deberían mostrarse en orden de
+  // llegada"), sin agrupar por terminal ni por estado: Montecon y TCP mezcladas
+  // por ETA. Lo urgente no se pierde: REAGENDAR va en rojo con su chip en el
+  // header. Las RETIRADAS van al fondo — ya no son una llegada, son el
+  // recordatorio de avisar al cliente.
+  const rango = (e: EstadoAgenda) => (e === 'retirado' ? 1 : 0)
   return out.sort((a, b) => {
     if (rango(a.estado) !== rango(b.estado)) return rango(a.estado) - rango(b.estado)
     if (a.dias !== b.dias) return a.dias - b.dias
