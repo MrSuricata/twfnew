@@ -34,6 +34,7 @@ import ChipDeposito from './trucks/ChipDeposito'
 import { useBrand } from '@/lib/brand'
 import { fmtDateDMY, hoyISO as hoyLocal } from '@/lib/format'
 import { formatKg, formatM3 } from '@/lib/truckUtils'
+import AvisosPartnersCard from './AvisosPartnersCard'
 
 interface HoyLclProps {
   dbShipments: DbShipment[]
@@ -46,6 +47,10 @@ interface HoyLclProps {
   /** Abre la ficha completa de la carga (clave = id de la fila en shipments). */
   onOpenDetail?: (key: string) => void
   onOpenTab?: (tab: string) => void
+  /** Recarga TODO desde la DB (App.loadDataFromDB). La card de avisos de
+   *  partners lo llama al confirmar "desconsolidé": el stock queda en
+   *  `shipments` y la LCL tiene que pasar a "con stock" sin F5. */
+  onReloadFromDB?: () => Promise<void>
 }
 
 const DIAS_VENTANA = 7
@@ -60,9 +65,11 @@ function diaCorto(iso: string): string {
 
 export default function HoyLcl({
   dbShipments, trucks = [], truckLoads = [], isDataLoading = false,
-  onPatchShipment, onOpenDetail, onOpenTab,
+  onPatchShipment, onOpenDetail, onOpenTab, onReloadFromDB,
 }: HoyLclProps) {
   const med = useBrand().id === 'med'
+  // Para ubicar los avisos `senasa` por el modo de la ref (ver avisosDeArea).
+  const shipmentsModo = useMemo(() => dbShipments.map(s => ({ ref: s.ref, mode: s.mode })), [dbShipments])
   // Fecha LOCAL (misma que la bandeja de stock): con UTC, de noche "hoy" ya era mañana.
   const hoyISO = hoyLocal()
 
@@ -110,6 +117,9 @@ export default function HoyLcl({
           </p>
         </div>
       </div>
+
+      {/* ── Avisos de partners (desconsolide + senasa de refs LCL) ── */}
+      <AvisosPartnersCard area="lcl" shipmentsModo={shipmentsModo} onResuelto={onReloadFromDB} />
 
       {isDataLoading && sinNada && (
         <Card className="border-dashed">
