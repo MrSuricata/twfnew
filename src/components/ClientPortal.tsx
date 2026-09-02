@@ -447,7 +447,7 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
                         <div className="text-sm font-medium">{alert.title}</div>
                         <div className="text-xs text-muted-foreground mt-0.5">{alert.message}</div>
                         {alert.date && (
-                          <div className="text-[10px] text-muted-foreground mt-1 font-mono">{alert.date}</div>
+                          <div className="text-xs text-muted-foreground mt-1 font-mono">{alert.date}</div>
                         )}
                       </div>
                       <Button
@@ -838,18 +838,18 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
                     >
                       <div className="flex items-stretch">
                         <div className={`w-1.5 shrink-0 ${stripClass}`} />
-                        <div className="flex-1 min-w-0 px-3 sm:px-4 py-2.5 flex items-center gap-2 sm:gap-3">
+                        <div className="flex-1 min-w-0 px-3 sm:px-4 py-3.5 flex items-center gap-3 sm:gap-4">
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <span className="font-bold">{refs.principal}</span>
+                              <span className="ref-med text-base font-bold">{refs.principal}</span>
                               {refs.secundaria && (
-                                <span className="text-[11px] text-muted-foreground" title="Nuestra referencia">
+                                <span className="text-xs text-muted-foreground" title="Nuestra referencia">
                                   {refs.secundaria}
                                 </span>
                               )}
                               <Badge className={ESTADO_CLIENTE_CLASE[estado]}>{etiquetaEstado(shipment, estado)}</Badge>
                               {(mostrarTipo || mostrarRuta) && (
-                                <span className="text-[11px] text-muted-foreground">
+                                <span className="text-xs text-muted-foreground">
                                   {[mostrarTipo ? TIPO_LABEL[tipoDe(shipment)] : null, mostrarRuta ? RUTA_CHIP[rutaDe(shipment)] : null].filter(Boolean).join(' · ')}
                                 </span>
                               )}
@@ -861,14 +861,14 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
                               )}
                             </div>
                             {(desc || shipment.BUQUE) && (
-                              <div className="text-xs text-muted-foreground truncate mt-0.5">
+                              <div className="text-sm text-muted-foreground truncate mt-1">
                                 {desc || shipment.BUQUE}
                               </div>
                             )}
                           </div>
                           <div className="text-right shrink-0">
-                            <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{hito.label}</div>
-                            <div className="text-sm font-bold tabular-nums">{hito.fecha}</div>
+                            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{hito.label}</div>
+                            <div className="text-base font-bold tabular-nums">{hito.fecha}</div>
                           </div>
                           <CaretDown
                             size={16}
@@ -986,7 +986,7 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
                                 <div className="flex items-center gap-2">
                                   <span className={`w-2 h-2 rounded-full shrink-0 ${c.salida ? 'bg-green-500' : 'bg-orange-400'}`} />
                                   <span className="font-mono text-xs font-medium">{c.number}</span>
-                                  {c.tipo && <span className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{c.tipo}</span>}
+                                  {c.tipo && <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{c.tipo}</span>}
                                 </div>
                                 <div className="text-xs">
                                   {c.salida ? (
