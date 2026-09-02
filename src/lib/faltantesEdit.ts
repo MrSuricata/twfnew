@@ -26,8 +26,9 @@ import { canonicalizeCliente, type CatalogClient } from './clientCatalog'
 
 /** Cómo se dibuja el input de cada campo faltante. */
 export interface FaltanteInput {
-  /** 'select' usa opciones fijas; 'datalist' es texto libre con sugerencias. */
-  widget: 'text' | 'date' | 'number' | 'select' | 'datalist'
+  /** 'select' usa opciones fijas; 'datalist' es texto libre con sugerencias;
+   *  'cliente' es el selector del catálogo (no se tipea libre, Brian 02/09). */
+  widget: 'text' | 'date' | 'number' | 'select' | 'datalist' | 'cliente'
   opciones?: { value: string; label: string }[]
   /** Fuente de sugerencias para 'datalist' (las provee el componente). */
   sugerencias?: 'transportes' | 'agentes' | 'depositos' | 'lineas' | 'terminales' | 'devoluciones'
@@ -43,7 +44,7 @@ export const DEVOLUCIONES_PLAZA = ['STL', 'MPS', 'TCP', 'MONTECON', 'MURCHISON']
 export const OPERATIVA_OPCIONES = ['TRASIEGO', 'CONTENEDOR', 'CARGA A PISO']
 
 export const FALTANTE_INPUTS: Partial<Record<keyof CargaCampos, FaltanteInput>> = {
-  cliente: { widget: 'text', placeholder: 'Cliente' },
+  cliente: { widget: 'cliente', placeholder: 'Elegí el cliente' },
   clientRef: { widget: 'text', placeholder: 'ref del cliente (ej: 1410)' },
   pais: { widget: 'select', opciones: (EDITABLE_FIELDS.pais?.options ?? []).filter(o => o.value !== '') },
   eta: { widget: 'date' },

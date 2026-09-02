@@ -18,6 +18,7 @@ import { fmtDMY } from '@/lib/salidaCheck'
 import { sugerirEtaFiscal, nombreDia } from '@/lib/transitoFiscal'
 import { parseCntr, serializeCntr, normalizeCntr, isStandardCntr } from '@/lib/cntrUtils'
 import { canonicalizeCliente, type CatalogClient } from '@/lib/clientCatalog'
+import ClienteSelect from './ClienteSelect'
 import type { OriginPhoto, OperativeReport } from '@/lib/quotationTypes'
 import ViabilityBlock from './ViabilityBlock'
 import ContainerDatesSection, { reconcileOperativasToCntrs, type ContainerDatesHandle } from './ContainerDatesSection'
@@ -610,6 +611,7 @@ export default function OperationDetailPanel({
                     segVencido={(f.key === 'seguimiento' && segVencido) || (f.key === 'salida' && salidaPisada)}
                     boxClass={tone.box}
                     options={f.key === 'cliente' && clienteOptions.length > 0 ? clienteOptions : undefined}
+                    clientes={f.key === 'cliente' ? knownClientes : undefined}
                     onCommit={commit}
                   />
                 ))}
@@ -724,6 +726,7 @@ function FieldRow({
   segVencido,
   boxClass,
   options,
+  clientes,
   onCommit,
 }: {
   label: string
@@ -738,6 +741,8 @@ function FieldRow({
   boxClass?: string
   /** Sugerencias conocidas (datalist) — texto libre sigue permitido. */
   options?: string[]
+  /** Catálogo de clientes: el campo Cliente se ELIGE, no se tipea (Brian 02/09). */
+  clientes?: CatalogClient[]
   onCommit: (key: keyof UnifiedOperation, v: unknown) => void
 }) {
   const [editing, setEditing] = useState(false)
@@ -800,7 +805,20 @@ function FieldRow({
     >
       <div className="text-[10px] uppercase tracking-wide text-muted-foreground leading-none mb-1">{label}</div>
       {editing ? (
-        selectOptions ? (
+        clientes ? (
+          // El cliente se elige del catálogo (o se crea ahí): tipear libre es
+          // lo que dejaba al mismo importador con tres nombres distintos.
+          <ClienteSelect
+            value={draft}
+            onChange={v => {
+              setEditing(false)
+              if (String(raw ?? '') !== v) onCommit(fieldKey, v)
+              refocus()
+            }}
+            clientes={clientes}
+            className="h-8"
+          />
+        ) : selectOptions ? (
           <select
             autoFocus
             value={draft}

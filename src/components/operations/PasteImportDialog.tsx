@@ -10,6 +10,7 @@ import {
 import { ClipboardText, Warning, CheckCircle } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import type { DbShipment } from '@/lib/operationsTypes'
+import { canonicalizeCliente, type CatalogClient } from '@/lib/clientCatalog'
 import { OPERATION_COLUMNS, EDITABLE_FIELDS } from '@/lib/operationsTypes'
 
 // ── Bulk paste from Excel ────────────────────────────────────────────────
@@ -72,7 +73,7 @@ interface ParseResult {
   totalRows: number
 }
 
-function parsePaste(text: string, dbShipments: DbShipment[]): ParseResult {
+function parsePaste(text: string, dbShipments: DbShipment[], clientes: CatalogClient[]): ParseResult {
   const lines = text.replace(/\r/g, '').split('\n').filter(l => l.trim().length > 0)
   const empty: ParseResult = { changes: [], skipped: [], unmatchedHeaders: [], noRefColumn: false, totalRows: 0 }
   if (lines.length < 2) return empty
@@ -111,6 +112,10 @@ function parsePaste(text: string, dbShipments: DbShipment[]): ParseResult {
       let next: unknown
       if (ef.type === 'number') next = parseNum(raw)
       else if (ef.type === 'bool') next = parseBool(raw)
+      // El cliente pegado se lleva al nombre del catálogo: pegar una planilla
+      // es la otra vía por la que entraban "VMG SA" y "VMG S.A." como dos
+      // clientes distintos (Brian 02/09).
+      else if (key === 'cliente' && raw) next = canonicalizeCliente(raw, clientes)
       else next = raw
 
       // Normalize for comparison to avoid no-op writes.
@@ -137,15 +142,18 @@ export default function PasteImportDialog({
   open,
   onOpenChange,
   dbShipments,
+  clientes = [],
   onPatch,
 }: {
   open: boolean
   onOpenChange: (v: boolean) => void
   dbShipments: DbShipment[]
+  /** Catálogo de clientes: canoniza la columna CLIENTE de lo pegado. */
+  clientes?: CatalogClient[]
   onPatch: (id: string, fields: Record<string, unknown>) => void
 }) {
   const [text, setText] = useState('')
-  const result = useMemo(() => (text.trim() ? parsePaste(text, dbShipments) : null), [text, dbShipments])
+  const result = useMemo(() => (text.trim() ? parsePaste(text, dbShipments, clientes) : null), [text, dbShipments, clientes])
 
   const cellCount = useMemo(
     () => (result ? result.changes.reduce((a, c) => a + c.diffs.length, 0) : 0),

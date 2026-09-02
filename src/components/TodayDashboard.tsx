@@ -34,6 +34,7 @@ import ContainerQuickEdit from './operations/ContainerQuickEdit'
 import { deriveKnownTransportes, deriveKnownValues, DEPOSITOS_UY, type DbShipment } from '@/lib/operationsTypes'
 import { faltantesUrgentes, faltantesFuturos, resumenFaltantes, FALTANTES_DIAS_COORDINACION, type FaltanteUrgente, type CampoFaltante } from '@/lib/datosFaltantes'
 import { buildFaltantePatch, columnaDeCampo, FALTANTE_INPUTS, DEVOLUCIONES_PLAZA } from '@/lib/faltantesEdit'
+import ClienteSelect from '@/components/operations/ClienteSelect'
 import {
   esCargaSinDatosPago, montosUrgentes, formaPagoEfectiva, parseMontoUY,
   paisDePago, agruparPorPais, MONTO_KEYS, type PagoRubro,
@@ -1809,8 +1810,8 @@ function CampoFaltanteInput({ campo, etiqueta, dbRow, onPatchShipment, transport
   const spec = FALTANTE_INPUTS[campo]
   if (!spec) return null
 
-  const commit = () => {
-    const texto = draft.trim()
+  const commit = (valor?: string) => {
+    const texto = (valor ?? draft).trim()
     if (!texto) return
     const r = buildFaltantePatch(campo, texto, dbRow.operativas, clientes)
     if (!r.ok) { setInvalido(true); toast.error(`${etiqueta}: ${r.error}`, { description: String(dbRow.ref) }); return }
@@ -1842,11 +1843,19 @@ function CampoFaltanteInput({ campo, etiqueta, dbRow, onPatchShipment, transport
   return (
     <label className="flex flex-col gap-0.5 min-w-0">
       <span className="text-[10px] uppercase tracking-wide text-muted-foreground leading-none">{etiqueta}</span>
-      {spec.widget === 'select' ? (
+      {spec.widget === 'cliente' ? (
+        <ClienteSelect
+          value={draft}
+          onChange={v => { setDraft(v); commit(v) }}
+          clientes={clientes}
+          placeholder={spec.placeholder}
+          className="h-9 w-56"
+        />
+      ) : spec.widget === 'select' ? (
         <select
           value={draft}
           onChange={e => { setDraft(e.target.value); if (invalido) setInvalido(false) }}
-          onBlur={commit}
+          onBlur={() => commit()}
           onKeyDown={e => {
             if (e.key === 'Enter') { e.preventDefault(); commit() }
             else if (e.key === 'Escape') { setDraft(''); setInvalido(false) }
@@ -1865,7 +1874,7 @@ function CampoFaltanteInput({ campo, etiqueta, dbRow, onPatchShipment, transport
             placeholder={spec.placeholder}
             list={spec.widget === 'datalist' ? listId : undefined}
             onChange={e => { setDraft(e.target.value); if (invalido) setInvalido(false) }}
-            onBlur={commit}
+            onBlur={() => commit()}
             onKeyDown={e => {
               if (e.key === 'Enter') { e.preventDefault(); commit() }
               else if (e.key === 'Escape') { setDraft(''); setInvalido(false) }
