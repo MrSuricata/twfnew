@@ -72,7 +72,82 @@ const num = (v: unknown): number => {
  * Espejo servidor de dbFclToParsedShipment (src/lib/operationsTypes) con la
  * whitelist puesta: financieros en cero, CLIENTE/CLIENTE_OP vacíos.
  */
-export function rowToClientShipment(d: Row): Record<string, unknown> {
+/** Lo que el portal necesita saber del camión que lleva una LCL: las fechas
+ *  (salida de Montevideo, llegada al fiscal) y el destino de ESA carga. */
+export interface CamionDeCarga {
+  /** Código C### saneado: cualquier otra cosa (los codes libres "A7887 + A7849 -
+   *  YEMEN" llevan refs y clientes ajenos) viaja como ''. */
+  code: string
+  departure_date: string
+  arrival_date: string
+  load_date: string
+  /** El equipo lo marcó entregado (los importados no tienen fecha de llegada). */
+  entregado: boolean
+  /** fiscal de la fila de truck_loads (gana sobre la carga). */
+  fiscal: string
+}
+
+/** Cargas → su camión publicado (source_ref = shipments.ref). Si una carga
+ *  viajó en más de un camión (raro), gana el más reciente por fecha de carga. */
+export function camionesPorRef(
+  loads: { source_ref?: unknown; truck_id?: unknown; fiscal?: unknown; pending?: unknown }[],
+  trucks: { id?: unknown; code?: unknown; departure_date?: unknown; arrival_date?: unknown; load_date?: unknown; draft?: unknown; status?: unknown }[],
+): Map<string, CamionDeCarga> {
+  const porId = new Map<string, (typeof trucks)[number]>()
+  for (const t of trucks || []) if (!t.draft) porId.set(txt(t.id), t)
+  const out = new Map<string, CamionDeCarga>()
+  for (const l of loads || []) {
+    if (txt(l.pending) === 'add') continue // todavía no confirmado en el camión
+    const t = porId.get(txt(l.truck_id))
+    if (!t) continue
+    const ref = txt(l.source_ref).toUpperCase()
+    const codeCrudo = txt(t.code).toUpperCase()
+    const cam: CamionDeCarga = {
+      code: /^C\d+$/.test(codeCrudo) ? codeCrudo : '',
+      departure_date: txt(t.departure_date).slice(0, 10), arrival_date: txt(t.arrival_date).slice(0, 10),
+      load_date: txt(t.load_date).slice(0, 10), entregado: txt(t.status).toLowerCase() === 'delivered',
+      fiscal: txt(l.fiscal),
+    }
+    const previo = out.get(ref)
+    if (!previo || (cam.load_date || cam.departure_date) > (previo.load_date || previo.departure_date)) out.set(ref, cam)
+  }
+  return out
+}
+
+/**
+ * Fila de la DB → shape ParsedShipment que el portal ya consume.
+ * Espejo servidor de dbFclToParsedShipment (src/lib/operationsTypes) con la
+ * whitelist puesta: financieros en cero, CLIENTE/CLIENTE_OP vacíos.
+ *
+ * `camion`: para las LCL, la salida y la llegada a destino viven en el camión
+ * consolidado (trucks), no en la carga. Se arma UNA operativa sintética
+ * "CONSOLIDADO" con esas fechas, así el portal deriva estado y cards con la
+ * misma lógica que un contenedor (derive-on-read, nada copiado a shipments).
+ */
+export function rowToClientShipment(d: Row, camion?: CamionDeCarga | null): Record<string, unknown> {
+  const esLcl = txt(d.mode).toLowerCase() === 'lcl'
+  if (esLcl && camion) {
+    return {
+      ...rowToClientShipmentBase(d),
+      operativas: [{
+        REF: txt(d.ref), TLX: d.telex ? 'SI' : '', DEPOSITO: txt(d.deposito), ETA_OP: '',
+        SALIDA: camion.departure_date, ETA_FISC: camion.arrival_date, LIBRE: '',
+        OPERATIVA: 'CONSOLIDADO', CNTR_OP: '', CAMION: camion.code, ENTREGADO: camion.entregado,
+        PKGS: num(d.pkgs), KG: num(d.kg), M3: num(d.m3),
+        // La descripción de truck_loads son instrucciones internas al camión
+        // ("NO APILABLE", "SIN BL"): al cliente le va la de su carga.
+        DESCRIPCION: txt(d.observacion),
+        FISCAL: camion.fiscal || txt(d.fiscal), DESCARGA: '', DEV: '',
+        CLIENTE_OP: '', TIPO: 'LCL', WOOD: d.wood ? 'SI' : '', TRANSPORTE: '', HORARIO: '',
+        LUGAR_SALIDA: txt(d.deposito),
+      }],
+    }
+  }
+  return rowToClientShipmentBase(d)
+}
+
+function rowToClientShipmentBase(d: Row): Record<string, unknown> {
+  const esLcl = txt(d.mode).toLowerCase() === 'lcl'
   const ops = Array.isArray(d.operativas) && (d.operativas as Row[]).length
     ? (d.operativas as Row[]).map(o => ({
         REF: txt(d.ref), TLX: txt(o.TLX) || (d.telex ? 'SI' : ''),
@@ -85,7 +160,9 @@ export function rowToClientShipment(d: Row): Record<string, unknown> {
         WOOD: txt(o.WOOD), TRANSPORTE: txt(o.TRANSPORTE) || txt(d.transporte), HORARIO: '',
         LUGAR_SALIDA: txt(o.LUGAR_SALIDA),
       }))
-    : ((d.salida || d.eta_fiscal || d.libre || d.operativa || d.deposito || d.descarga || d.dev)
+    // LCL: SIEMPRE una operativa (aunque no tenga nada cargado) — si no, una LCL
+    // arribada sin depósito no existe para "esperando salida" (revisión 02/09).
+    : ((d.salida || d.eta_fiscal || d.libre || d.operativa || d.deposito || d.descarga || d.dev || esLcl)
         ? [{
             REF: txt(d.ref), TLX: d.telex ? 'SI' : '', DEPOSITO: txt(d.deposito), ETA_OP: '',
             SALIDA: txt(d.salida), ETA_FISC: txt(d.eta_fiscal), LIBRE: txt(d.libre),
@@ -94,6 +171,8 @@ export function rowToClientShipment(d: Row): Record<string, unknown> {
             FISCAL: txt(d.fiscal), DESCARGA: txt(d.descarga), DEV: txt(d.dev),
             CLIENTE_OP: '', TIPO: txt(d.tipo), WOOD: d.wood ? 'SI' : '',
             TRANSPORTE: txt(d.transporte), HORARIO: '',
+            // LCL sin camión todavía: está en el depósito de desconsolidación.
+            LUGAR_SALIDA: esLcl ? txt(d.deposito) : '',
           }]
         : [])
 
@@ -109,6 +188,8 @@ export function rowToClientShipment(d: Row): Record<string, unknown> {
     CR: false, BL: false, AD: false, AT: false,
     POL: txt(d.origin), POD: txt(d.discharge_port),
     PAIS: txt(d.dest_country) || 'OTRO',
+    // Modalidad (fcl / lcl / air): el portal filtra y etiqueta por tipo (Brian 02/09).
+    MODE: txt(d.mode).toLowerCase() || 'fcl',
     SEGUIMIENTO: txt(d.seguimiento), TIPO: txt(d.tipo),
     containers: [], calculatedN: num(d.n_cntr), calculatedLibreHasta: txt(d.libre),
     operativas: ops,

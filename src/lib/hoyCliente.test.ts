@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import type { ParsedShipment, OperativasRecord, ShipmentAlert } from './shipmentTypes'
 import {
-  refsCliente, estadoCliente, proximoHito, progresoCliente, esActivaParaCliente,
-  llegadasADeposito, esperandoSalida, llegadasAMontevideo, embarcadas, hoyCliente, alertasCliente,
-  pasoSiguiente, textoDias, DEPOSITO_DIAS_ADELANTE, MVD_DIAS_ADELANTE, CLIENTE_ENTREGADA_DIAS, DIAS_LLEGADA_SUPUESTA,
+  refsCliente, estadoCliente, etiquetaEstado, proximoHito, progresoCliente, esActivaParaCliente,
+  llegadasADestino, esperandoSalida, llegadasAMontevideo, embarcadas, hoyCliente, alertasCliente,
+  pasoSiguiente, textoDias, rutaDe, tipoDe, filtrarCargas, opcionesFiltro, FILTRO_TODO,
+  DESTINO_DIAS_ADELANTE, MVD_DIAS_ADELANTE, CLIENTE_ENTREGADA_DIAS, DIAS_LLEGADA_SUPUESTA,
 } from './hoyCliente'
 
 const HOY = '2026-09-02'
@@ -13,7 +14,7 @@ const dia = (n: number) => {
   return d.toISOString().slice(0, 10)
 }
 
-const op = (o: Partial<OperativasRecord> = {}): OperativasRecord => ({
+const op = (o: Partial<OperativasRecord> & { CAMION?: string } = {}): OperativasRecord => ({
   REF: 'A8045', TLX: '', DEPOSITO: 'GODILCO', ETA_OP: '', SALIDA: '', ETA_FISC: '', LIBRE: '',
   OPERATIVA: 'TRASIEGO', CNTR_OP: 'FANU1858496', PKGS: 10, KG: 1000, M3: 20,
   DESCRIPCION: 'MOTOPARTES', FISCAL: 'CACEC', DESCARGA: '', DEV: '', TIPO: '40HC', WOOD: '',
@@ -21,11 +22,22 @@ const op = (o: Partial<OperativasRecord> = {}): OperativasRecord => ({
   ...o,
 } as unknown as OperativasRecord)
 
-const carga = (c: Partial<ParsedShipment> & { CLIENT_REF?: string } = {}, operativas: OperativasRecord[] = [op()]): ParsedShipment => ({
-  REF: 'A8045', CLIENT_REF: '1417', ETD: dia(-30), ETA: dia(4), CNTR: 'FANU1858496', N: 1,
-  BUQUE: 'SANTA CATARINA EXPRESS', LIBRE_HASTA: '', TERMINAL: 'TCP', containers: [], calculatedN: 1,
-  calculatedLibreHasta: '', operativas, ...c,
+type Extra = { CLIENT_REF?: string; MODE?: string }
+const carga = (c: Partial<ParsedShipment> & Extra = {}, operativas: OperativasRecord[] = [op()]): ParsedShipment => ({
+  REF: 'A8045', CLIENT_REF: '1417', MODE: 'fcl', PAIS: 'UY', POD: 'MONTEVIDEO', ETD: dia(-30), ETA: dia(4),
+  CNTR: 'FANU1858496', N: 1, BUQUE: 'SANTA CATARINA EXPRESS', LIBRE_HASTA: '', TERMINAL: 'TCP',
+  containers: [], calculatedN: 1, calculatedLibreHasta: '', operativas, ...c,
 } as unknown as ParsedShipment)
+
+/** Chile directo: sin tramo terrestre cargado, el puerto es el destino. */
+const chile = (c: Partial<ParsedShipment> & Extra = {}, operativas: OperativasRecord[] = []) =>
+  carga({ REF: 'A8009', PAIS: 'CL', POD: 'SAN ANTONIO', TERMINAL: 'SAN ANTONIO', ...c }, operativas)
+
+/** LCL por Montevideo; con camión trae la operativa CONSOLIDADO que arma la API. */
+const lcl = (c: Partial<ParsedShipment> & Extra = {}, operativas: OperativasRecord[] = []) =>
+  carga({ REF: 'E234', CLIENT_REF: '', MODE: 'lcl', CNTR: '', N: 0, ...c }, operativas)
+const opCamion = (o: Partial<OperativasRecord> & { CAMION?: string } = {}) =>
+  op({ OPERATIVA: 'CONSOLIDADO', CNTR_OP: '', CAMION: 'C463', DEPOSITO: 'PLANIR', LUGAR_SALIDA: 'PLANIR', FISCAL: 'ZF RAFAELA', ...o })
 
 describe('refsCliente — una sola regla para nombrar la carga', () => {
   it('con ref propia: la propia grande y "TWF 8045" chica', () => {
@@ -33,11 +45,42 @@ describe('refsCliente — una sola regla para nombrar la carga', () => {
   })
   it('sin ref propia: "TWF 8216" grande y nada chico (no una ref sin dueño)', () => {
     expect(refsCliente({ REF: 'A8216', CLIENT_REF: '' })).toEqual({ principal: 'TWF 8216', secundaria: '', propia: false })
-    expect(refsCliente({ REF: 'A8216' })).toEqual({ principal: 'TWF 8216', secundaria: '', propia: false })
+    expect(refsCliente({ REF: 'E234' })).toEqual({ principal: 'TWF E234', secundaria: '', propia: false })
   })
 })
 
-describe('estadoCliente — 6 pasos en lenguaje del cliente', () => {
+describe('ruta, tipo y filtros (Brian 02/09: por país y por tipo)', () => {
+  it('rutaDe y tipoDe leen PAIS y MODE con defaults sanos', () => {
+    expect(rutaDe({ PAIS: 'UY' })).toBe('UY')
+    expect(rutaDe({ PAIS: 'CL' })).toBe('CL')
+    expect(rutaDe({ PAIS: 'AR' })).toBe('AR')
+    expect(rutaDe({ PAIS: 'PY' })).toBe('OTRO')
+    // Sin país (o el genérico OTRO): decide el puerto; sin puerto, vía Montevideo (la operación de la casa)
+    expect(rutaDe({})).toBe('UY')
+    expect(rutaDe({ PAIS: '', POD: 'MONTEVIDEO' })).toBe('UY')
+    expect(rutaDe({ PAIS: 'OTRO', POD: 'MONTEVIDEO' })).toBe('UY')
+    expect(rutaDe({ PAIS: 'OTRO', POD: 'ASUNCION' })).toBe('OTRO')
+    expect(rutaDe({ PAIS: '', POD: 'SAN ANTONIO' })).toBe('OTRO')
+    expect(tipoDe({ MODE: 'lcl' })).toBe('lcl')
+    expect(tipoDe({ MODE: 'FCL' })).toBe('fcl')
+    expect(tipoDe({})).toBe('fcl')
+    expect(tipoDe({ MODE: 'air' })).toBe('air')
+  })
+  it('filtrarCargas combina ruta y tipo; FILTRO_TODO no filtra', () => {
+    const lista = [carga({ REF: 'UYF' }), lcl({ REF: 'UYL' }), chile({ REF: 'CLF' })]
+    expect(filtrarCargas(lista, FILTRO_TODO).map(s => s.REF)).toEqual(['UYF', 'UYL', 'CLF'])
+    expect(filtrarCargas(lista, { ruta: 'UY', tipo: 'todos' }).map(s => s.REF)).toEqual(['UYF', 'UYL'])
+    expect(filtrarCargas(lista, { ruta: 'UY', tipo: 'lcl' }).map(s => s.REF)).toEqual(['UYL'])
+    expect(filtrarCargas(lista, { ruta: 'CL', tipo: 'fcl' }).map(s => s.REF)).toEqual(['CLF'])
+    expect(filtrarCargas(lista, { ruta: 'CL', tipo: 'lcl' })).toEqual([])
+  })
+  it('opcionesFiltro ofrece solo lo que el cliente tiene, en orden fijo', () => {
+    expect(opcionesFiltro([chile(), carga(), lcl()])).toEqual({ rutas: ['UY', 'CL'], tipos: ['fcl', 'lcl'] })
+    expect(opcionesFiltro([carga()])).toEqual({ rutas: ['UY'], tipos: ['fcl'] })
+  })
+})
+
+describe('estadoCliente — 6 pasos en lenguaje del cliente (ruta Montevideo)', () => {
   it('sin ETD o ETD futuro y ETA futura → por embarcar', () => {
     expect(estadoCliente(carga({ ETD: '', ETA: dia(30) }), HOY)).toBe('por_embarcar')
     expect(estadoCliente(carga({ ETD: dia(3), ETA: dia(30) }), HOY)).toBe('por_embarcar')
@@ -51,24 +94,25 @@ describe('estadoCliente — 6 pasos en lenguaje del cliente', () => {
     expect(estadoCliente(carga({ ETA: dia(-2) }, [op({ SALIDA: dia(3) })]), HOY)).toBe('en_montevideo')
     expect(estadoCliente(carga({ ETA: dia(-2) }, [op({ SALIDA: dia(0), ETA_FISC: dia(2) })]), HOY)).toBe('en_montevideo')
     expect(estadoCliente(carga({ ETA: dia(-2) }, []), HOY)).toBe('en_montevideo')
+    expect(etiquetaEstado(carga(), 'en_montevideo')).toBe('En Montevideo')
   })
   it('algo salió antes de hoy y no llegó → en camino (también parcial)', () => {
     expect(estadoCliente(carga({ ETA: dia(-5) }, [op({ SALIDA: dia(-1), ETA_FISC: dia(1) })]), HOY)).toBe('en_camino')
     expect(estadoCliente(carga({ ETA: dia(-5) }, [op({ SALIDA: dia(-1) }), op({ CNTR_OP: 'B', SALIDA: '' })]), HOY)).toBe('en_camino')
   })
-  it('parcial: uno ya en el depósito y el otro sin salir → en Montevideo (hay que coordinar), no "en camino"', () => {
+  it('parcial: uno ya en destino y el otro sin salir → en Montevideo (hay que coordinar), no "en camino"', () => {
     const s = carga({ ETA: dia(-9) }, [op({ SALIDA: dia(-5), ETA_FISC: dia(-3) }), op({ CNTR_OP: 'B', SALIDA: '' })])
     expect(estadoCliente(s, HOY)).toBe('en_montevideo')
     expect(proximoHito(s, HOY)).toEqual({ label: 'Salida', fecha: 'A coordinar', iso: '' })
   })
-  it('todo llegó al depósito → en tu depósito; DEVUELTO (en OPERATIVA o en LIBRE) → entregada', () => {
+  it('todo llegó a destino → en destino; DEVUELTO (en OPERATIVA o en LIBRE) → entregada', () => {
     expect(estadoCliente(carga({ ETA: dia(-9) }, [op({ SALIDA: dia(-4), ETA_FISC: dia(-2) })]), HOY)).toBe('en_deposito')
+    expect(etiquetaEstado(carga(), 'en_deposito')).toBe('En destino')
     expect(estadoCliente(carga({ ETA: dia(-9) }, [op({ SALIDA: dia(-4), ETA_FISC: dia(-2), OPERATIVA: 'DEVUELTO' })]), HOY)).toBe('entregada')
     expect(estadoCliente(carga({ ETA: dia(-9) }, [op({ SALIDA: dia(-4), ETA_FISC: dia(-2), LIBRE: 'DEVUELTO' })]), HOY)).toBe('entregada')
     expect(estadoCliente(carga({ ETA: dia(-9), LIBRE_HASTA: 'DEVUELTO' }, [op({ SALIDA: dia(-4), ETA_FISC: dia(-2) })]), HOY)).toBe('entregada')
   })
   it('DESCARGA (fecha en que se confirmó el arribo del buque) y DEV (un lugar) NO son entrega', () => {
-    // "¿Llegó?" en Seguimientos estampa DESCARGA = ETA. Sin salida sigue en Montevideo.
     expect(estadoCliente(carga({ ETA: dia(-11) }, [op({ DESCARGA: dia(-11) })]), HOY)).toBe('en_montevideo')
     expect(estadoCliente(carga({ ETA: dia(-9) }, [op({ SALIDA: dia(-4), ETA_FISC: dia(0), DESCARGA: dia(-9), DEV: 'STL' })]), HOY)).toBe('en_deposito')
   })
@@ -77,12 +121,11 @@ describe('estadoCliente — 6 pasos en lenguaje del cliente', () => {
     expect(estadoCliente(reciente, HOY)).toBe('en_camino')
     const vieja = carga({ ETA: dia(-40) }, [op({ SALIDA: dia(-DIAS_LLEGADA_SUPUESTA) })])
     expect(estadoCliente(vieja, HOY)).toBe('en_deposito')
-    expect(proximoHito(vieja, HOY)).toEqual({ label: 'En tu depósito (estimado)', fecha: '02/09/2026', iso: HOY })
-    expect(llegadasADeposito([vieja], HOY)).toEqual([])
-    // devuelta después de una salida vieja → entregada aunque falte ETA_FISC
+    expect(proximoHito(vieja, HOY)).toEqual({ label: 'En destino (estimado)', fecha: '02/09/2026', iso: HOY })
+    expect(llegadasADestino([vieja], HOY)).toEqual([])
     expect(estadoCliente(carga({ ETA: dia(-60), LIBRE_HASTA: 'DEVUELTO' }, [op({ SALIDA: dia(-30) })]), HOY)).toBe('entregada')
   })
-  it('DEVUELTO sin salida (carga a piso: el contenedor vuelve vacío, la mercadería sigue en depósito) NO es entregada', () => {
+  it('DEVUELTO sin salida (carga a piso) NO es entregada: sigue esperando salida', () => {
     const s = carga({ ETA: dia(-6) }, [op({ OPERATIVA: 'CARGA A PISO', LIBRE: 'DEVUELTO' })])
     expect(estadoCliente(s, HOY)).toBe('en_montevideo')
     expect(esperandoSalida([s], HOY)).toHaveLength(1)
@@ -94,13 +137,52 @@ describe('estadoCliente — 6 pasos en lenguaje del cliente', () => {
   })
 })
 
+describe('rutas directas (Chile / Buenos Aires): el puerto es el destino', () => {
+  it('embarcada → "Llega a destino"; llegó sin tramo terrestre → En destino desde la ETA', () => {
+    const viene = chile({ ETD: dia(-10), ETA: dia(4) })
+    expect(estadoCliente(viene, HOY)).toBe('embarcada')
+    expect(proximoHito(viene, HOY)).toEqual({ label: 'Llega a destino', fecha: '06/09/2026', iso: dia(4) })
+    const llego = chile({ ETA: dia(-3) })
+    expect(estadoCliente(llego, HOY)).toBe('en_deposito')
+    expect(etiquetaEstado(llego, 'en_deposito')).toBe('En destino')
+    expect(proximoHito(llego, HOY)).toEqual({ label: 'En destino desde', fecha: '30/08/2026', iso: dia(-3) })
+  })
+  it('el día de la ETA todavía "llega hoy" (embarcada), no en destino', () => {
+    expect(estadoCliente(chile({ ETA: dia(0) }), HOY)).toBe('embarcada')
+  })
+  it('con tramo terrestre cargado (Buenos Aires con fiscal) se sigue como cualquier carga, con etiqueta "En puerto"', () => {
+    const ba = carga({ REF: 'A8085', PAIS: 'AR', POD: 'BUENOS AIRES', ETA: dia(-2) }, [op({ SALIDA: dia(3), ETA_FISC: dia(4) })])
+    expect(estadoCliente(ba, HOY)).toBe('en_montevideo')
+    expect(etiquetaEstado(ba, 'en_montevideo')).toBe('En puerto')
+    expect(proximoHito(ba, HOY)).toEqual({ label: 'Sale del puerto', fecha: '05/09/2026', iso: dia(3) })
+  })
+  it('Buenos Aires con FISCAL cargado pero sin fechas: sigue "En puerto" esperando salida, no "En destino" (así no retrocede al cargar la salida)', () => {
+    const ba = carga({ REF: 'A8085', PAIS: 'AR', POD: 'BUENOS AIRES', ETA: dia(-2) }, [op({ FISCAL: 'CACEC' })])
+    expect(estadoCliente(ba, HOY)).toBe('en_montevideo')
+    expect(etiquetaEstado(ba, 'en_montevideo')).toBe('En puerto')
+    const e = esperandoSalida([ba], HOY)
+    expect(e).toHaveLength(1)
+    expect(e[0]).toMatchObject({ lugar: 'puerto BUENOS AIRES', enPuerto: true, ruta: 'AR' })
+    // sin fiscal ni tramo, el puerto es el destino
+    const sinFiscal = carga({ REF: 'A8086', PAIS: 'AR', POD: 'BUENOS AIRES', ETA: dia(-2) }, [op({ FISCAL: '' })])
+    expect(estadoCliente(sinFiscal, HOY)).toBe('en_deposito')
+    expect(esperandoSalida([sinFiscal], HOY)).toEqual([])
+    // llegando al puerto: en "Llegan a destino" como LLEGA, con o sin fiscal
+    expect(llegadasADestino([carga({ REF: 'A8087', PAIS: 'AR', POD: 'BUENOS AIRES', ETA: dia(2) }, [op({ FISCAL: 'CACEC' })])], HOY).map(f => f.estado)).toEqual(['llega'])
+  })
+  it('activa hasta 10 días después de llegar al puerto de destino; después Historial', () => {
+    expect(esActivaParaCliente(chile({ ETA: dia(-CLIENTE_ENTREGADA_DIAS) }), HOY)).toBe(true)
+    expect(esActivaParaCliente(chile({ ETA: dia(-CLIENTE_ENTREGADA_DIAS - 1) }), HOY)).toBe(false)
+  })
+})
+
 describe('esActivaParaCliente — qué va a Mis cargas y qué a Historial', () => {
   it('un TRASIEGO que salió ayer y llega mañana sigue ACTIVO (el admin lo daba por completado)', () => {
     const s = carga({ ETA: dia(-5) }, [op({ OPERATIVA: 'TRASIEGO', SALIDA: dia(-1), ETA_FISC: dia(1) })])
     expect(esActivaParaCliente(s, HOY)).toBe(true)
-    expect(llegadasADeposito([s], HOY).map(f => f.estado)).toEqual(['en_frontera'])
+    expect(llegadasADestino([s], HOY).map(f => f.estado)).toEqual(['en_frontera'])
   })
-  it('en tu depósito hace poco → activa; hace más de 10 días → Historial', () => {
+  it('en destino hace poco → activa; hace más de 10 días → Historial', () => {
     expect(esActivaParaCliente(carga({ ETA: dia(-20) }, [op({ SALIDA: dia(-9), ETA_FISC: dia(-CLIENTE_ENTREGADA_DIAS) })]), HOY)).toBe(true)
     expect(esActivaParaCliente(carga({ ETA: dia(-20) }, [op({ SALIDA: dia(-15), ETA_FISC: dia(-CLIENTE_ENTREGADA_DIAS - 1) })]), HOY)).toBe(false)
   })
@@ -111,7 +193,7 @@ describe('esActivaParaCliente — qué va a Mis cargas y qué a Historial', () =
     expect(esActivaParaCliente(carga({ ETA: dia(-40) }, [op({ SALIDA: dia(-(DIAS_LLEGADA_SUPUESTA + CLIENTE_ENTREGADA_DIAS)) })]), HOY)).toBe(true)
     expect(esActivaParaCliente(carga({ ETA: dia(-40) }, [op({ SALIDA: dia(-(DIAS_LLEGADA_SUPUESTA + CLIENTE_ENTREGADA_DIAS + 1)) })]), HOY)).toBe(false)
   })
-  it('sin operativas: activa hasta 60 días después de la ETA', () => {
+  it('sin operativas (ruta UY): activa hasta 60 días después de la ETA', () => {
     expect(esActivaParaCliente(carga({ ETA: dia(-50) }, []), HOY)).toBe(true)
     expect(esActivaParaCliente(carga({ ETA: dia(-61) }, []), HOY)).toBe(false)
     expect(esActivaParaCliente(carga({ ETA: dia(20) }, []), HOY)).toBe(true)
@@ -132,96 +214,132 @@ describe('proximoHito — siempre el mismo dato por estado', () => {
     expect(proximoHito(carga({ ETA: dia(-2) }, [op({ SALIDA: dia(0) })]), HOY)).toEqual({ label: 'Sale de Montevideo', fecha: '02/09/2026', iso: HOY })
     expect(proximoHito(carga({ ETA: dia(-2) }, [op()]), HOY)).toEqual({ label: 'Salida', fecha: 'A coordinar', iso: '' })
   })
-  it('en camino → Llega a tu depósito (la más próxima de las que viajan)', () => {
+  it('en camino → Llega a destino (la más próxima de las que viajan)', () => {
     const h = proximoHito(carga({ ETA: dia(-5) }, [
       op({ SALIDA: dia(-1), ETA_FISC: dia(2) }),
       op({ CNTR_OP: 'B', SALIDA: dia(-1), ETA_FISC: dia(1) }),
     ]), HOY)
-    expect(h).toEqual({ label: 'Llega a tu depósito', fecha: '03/09/2026', iso: dia(1) })
+    expect(h).toEqual({ label: 'Llega a destino', fecha: '03/09/2026', iso: dia(1) })
   })
-  it('en depósito → desde cuándo; entregada → sin fecha', () => {
-    expect(proximoHito(carga({ ETA: dia(-9) }, [op({ SALIDA: dia(-4), ETA_FISC: dia(-2) })]), HOY).label).toBe('En tu depósito desde')
+  it('en destino → desde cuándo; entregada → sin fecha', () => {
+    expect(proximoHito(carga({ ETA: dia(-9) }, [op({ SALIDA: dia(-4), ETA_FISC: dia(-2) })]), HOY).label).toBe('En destino desde')
     expect(proximoHito(carga({ ETA: dia(-9) }, [op({ SALIDA: dia(-4), ETA_FISC: dia(-2), LIBRE: 'DEVUELTO' })]), HOY)).toEqual({ label: 'Entregada', fecha: '', iso: '' })
   })
 })
 
-describe('llegadasADeposito — card 1', () => {
+describe('llegadasADestino — card 1', () => {
   it('en frontera primero, después sale hoy, después por fecha de llegada', () => {
-    const l = llegadasADeposito([
+    const l = llegadasADestino([
       carga({ REF: 'A1', CLIENT_REF: '', ETA: dia(-6) }, [op({ SALIDA: dia(3), ETA_FISC: dia(5) })]),
       carga({ REF: 'A2', ETA: dia(-6) }, [op({ SALIDA: dia(-2), ETA_FISC: dia(1) })]),
       carga({ REF: 'A3', ETA: dia(-6) }, [op({ SALIDA: dia(0), ETA_FISC: dia(2) })]),
     ], HOY)
     expect(l.map(f => f.ref + ':' + f.estado)).toEqual(['A2:en_frontera', 'A3:sale_hoy', 'A1:sale'])
-    expect(l[0]).toMatchObject({ fecha: dia(1), dias: 1, cntr: 'FANU1858496', descripcion: 'MOTOPARTES', fiscal: 'CACEC' })
+    expect(l[0]).toMatchObject({ fecha: dia(1), dias: 1, cntr: 'FANU1858496', descripcion: 'MOTOPARTES', fiscal: 'CACEC', ruta: 'UY', tipo: 'fcl', camion: '' })
     expect(l[2].refs.principal).toBe('TWF 1')
   })
+  it('rutas directas: el buque que llega al puerto de destino en los próximos 7 días entra como "llega"', () => {
+    const l = llegadasADestino([
+      chile({ REF: 'HOY', ETA: dia(0) }),
+      chile({ REF: 'EN7', ETA: dia(DESTINO_DIAS_ADELANTE) }),
+      chile({ REF: 'EN8', ETA: dia(DESTINO_DIAS_ADELANTE + 1) }),
+      chile({ REF: 'LLEGO', ETA: dia(-1) }),
+    ], HOY)
+    expect(l.map(f => f.ref + ':' + f.estado + ':' + f.dias)).toEqual(['HOY:llega:0', `EN7:llega:${DESTINO_DIAS_ADELANTE}`])
+    expect(l[0]).toMatchObject({ ruta: 'CL', fecha: HOY, fiscal: 'SAN ANTONIO', salida: '' })
+  })
+  it('LCL en camión: tránsito supuesto de 3 días sin fecha de llegada; si el equipo marcó el camión entregado, llegó', () => {
+    const viajando = lcl({ ETA: dia(-10) }, [opCamion({ SALIDA: dia(-2) })])
+    expect(estadoCliente(viajando, HOY)).toBe('en_camino')
+    const llegada = lcl({ ETA: dia(-10) }, [opCamion({ SALIDA: dia(-3) })])
+    expect(estadoCliente(llegada, HOY)).toBe('en_deposito')
+    expect(proximoHito(llegada, HOY)).toEqual({ label: 'En destino (estimado)', fecha: '02/09/2026', iso: HOY })
+    const entregado = lcl({ ETA: dia(-10) }, [opCamion({ SALIDA: dia(-1), ENTREGADO: true } as never)])
+    expect(estadoCliente(entregado, HOY)).toBe('en_deposito')
+    expect(proximoHito(entregado, HOY).iso).toBe(HOY) // a más tardar hoy
+    expect(llegadasADestino([entregado], HOY)).toEqual([])
+  })
+  it('LCL con camión: la fila lleva el código del camión y el fiscal de esa carga', () => {
+    const l = llegadasADestino([lcl({ ETA: dia(-10) }, [opCamion({ SALIDA: dia(-1), ETA_FISC: dia(1) })])], HOY)
+    expect(l).toHaveLength(1)
+    expect(l[0]).toMatchObject({ estado: 'en_frontera', camion: 'C463', cntr: '', fiscal: 'ZF RAFAELA', tipo: 'lcl', ruta: 'UY' })
+    expect(l[0].refs.principal).toBe('TWF E234')
+  })
   it('sin SALIDA no entra (es "esperando salida"); ya llegado, lejano, en el mar y devuelto tampoco', () => {
-    const l = llegadasADeposito([
+    const l = llegadasADestino([
       carga({ REF: 'SINSALIDA', ETA: dia(-1) }, [op({ ETA_FISC: dia(3) })]),
       carga({ REF: 'LLEGO', ETA: dia(-9) }, [op({ SALIDA: dia(-4), ETA_FISC: dia(-1) })]),
       carga({ REF: 'ENMAR', ETA: dia(2) }, [op({ SALIDA: dia(4), ETA_FISC: dia(6) })]),
-      carga({ REF: 'LEJOS', ETA: dia(-1) }, [op({ SALIDA: dia(DEPOSITO_DIAS_ADELANTE + 1) })]),
+      carga({ REF: 'LEJOS', ETA: dia(-1) }, [op({ SALIDA: dia(DESTINO_DIAS_ADELANTE + 1) })]),
       carga({ REF: 'DEVUELTA', ETA: dia(-9) }, [op({ SALIDA: dia(-1), LIBRE: 'DEVUELTO' })]),
     ], HOY)
     expect(l).toEqual([])
   })
   it('salió sin fecha de llegada: en frontera con llegada a confirmar', () => {
-    const [f] = llegadasADeposito([carga({ ETA: dia(-3) }, [op({ SALIDA: dia(-1) })])], HOY)
+    const [f] = llegadasADestino([carga({ ETA: dia(-3) }, [op({ SALIDA: dia(-1) })])], HOY)
     expect(f).toMatchObject({ estado: 'en_frontera', fecha: '', dias: null, salida: dia(-1) })
   })
 })
 
-describe('esperandoSalida — card 2', () => {
+describe('esperandoSalida — card 2 (solo vía Montevideo)', () => {
   it('arribadas ANTES de hoy sin salida, la que más espera primero, con dónde está', () => {
     const l = esperandoSalida([
       carga({ REF: 'A1', ETA: dia(-2), TERMINAL: 'TCP' }, [op({ LUGAR_SALIDA: '' })]),
       carga({ REF: 'A2', ETA: dia(-7) }, [op({ LUGAR_SALIDA: 'PLANIR' })]),
-      carga({ REF: 'PROG', ETA: dia(-3) }, [op({ SALIDA: dia(2) })]),        // tiene salida programada → card 1
+      carga({ REF: 'PROG', ETA: dia(-3) }, [op({ SALIDA: dia(2) })]),
       carga({ REF: 'SALIO', ETA: dia(-3) }, [op({ SALIDA: dia(-1) })]),
-      carga({ REF: 'HOYLLEGA', ETA: dia(0) }, [op()]),                       // el día de la ETA está en "Llegan a Montevideo"
+      carga({ REF: 'HOYLLEGA', ETA: dia(0) }, [op()]),
       carga({ REF: 'ENMAR', ETA: dia(2) }, [op()]),
-      carga({ REF: 'SINETA', ETA: '' }, [op()]),                              // sin ETA no se afirma que llegó
-      carga({ REF: 'PISO', ETA: dia(-20) }, [op({ OPERATIVA: 'CARGA A PISO', LIBRE: 'DEVUELTO' })]), // contenedor devuelto, mercadería en depósito
-      carga({ REF: 'DESCARGADA', ETA: dia(-4) }, [op({ DESCARGA: dia(-4) })]), // "¿Llegó?" no es entrega: sigue esperando
+      carga({ REF: 'SINETA', ETA: '' }, [op()]),
+      carga({ REF: 'PISO', ETA: dia(-20) }, [op({ OPERATIVA: 'CARGA A PISO', LIBRE: 'DEVUELTO' })]),
+      carga({ REF: 'DESCARGADA', ETA: dia(-4) }, [op({ DESCARGA: dia(-4) })]),
+      chile({ REF: 'CHILE', ETA: dia(-3) }, [op({ LUGAR_SALIDA: '' })]),   // ruta directa: no espera salida
     ], HOY)
     expect(l.map(f => f.ref + ':' + f.lugar + ':' + f.dias)).toEqual(['PISO:terminal TCP:20', 'A2:PLANIR:7', 'DESCARGADA:terminal TCP:4', 'A1:terminal TCP:2'])
   })
+  it('LCL arribada sin camión: espera en su depósito de desconsolidación', () => {
+    const l = esperandoSalida([lcl({ ETA: dia(-5) }, [op({ OPERATIVA: '', CNTR_OP: '', DEPOSITO: 'PLANIR', LUGAR_SALIDA: 'PLANIR' })])], HOY)
+    expect(l.map(f => f.ref + ':' + f.lugar + ':' + f.tipo)).toEqual(['E234:PLANIR:lcl'])
+  })
 })
 
-describe('llegadasAMontevideo — card 3', () => {
+describe('llegadasAMontevideo — card 3 (solo vía Montevideo)', () => {
   it('ETA de hoy a 14 días, con el paso siguiente en palabras del cliente', () => {
     const l = llegadasAMontevideo([
       carga({ REF: 'HOY', ETA: dia(0) }, [op({ OPERATIVA: 'TRASIEGO', DEPOSITO: 'PLANIR' })]),
       carga({ REF: 'DIRECTO', ETA: dia(4) }, [op({ OPERATIVA: 'CONTENEDOR' })]),
+      lcl({ REF: 'E1', ETA: dia(6) }, [op({ OPERATIVA: '', DEPOSITO: 'TCP' })]),
       carga({ REF: 'PISO', ETA: dia(MVD_DIAS_ADELANTE) }, [op({ OPERATIVA: 'CARGA A PISO', DEPOSITO: 'GODILCO' })]),
       carga({ REF: 'AYER', ETA: dia(-1) }),
       carga({ REF: 'LEJOS', ETA: dia(MVD_DIAS_ADELANTE + 1) }),
-      carga({ REF: 'SINETA', ETA: '' }),
+      chile({ REF: 'CHILE', ETA: dia(3) }),
     ], HOY)
     expect(l.map(f => f.ref + ':' + f.dias + ':' + f.pasoSiguiente)).toEqual([
-      'HOY:0:Trasiego en PLANIR', 'DIRECTO:4:Directo a tu depósito', `PISO:${MVD_DIAS_ADELANTE}:Desconsolida en GODILCO`,
+      'HOY:0:Trasiego en PLANIR', 'DIRECTO:4:Directo a tu depósito', 'E1:6:Desconsolida en TCP', `PISO:${MVD_DIAS_ADELANTE}:Desconsolida en GODILCO`,
     ])
     expect(l[0]).toMatchObject({ buque: 'SANTA CATARINA EXPRESS', cntrs: 1 })
   })
-  it('sin operativa el paso siguiente queda vacío', () => {
+  it('sin operativa el paso siguiente queda vacío (FCL) o "Desconsolida" (LCL)', () => {
     expect(pasoSiguiente(carga({}, []))).toBe('')
+    expect(pasoSiguiente(lcl({}, []))).toBe('Desconsolida en depósito')
   })
 })
 
 describe('embarcadas — card 4', () => {
-  it('ETD de −7 a +7 días, sin las que ya están en "Llegan a Montevideo" (ETA a 14 días o menos)', () => {
+  it('ETD de −7 a +7 días, sin lo que ya está en una card de llegada', () => {
     const l = embarcadas([
       carga({ REF: 'ZARPO', ETD: dia(-3), ETA: dia(30) }),
       carga({ REF: 'ZARPA', ETD: dia(5), ETA: dia(40) }),
       carga({ REF: 'VIEJA', ETD: dia(-8), ETA: dia(25) }),
-      carga({ REF: 'CORTA', ETD: dia(-3), ETA: dia(5) }),       // ya en "Llegan a Montevideo"
+      carga({ REF: 'CORTA', ETD: dia(-3), ETA: dia(5) }),            // ya en "Llegan a Montevideo"
+      chile({ REF: 'CLCERCA', ETD: dia(-3), ETA: dia(5) }),          // ya en "Llegan a destino"
+      chile({ REF: 'CLLEJOS', ETD: dia(-3), ETA: dia(10) }),         // todavía no está en ninguna llegada
       carga({ REF: 'LLEGAHOY', ETD: dia(-2), ETA: dia(0) }),
-      carga({ REF: 'LLEGO', ETD: dia(-2), ETA: dia(-1) }),
       carga({ REF: 'SINETD', ETD: '', ETA: dia(30) }),
     ], HOY)
-    expect(l.map(f => f.ref + ':' + f.dias + ':' + f.zarpo)).toEqual(['ZARPO:-3:true', 'ZARPA:5:false'])
-    expect(l[0].eta).toBe(dia(30))
+    expect(l.map(f => f.ref)).toEqual(['CLLEJOS', 'ZARPO', 'ZARPA']) // mismo ETD → por ref
+    expect(l[1]).toMatchObject({ zarpo: true, dias: -3, eta: dia(30), ruta: 'UY' })
+    expect(l[0]).toMatchObject({ ruta: 'CL', eta: dia(10) })
   })
 })
 
@@ -239,11 +357,22 @@ describe('las cards son excluyentes: una carga (de un contenedor) está en UNA s
     ['zarpó hace 3 y llega en 5 (ruta corta)', carga({ ETD: dia(-3), ETA: dia(5) }, [op()])],
     ['zarpa en 2 y llega en 10', carga({ ETD: dia(2), ETA: dia(10) }, [op()])],
     ['salida vieja sin llegada cargada', carga({ ETA: dia(-40) }, [op({ SALIDA: dia(-20) })])],
+    ['Chile llega hoy', chile({ ETD: dia(-20), ETA: dia(0) })],
+    ['Chile zarpó hace 3, llega en 5', chile({ ETD: dia(-3), ETA: dia(5) })],
+    ['Chile zarpó hace 3, llega en 10', chile({ ETD: dia(-3), ETA: dia(10) })],
+    ['Chile llegó ayer', chile({ ETA: dia(-1) })],
+    ['LCL en camión', lcl({ ETA: dia(-10) }, [opCamion({ SALIDA: dia(-1), ETA_FISC: dia(1) })])],
+    ['LCL esperando', lcl({ ETA: dia(-5) }, [op({ OPERATIVA: '', CNTR_OP: '', LUGAR_SALIDA: 'PLANIR' })])],
+    ['LCL sin país ni puerto, esperando', lcl({ PAIS: '' as unknown as ParsedShipment['PAIS'], POD: '', ETA: dia(-5) }, [op({ OPERATIVA: '', CNTR_OP: '' })])],
+    ['Bs. As. con fiscal, llegó ayer', carga({ PAIS: 'AR', POD: 'BUENOS AIRES', ETA: dia(-1) }, [op({ FISCAL: 'CACEC' })])],
+    ['Bs. As. con fiscal, llega en 3', carga({ PAIS: 'AR', POD: 'BUENOS AIRES', ETA: dia(3) }, [op({ FISCAL: 'CACEC' })])],
+    ['Bs. As. con fiscal, sale en 2', carga({ PAIS: 'AR', POD: 'BUENOS AIRES', ETA: dia(-3) }, [op({ FISCAL: 'CACEC', SALIDA: dia(2) })])],
+    ['LCL en camión entregado', lcl({ ETA: dia(-10) }, [opCamion({ SALIDA: dia(-1), ENTREGADO: true } as never)])],
   ]
   for (const [nombre, s] of casos) {
     it(nombre, () => {
       const h = hoyCliente([s], HOY)
-      const n = [h.deposito, h.esperando, h.montevideo, h.embarques].filter(l => l.length > 0).length
+      const n = [h.destino, h.esperando, h.montevideo, h.embarques].filter(l => l.length > 0).length
       expect(n).toBeLessThanOrEqual(1)
     })
   }

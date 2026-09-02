@@ -6,8 +6,10 @@
  * celular, card vacía = no se muestra. Toda la lógica vive en lib/hoyCliente.ts
  * (pura, testeada); acá solo se pinta.
  *
- * Orden (spec aprobada por Brian 02/09): Llegan a tu depósito → En Montevideo,
+ * Orden (spec aprobada por Brian 02/09): Llegan a destino → En Montevideo,
  * esperando salida → Llegan a Montevideo → Embarcadas → Atención (solo si hay).
+ * Los selectores de ruta/tipo viven en el portal (filtran cards Y lista); acá
+ * solo se marcan ruta y tipo en la fila cuando el cliente ve mezcla.
  *
  * Spec: docs/superpowers/specs/2026-09-02-portal-cliente-hoy-design.md
  */
@@ -15,17 +17,24 @@ import { useMemo, type ReactNode, type CSSProperties } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Anchor, Boat, CheckCircle, EnvelopeSimple, Timer, Warehouse, Warning } from '@phosphor-icons/react'
 import type { ParsedShipment, ShipmentAlert } from '@/lib/shipmentTypes'
-import { hoyCliente, alertasCliente, textoDias, type RefsCliente, type EstadoLlegadaDeposito } from '@/lib/hoyCliente'
+import {
+  hoyCliente, alertasCliente, textoDias, RUTA_CHIP, TIPO_LABEL,
+  type RefsCliente, type EstadoLlegadaDestino, type Ruta, type Tipo,
+} from '@/lib/hoyCliente'
 import { fmtDateDMY } from '@/lib/format'
 import { useBrand } from '@/lib/brand'
 
 interface HoyClienteProps {
-  /** Cargas activas del cliente (sin filtros de la lista). */
+  /** Cargas activas del cliente, YA filtradas por ruta/tipo (sin el buscador de la lista). */
   shipments: ParsedShipment[]
   /** Alertas visibles (no descartadas); acá se filtran a critical/warning y se traducen. */
   alerts: ShipmentAlert[]
   /** Hoy en ISO local (YYYY-MM-DD). */
   hoyISO: string
+  /** El cliente tiene cargas de más de una ruta y está viendo todas: marcar la ruta en la fila. */
+  mostrarRuta?: boolean
+  /** Ídem tipo (FCL / LCL). */
+  mostrarTipo?: boolean
   /** Abre la carga en la lista (pestaña Mis cargas, fila desplegada). */
   onVerCarga: (ref: string) => void
   onVerAlertas: () => void
@@ -42,7 +51,6 @@ function CardHoy({ med, tono, icon, titulo, subtitulo, count, children, onVerMas
   subtitulo: string
   count: number
   children: ReactNode
-  /** Si hay más filas que MAX_FILAS: qué hacer con "y N más". */
   onVerMas?: () => void
 }) {
   const card = tono === 'error'
@@ -112,18 +120,36 @@ function Refs({ med, refs }: { med: boolean; refs: RefsCliente }) {
   )
 }
 
+/** Marcas de ruta y tipo: solo cuando el cliente ve mezcla (props del portal). */
+function Marcas({ ruta, tipo, mostrarRuta, mostrarTipo }: { ruta: Ruta; tipo: Tipo; mostrarRuta?: boolean; mostrarTipo?: boolean }) {
+  if (!mostrarRuta && !mostrarTipo) return null
+  return (
+    <>
+      {mostrarTipo && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-border text-muted-foreground">{TIPO_LABEL[tipo]}</span>}
+      {mostrarRuta && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-muted text-muted-foreground">{RUTA_CHIP[ruta]}</span>}
+    </>
+  )
+}
+
 const Desc = ({ texto }: { texto: string }) =>
   texto ? <span className="text-xs text-muted-foreground truncate max-w-[180px]" title={texto}>{texto}</span> : null
 
-const Cntr = ({ cntr }: { cntr: string }) =>
-  cntr ? <span className="font-mono text-[11px] text-muted-foreground">{cntr}</span> : null
+const Cntr = ({ cntr, camion }: { cntr: string; camion?: string }) =>
+  cntr
+    ? <span className="font-mono text-[11px] text-muted-foreground">{cntr}</span>
+    : camion
+      ? <span className="font-mono text-[11px] text-muted-foreground">Camión {camion}</span>
+      : null
 
-function ChipEstadoDeposito({ med, estado, salida }: { med: boolean; estado: EstadoLlegadaDeposito; salida: string }) {
+function ChipEstadoDestino({ med, estado, salida }: { med: boolean; estado: EstadoLlegadaDestino; salida: string }) {
   if (estado === 'en_frontera') {
     return <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-orange-100 text-orange-700">EN CAMINO</span>
   }
   if (estado === 'sale_hoy') {
     return <span className={med ? 'text-[10px] font-bold px-1.5 py-0.5 rounded bg-med-violeta text-white' : 'text-[10px] font-bold px-1.5 py-0.5 rounded bg-sky-600 text-white'}>SALE HOY</span>
+  }
+  if (estado === 'llega') {
+    return <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">LLEGA AL PUERTO</span>
   }
   return <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">Sale el {fmtDateDMY(salida)}</span>
 }
@@ -135,34 +161,40 @@ const Derecha = ({ label, valor, detalle }: { label: string; valor: string; deta
   </span>
 )
 
-export default function HoyCliente({ shipments, alerts, hoyISO, onVerCarga, onVerAlertas }: HoyClienteProps) {
+export default function HoyCliente({ shipments, alerts, hoyISO, mostrarRuta, mostrarTipo, onVerCarga, onVerAlertas }: HoyClienteProps) {
   const brand = useBrand()
   const med = brand.id === 'med'
   const hoy = useMemo(() => hoyCliente(shipments, hoyISO), [shipments, hoyISO])
   const atencion = useMemo(() => alertasCliente(alerts, shipments), [alerts, shipments])
-  const nada = hoy.deposito.length === 0 && hoy.esperando.length === 0 && hoy.montevideo.length === 0 && hoy.embarques.length === 0
+  const nada = hoy.destino.length === 0 && hoy.esperando.length === 0 && hoy.montevideo.length === 0 && hoy.embarques.length === 0
   const mailSalida = (refPrincipal: string) =>
     `mailto:${brand.contact.email}?subject=${encodeURIComponent(`Salida ${refPrincipal}`)}&body=${encodeURIComponent(`Hola, quiero coordinar la salida de la carga ${refPrincipal}. La necesito para el día: `)}`
+  // Ruta solo donde se mezclan rutas (destino y embarcadas); en las cards que
+  // son solo Montevideo la marca "vía Montevideo" es ruido (revisión 02/09).
+  const marcasMixtas = { mostrarRuta, mostrarTipo }
+  const marcasSoloTipo = { mostrarRuta: false, mostrarTipo }
+  const esperandoEnPuerto = hoy.esperando.length > 0 && hoy.esperando.every(f => f.enPuerto)
 
   return (
     <div className="space-y-4 mb-8">
-      {hoy.deposito.length > 0 && (
+      {hoy.destino.length > 0 && (
         <CardHoy
           med={med} tono="info" icon={<Warehouse size={18} weight="fill" />}
-          titulo="Llegan a tu depósito"
-          subtitulo="Contenedores en camino a tu depósito o que salen de Montevideo en los próximos días."
-          count={hoy.deposito.length}
-          onVerMas={() => onVerCarga(hoy.deposito[MAX_FILAS].ref)}
+          titulo="Llegan a destino"
+          subtitulo="Lo que llega a tu depósito fiscal, o al puerto de destino, en los próximos días."
+          count={hoy.destino.length}
+          onVerMas={() => onVerCarga(hoy.destino[MAX_FILAS].ref)}
         >
-          {hoy.deposito.slice(0, MAX_FILAS).map(f => (
-            <Fila key={`${f.ref}|${f.cntr}`} med={med} onClick={() => onVerCarga(f.ref)}>
+          {hoy.destino.slice(0, MAX_FILAS).map(f => (
+            <Fila key={`${f.ref}|${f.cntr}|${f.camion}`} med={med} onClick={() => onVerCarga(f.ref)}>
               <Refs med={med} refs={f.refs} />
+              <Marcas ruta={f.ruta} tipo={f.tipo} {...marcasMixtas} />
               <Desc texto={f.descripcion} />
-              <Cntr cntr={f.cntr} />
-              <ChipEstadoDeposito med={med} estado={f.estado} salida={f.salida} />
+              <Cntr cntr={f.cntr} camion={f.camion} />
+              <ChipEstadoDestino med={med} estado={f.estado} salida={f.salida} />
               {f.fiscal && <span className="text-[11px] text-muted-foreground">→ {f.fiscal}</span>}
               {f.fecha
-                ? <Derecha label="Llega" valor={fmtDateDMY(f.fecha)} detalle={textoDias(f.dias)} />
+                ? <Derecha label={f.estado === 'llega' ? 'Llega a destino' : 'Llega'} valor={fmtDateDMY(f.fecha)} detalle={textoDias(f.dias)} />
                 : <Derecha label="Llegada" valor="A confirmar" />}
             </Fila>
           ))}
@@ -172,8 +204,8 @@ export default function HoyCliente({ shipments, alerts, hoyISO, onVerCarga, onVe
       {hoy.esperando.length > 0 && (
         <CardHoy
           med={med} tono="aviso" icon={<Timer size={18} weight="fill" />}
-          titulo="En Montevideo, esperando salida"
-          subtitulo="Ya llegaron y todavía no tienen fecha de salida hacia tu depósito. Desde cada fila podés pedirla por mail."
+          titulo={esperandoEnPuerto ? 'En puerto, esperando salida' : 'En Montevideo, esperando salida'}
+          subtitulo="Ya llegaron y todavía no tienen fecha de salida hacia destino. Desde cada fila podés pedirla por mail."
           count={hoy.esperando.length}
           onVerMas={() => onVerCarga(hoy.esperando[MAX_FILAS].ref)}
         >
@@ -191,6 +223,7 @@ export default function HoyCliente({ shipments, alerts, hoyISO, onVerCarga, onVe
               )}
             >
               <Refs med={med} refs={f.refs} />
+              <Marcas ruta={f.ruta} tipo={f.tipo} {...(esperandoEnPuerto ? marcasSoloTipo : marcasMixtas)} />
               <Desc texto={f.descripcion} />
               <Cntr cntr={f.cntr} />
               <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">En {f.lugar}</span>
@@ -211,6 +244,7 @@ export default function HoyCliente({ shipments, alerts, hoyISO, onVerCarga, onVe
           {hoy.montevideo.slice(0, MAX_FILAS).map(f => (
             <Fila key={f.ref} med={med} onClick={() => onVerCarga(f.ref)}>
               <Refs med={med} refs={f.refs} />
+              <Marcas ruta={f.ruta} tipo={f.tipo} {...marcasSoloTipo} />
               <Desc texto={f.descripcion} />
               {f.buque && <span className="text-[11px] text-muted-foreground truncate max-w-[160px]">{f.buque}</span>}
               {f.cntrs > 0 && <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">{f.cntrs} CNTR</span>}
@@ -232,9 +266,10 @@ export default function HoyCliente({ shipments, alerts, hoyISO, onVerCarga, onVe
           {hoy.embarques.slice(0, MAX_FILAS).map(f => (
             <Fila key={f.ref} med={med} onClick={() => onVerCarga(f.ref)}>
               <Refs med={med} refs={f.refs} />
+              <Marcas ruta={f.ruta} tipo={f.tipo} {...marcasMixtas} />
               <Desc texto={f.descripcion} />
               {f.buque && <span className="text-[11px] text-muted-foreground truncate max-w-[160px]">{f.buque}</span>}
-              {f.eta && <span className="text-[11px] text-muted-foreground">Llega a Montevideo {fmtDateDMY(f.eta)}</span>}
+              {f.eta && <span className="text-[11px] text-muted-foreground">{f.ruta === 'UY' ? 'Llega a Montevideo' : 'Llega a destino'} {fmtDateDMY(f.eta)}</span>}
               <Derecha label={f.zarpo ? 'Zarpó' : 'Zarpa'} valor={fmtDateDMY(f.etd)} detalle={textoDias(f.dias)} />
             </Fila>
           ))}

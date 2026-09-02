@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  esCargaDeClienteActiva, rowToClientShipment, CLIENT_SHIPMENT_COLS,
+  esCargaDeClienteActiva, rowToClientShipment, CLIENT_SHIPMENT_COLS, camionesPorRef,
   CLIENTE_ETA_MAX_DIAS, CLIENTE_ENTREGADA_DIAS,
 } from '../../api/_lib/clientShipments'
 
@@ -93,5 +93,80 @@ describe('rowToClientShipment — el contrato de la whitelist', () => {
     expect(v.operativas).toHaveLength(1)
     expect(v.operativas[0].SALIDA).toBe('2026-09-08')
     expect(v.operativas[0].CLIENTE_OP).toBe('')
+  })
+})
+
+describe('rowToClientShipment — modalidad y LCL en camión (Brian 02/09)', () => {
+  const lcl = {
+    ref: 'E234', client_ref: '', cliente: 'CHIAPERO Y ASOC. S.R.L.', mode: 'lcl',
+    eta: '2026-08-20', etd: '2026-07-10', buque: 'MSC LAURA', deposito: 'PLANIR', fiscal: 'CACEC',
+    observacion: 'REPUESTOS', pkgs: 12, kg: 800, m3: 3.2, dest_country: 'UY',
+    operativas: null, salida: '', eta_fiscal: '',
+  }
+  const camion = { code: 'C463', departure_date: '2026-09-01', arrival_date: '2026-09-03', load_date: '2026-09-01', entregado: false, fiscal: 'ZF RAFAELA' }
+
+  it('MODE viaja en minúscula (fcl por defecto)', () => {
+    expect((rowToClientShipment({ ref: 'A1', mode: 'FCL' }) as any).MODE).toBe('fcl')
+    expect((rowToClientShipment({ ref: 'E1', mode: 'lcl' }) as any).MODE).toBe('lcl')
+    expect((rowToClientShipment({ ref: 'A2' }) as any).MODE).toBe('fcl')
+  })
+
+  it('una LCL con camión arma la operativa CONSOLIDADO con las fechas del camión y el fiscal de la fila; la descripción es la de la carga', () => {
+    const v = rowToClientShipment(lcl, camion) as any
+    expect(v.operativas).toHaveLength(1)
+    expect(v.operativas[0]).toMatchObject({
+      OPERATIVA: 'CONSOLIDADO', SALIDA: '2026-09-01', ETA_FISC: '2026-09-03', CAMION: 'C463', ENTREGADO: false,
+      FISCAL: 'ZF RAFAELA', DESCRIPCION: 'REPUESTOS', DEPOSITO: 'PLANIR', LUGAR_SALIDA: 'PLANIR', CNTR_OP: '',
+    })
+    expect(v.operativas[0].TRANSPORTE).toBe('')
+  })
+
+  it('camión marcado entregado sin fecha de llegada → ENTREGADO viaja para que el portal lo dé por llegado', () => {
+    const v = rowToClientShipment(lcl, { ...camion, arrival_date: '', entregado: true }) as any
+    expect(v.operativas[0]).toMatchObject({ ETA_FISC: '', ENTREGADO: true })
+  })
+
+  it('el código del camión solo viaja si es C###: un code libre con refs y clientes ajenos se blanquea', () => {
+    const loads = [{ source_ref: 'E234', truck_id: 't9', fiscal: '', pending: null }]
+    const trucks = [{ id: 't9', code: 'A7887 + A7849 - YEMEN', departure_date: '2026-08-20', arrival_date: '', load_date: '2026-08-20', draft: false, status: 'delivered' }]
+    const m = camionesPorRef(loads, trucks)
+    expect(m.get('E234')).toMatchObject({ code: '', entregado: true })
+    const json = JSON.stringify(rowToClientShipment(lcl, m.get('E234')))
+    expect(json).not.toContain('YEMEN')
+    expect(json).not.toContain('A7887')
+  })
+
+  it('una LCL sin nada cargado igual tiene su operativa (para que "esperando salida" la vea)', () => {
+    const v = rowToClientShipment({ ref: 'E999', mode: 'lcl', eta: '2026-08-20' }, null) as any
+    expect(v.operativas).toHaveLength(1)
+    expect(v.operativas[0]).toMatchObject({ SALIDA: '', ETA_FISC: '', LUGAR_SALIDA: '' })
+    const fcl = rowToClientShipment({ ref: 'A999', mode: 'fcl', eta: '2026-08-20' }, null) as any
+    expect(fcl.operativas).toEqual([])
+  })
+
+  it('una LCL sin camión: operativa sin fechas, ubicada en su depósito de desconsolidación', () => {
+    const v = rowToClientShipment(lcl, null) as any
+    expect(v.operativas).toHaveLength(1)
+    expect(v.operativas[0]).toMatchObject({ SALIDA: '', ETA_FISC: '', DEPOSITO: 'PLANIR', LUGAR_SALIDA: 'PLANIR', FISCAL: 'CACEC' })
+    expect(v.MODE).toBe('lcl')
+  })
+
+  it('camionesPorRef: ignora borradores y cargas pendientes de confirmar; ante dos camiones gana el más reciente', () => {
+    const loads = [
+      { source_ref: 'E234', truck_id: 't1', fiscal: 'CACEC', pending: null },
+      { source_ref: 'E234', truck_id: 't2', fiscal: 'CACEC', pending: null },
+      { source_ref: 'E235', truck_id: 't3', fiscal: '', pending: 'add' },
+      { source_ref: 'E236', truck_id: 't4', fiscal: '', pending: null },
+    ]
+    const trucks = [
+      { id: 't1', code: 'C450', departure_date: '2026-07-28', arrival_date: '2026-07-30', load_date: '2026-07-28', draft: false },
+      { id: 't2', code: 'C462', departure_date: '2026-08-28', arrival_date: '', load_date: '2026-08-28', draft: false },
+      { id: 't3', code: 'C463', departure_date: '2026-09-01', arrival_date: '', load_date: '2026-09-01', draft: false },
+      { id: 't4', code: 'C999', departure_date: '', arrival_date: '', load_date: '', draft: true },
+    ]
+    const m = camionesPorRef(loads, trucks)
+    expect(m.get('E234')?.code).toBe('C462')
+    expect(m.has('E235')).toBe(false)
+    expect(m.has('E236')).toBe(false)
   })
 })
