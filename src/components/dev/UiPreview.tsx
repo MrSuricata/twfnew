@@ -60,9 +60,9 @@ export default function UiPreview() {
       )}
       {vista === 'cliente' && (
         <ClientPortal
-          clientEmail=""
+          clientEmail="demo@cliente.com"
           clientName="DEMO ALPHA S.A."
-          clients={[{ id: 'demo', name: 'DEMO ALPHA S.A.', email: '', company: '', createdAt: 0, clientePattern: 'DEMO ALPHA' } as never]}
+          clients={[{ id: 'demo', name: 'DEMO ALPHA S.A.', email: 'demo@cliente.com', company: '', createdAt: 0, clientePattern: 'DEMO' } as never]}
           shipments={shipments}
           onLogout={salir}
           preview
