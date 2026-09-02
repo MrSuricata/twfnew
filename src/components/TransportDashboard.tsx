@@ -14,6 +14,7 @@ import { Truck, Sun, Lightning, Bell, CheckCircle, Clock, Warning, CaretDown, Ca
 import AgendaCalendar from '@/components/agenda/AgendaCalendar'
 import PartnerDashboardShell from '@/components/PartnerDashboardShell'
 import ProximasSalidas from '@/components/ProximasSalidas'
+import { PanelPlegable, PanelFila, FilaTitulo, FilaDatos, Ref, Dato, type TonoPanel } from './partner/PanelCard'
 import AvisoOperativo from '@/components/AvisoOperativo'
 import ChipDeposito from '@/components/trucks/ChipDeposito'
 import { Button } from '@/components/ui/button'
@@ -42,28 +43,20 @@ interface TransportDashboardProps {
 
 // ── Piezas visuales ─────────────────────────────────────────────────────
 
-/** Misma piel que el Plan de carga: card plegable con título y contador. */
-function CardHoy({ icono, titulo, resumen, children, abiertaPorDefecto = true }: {
+/** Card plegable con la piel común de los portales (color por card). */
+function CardHoy({ icono, titulo, resumen, contador, tono = 'neutro', children, abiertaPorDefecto = true }: {
   icono: ReactNode
   titulo: string
   resumen?: ReactNode
+  contador?: number
+  tono?: TonoPanel
   children: ReactNode
   abiertaPorDefecto?: boolean
 }) {
-  const [abierta, setAbierta] = useState(abiertaPorDefecto)
   return (
-    <section className="rounded-xl border border-border bg-card overflow-hidden">
-      <button
-        onClick={() => setAbierta(v => !v)}
-        className="flex w-full items-center gap-2 px-4 py-3 text-left hover:bg-muted/40 transition-colors"
-      >
-        {abierta ? <CaretDown size={14} weight="bold" /> : <CaretRight size={14} weight="bold" />}
-        {icono}
-        <span className="font-semibold text-sm">{titulo}</span>
-        {resumen && <span className="text-xs text-muted-foreground">{resumen}</span>}
-      </button>
-      {abierta && <div className="border-t border-border">{children}</div>}
-    </section>
+    <PanelPlegable tono={tono} icono={icono} titulo={titulo} subtitulo={resumen} contador={contador} abiertaPorDefecto={abiertaPorDefecto}>
+      {children}
+    </PanelPlegable>
   )
 }
 
@@ -227,8 +220,10 @@ export default function TransportDashboard({ shipments, transportName, userName,
 
         {/* 1 · Hoy cargan */}
         <CardHoy
-          icono={<Sun size={18} weight="duotone" className="text-primary" />}
-          titulo={`Hoy cargan · ${deHoy.length}`}
+          icono={<Sun size={22} weight="duotone" />}
+          titulo="Hoy cargan"
+          contador={deHoy.length}
+          tono="ok"
           resumen={fmtDateDMY(hoy)}
         >
           {deHoy.length === 0 ? (
@@ -273,8 +268,10 @@ export default function TransportDashboard({ shipments, transportName, userName,
 
         {/* 3 · Cargas especiales asignadas */}
         <CardHoy
-          icono={<Lightning size={18} weight="duotone" className="text-violet-600" />}
-          titulo={`Cargas especiales asignadas · ${totalEspeciales}`}
+          icono={<Lightning size={22} weight="duotone" />}
+          titulo="Cargas especiales asignadas"
+          contador={totalEspeciales}
+          tono="aviso"
           resumen={`próximos ${ESPECIALES_DIAS_ADELANTE} días o sin fecha · para conseguir unidad y permisos con tiempo`}
         >
           {especiales.length === 0 ? (
@@ -329,8 +326,9 @@ export default function TransportDashboard({ shipments, transportName, userName,
 
         {/* 4 · Mis avisos */}
         <CardHoy
-          icono={<Bell size={18} weight="duotone" className="text-primary" />}
-          titulo={`Mis avisos · ${misAvisos.length}`}
+          icono={<Bell size={22} weight="duotone" />}
+          titulo="Mis avisos"
+          contador={misAvisos.length}
           resumen="últimos 30 días"
         >
           {avisosError ? (

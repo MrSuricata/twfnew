@@ -11,6 +11,7 @@ import { OperatorAssignment, DbShipment, UnifiedOperation, dbFclToParsedShipment
 import { withRollupColumns } from '@/lib/operativasRollup'
 import { subscribeTrucksLive } from '@/lib/realtimeBus'
 import { getDemoShipments } from '@/lib/demoShipments'
+import UiPreview from '@/components/dev/UiPreview'
 import { filterShipments } from '@/lib/sheetsSync'
 import { verifySession, clearAuth, authFetch, hasStoredToken, adoptImpersonationToken, onSesionVencida } from '@/lib/authClient'
 import { shouldRestoreSession } from '@/lib/authGate'
@@ -31,7 +32,7 @@ import { NovedadesPage } from './components/NovedadesSection'
 import PrivacyPage from './components/PrivacyPage'
 import NotFoundPage from './components/NotFoundPage'
 
-type View = 'public' | 'admin-login' | 'admin-dashboard' | 'client-login' | 'client-portal' | 'partner-login' | 'depot-dashboard' | 'transport-dashboard' | 'terms' | 'privacy' | 'novedades' | 'not-found'
+type View = 'public' | 'admin-login' | 'admin-dashboard' | 'client-login' | 'client-portal' | 'partner-login' | 'depot-dashboard' | 'transport-dashboard' | 'terms' | 'privacy' | 'novedades' | 'not-found' | 'ui-preview'
 
 const KNOWN_PATHS = new Set(['/', '/admin', '/portal', '/depot', '/transport', '/partner', '/terminos', '/privacidad', '/mirendimiento', '/deposito', '/novedades'])
 
@@ -92,6 +93,9 @@ function getInitialView(): View {
     if (path === '/portal') return 'client-login'
     if (path === '/depot' || path === '/transport' || path === '/partner') return 'partner-login'
   }
+  // /ui: vista de diseño de los portales con datos inventados. Solo en
+  // desarrollo — en producción cae en 'not-found' como cualquier ruta rara.
+  if (path === '/ui' && import.meta.env.DEV) return 'ui-preview'
   if (path === '/terminos') return 'terms'
   if (path === '/privacidad') return 'privacy'
   if (path === '/novedades') return 'novedades'
@@ -1244,6 +1248,10 @@ function App() {
         shipments={fclShipments}
       />
     )
+  }
+
+  if (currentView === 'ui-preview' && import.meta.env.DEV) {
+    return <UiPreview />
   }
 
   if (currentView === 'terms') {
