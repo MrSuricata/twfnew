@@ -101,3 +101,41 @@ API.
 - Pendiente para la etapa siguiente: que el PDF de estado y la Agenda usen
   `refsCliente`/`estadoCliente` (hoy siguen con la ref sin prefijo y los
   estados internos).
+
+## Segunda vuelta (02/09, tarde): "Llegan a destino", todos los países, filtros
+
+Brian, después de ver la v1: "donde dice llegan a tu depósito debería decir
+LLEGAN A DESTINO: la fecha en que llegan al depósito fiscal en Argentina. Que
+puedan ver las cargas por país, por tipo (FCL / LCL) o por país y tipo, tanto
+las que llegan a destino como las embarcadas. Todas las de todos los países, o
+solo las que vienen por Uruguay, o solo LCL por Uruguay".
+
+- **Universo**: el cliente ve TODAS sus cargas (antes solo `dest_country='UY'`).
+  La API deja de filtrar por Montevideo; el filtro lo hace el portal.
+- **Ruta** (`rutaDe`, desde PAIS): Por Uruguay · Buenos Aires · Chile · Otros
+  destinos. **Tipo** (`tipoDe`, desde MODE, nuevo en el shape): FCL · LCL ·
+  Aéreo. Chips arriba de HOY, solo si el cliente tiene más de una opción; el
+  filtro aplica a cards, lista, agenda y alertas; se recuerda en el navegador.
+  Cuando ve mezcla, cada fila marca ruta y tipo.
+- **Destino**: para lo que viene por Montevideo, el depósito fiscal (ETA_FISC;
+  para LCL la llegada del camión). Para rutas directas (Chile, Buenos Aires,
+  otros) sin tramo terrestre cargado, el puerto ES el destino: "Llegan a
+  destino" las lista con la ETA (chip LLEGA AL PUERTO) y al llegar quedan
+  "En destino". Si tienen un tramo terrestre cargado, siguen como cualquier
+  carga, con etiqueta "En puerto" en vez de "En Montevideo".
+- **LCL**: la salida y la llegada viven en el camión consolidado. La API arma
+  una operativa sintética `CONSOLIDADO` (SALIDA = salida del camión, ETA_FISC =
+  llegada, CAMION = código, FISCAL de la fila de truck_loads). Sin camión, la
+  LCL está "En PLANIR / TCP" esperando salida.
+- "Llegan a Montevideo" y "En Montevideo, esperando salida" son solo ruta UY.
+  "Embarcadas" no repite lo que ya está en una card de llegada.
+
+## Próximas etapas (anotadas con Brian 02/09)
+
+- **Despachantes como rol**: usuarios que ven todas las cargas en las que son
+  despachantes, de cualquier cliente, donde nosotros somos el agente. Requiere
+  una columna `despachante` en shipments (hoy no existe) y un rol nuevo (o
+  extender partners) con la misma lista blanca del cliente. Cierra la red
+  cliente · despachante · depósito · transporte.
+- "Pedir salida" como aviso al equipo (hoy es un mail prearmado).
+- PDF de estado y Agenda con las mismas refs y estados que la pantalla.

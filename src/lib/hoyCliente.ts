@@ -6,27 +6,28 @@
  * activas y agenda". Misma idea que HOY depósito/transporte: cards con
  * contador, filas cortas, card vacía = no se muestra.
  *
- * Deriva TODO de los ParsedShipment que el portal ya recibe del server (lista
- * blanca del cliente). Cero datos nuevos. Pura y testeable: `hoyISO` entra por
- * parámetro, nunca se lee el reloj acá.
+ * Segunda vuelta (02/09, tarde): "Llegan a DESTINO" (no "a tu depósito"):
+ * destino = el depósito fiscal en Argentina para lo que viene por Montevideo,
+ * y el puerto de llegada para lo que va directo a Chile / Buenos Aires /
+ * otros. El cliente ve TODAS sus cargas (cualquier país, FCL o LCL) y filtra
+ * por ruta y por tipo. Las LCL traen su salida/llegada desde el camión
+ * consolidado (operativa sintética CONSOLIDADO que arma la API).
+ *
+ * Deriva TODO de los ParsedShipment que el portal recibe del server (lista
+ * blanca del cliente). Pura y testeable: `hoyISO` entra por parámetro.
  *
  * Reglas que dejó la revisión adversaria (02/09):
  *  · El día de la ETA el buque "llega hoy": la carga está SOLO en "Llegan a
- *    Montevideo". Pasa a "En Montevideo" desde el día siguiente. Así ninguna
- *    carga cae en dos cards a la vez.
+ *    Montevideo" (ruta UY) o en "Llegan a destino" (rutas directas). Pasa a
+ *    "En Montevideo / En puerto" desde el día siguiente.
  *  · "En camino" solo si algo está viajando (salió ANTES de hoy y no llegó).
- *    El día de la salida la card dice SALE HOY y la fila "Sale de Montevideo hoy".
- *  · "Entregada" = la carga SALIÓ y el contenedor está DEVUELTO (en OPERATIVA o
- *    en LIBRE, que es donde vive en la web). DESCARGA es la fecha en que se
- *    confirmó el arribo del buque y DEV es un LUGAR: ninguno significa entrega.
- *  · Sin ETA_FISC, una salida de hace más de 14 días se da por llegada al
- *    depósito (DIAS_LLEGADA_SUPUESTA): nada queda "en camino" para siempre.
- *  · "Embarcadas" no repite lo que ya está en "Llegan a Montevideo" (ETA a
- *    14 días o menos).
- *  · Activo/Historial para el cliente se decide con estas mismas reglas
- *    (esActivaParaCliente), no con isShipmentCompleted del admin, que mandaba
- *    los trasiegos a Historial el día después de la salida con el camión en
- *    la frontera.
+ *  · "Entregada" = la carga SALIÓ y el contenedor está DEVUELTO (OPERATIVA o
+ *    LIBRE). DESCARGA (fecha en que se confirmó el arribo) y DEV (lugar) no
+ *    significan entrega.
+ *  · Sin ETA_FISC, una salida de hace más de 14 días se da por llegada
+ *    (DIAS_LLEGADA_SUPUESTA): nada queda "en camino" para siempre.
+ *  · "Embarcadas" no repite lo que ya está en una card de llegada.
+ *  · Activo/Historial se decide con estas reglas (esActivaParaCliente).
  *
  * Spec: docs/superpowers/specs/2026-09-02-portal-cliente-hoy-design.md
  */
@@ -52,48 +53,134 @@ const dias = (hoyISO: string, v: unknown): number | null => {
   return f === null ? null : diffDias(hoyISO, f)
 }
 
-const ops = (s: ParsedShipment): OperativasRecord[] => (s.operativas || []).filter(Boolean)
+const sumarDias = (iso: string, n: number): string =>
+  new Date(Date.parse(iso + 'T00:00:00Z') + n * 86400000).toISOString().slice(0, 10)
 
-/** El buque YA llegó a Montevideo: ETA anterior a hoy (el día de la ETA
- *  todavía "llega hoy"). Sin ETA no se puede saber → se asume que sí, misma
- *  convención que getShipmentStatus. */
-const llegoAMvd = (s: ParsedShipment, hoyISO: string): boolean => {
+/** Operativa con el camión (LCL, la arma la API): código y si el equipo ya lo
+ *  marcó entregado (los camiones importados no tienen fecha de llegada). */
+type Op = OperativasRecord & { CAMION?: string; ENTREGADO?: boolean }
+const ops = (s: ParsedShipment): Op[] => ((s.operativas || []) as Op[]).filter(Boolean)
+
+// ── Ruta y tipo ───────────────────────────────────────────────────────────
+
+/** Por dónde entra la carga: UY = vía Montevideo (destino = fiscal AR);
+ *  AR = Buenos Aires directo; CL = Chile; OTRO = Paraguay, etc. */
+export type Ruta = 'UY' | 'AR' | 'CL' | 'OTRO'
+export type Tipo = 'fcl' | 'lcl' | 'air' | 'otro'
+
+export const RUTA_ORDEN: Ruta[] = ['UY', 'AR', 'CL', 'OTRO']
+export const TIPO_ORDEN: Tipo[] = ['fcl', 'lcl', 'air', 'otro']
+
+/** Nombre del filtro (chip) — el mismo vocabulario que la fila y los mails. */
+export const RUTA_LABEL: Record<Ruta, string> = { UY: 'Vía Montevideo', AR: 'Buenos Aires', CL: 'Chile', OTRO: 'Otros destinos' }
+/** Marca corta en la fila. */
+export const RUTA_CHIP: Record<Ruta, string> = { UY: 'vía Montevideo', AR: 'Buenos Aires', CL: 'Chile', OTRO: 'Otro destino' }
+export const TIPO_LABEL: Record<Tipo, string> = { fcl: 'FCL', lcl: 'LCL', air: 'Aéreo', otro: 'Otro' }
+
+/** Por dónde entra la carga. Sin país cargado (o el genérico 'OTRO') decide el
+ *  puerto de descarga; sin puerto tampoco, la operación de la casa es vía
+ *  Montevideo (revisión 02/09: una LCL con el país vacío caía en "ruta directa"
+ *  y aparecía "En destino" estando en un depósito de Montevideo). */
+export function rutaDe(s: { PAIS?: unknown; POD?: unknown } | null | undefined): Ruta {
+  const p = txt(s?.PAIS).toUpperCase()
+  if (p === 'UY') return 'UY'
+  if (p === 'AR') return 'AR'
+  if (p === 'CL') return 'CL'
+  const pod = txt(s?.POD).toUpperCase()
+  if (p === '' || p === 'OTRO') return pod === '' || pod.includes('MONTEVIDEO') ? 'UY' : 'OTRO'
+  return 'OTRO'
+}
+export const porUruguay = (s: { PAIS?: unknown; POD?: unknown } | null | undefined): boolean => rutaDe(s) === 'UY'
+
+export function tipoDe(s: { MODE?: unknown; REF?: unknown } | null | undefined): Tipo {
+  const m = txt(s?.MODE).toLowerCase()
+  if (m === '' || m === 'fcl') return 'fcl'
+  if (m === 'lcl') return 'lcl'
+  if (m === 'air' || m === 'aereo' || m === 'aéreo') return 'air'
+  return 'otro'
+}
+
+export interface FiltroCargas {
+  ruta: Ruta | 'todas'
+  tipo: Tipo | 'todos'
+}
+export const FILTRO_TODO: FiltroCargas = { ruta: 'todas', tipo: 'todos' }
+
+export function filtrarCargas(shipments: ParsedShipment[], f: FiltroCargas): ParsedShipment[] {
+  return (shipments || []).filter(s =>
+    (f.ruta === 'todas' || rutaDe(s) === f.ruta) && (f.tipo === 'todos' || tipoDe(s) === f.tipo))
+}
+
+/** Qué rutas y tipos tiene ESTE cliente (los selectores solo ofrecen lo que existe). */
+export function opcionesFiltro(shipments: ParsedShipment[]): { rutas: Ruta[]; tipos: Tipo[] } {
+  const rutas = new Set<Ruta>()
+  const tipos = new Set<Tipo>()
+  for (const s of shipments || []) { rutas.add(rutaDe(s)); tipos.add(tipoDe(s)) }
+  return {
+    rutas: RUTA_ORDEN.filter(r => rutas.has(r)),
+    tipos: TIPO_ORDEN.filter(t => tipos.has(t)),
+  }
+}
+
+// ── Fechas y hechos por operativa ─────────────────────────────────────────
+
+/** El buque YA llegó al puerto (Montevideo o el de destino): ETA anterior a
+ *  hoy — el día de la ETA todavía "llega hoy". Sin ETA no se puede saber → se
+ *  asume que sí, misma convención que getShipmentStatus. */
+const llegoAPuerto = (s: ParsedShipment, hoyISO: string): boolean => {
   const d = dias(hoyISO, s.ETA)
   return d === null ? true : d < 0
 }
 
 /** Sin ETA_FISC cargada, una salida de hace más de esto se da por llegada al
- *  depósito (misma convención que el admin: "SALIDA > 2 semanas = llegó"). Sin
- *  este tope una carga con salida vieja y sin fecha de llegada quedaba "En
- *  camino" para siempre (revisión 02/09). */
+ *  destino (misma convención que el admin: "SALIDA > 2 semanas = llegó"). */
 export const DIAS_LLEGADA_SUPUESTA = 14
+/** Un camión consolidado Montevideo → fiscal argentino tarda 2-3 días: para
+ *  las LCL en camión el supuesto es corto (revisión 02/09). */
+export const DIAS_LLEGADA_SUPUESTA_CAMION = 3
 
-const fiscalAlcanzada = (o: OperativasRecord, hoyISO: string): boolean => (dias(hoyISO, o.ETA_FISC) ?? 1) <= 0
-/** Fecha (ISO) en que la carga llegó al depósito del cliente: ETA_FISC si está
- *  y ya pasó; si no hay ETA_FISC, SALIDA + DIAS_LLEGADA_SUPUESTA cuando ya
- *  pasó. null = todavía no llegó (o no se puede saber). */
-const fechaLlegadaDeposito = (o: OperativasRecord, hoyISO: string): string | null => {
+const fiscalAlcanzada = (o: Op, hoyISO: string): boolean => (dias(hoyISO, o.ETA_FISC) ?? 1) <= 0
+const esCamion = (o: Op): boolean => txt(o.OPERATIVA).toUpperCase() === 'CONSOLIDADO' || !!txt(o.CAMION)
+
+/** Fecha (ISO) en que ESTA operativa llegó al destino: ETA_FISC si ya pasó;
+ *  si no hay ETA_FISC, SALIDA + supuesto de tránsito cuando ya pasó (y si el
+ *  camión está marcado ENTREGADO, a más tardar hoy). null = todavía no llegó
+ *  (o no se puede saber). */
+const fechaLlegadaOp = (o: Op, hoyISO: string): string | null => {
   const fisc = isoDia(o.ETA_FISC)
   if (fisc) return diffDias(hoyISO, fisc) <= 0 ? fisc : null
   const salida = isoDia(o.SALIDA)
   if (!salida) return null
   const dSalida = diffDias(hoyISO, salida)
-  if (dSalida > -DIAS_LLEGADA_SUPUESTA) return null
-  const d = new Date(Date.parse(salida + 'T00:00:00Z') + DIAS_LLEGADA_SUPUESTA * 86400000)
-  return d.toISOString().slice(0, 10)
+  if (dSalida > 0) return null
+  const supuesto = esCamion(o) ? DIAS_LLEGADA_SUPUESTA_CAMION : DIAS_LLEGADA_SUPUESTA
+  const estimada = sumarDias(salida, supuesto)
+  if (o.ENTREGADO) return estimada <= hoyISO ? estimada : hoyISO
+  return dSalida > -supuesto ? null : estimada
 }
-const llegoAlDeposito = (o: OperativasRecord, hoyISO: string): boolean => fechaLlegadaDeposito(o, hoyISO) !== null
+const llegoAlDestino = (o: Op, hoyISO: string): boolean => fechaLlegadaOp(o, hoyISO) !== null
 /** Salió ANTES de hoy y todavía no llegó: está viajando. */
-const viajando = (o: OperativasRecord, hoyISO: string): boolean => (dias(hoyISO, o.SALIDA) ?? 1) < 0 && !llegoAlDeposito(o, hoyISO)
+const viajando = (o: Op, hoyISO: string): boolean => (dias(hoyISO, o.SALIDA) ?? 1) < 0 && !llegoAlDestino(o, hoyISO)
 /** Contenedor devuelto: DEVUELTO en OPERATIVA o en LIBRE (donde vive en la web). */
-const devuelto = (o: OperativasRecord, libreCarga: unknown): boolean =>
+const devuelto = (o: Op, libreCarga: unknown): boolean =>
   txt(o.OPERATIVA).toUpperCase() === 'DEVUELTO'
   || txt(o.LIBRE).toUpperCase() === 'DEVUELTO'
   || txt(libreCarga).toUpperCase() === 'DEVUELTO'
 /** Entregada = la carga SALIÓ y el contenedor se devolvió. Un DEVUELTO sin
  *  salida (carga a piso: el contenedor vuelve vacío y la mercadería sigue en
  *  el depósito uruguayo) NO es entrega. */
-const entregada = (o: OperativasRecord, libreCarga: unknown): boolean => !!isoDia(o.SALIDA) && devuelto(o, libreCarga)
+const entregada = (o: Op, libreCarga: unknown): boolean => !!isoDia(o.SALIDA) && devuelto(o, libreCarga)
+/** La operativa no tiene ningún tramo terrestre cargado (ni salida ni llegada). */
+const sinTramo = (o: Op): boolean => !isoDia(o.SALIDA) && !isoDia(o.ETA_FISC)
+/** Hay un depósito fiscal de destino cargado: después del puerto hay un tramo. */
+const tieneFiscal = (s: ParsedShipment): boolean => ops(s).some(o => !!txt(o.FISCAL))
+
+/** Ruta directa donde el puerto ES el destino: Chile siempre (no seguimos el
+ *  tramo interno); Buenos Aires / otros solo si no hay fiscal ni tramo cargado.
+ *  Con fiscal, la carga sigue el flujo puerto → salida → en camino → destino,
+ *  así el estado no retrocede cuando el equipo carga la salida (revisión 02/09). */
+const puertoEsDestino = (s: ParsedShipment): boolean =>
+  !porUruguay(s) && (rutaDe(s) === 'CL' || (!tieneFiscal(s) && ops(s).every(sinTramo)))
 
 // ── Referencias ──────────────────────────────────────────────────────────
 
@@ -119,23 +206,30 @@ export function refsCliente(s: { REF?: unknown; CLIENT_REF?: unknown } | null | 
 
 export type EstadoCliente =
   | 'por_embarcar'   // sin ETD o ETD futuro
-  | 'embarcada'      // zarpó, todavía no llegó a Montevideo (incluye el día de la ETA)
-  | 'en_montevideo'  // llegó; nada viaja hacia el depósito (puede haber salida programada o de hoy)
-  | 'en_camino'      // algún contenedor salió antes de hoy y no llegó al depósito
-  | 'en_deposito'    // todo llegó al depósito del cliente
+  | 'embarcada'      // zarpó, todavía no llegó al puerto (incluye el día de la ETA)
+  | 'en_montevideo'  // llegó al puerto; nada viaja hacia el destino (ruta UY: "En Montevideo"; directa: "En puerto")
+  | 'en_camino'      // algo salió antes de hoy y no llegó al destino
+  | 'en_deposito'    // todo llegó al destino (fiscal AR, o el puerto en rutas directas)
   | 'entregada'      // todo devuelto / cerrado
 
 export const ESTADO_CLIENTE_ORDEN: EstadoCliente[] = [
   'por_embarcar', 'embarcada', 'en_montevideo', 'en_camino', 'en_deposito', 'entregada',
 ]
 
+/** Etiqueta genérica (filtros); para la fila usar etiquetaEstado(s, estado). */
 export const ESTADO_CLIENTE_LABEL: Record<EstadoCliente, string> = {
   por_embarcar: 'Por embarcar',
   embarcada: 'Embarcada',
-  en_montevideo: 'En Montevideo',
+  en_montevideo: 'En puerto',
   en_camino: 'En camino',
-  en_deposito: 'En tu depósito',
+  en_deposito: 'En destino',
   entregada: 'Entregada',
+}
+
+/** La etiqueta de la fila sabe por dónde viene la carga. */
+export function etiquetaEstado(s: ParsedShipment, estado: EstadoCliente): string {
+  if (estado === 'en_montevideo') return porUruguay(s) ? 'En Montevideo' : 'En puerto'
+  return ESTADO_CLIENTE_LABEL[estado]
 }
 
 /** Clases del chip de estado (claras, funcionan en las dos marcas). */
@@ -154,24 +248,35 @@ export function progresoCliente(estado: EstadoCliente): number {
 }
 
 export function estadoCliente(s: ParsedShipment, hoyISO: string): EstadoCliente {
-  if (!llegoAMvd(s, hoyISO)) {
+  if (!llegoAPuerto(s, hoyISO)) {
     const dEtd = dias(hoyISO, s.ETD)
     return dEtd !== null && dEtd <= 0 ? 'embarcada' : 'por_embarcar'
   }
+  // Ruta directa sin tramo terrestre: llegar al puerto ES llegar a destino.
+  if (puertoEsDestino(s)) return 'en_deposito'
   const lista = ops(s)
   if (lista.length === 0) return 'en_montevideo'
   if (lista.every(o => entregada(o, s.LIBRE_HASTA))) return 'entregada'
   if (lista.some(o => viajando(o, hoyISO))) return 'en_camino'
-  if (lista.every(o => llegoAlDeposito(o, hoyISO))) return 'en_deposito'
-  // Nada viaja y algo no salió (o sale hoy): sigue en Montevideo.
+  if (lista.every(o => llegoAlDestino(o, hoyISO))) return 'en_deposito'
+  // Nada viaja y algo no salió (o sale hoy): sigue en el puerto / depósito UY.
   return 'en_montevideo'
 }
 
-/** Días desde la última llegada al depósito (null si ninguna llegó). */
+/** Fechas de llegada a destino de la carga (una por operativa que llegó; en
+ *  rutas directas sin tramo, la ETA al puerto). */
+const fechasLlegadaDestino = (s: ParsedShipment, hoyISO: string): string[] => {
+  if (puertoEsDestino(s)) {
+    const eta = isoDia(s.ETA)
+    return eta && diffDias(hoyISO, eta) < 0 ? [eta] : []
+  }
+  return ops(s).map(o => fechaLlegadaOp(o, hoyISO)).filter((f): f is string => !!f)
+}
+
+/** Días desde la última llegada a destino (null si ninguna llegó). */
 const diasDesdeUltimaLlegada = (s: ParsedShipment, hoyISO: string): number | null => {
-  const llegadas = ops(s).map(o => fechaLlegadaDeposito(o, hoyISO)).filter((f): f is string => !!f).map(f => -diffDias(hoyISO, f))
-  if (llegadas.length === 0) return null
-  return Math.min(...llegadas)
+  const llegadas = fechasLlegadaDestino(s, hoyISO).map(f => -diffDias(hoyISO, f))
+  return llegadas.length === 0 ? null : Math.min(...llegadas)
 }
 
 export const CLIENTE_ENTREGADA_DIAS = 10
@@ -189,7 +294,7 @@ export function esActivaParaCliente(s: ParsedShipment, hoyISO: string): boolean 
     return d === null || d <= CLIENTE_ENTREGADA_DIAS
   }
   if (ops(s).length === 0) {
-    // Sin operativas nunca va a llegar a "en depósito": una carga arribada hace
+    // Sin operativas nunca va a llegar a "en destino": una carga arribada hace
     // meses sin datos no es trabajo vivo (mismo tope que el server, 60 días).
     const d = dias(hoyISO, s.ETA)
     if (d !== null && -d > CLIENTE_SIN_OPERATIVA_DIAS) return false
@@ -214,6 +319,7 @@ const fmt = (iso: string): string => (iso ? fmtDateDMY(iso) : '')
 export function proximoHito(s: ParsedShipment, hoyISO: string): HitoCliente {
   const estado = estadoCliente(s, hoyISO)
   const lista = ops(s)
+  const uy = porUruguay(s)
   switch (estado) {
     case 'por_embarcar': {
       const etd = isoDia(s.ETD) || ''
@@ -221,75 +327,102 @@ export function proximoHito(s: ParsedShipment, hoyISO: string): HitoCliente {
     }
     case 'embarcada': {
       const eta = isoDia(s.ETA) || ''
-      return eta ? { label: 'Llega a Montevideo', fecha: fmt(eta), iso: eta } : { label: 'Llegada a Montevideo', fecha: 'A confirmar', iso: '' }
+      const label = uy ? 'Llega a Montevideo' : 'Llega a destino'
+      return eta ? { label, fecha: fmt(eta), iso: eta } : { label: uy ? 'Llegada a Montevideo' : 'Llegada a destino', fecha: 'A confirmar', iso: '' }
     }
     case 'en_montevideo': {
       // Salida programada (hoy o futura) → se muestra; sin salida → hay que coordinarla.
       const programada = minIso(lista.map(o => o.SALIDA).filter(v => (dias(hoyISO, v) ?? -1) >= 0))
       return programada
-        ? { label: 'Sale de Montevideo', fecha: fmt(programada), iso: programada }
+        ? { label: uy ? 'Sale de Montevideo' : 'Sale del puerto', fecha: fmt(programada), iso: programada }
         : { label: 'Salida', fecha: 'A coordinar', iso: '' }
     }
     case 'en_camino': {
       const llegada = minIso(lista.filter(o => viajando(o, hoyISO)).map(o => o.ETA_FISC))
       return llegada
-        ? { label: 'Llega a tu depósito', fecha: fmt(llegada), iso: llegada }
-        : { label: 'Llegada a tu depósito', fecha: 'A confirmar', iso: '' }
+        ? { label: 'Llega a destino', fecha: fmt(llegada), iso: llegada }
+        : { label: 'Llegada a destino', fecha: 'A confirmar', iso: '' }
     }
     case 'en_deposito': {
-      const desde = maxIso(lista.map(o => fechaLlegadaDeposito(o, hoyISO)))
-      const estimada = !lista.some(o => isoDia(o.ETA_FISC))
+      const desde = maxIso(fechasLlegadaDestino(s, hoyISO))
+      const estimada = !puertoEsDestino(s) && !lista.some(o => isoDia(o.ETA_FISC))
       return desde
-        ? { label: estimada ? 'En tu depósito (estimado)' : 'En tu depósito desde', fecha: fmt(desde), iso: desde }
-        : { label: 'En tu depósito', fecha: '', iso: '' }
+        ? { label: estimada ? 'En destino (estimado)' : 'En destino desde', fecha: fmt(desde), iso: desde }
+        : { label: 'En destino', fecha: '', iso: '' }
     }
     case 'entregada':
       return { label: 'Entregada', fecha: '', iso: '' }
   }
 }
 
-// ── Card 1: Llegan a tu depósito ──────────────────────────────────────────
+// ── Base común de las filas ───────────────────────────────────────────────
 
-export type EstadoLlegadaDeposito = 'en_frontera' | 'sale_hoy' | 'sale'
-
-export interface FilaDeposito {
+interface FilaBase {
   ref: string
   refs: RefsCliente
+  ruta: Ruta
+  tipo: Tipo
+}
+const base = (s: ParsedShipment): FilaBase => ({ ref: txt(s.REF), refs: refsCliente(s), ruta: rutaDe(s), tipo: tipoDe(s) })
+
+// ── Card 1: Llegan a destino ──────────────────────────────────────────────
+
+/** en_frontera = viajando · sale_hoy · sale = salida programada · llega =
+ *  ruta directa, el buque llega al puerto de destino. */
+export type EstadoLlegadaDestino = 'en_frontera' | 'sale_hoy' | 'sale' | 'llega'
+
+export interface FilaDestino extends FilaBase {
   descripcion: string
   cntr: string
-  /** ETA_FISC ISO ('' = a confirmar). */
+  /** Código del camión consolidado (LCL). */
+  camion: string
+  /** Fecha de llegada a destino ISO ('' = a confirmar). */
   fecha: string
-  /** días hasta ETA_FISC (null si no hay). */
+  /** días hasta la llegada (null si no hay fecha). */
   dias: number | null
-  estado: EstadoLlegadaDeposito
-  /** SALIDA ISO. */
+  estado: EstadoLlegadaDestino
+  /** SALIDA ISO ('' en rutas directas sin tramo). */
   salida: string
   fiscal: string
 }
 
-export const DEPOSITO_DIAS_ADELANTE = 7
+export const DESTINO_DIAS_ADELANTE = 7
 
-/** Contenedores con SALIDA cargada que van hacia el depósito del cliente: ya
- *  salieron y no llegaron, salen hoy, o salen en los próximos días. Sin
- *  SALIDA no hay nada que "llegue": eso es "esperando salida" (card 2). */
-export function llegadasADeposito(shipments: ParsedShipment[], hoyISO: string, adelante = DEPOSITO_DIAS_ADELANTE): FilaDeposito[] {
-  const out: FilaDeposito[] = []
+/** Lo que está llegando a destino: contenedores/consolidados con SALIDA
+ *  cargada que van hacia el fiscal (ya salieron, salen hoy o en los próximos
+ *  días), y en rutas directas los buques que llegan al puerto de destino en
+ *  los próximos días. Sin SALIDA no hay nada que "llegue": eso es card 2. */
+export function llegadasADestino(shipments: ParsedShipment[], hoyISO: string, adelante = DESTINO_DIAS_ADELANTE): FilaDestino[] {
+  const out: FilaDestino[] = []
   for (const s of shipments || []) {
-    if (!llegoAMvd(s, hoyISO)) continue
+    if (!porUruguay(s) && ops(s).every(sinTramo)) {
+      // Ruta directa llegando al puerto de destino (con tramo cargado sigue abajo).
+      const eta = isoDia(s.ETA)
+      if (!eta) continue
+      const d = diffDias(hoyISO, eta)
+      if (d < 0 || d > adelante) continue
+      const o = ops(s)[0]
+      out.push({
+        ...base(s), descripcion: txt(o?.DESCRIPCION), cntr: txt(s.CNTR), camion: '',
+        fecha: eta, dias: d, estado: 'llega', salida: '', fiscal: txt(s.POD),
+      })
+      continue
+    }
+    if (!llegoAPuerto(s, hoyISO)) continue
     for (const o of ops(s)) {
-      if (llegoAlDeposito(o, hoyISO)) continue // ya está en el depósito (o se da por llegado)
+      if (llegoAlDestino(o, hoyISO)) continue // ya está en destino (o se da por llegado)
       if (entregada(o, s.LIBRE_HASTA)) continue
       const salida = isoDia(o.SALIDA)
       if (!salida) continue
       const dSalida = diffDias(hoyISO, salida)
       if (dSalida > adelante) continue
-      const estado: EstadoLlegadaDeposito = dSalida < 0 ? 'en_frontera' : dSalida === 0 ? 'sale_hoy' : 'sale'
+      const estado: EstadoLlegadaDestino = dSalida < 0 ? 'en_frontera' : dSalida === 0 ? 'sale_hoy' : 'sale'
       const fiscal = isoDia(o.ETA_FISC) || ''
       out.push({
-        ref: txt(s.REF),
-        refs: refsCliente(s),
+        ...base(s),
         descripcion: txt(o.DESCRIPCION),
         cntr: txt(o.CNTR_OP),
+        camion: txt(o.CAMION),
         fecha: fiscal,
         dias: fiscal ? diffDias(hoyISO, fiscal) : null,
         estado,
@@ -299,46 +432,52 @@ export function llegadasADeposito(shipments: ParsedShipment[], hoyISO: string, a
     }
   }
   // Lo que ya viene primero (en frontera / sale hoy), después por fecha de llegada.
-  const rango = (e: EstadoLlegadaDeposito) => (e === 'en_frontera' ? 0 : e === 'sale_hoy' ? 1 : 2)
+  const rango = (e: EstadoLlegadaDestino) => (e === 'en_frontera' ? 0 : e === 'sale_hoy' ? 1 : 2)
   return out.sort((a, b) =>
     rango(a.estado) - rango(b.estado)
     || (a.fecha || '9999').localeCompare(b.fecha || '9999')
-    || a.salida.localeCompare(b.salida)
+    || (a.salida || '9999').localeCompare(b.salida || '9999')
     || a.ref.localeCompare(b.ref))
 }
 
-// ── Card 2: En Montevideo, esperando salida ──────────────────────────────
+// ── Card 2: En Montevideo, esperando salida (solo ruta UY) ───────────────
 
-export interface FilaEsperando {
-  ref: string
-  refs: RefsCliente
+export interface FilaEsperando extends FilaBase {
   descripcion: string
   cntr: string
-  /** Dónde está: LUGAR_SALIDA del contenedor, si no la terminal de arribo. */
+  /** Dónde está: LUGAR_SALIDA del contenedor (o el depósito de la LCL), si no la terminal / el puerto de arribo. */
   lugar: string
+  /** true = ruta directa con fiscal: está en el puerto de destino, no en Montevideo. */
+  enPuerto: boolean
   /** ETA a Montevideo (ISO). */
   desde: string
   /** Días desde que llegó (≥ 1: el día de la ETA todavía está "llegando"). */
   dias: number
 }
 
-/** Contenedores arribados a Montevideo (ETA anterior a hoy) sin salida cargada:
- *  el cliente tiene que decidir cuándo los quiere. */
+/** Contenedores/consolidados arribados (ETA anterior a hoy) sin salida cargada
+ *  hacia el fiscal: el cliente tiene que decidir cuándo los quiere. Vía
+ *  Montevideo, o ruta directa con fiscal (en el puerto de destino). */
 export function esperandoSalida(shipments: ParsedShipment[], hoyISO: string): FilaEsperando[] {
   const out: FilaEsperando[] = []
   for (const s of shipments || []) {
+    if (puertoEsDestino(s)) continue // ya está en destino: no espera nada
     const eta = isoDia(s.ETA)
     if (!eta || diffDias(hoyISO, eta) >= 0) continue // sin ETA no se afirma que llegó; el día 0 es "llega hoy"
+    const uy = porUruguay(s)
     for (const o of ops(s)) {
       if (isoDia(o.SALIDA)) continue // tiene salida (pasada, de hoy o programada) → card 1 o en camino
       if (fiscalAlcanzada(o, hoyISO)) continue
-      const lugar = txt(o.LUGAR_SALIDA) || (txt(s.TERMINAL) ? `terminal ${txt(s.TERMINAL)}` : 'terminal')
+      const lugar = txt(o.LUGAR_SALIDA)
+        || (uy
+          ? (txt(s.TERMINAL) ? `terminal ${txt(s.TERMINAL)}` : 'terminal')
+          : (txt(s.POD) ? `puerto ${txt(s.POD)}` : 'puerto'))
       out.push({
-        ref: txt(s.REF),
-        refs: refsCliente(s),
+        ...base(s),
         descripcion: txt(o.DESCRIPCION),
         cntr: txt(o.CNTR_OP),
         lugar,
+        enPuerto: !uy,
         desde: eta,
         dias: -diffDias(hoyISO, eta),
       })
@@ -347,11 +486,9 @@ export function esperandoSalida(shipments: ParsedShipment[], hoyISO: string): Fi
   return out.sort((a, b) => b.dias - a.dias || a.ref.localeCompare(b.ref))
 }
 
-// ── Card 3: Llegan a Montevideo ───────────────────────────────────────────
+// ── Card 3: Llegan a Montevideo (solo ruta UY) ───────────────────────────
 
-export interface FilaLlegadaMvd {
-  ref: string
-  refs: RefsCliente
+export interface FilaLlegadaMvd extends FilaBase {
   buque: string
   descripcion: string
   eta: string
@@ -365,9 +502,10 @@ export const MVD_DIAS_ADELANTE = 14
 
 export function pasoSiguiente(s: ParsedShipment): string {
   const o = ops(s)[0]
+  const dep = txt(o?.DEPOSITO)
+  if (tipoDe(s) === 'lcl') return dep ? `Desconsolida en ${dep}` : 'Desconsolida en depósito'
   if (!o) return ''
   const op = txt(o.OPERATIVA).toUpperCase()
-  const dep = txt(o.DEPOSITO)
   if (op === 'TRASIEGO') return dep ? `Trasiego en ${dep}` : 'Trasiego a camión'
   if (op === 'CONTENEDOR') return 'Directo a tu depósito'
   if (op === 'CARGA A PISO') return dep ? `Desconsolida en ${dep}` : 'Desconsolida en depósito'
@@ -377,14 +515,14 @@ export function pasoSiguiente(s: ParsedShipment): string {
 export function llegadasAMontevideo(shipments: ParsedShipment[], hoyISO: string, adelante = MVD_DIAS_ADELANTE): FilaLlegadaMvd[] {
   const out: FilaLlegadaMvd[] = []
   for (const s of shipments || []) {
+    if (!porUruguay(s)) continue
     const eta = isoDia(s.ETA)
     if (!eta) continue
     const d = diffDias(hoyISO, eta)
     if (d < 0 || d > adelante) continue
     const lista = ops(s)
     out.push({
-      ref: txt(s.REF),
-      refs: refsCliente(s),
+      ...base(s),
       buque: txt(s.BUQUE),
       descripcion: txt(lista[0]?.DESCRIPCION),
       eta,
@@ -398,9 +536,7 @@ export function llegadasAMontevideo(shipments: ParsedShipment[], hoyISO: string,
 
 // ── Card 4: Embarcadas ────────────────────────────────────────────────────
 
-export interface FilaEmbarque {
-  ref: string
-  refs: RefsCliente
+export interface FilaEmbarque extends FilaBase {
   buque: string
   descripcion: string
   etd: string
@@ -408,7 +544,7 @@ export interface FilaEmbarque {
   dias: number
   /** true = ya zarpó. */
   zarpo: boolean
-  /** ETA a Montevideo (ISO, '' si no hay). */
+  /** ETA al puerto (ISO, '' si no hay). */
   eta: string
 }
 
@@ -426,12 +562,13 @@ export function embarcadas(
     const etd = isoDia(s.ETD)
     if (!etd) continue
     const eta = isoDia(s.ETA)
-    if (eta && diffDias(hoyISO, eta) <= MVD_DIAS_ADELANTE) continue // ya está (o estuvo) en "Llegan a Montevideo"
+    // Lo que ya está en una card de llegada no se repite acá.
+    const topeLlegada = porUruguay(s) ? MVD_DIAS_ADELANTE : DESTINO_DIAS_ADELANTE
+    if (eta && diffDias(hoyISO, eta) <= topeLlegada) continue
     const d = diffDias(hoyISO, etd)
     if (d < -atras || d > adelante) continue
     out.push({
-      ref: txt(s.REF),
-      refs: refsCliente(s),
+      ...base(s),
       buque: txt(s.BUQUE),
       descripcion: txt(ops(s)[0]?.DESCRIPCION),
       etd,
@@ -456,10 +593,7 @@ export interface AlertaCliente {
 
 /** Las alertas del portal hablan en nuestro idioma ("Días libres vencidos:
  *  A8045…"). Acá se traducen: ref del cliente y qué puede hacer. */
-export function alertasCliente(
-  alerts: ShipmentAlert[],
-  shipments: ParsedShipment[],
-): AlertaCliente[] {
+export function alertasCliente(alerts: ShipmentAlert[], shipments: ParsedShipment[]): AlertaCliente[] {
   const porRef = new Map<string, ParsedShipment>()
   for (const s of shipments || []) porRef.set(txt(s.REF), s)
   const out: AlertaCliente[] = []
@@ -484,7 +618,7 @@ export function alertasCliente(
 // ── Todo junto (para el componente y los contadores) ─────────────────────
 
 export interface HoyCliente {
-  deposito: FilaDeposito[]
+  destino: FilaDestino[]
   esperando: FilaEsperando[]
   montevideo: FilaLlegadaMvd[]
   embarques: FilaEmbarque[]
@@ -492,7 +626,7 @@ export interface HoyCliente {
 
 export function hoyCliente(shipments: ParsedShipment[], hoyISO: string): HoyCliente {
   return {
-    deposito: llegadasADeposito(shipments, hoyISO),
+    destino: llegadasADestino(shipments, hoyISO),
     esperando: esperandoSalida(shipments, hoyISO),
     montevideo: llegadasAMontevideo(shipments, hoyISO),
     embarques: embarcadas(shipments, hoyISO),

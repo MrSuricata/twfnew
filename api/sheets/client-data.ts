@@ -2,8 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { authenticateRequest, type ClientPayload } from '../_lib/jwt.js'
 import { matchesClientePattern } from '../_lib/csvParser.js'
 import { getSupabase } from '../_lib/supabase.js'
-import { CLIENT_SHIPMENT_COLS, esCargaDeClienteActiva, rowToClientShipment } from '../_lib/clientShipments.js'
-import { esViaMontevideo } from '../_lib/clientDigest.js'
+import { CLIENT_SHIPMENT_COLS, esCargaDeClienteActiva, rowToClientShipment, camionesPorRef, type CamionDeCarga } from '../_lib/clientShipments.js'
 import { pickOrigin } from '../_lib/cors.js'
 
 // ── Datos del PORTAL DE CLIENTES ─────────────────────────────────────────
@@ -53,13 +52,43 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const hoyISO = new Date().toISOString().slice(0, 10)
     const rows = (data || []) as unknown as Record<string, unknown>[]
-    // Solo la operación VÍA MONTEVIDEO (mismo criterio que el digest por mail):
-    // las cargas CL (San Antonio/Valpo) y AR directo no pasan por acá y al
-    // cliente lo confunden en su portal (Brian 27/08).
-    const propias = rows.filter(s =>
-      matchesClientePattern(String(s.cliente || ''), pattern) && esCargaDeClienteActiva(s, hoyISO)
-      && esViaMontevideo(s as { dest_country?: string }))
-    const shipments = propias.map(rowToClientShipment)
+    // Todas las cargas del cliente, de cualquier país y modalidad (Brian 02/09:
+    // "que vean las de todos los países, FCL o LCL, y filtren por país y tipo").
+    // Antes solo vía Montevideo (27/08); el filtro por país ahora lo hace el
+    // portal con selectores. El digest por mail sigue solo Montevideo.
+    const propias = rows.filter(s => matchesClientePattern(String(s.cliente || ''), pattern))
+
+    // LCL: la salida y la llegada a destino viven en el camión consolidado.
+    // Se traen los camiones publicados de esas refs y se arma la operativa
+    // sintética en rowToClientShipment (derive-on-read).
+    const refsLcl = propias.filter(s => String(s.mode || '').toLowerCase() === 'lcl').map(s => String(s.ref || ''))
+    let camiones: Map<string, CamionDeCarga> = new Map()
+    if (refsLcl.length > 0) {
+      // Un error acá NO puede pasar en silencio: sin camión las LCL se verían
+      // "esperando salida" estando entregadas. Falla ruidoso, como shipments.
+      const { data: loads, error: errLoads } = await db.from('truck_loads').select('source_ref, truck_id, fiscal, pending').in('source_ref', refsLcl)
+      if (errLoads) throw errLoads
+      const truckIds = Array.from(new Set((loads || []).map((l: any) => String(l.truck_id || '')).filter(Boolean)))
+      if (truckIds.length) {
+        const { data: trucks, error: errTrucks } = await db.from('trucks').select('id, code, departure_date, arrival_date, load_date, draft, status').in('id', truckIds)
+        if (errTrucks) throw errTrucks
+        camiones = camionesPorRef((loads || []) as any[], (trucks || []) as any[])
+      }
+    }
+
+    const shipments = propias
+      .filter(s => {
+        const cam = camiones.get(String(s.ref || '').toUpperCase())
+        // Una LCL en camión es vigente aunque no tenga ETA de buque cargada, y
+        // para la regla "entregada hace más de 10 días" vale la llegada del
+        // camión, que la carga no tiene en su columna.
+        return esCargaDeClienteActiva({
+          ...s,
+          eta: (s.eta as string) || cam?.departure_date || cam?.load_date || '',
+          eta_fiscal: (s.eta_fiscal as string) || cam?.arrival_date || '',
+        }, hoyISO)
+      })
+      .map(s => rowToClientShipment(s, camiones.get(String(s.ref || '').toUpperCase()) || null))
 
     return res.status(200).json({
       shipments,

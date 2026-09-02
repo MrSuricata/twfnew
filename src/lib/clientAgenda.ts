@@ -13,8 +13,12 @@
  * Pura y testeable.
  */
 import type { ParsedShipment } from './shipmentTypes'
+import { porUruguay } from './hoyCliente'
 
-export type TipoEvento = 'llegada_mvd' | 'salida' | 'llegada_deposito'
+/** llegada_mvd = el buque llega a Montevideo (vía UY) · llegada_destino = el
+ *  buque llega al puerto de destino (Chile, Buenos Aires directo…) · salida =
+ *  sale hacia el fiscal · llegada_deposito = llega al fiscal. */
+export type TipoEvento = 'llegada_mvd' | 'llegada_destino' | 'salida' | 'llegada_deposito'
 
 export interface EventoCliente {
   tipo: TipoEvento
@@ -80,7 +84,7 @@ export function eventosCliente(shipments: ParsedShipment[], hoyISO: string): Eve
   }
 
   for (const s of shipments || []) {
-    push('llegada_mvd', isoDia(s.ETA), s, txt(s.CNTR))
+    push(porUruguay(s) ? 'llegada_mvd' : 'llegada_destino', isoDia(s.ETA), s, txt(s.CNTR))
     for (const op of s.operativas || []) {
       const cntr = txt(op.CNTR_OP)
       push('salida', isoDia(op.SALIDA), s, cntr)
@@ -108,6 +112,7 @@ export function agendaCliente(shipments: ParsedShipment[], hoyISO: string): Agen
 
 export const EVENTO_LABELS: Record<TipoEvento, string> = {
   llegada_mvd: 'Llega a Montevideo',
-  salida: 'Sale hacia tu depósito',
-  llegada_deposito: 'Llega a tu depósito',
+  llegada_destino: 'Llega a destino',
+  salida: 'Sale hacia destino',
+  llegada_deposito: 'Llega a destino',
 }

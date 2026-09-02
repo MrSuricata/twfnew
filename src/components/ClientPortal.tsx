@@ -51,7 +51,11 @@ import { matchesPattern, findClientByEmail } from '@/lib/clientMatching'
 import { useBrand } from '@/lib/brand'
 import { downloadClientStatusPdf } from '@/lib/clientStatusPdf'
 import HoyCliente from './HoyCliente'
-import { estadoCliente, ESTADO_CLIENTE_LABEL, ESTADO_CLIENTE_CLASE, ESTADO_CLIENTE_ORDEN, progresoCliente, proximoHito, refsCliente, esActivaParaCliente, type EstadoCliente } from '@/lib/hoyCliente'
+import {
+  estadoCliente, etiquetaEstado, ESTADO_CLIENTE_LABEL, ESTADO_CLIENTE_CLASE, ESTADO_CLIENTE_ORDEN, progresoCliente, proximoHito, refsCliente,
+  esActivaParaCliente, filtrarCargas, opcionesFiltro, rutaDe, tipoDe, FILTRO_TODO, RUTA_LABEL, RUTA_CHIP, TIPO_LABEL,
+  type EstadoCliente, type FiltroCargas,
+} from '@/lib/hoyCliente'
 
 interface ClientPortalProps {
   onLogout: () => void
@@ -72,6 +76,20 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
   // Antes cada carga era una tarjeta gigante y había que scrollear por cada
   // una (Brian 27/08).
   const [expandedRefs, setExpandedRefs] = useState<Set<string>>(new Set())
+  // Selectores de ruta (por dónde entra) y tipo (FCL/LCL) — Brian 02/09: "que
+  // puedan ver las cargas por país, por tipo, o por país y tipo". Filtran las
+  // cards de HOY Y la lista (un solo universo). Se recuerda en este navegador.
+  // Clave por cliente: al impersonar a otro (o cambiar de cuenta) no hereda el filtro.
+  const filtroKey = `twf-portal-filtro:${clientEmail || 'anon'}`
+  const [filtroCargas, setFiltroCargas] = useState<FiltroCargas>(() => {
+    try {
+      const raw = localStorage.getItem(filtroKey)
+      return raw ? { ...FILTRO_TODO, ...JSON.parse(raw) } : FILTRO_TODO
+    } catch { return FILTRO_TODO }
+  })
+  useEffect(() => {
+    try { localStorage.setItem(filtroKey, JSON.stringify(filtroCargas)) } catch { /* sin storage */ }
+  }, [filtroCargas, filtroKey])
   const toggleExpanded = (ref: string) => {
     setExpandedRefs(prev => {
       const next = new Set(prev)
@@ -145,6 +163,7 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
   // email del catálogo — "Bienvenido CENA HNOS"); sin match, manda el token.
   const currentClient = findClientByEmail(clients, clientEmail)
   const brand = useBrand()
+  const med = brand.id === 'med'
   // Hoy en ISO LOCAL (lib/format): toISOString() es UTC y después de las
   // 21:00 de Uruguay ya es "mañana" — corría la agenda y las cards un día.
   const hoyISO = hoyISOLocal()
@@ -176,8 +195,27 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
   // frontera: la carga caía a Historial justo cuando el cliente la esperaba.
   const isActiveShipment = (shipment: ParsedShipment): boolean => esActivaParaCliente(shipment, hoyISO)
 
-  const activeShipmentsRaw = clientShipments.filter(isActiveShipment)
-  const historyShipmentsRaw = clientShipments.filter(s => !isActiveShipment(s))
+  // Los selectores se ofrecen sobre TODAS las cargas del cliente; lo que se
+  // muestra (cards, lista, agenda, alertas) es lo filtrado.
+  const opciones = useMemo(() => opcionesFiltro(clientShipments), [clientShipments])
+  // Filtro EFECTIVO: si lo guardado ya no existe entre las opciones (la última
+  // carga a Chile pasó a historial, otro cliente en este navegador) cae a
+  // "todas" — un filtro fantasma dejaba el portal vacío y sin chips para salir.
+  const filtroEfectivo: FiltroCargas = {
+    ruta: filtroCargas.ruta !== 'todas' && opciones.rutas.includes(filtroCargas.ruta) ? filtroCargas.ruta : 'todas',
+    tipo: filtroCargas.tipo !== 'todos' && opciones.tipos.includes(filtroCargas.tipo) ? filtroCargas.tipo : 'todos',
+  }
+  const mostrarRuta = filtroEfectivo.ruta === 'todas' && opciones.rutas.length > 1
+  const mostrarTipo = filtroEfectivo.tipo === 'todos' && opciones.tipos.length > 1
+  const cargasFiltradas = useMemo(
+    () => filtrarCargas(clientShipments, filtroEfectivo),
+    [clientShipments, filtroEfectivo.ruta, filtroEfectivo.tipo],
+  )
+  // Alertas y campana: SIEMPRE sobre todas las cargas activas (un chip no puede
+  // apagar una alerta). La card "Atención" de HOY sí respeta la vista.
+  const activeAll = clientShipments.filter(isActiveShipment)
+  const activeShipmentsRaw = cargasFiltradas.filter(isActiveShipment)
+  const historyShipmentsRaw = cargasFiltradas.filter(s => !isActiveShipment(s))
 
   // ── Apply filters ──
   const applyFilters = (list: ParsedShipment[]) => {
@@ -258,13 +296,13 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
     return effectiveReports.filter(r => clientRefs.has(r.shipmentRef))
   }, [effectiveReports, clientShipments])
 
-  const allAlerts = useMemo(() => generateShipmentAlerts(activeShipments, clientReports), [activeShipments, clientReports])
+  const allAlerts = useMemo(() => generateShipmentAlerts(activeAll, clientReports), [activeAll, clientReports])
 
   // La agenda del cliente (Brian 26/08): próximos movimientos, últimas
   // llegadas y contadores de semana/mes — derivada de las cargas activas.
   const agenda = useMemo(
-    () => agendaCliente(clientShipments, hoyISO),
-    [clientShipments, hoyISO],
+    () => agendaCliente(cargasFiltradas, hoyISO),
+    [cargasFiltradas, hoyISO],
   )
   const visibleAlerts = allAlerts.filter(a => !dismissedAlerts.includes(a.id))
   const unseenAlerts = visibleAlerts.filter(a => !seenAlerts.includes(a.id))
@@ -446,8 +484,35 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
 
         {/* HOY del cliente (Brian 02/09): qué le llega, qué espera, qué viene,
             qué zarpó — en vez de cuatro números que no dicen qué hacer. */}
+        {(opciones.rutas.length > 1 || opciones.tipos.length > 1) && (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mb-4">
+            {opciones.rutas.length > 1 && (
+              <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Ruta">
+                <span className="text-[11px] uppercase tracking-wide text-muted-foreground mr-0.5">Ruta</span>
+                <ChipFiltro med={med} activo={filtroEfectivo.ruta === 'todas'} onClick={() => setFiltroCargas(f => ({ ...f, ruta: 'todas' }))}>Todas</ChipFiltro>
+                {opciones.rutas.map(r => (
+                  <ChipFiltro key={r} med={med} activo={filtroEfectivo.ruta === r} onClick={() => setFiltroCargas(f => ({ ...f, ruta: r }))}>{RUTA_LABEL[r]}</ChipFiltro>
+                ))}
+              </div>
+            )}
+            {opciones.tipos.length > 1 && (
+              <div className="flex flex-wrap items-center gap-1.5 sm:ml-auto" role="group" aria-label="Tipo de carga">
+                <span className="text-[11px] uppercase tracking-wide text-muted-foreground mr-0.5">Tipo</span>
+                <ChipFiltro med={med} activo={filtroEfectivo.tipo === 'todos'} onClick={() => setFiltroCargas(f => ({ ...f, tipo: 'todos' }))}>{opciones.tipos.map(t => TIPO_LABEL[t]).join(' y ')}</ChipFiltro>
+                {opciones.tipos.map(t => (
+                  <ChipFiltro key={t} med={med} activo={filtroEfectivo.tipo === t} onClick={() => setFiltroCargas(f => ({ ...f, tipo: t }))}>{TIPO_LABEL[t]}</ChipFiltro>
+                ))}
+              </div>
+            )}
+            {(filtroEfectivo.ruta !== 'todas' || filtroEfectivo.tipo !== 'todos') && (
+              <span className="text-xs text-muted-foreground w-full sm:w-auto">Mostrando {activeShipmentsRaw.length} de {activeAll.length} cargas</span>
+            )}
+          </div>
+        )}
         <HoyCliente
           shipments={activeShipmentsRaw}
+          mostrarRuta={mostrarRuta}
+          mostrarTipo={mostrarTipo}
           alerts={visibleAlerts.filter(a => a.severity === 'critical' || a.severity === 'warning')}
           hoyISO={hoyISO}
           onVerCarga={verCarga}
@@ -495,7 +560,7 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
                     <div className="space-y-2">
                       {agenda.proximos.slice(0, 8).map((e, i) => (
                         <div key={`${e.tipo}-${e.ref}-${e.cntr}-${i}`} className="flex items-center gap-2.5 text-sm min-w-0">
-                          {e.tipo === 'llegada_mvd'
+                          {(e.tipo === 'llegada_mvd' || e.tipo === 'llegada_destino')
                             ? <Boat size={16} weight="fill" className="text-blue-600 shrink-0" />
                             : e.tipo === 'salida'
                               ? <Truck size={16} weight="fill" className="text-amber-600 shrink-0" />
@@ -552,7 +617,7 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
               </span>
             </div>
             <AgendaCalendar
-              shipments={clientShipments}
+              shipments={cargasFiltradas}
               clientView={true}
               defaultView="month"
             />
@@ -590,7 +655,7 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
                   onClick={() => downloadClientStatusPdf(activeShipmentsRaw, currentClient?.name || clientName || clientEmail, brand)}
                   disabled={activeShipmentsRaw.length === 0}
                   className="gap-1.5 shrink-0"
-                  title="Descargar PDF con el estado de todas tus cargas activas"
+                  title="Descargar PDF con el estado de las cargas que estás viendo"
                 >
                   <FilePdf size={16} />
                   <span className="hidden sm:inline">Estado (PDF)</span>
@@ -777,7 +842,12 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
                                   {refs.secundaria}
                                 </span>
                               )}
-                              <Badge className={ESTADO_CLIENTE_CLASE[estado]}>{ESTADO_CLIENTE_LABEL[estado]}</Badge>
+                              <Badge className={ESTADO_CLIENTE_CLASE[estado]}>{etiquetaEstado(shipment, estado)}</Badge>
+                              {(mostrarTipo || mostrarRuta) && (
+                                <span className="text-[11px] text-muted-foreground">
+                                  {[mostrarTipo ? TIPO_LABEL[tipoDe(shipment)] : null, mostrarRuta ? RUTA_CHIP[rutaDe(shipment)] : null].filter(Boolean).join(' · ')}
+                                </span>
+                              )}
                               {shipment.N > 0 && <Badge variant="secondary" className="text-xs">{shipment.N} CNTR</Badge>}
                               {shipment.LIBRE_HASTA && daysLibre <= 3 && (
                                 <Badge className={daysLibre < 0 ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}>
@@ -816,7 +886,7 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
                       {/* ── Row 2: Progress bar ── */}
                       <div className="mb-4">
                         <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
-                          <span>{ESTADO_CLIENTE_LABEL[estado]}</span>
+                          <span>{etiquetaEstado(shipment, estado)}</span>
                           <span>{progreso}%</span>
                         </div>
                         <div className="w-full bg-muted rounded-full h-1.5">
@@ -1154,5 +1224,17 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
         />
       )}
     </div>
+  )
+}
+
+/** Chip de los selectores de ruta / tipo (arriba de HOY del cliente). */
+function ChipFiltro({ med, activo, onClick, children }: { med: boolean; activo: boolean; onClick: () => void; children: React.ReactNode }) {
+  const base = 'h-8 px-3 rounded-full text-xs font-semibold border transition-colors'
+  const on = med ? 'bg-med-violeta text-white border-med-violeta' : 'bg-accent text-accent-foreground border-accent'
+  const off = med ? 'bg-white text-med-violeta border-med-violeta/30 hover:bg-med-violeta/10' : 'bg-background text-foreground border-border hover:bg-muted'
+  return (
+    <button type="button" aria-pressed={activo} onClick={onClick} className={`${base} ${activo ? on : off}`}>
+      {children}
+    </button>
   )
 }
