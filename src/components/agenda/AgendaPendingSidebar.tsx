@@ -3,6 +3,7 @@ import type { ParsedShipment } from '@/lib/shipmentTypes'
 import { parseLocalDate } from '@/lib/shipmentTypes'
 import { Package, Truck, MapPin, X, Warning, Calendar } from '@phosphor-icons/react'
 import { useBrand } from '@/lib/brand'
+import { etaVigente } from '@/lib/salidaCheck'
 
 interface AgendaPendingSidebarProps {
   shipments: ParsedShipment[]
@@ -106,7 +107,7 @@ export default function AgendaPendingSidebar({ shipments, windowDays = 4, onClos
         const hasSalida = (op.SALIDA || '').trim() !== ''
         if (hasSalida) continue
 
-        const etaStr = (op.ETA_OP || s.ETA || '').trim()
+        const etaStr = etaVigente(s.ETA, op.ETA_OP)
         const etaDate = parseLocalDate(etaStr)
         if (!etaDate) continue
 

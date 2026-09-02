@@ -201,7 +201,8 @@ describe('libresPorVencer — vacíos que hay que devolver', () => {
   it('si el contenedor todavía no llegó al depósito (turno o ETA futura) no pide devolver el vacío', () => {
     expect(libresPorVencer([
       carga('TURNO', [{ LIBRE: '2026-09-04', TURNO_RETIRO: '2026-09-03' }]),
-      carga('ETA', [{ LIBRE: '2026-09-05', ETA: '2026-09-03' }]),
+      // La ETA que manda es la de la CARGA (ETA_OP es una copia congelada).
+      carga('ETA', [{ LIBRE: '2026-09-05', ETA_OP: '2026-08-20' }], { ETA: '2026-09-03' }),
       carga('CAB', [{ LIBRE: '2026-09-05' }], { ETA: '2026-09-02' }),
     ], HOY, 'PLANIR', [])).toEqual([])
   })

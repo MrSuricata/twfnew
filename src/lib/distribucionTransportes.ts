@@ -189,7 +189,8 @@ function contar(
       } else if (modo === 'prevision' && SALIDA_VACIA.has(norm(op.SALIDA))) {
         // Sin salida: se ubica por cuándo llega la carga. Si llega dentro del
         // período (o ya llegó), es trabajo a repartir en esa ventana.
-        const eta = parseLocalDate(op.ETA_OP || '') || parseLocalDate(etaDe(s))
+        // La ETA de la carga manda; ETA_OP es una copia congelada al hornear.
+        const eta = parseLocalDate(etaDe(s)) || parseLocalDate(op.ETA_OP || '')
         entra = !!eta && medianoche(eta) <= hasta
         esPendiente = entra
       }

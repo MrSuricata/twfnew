@@ -39,6 +39,7 @@ import {
 } from '@/lib/actasDeposito'
 import { normalizeRef } from '@/lib/checksTypes'
 import { fmtDateDMY } from '@/lib/format'
+import { etaVigente } from '@/lib/salidaCheck'
 
 const hoyIso = (): string => {
   const d = new Date()
@@ -87,7 +88,7 @@ export default function DepositoPanel({
         // Fechas POR CONTENEDOR: sin esto, el trasiego de HOY de una carga
         // cuyo otro contenedor salió ayer quedaba invisible (A8025, 19/08).
         operativas: (s.operativas || []).map(o => ({
-          cntr: String(o.CNTR_OP || ''), salida: o.SALIDA, eta: o.ETA_OP,
+          cntr: String(o.CNTR_OP || ''), salida: o.SALIDA, eta: etaVigente(s.eta, o.ETA_OP),
         })),
       })),
       hoy,
