@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { saludoPersonal } from '@/lib/saludo'
 import { Button } from '@/components/ui/button'
 import { SignOut, User, House } from '@phosphor-icons/react'
 import BrandLogo from './BrandLogo'
@@ -35,6 +36,7 @@ export default function PartnerDashboardShell({
           <div className="flex items-center gap-3 min-w-0">
             <div className="p-2 bg-white/10 rounded-lg ring-1 ring-inset ring-white/20 shrink-0 [&_svg]:text-white">{icon}</div>
             <div className="min-w-0">
+              <p className="text-xs text-white/80 leading-tight truncate">{saludoPersonal(userName)}</p>
               <h1 className="titulo-med text-base text-white leading-tight truncate">{title}</h1>
               <div className="flex items-center gap-1.5 text-xs text-white/70">
                 <User size={12} />

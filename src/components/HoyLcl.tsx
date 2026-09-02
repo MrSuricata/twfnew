@@ -32,6 +32,8 @@ import type { DatoClave } from '@/lib/datosClave'
 import BandejaStock from './trucks/BandejaStock'
 import ChipDeposito from './trucks/ChipDeposito'
 import { useBrand } from '@/lib/brand'
+import { saludoPersonal } from '@/lib/saludo'
+import { getAdminName } from '@/lib/authClient'
 import { fmtDateDMY, hoyISO as hoyLocal } from '@/lib/format'
 import { formatKg, formatM3 } from '@/lib/truckUtils'
 import AvisosPartnersCard from './AvisosPartnersCard'
@@ -101,6 +103,7 @@ export default function HoyLcl({
       {/* ── Header ───────────────────────────────────────── */}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
+          <p className="text-sm text-muted-foreground mb-0.5">{saludoPersonal(getAdminName())}</p>
           <h1 className="text-3xl font-bold tracking-tight">
             <span className={med ? 'titulo-med text-med-violeta' : 'text-muted-foreground/70 font-semibold'}>Hoy LCL</span>
             <span className="text-muted-foreground/50 font-normal mx-2">·</span>
