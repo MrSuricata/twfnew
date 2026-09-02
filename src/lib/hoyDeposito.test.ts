@@ -198,6 +198,25 @@ describe('libresPorVencer — vacíos que hay que devolver', () => {
     ], HOY, 'PLANIR', [aviso({ tipo: 'devolvi', ref: 'C', cntr: 'X1', estado: 'confirmado' })])).toEqual([])
   })
 
+  it('si el contenedor todavía no llegó al depósito (turno o ETA futura) no pide devolver el vacío', () => {
+    expect(libresPorVencer([
+      carga('TURNO', [{ LIBRE: '2026-09-04', TURNO_RETIRO: '2026-09-03' }]),
+      carga('ETA', [{ LIBRE: '2026-09-05', ETA: '2026-09-03' }]),
+      carga('CAB', [{ LIBRE: '2026-09-05' }], { ETA: '2026-09-02' }),
+    ], HOY, 'PLANIR', [])).toEqual([])
+  })
+
+  it('retirado hoy (turno = hoy) sí entra: ya está en el predio', () => {
+    const filas = libresPorVencer([carga('HOY', [{ LIBRE: '2026-09-04', TURNO_RETIRO: HOY }])], HOY, 'PLANIR', [])
+    expect(filas.map(f => f.ref)).toEqual(['HOY'])
+  })
+
+  it('CONTENEDOR directo no pasa por el predio: no entra ni con LIBRE vencido', () => {
+    expect(libresPorVencer([
+      carga('DIR', [{ LIBRE: '2026-08-20', OPERATIVA: 'CONTENEDOR' }]),
+    ], HOY, 'PLANIR', [])).toEqual([])
+  })
+
   it('ordena: vencidos primero (el más vencido arriba), después los que vencen antes', () => {
     const filas = libresPorVencer([
       carga('P', [{ LIBRE: '2026-09-05' }]),

@@ -280,6 +280,12 @@ export function severidadLibre(dias: number): SeveridadLibre {
  * LIBRE de HOY admin (vencido / hoy / 1-2 d) más la franja de aviso a 5 días.
  * "DEVUELTO" en LIBRE o una DEV_FECHA = ya devuelto, no entra. Con un aviso
  * "devolví" confirmado la fila desaparece.
+ *
+ * Solo contenedores que están (o estuvieron) en el predio: la operativa tiene
+ * que pasar por el depósito (TRASIEGO / CARGA A PISO, nunca CONTENEDOR directo)
+ * y la fecha de retiro (turno de Montecon o ETA) no puede ser futura — si el
+ * contenedor sigue en el buque o en la terminal, "devolví el vacío" es una
+ * acción imposible. No se exige RETIRADO (TCP no tiene agenda): conservador.
  */
 export function libresPorVencer(
   shipments: ParsedShipment[],
@@ -290,8 +296,10 @@ export function libresPorVencer(
   const out: LibrePorVencer[] = []
   for (const cab of shipments) {
     for (const op of ops(cab)) {
-      if (!esMiDeposito(op, deposito) || !esFcl(op)) continue
+      if (!esMiDeposito(op, deposito) || !esFcl(op) || !pasaPorDeposito(op)) continue
       if (devuelto(op, cab)) continue
+      const retiro = fechaRetiro(op, cab)
+      if (retiro && retiro > hoyISO) continue
       const libre = fechaISO(libreDe(op, cab))
       if (!libre) continue
       const dias = diasEntre(hoyISO, libre)
