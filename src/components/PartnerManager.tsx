@@ -151,7 +151,15 @@ export default function PartnerManager() {
         throw new Error(err.error || 'Error al guardar')
       }
 
-      toast.success(editingId ? 'Partner actualizado' : 'Partner creado — email de bienvenida enviado')
+      const data = await res.json().catch(() => ({} as { welcomeSent?: boolean }))
+      if (editingId) {
+        toast.success('Partner actualizado')
+      } else if (data?.welcomeSent === false) {
+        // Sin proveedor de mail el server no manda nada (y antes lo decía igual).
+        toast.warning('Partner creado, pero el email de bienvenida NO se envió: falta configurar el proveedor de mail en Vercel. Pasale el acceso por otro canal.', { duration: 9000 })
+      } else {
+        toast.success('Partner creado — email de bienvenida enviado')
+      }
       setShowDialog(false)
       setForm(EMPTY_FORM)
       setEditingId(null)
