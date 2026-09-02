@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { ShipmentTableSkeleton, StatCardSkeleton } from '@/components/SkeletonLoaders'
+import { ShipmentTableSkeleton } from '@/components/SkeletonLoaders'
 import BrandLogo from './BrandLogo'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -39,18 +39,19 @@ import {
   CaretDown,
 } from '@phosphor-icons/react'
 import { ParsedShipment, getShipmentStatus, generateShipmentAlerts, isShipmentCompleted, parseLocalDate } from '@/lib/shipmentTypes'
-import { statusColorToClass, getUrgencyMeta } from '@/lib/statusColors'
 import AvisoOperativo from '@/components/AvisoOperativo'
 import { ClientAccount, OperativeReport, OriginPhoto } from '@/lib/quotationTypes'
 import { authFetch } from '@/lib/authClient'
 import { fetchClientReports, fetchClientOriginPhotos } from '@/lib/dataClient'
 import { agendaCliente, EVENTO_LABELS, refParaCliente } from '@/lib/clientAgenda'
-import { fmtDateDMY } from '@/lib/format'
+import { fmtDateDMY, hoyISO as hoyISOLocal } from '@/lib/format'
 import ShipmentDetailsDialog from './ShipmentDetailsDialog'
 import AgendaCalendar from './agenda/AgendaCalendar'
 import { matchesPattern, findClientByEmail } from '@/lib/clientMatching'
 import { useBrand } from '@/lib/brand'
 import { downloadClientStatusPdf } from '@/lib/clientStatusPdf'
+import HoyCliente from './HoyCliente'
+import { estadoCliente, ESTADO_CLIENTE_LABEL, ESTADO_CLIENTE_CLASE, ESTADO_CLIENTE_ORDEN, progresoCliente, proximoHito, refsCliente, esActivaParaCliente, type EstadoCliente } from '@/lib/hoyCliente'
 
 interface ClientPortalProps {
   onLogout: () => void
@@ -77,6 +78,16 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
       if (next.has(ref)) next.delete(ref)
       else next.add(ref)
       return next
+    })
+  }
+  // Desde una card de HOY: abrir la carga en la lista, desplegada, y llevar la
+  // vista hasta ella (el cliente viene de arriba de todo).
+  const verCarga = (ref: string) => {
+    clearFilters() // con un filtro/búsqueda activo la fila no estaría en el DOM
+    setActiveTab('active')
+    setExpandedRefs(prev => { const n = new Set(prev); n.add(ref); return n })
+    requestAnimationFrame(() => {
+      document.getElementById(`carga-${ref}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     })
   }
   const [showNotifications, setShowNotifications] = useState(false)
@@ -134,6 +145,9 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
   // email del catálogo — "Bienvenido CENA HNOS"); sin match, manda el token.
   const currentClient = findClientByEmail(clients, clientEmail)
   const brand = useBrand()
+  // Hoy en ISO LOCAL (lib/format): toISOString() es UTC y después de las
+  // 21:00 de Uruguay ya es "mañana" — corría la agenda y las cards un día.
+  const hoyISO = hoyISOLocal()
 
   // Use server data if available, fallback to props
   const clientShipments = serverShipments.length > 0
@@ -156,15 +170,11 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
     }
   }
 
-  // Improved: A shipment is active unless it's completed (all containers devueltos/SALIDA)
-  // OR if libre expired more than 30 days ago AND no operativas data
-  const isActiveShipment = (shipment: ParsedShipment): boolean => {
-    // If all containers have SALIDA → completed (user's logic)
-    if (isShipmentCompleted(shipment)) return false
-    // Fallback for shipments without operativas: use libre date
-    const daysUntilFree = getDaysUntilFree(shipment.LIBRE_HASTA)
-    return daysUntilFree >= -30
-  }
+  // Activa / Historial con la MISMA regla que el chip de estado del cliente
+  // (hoyCliente.esActivaParaCliente). isShipmentCompleted (admin) daba por
+  // completado un trasiego el día después de la salida, con el camión en la
+  // frontera: la carga caía a Historial justo cuando el cliente la esperaba.
+  const isActiveShipment = (shipment: ParsedShipment): boolean => esActivaParaCliente(shipment, hoyISO)
 
   const activeShipmentsRaw = clientShipments.filter(isActiveShipment)
   const historyShipmentsRaw = clientShipments.filter(s => !isActiveShipment(s))
@@ -175,10 +185,7 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
 
     // Status filter
     if (filterStatus !== '__all__') {
-      filtered = filtered.filter(s => {
-        const st = getShipmentStatus(s)
-        return st.code === filterStatus
-      })
+      filtered = filtered.filter(s => estadoCliente(s, hoyISO) === filterStatus)
     }
 
     // Text search (REF, BUQUE, CNTR, DESCRIPCION)
@@ -256,8 +263,8 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
   // La agenda del cliente (Brian 26/08): próximos movimientos, últimas
   // llegadas y contadores de semana/mes — derivada de las cargas activas.
   const agenda = useMemo(
-    () => agendaCliente(clientShipments, new Date().toISOString().slice(0, 10)),
-    [clientShipments],
+    () => agendaCliente(clientShipments, hoyISO),
+    [clientShipments, hoyISO],
   )
   const visibleAlerts = allAlerts.filter(a => !dismissedAlerts.includes(a.id))
   const unseenAlerts = visibleAlerts.filter(a => !seenAlerts.includes(a.id))
@@ -295,16 +302,6 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
       case 'success': return 'border-l-green-500 bg-green-50'
       default: return 'border-l-gray-500'
     }
-  }
-
-  const getStatusBadge = (shipment: ParsedShipment) => {
-    const status = getShipmentStatus(shipment)
-    return <Badge className={statusColorToClass(status.color)}>{status.label}</Badge>
-  }
-
-  const getUrgencyBadge = (days: number) => {
-    const urgency = getUrgencyMeta(days)
-    return <Badge className={urgency.badgeClass}>{urgency.label}</Badge>
   }
 
   const handleViewDetails = (shipment: ParsedShipment) => {
@@ -429,29 +426,7 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
       )}
 
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-8">
-        {/* ── Critical Alerts Banner (always visible if critical alerts exist) ── */}
-        {visibleAlerts.filter(a => a.severity === 'critical').length > 0 && (
-          <div className="mb-6 space-y-2">
-            {visibleAlerts.filter(a => a.severity === 'critical').map(alert => (
-              <div key={alert.id} className="flex items-center gap-3 bg-red-50 border border-red-200 rounded-lg px-4 py-3">
-                <Warning size={20} weight="fill" className="text-red-500 shrink-0" />
-                <div className="flex-1 text-sm">
-                  <span className="font-semibold text-red-700">{alert.title}:</span>
-                  <span className="ml-1 text-red-600">{alert.message}</span>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-red-500 hover:bg-red-100"
-                  onClick={() => dismissAlert(alert.id)}
-                >
-                  <XIcon size={16} />
-                </Button>
-              </div>
-            ))}
-          </div>
-        )}
-
+        {/* Las alertas críticas viven en la card "Atención" de HOY (abajo) y en la pestaña Alertas. */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2">Mis Cargas</h1>
           <p className="text-muted-foreground">
@@ -461,12 +436,6 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
 
         {isLoadingData && serverShipments.length === 0 && (
           <>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-              <StatCardSkeleton />
-              <StatCardSkeleton />
-              <StatCardSkeleton />
-              <StatCardSkeleton />
-            </div>
             <ShipmentTableSkeleton />
           </>
         )}
@@ -475,44 +444,21 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
         <>
         <AvisoOperativo className="mb-6" />
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-3xl font-bold text-accent">{activeShipments.length}</div>
-              <div className="text-sm text-muted-foreground">Cargas Activas</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-3xl font-bold text-accent">
-                {activeShipments.reduce((sum, s) => sum + s.N, 0)}
-              </div>
-              <div className="text-sm text-muted-foreground">Contenedores</div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className={`text-3xl font-bold ${criticalCount > 0 ? 'text-red-500' : 'text-green-500'}`}>
-                {criticalCount > 0 ? criticalCount : '✓'}
-              </div>
-              <div className="text-sm text-muted-foreground">
-                {criticalCount > 0 ? 'Alertas Activas' : 'Sin Alertas'}
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-3xl font-bold text-accent">{historyShipments.length}</div>
-              <div className="text-sm text-muted-foreground">Completadas</div>
-            </CardContent>
-          </Card>
-        </div>
+        {/* HOY del cliente (Brian 02/09): qué le llega, qué espera, qué viene,
+            qué zarpó — en vez de cuatro números que no dicen qué hacer. */}
+        <HoyCliente
+          shipments={activeShipmentsRaw}
+          alerts={visibleAlerts.filter(a => a.severity === 'critical' || a.severity === 'warning')}
+          hoyISO={hoyISO}
+          onVerCarga={verCarga}
+          onVerAlertas={() => setActiveTab('alerts')}
+        />
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
           <TabsList className="tabs-list-underline max-w-3xl">
             <TabsTrigger value="active" className="tab-underline">
               <Package size={18} className="mr-1.5" />
-              <span className="hidden sm:inline">Activas</span>
+              <span className="hidden sm:inline">Mis cargas</span>
             </TabsTrigger>
             <TabsTrigger value="agenda" className="tab-underline">
               <CalendarBlank size={18} className="mr-1.5" />
@@ -672,12 +618,9 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="__all__">Todos los estados</SelectItem>
-                            <SelectItem value="en_transito">🚢 En Tránsito Marítimo</SelectItem>
-                            <SelectItem value="en_puerto">⚓ En Terminal / Puerto</SelectItem>
-                            <SelectItem value="salio_montevideo">🚛 Salida MVD / Carga Hoy</SelectItem>
-                            <SelectItem value="en_frontera">🛃 En Frontera</SelectItem>
-                            <SelectItem value="llego_fiscal">📦 En Depósito Fiscal</SelectItem>
-                            <SelectItem value="devuelto">✅ Contenedor Devuelto</SelectItem>
+                            {ESTADO_CLIENTE_ORDEN.map(e => (
+                              <SelectItem key={e} value={e}>{ESTADO_CLIENTE_LABEL[e]}</SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                       </div>
@@ -718,12 +661,7 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
                   <span className="text-muted-foreground">Mostrando {activeShipments.length} de {activeShipmentsRaw.length} cargas</span>
                   {filterStatus !== '__all__' && (
                     <Badge variant="secondary" className="text-xs gap-1">
-                      {filterStatus === 'en_transito' ? '🚢 En Tránsito' :
-                       filterStatus === 'en_puerto' ? '⚓ Terminal/Puerto' :
-                       filterStatus === 'salio_montevideo' ? '🚛 Salida MVD' :
-                       filterStatus === 'en_frontera' ? '🛃 Frontera' :
-                       filterStatus === 'llego_fiscal' ? '📦 Fiscal' :
-                       filterStatus === 'devuelto' ? '✅ Devuelto' : filterStatus}
+                      {ESTADO_CLIENTE_LABEL[filterStatus as EstadoCliente] ?? filterStatus}
                       <button onClick={() => setFilterStatus('__all__')} className="ml-0.5 hover:text-foreground"><XIcon size={12} /></button>
                     </Badge>
                   )}
@@ -786,9 +724,9 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
                   const daysLibre = getDaysUntilFree(shipment.LIBRE_HASTA)
                   // UNA referencia protagonista: la del cliente, o la nuestra
                   // sin la A; la TWF corta queda como dato secundario.
-                  const clientRef = String((shipment as { CLIENT_REF?: string }).CLIENT_REF || '')
-                  const refVisible = refParaCliente(shipment)
-                  const refTwfCorta = shipment.REF.replace(/^A(?=\d)/, '')
+                  const refs = refsCliente(shipment)
+                  const estado = estadoCliente(shipment, hoyISO)
+                  const progreso = progresoCliente(estado)
                   const expanded = expandedRefs.has(shipment.REF)
 
                   // Build container list: from operativas or fallback to main CNTR
@@ -808,16 +746,9 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
                     }
                   }
 
-                  // Próximo hito para la fila colapsada: lo más avanzado con fecha.
-                  const salidaFecha = ops.find(o => o.SALIDA && o.SALIDA.trim())?.SALIDA || ''
-                  const etaFiscFecha = ops.find(o => o.ETA_FISC && o.ETA_FISC.trim())?.ETA_FISC || ''
-                  const hito = etaFiscFecha
-                    ? { label: 'Llega a depósito', fecha: fmtDateDMY(etaFiscFecha) }
-                    : salidaFecha
-                      ? { label: 'Salida MVD', fecha: fmtDateDMY(salidaFecha) }
-                      : shipment.ETA
-                        ? { label: 'ETA Montevideo', fecha: fmtDateDMY(shipment.ETA) }
-                        : { label: 'Salida', fecha: 'A confirmar' }
+                  // Próximo hito: SIEMPRE el mismo dato para el mismo estado
+                  // (antes alternaba ETA Montevideo / Llega a depósito por fila).
+                  const hito = proximoHito(shipment, hoyISO)
 
                   const stripClass =
                     status.color === 'green' ? 'bg-green-500' :
@@ -827,7 +758,7 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
                     'bg-blue-500'
 
                   return (
-                  <Card key={shipment.REF} className="overflow-hidden py-0 gap-0">
+                  <Card key={shipment.REF} id={`carga-${shipment.REF}`} className="overflow-hidden py-0 gap-0">
                     {/* ── Fila compacta: siempre visible, click expande ── */}
                     <button
                       type="button"
@@ -840,14 +771,14 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
                         <div className="flex-1 min-w-0 px-3 sm:px-4 py-2.5 flex items-center gap-2 sm:gap-3">
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <span className="font-bold">Ref. {refVisible}</span>
-                              {clientRef && (
+                              <span className="font-bold">{refs.principal}</span>
+                              {refs.secundaria && (
                                 <span className="text-[11px] text-muted-foreground" title="Nuestra referencia">
-                                  TWF {refTwfCorta}
+                                  {refs.secundaria}
                                 </span>
                               )}
-                              {getStatusBadge(shipment)}
-                              <Badge variant="secondary" className="text-xs">{shipment.N} CNTR</Badge>
+                              <Badge className={ESTADO_CLIENTE_CLASE[estado]}>{ESTADO_CLIENTE_LABEL[estado]}</Badge>
+                              {shipment.N > 0 && <Badge variant="secondary" className="text-xs">{shipment.N} CNTR</Badge>}
                               {shipment.LIBRE_HASTA && daysLibre <= 3 && (
                                 <Badge className={daysLibre < 0 ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}>
                                   {daysLibre < 0 ? 'Libre vencido' : daysLibre === 0 ? 'Libre vence HOY' : `Libre: ${daysLibre}d`}
@@ -885,8 +816,8 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
                       {/* ── Row 2: Progress bar ── */}
                       <div className="mb-4">
                         <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
-                          <span>{status.label}</span>
-                          <span>{status.progress}%</span>
+                          <span>{ESTADO_CLIENTE_LABEL[estado]}</span>
+                          <span>{progreso}%</span>
                         </div>
                         <div className="w-full bg-muted rounded-full h-1.5">
                           <div
@@ -896,7 +827,7 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
                               status.color === 'gray' ? 'bg-gray-400' :
                               'bg-blue-500'
                             }`}
-                            style={{ width: `${status.progress}%` }}
+                            style={{ width: `${progreso}%` }}
                           />
                         </div>
                       </div>
