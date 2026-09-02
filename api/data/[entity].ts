@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { authenticateRequest, auditUser, type TokenPayload, type AdminPayload } from '../_lib/jwt.js'
 import { handleCors } from '../_lib/cors.js'
 import { getSupabase } from '../_lib/supabase.js'
-import { sendMail } from '../_lib/mail.js'
+import { sendMail, mailConfigured } from '../_lib/mail.js'
 import { welcomeClientEmail, welcomePartnerEmail, resolveEmailBrand } from '../_lib/emailTemplates.js'
 import { hashPassword } from '../_lib/password.js'
 import { matchesClientePattern } from '../_lib/csvParser.js'
@@ -638,7 +638,7 @@ async function handleClientUsers(req: VercelRequest, res: VercelResponse, db: an
       console.warn('[welcome-client-user] failed:', err)
     }
 
-    return res.status(201).json({ created: true, id: created.id })
+    return res.status(201).json({ created: true, id: created.id, welcomeSent: mailConfigured() })
   }
 
   if (req.method === 'PATCH') {
@@ -1467,7 +1467,9 @@ async function handlePartnerUsers(req: VercelRequest, res: VercelResponse, db: a
       })
       .catch(err => console.warn('[welcome-partner] failed:', err))
 
-    return res.status(201).json({ created: true, id: data.id, welcomeSent: true })
+    // welcomeSent = si HAY proveedor de mail (el envío es fire-and-forget). Con
+    // false la UI avisa que el acceso se pasa por otro canal.
+    return res.status(201).json({ created: true, id: data.id, welcomeSent: mailConfigured() })
   }
 
   if (req.method === 'PATCH') {
