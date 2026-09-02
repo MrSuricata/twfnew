@@ -12,6 +12,8 @@
  *                            + Terminal (FCL por MVD)
  *   Llega en ≤7 / llegó   → Depósito · Operativa · Transporte · Fiscal
  *                            (coordinación: solo cargas por Uruguay)
+ *                            + Despachante de destino (el que libera en AR),
+ *                            recién cuando ya se sabe a qué fiscal va
  *   Llegó (ETA+1)         → Devolución (lugar) · Fecha devolución
  *                            (Brian 28/08: no antes — el buque tiene que
  *                            haber atracado para que el dato importe)
@@ -54,6 +56,9 @@ export interface CargaCampos {
   /** Terminal/depósito de DEVOLUCIÓN del vacío (STL/MPS/TCP…): Pagos saca de
    *  acá a QUIÉN se le paga la devolución y su costo default. */
   dev?: string | null
+  /** Despachante de DESTINO: el que libera la carga en Argentina (Brian
+   *  02/09). No es Navatta, que es el despachante uruguayo. Columna `despacho`. */
+  despacho?: string | null
   /** Fecha de devolución del vacío, una vez que ocurrió. NO es un dato que se
    *  pueda pedir al arribo: recién existe cuando el contenedor volvió. Sirve
    *  para medir sobrestadía contra `libre`. */
@@ -175,6 +180,10 @@ export function datosFaltantes(c: CargaCampos, hoy: Date): CampoFaltante[] {
     if (vacio(c.operativa)) falta('operativa', 'Operativa')
     if (vacio(c.transporte)) falta('transporte', 'Transporte')
     if (vacio(c.fiscal)) falta('fiscal', 'Fiscal')
+    // Despachante de destino: se pide junto con el fiscal, porque va de la
+    // mano (quién libera en ese depósito). Solo cuando el fiscal ya está: sin
+    // saber a dónde va, todavía no hay a quién asignar.
+    if (!vacio(c.fiscal) && vacio(c.despacho)) falta('despacho', 'Despachante')
   }
 
   return out

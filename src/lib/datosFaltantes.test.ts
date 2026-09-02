@@ -114,7 +114,7 @@ describe('urgentes y adelantar (Brian 28/08)', () => {
     mode: 'fcl', pais: 'UY', cliente: 'X', buque: 'B', linea: 'MSC', docNumber: 'MBL1',
     cntr: 'ABCD1234567', pkgs: 1, kg: 1, m3: 1, agente: 'AG', terminal: 'TCP',
     deposito: 'GODILCO', operativa: 'TRASIEGO', transporte: 'T', fiscal: 'F',
-    descripcion: 'REPUESTOS', etd: '2026-07-01',
+    descripcion: 'REPUESTOS', etd: '2026-07-01', despacho: 'GOMEZ',
   }
 
   it('llegada CON salida coordinada sigue en la tarjeta si falta la devolución', () => {
@@ -236,13 +236,30 @@ describe('datosFaltantes — exigencia por etapa', () => {
       .toContain('deposito')
   })
 
+  it('el despachante se pide junto al fiscal, y solo cuando el fiscal ya está (Brian 02/09)', () => {
+    // Sin fiscal todavía no hay a quién asignar: no se pide.
+    const sinFiscal = datosFaltantes(carga({ eta: '2026-08-22', fiscal: '' }), HOY)
+    expect(sinFiscal.map(x => x.campo)).toContain('fiscal')
+    expect(sinFiscal.map(x => x.campo)).not.toContain('despacho')
+    // Con fiscal cargado y sin despachante, sí.
+    const conFiscal = datosFaltantes(carga({ eta: '2026-08-22', fiscal: 'ZP RAFAELA' }), HOY)
+    expect(conFiscal.map(x => x.campo)).toContain('despacho')
+    expect(conFiscal.find(x => x.campo === 'despacho')?.etiqueta).toBe('Despachante')
+    // Cargado, deja de pedirse.
+    expect(datosFaltantes(carga({ eta: '2026-08-22', fiscal: 'ZP RAFAELA', despacho: 'GOMEZ' }), HOY).map(x => x.campo))
+      .not.toContain('despacho')
+    // Fuera de la ventana de coordinación tampoco molesta.
+    expect(datosFaltantes(carga({ eta: '2026-11-20', fiscal: 'ZP RAFAELA' }), HOY).map(x => x.campo))
+      .not.toContain('despacho')
+  })
+
   it('con todo cargado no molesta ni encima de la llegada', () => {
     const completa = carga({
       eta: '2026-08-19', etd: '2026-07-10', buque: 'MAERSK X 001W', linea: 'MAERSK',
       docNumber: 'MAEU123', cntr: 'MSKU1234567', pkgs: 10, kg: 5000, m3: 20,
       agente: 'REPREMAR', deposito: 'GODILCO', operativa: 'TRASIEGO',
       transporte: 'TRANSCAL', fiscal: 'RAFAELA', terminal: 'TCP', dev: 'STL',
-      descripcion: 'BICICLETAS',
+      descripcion: 'BICICLETAS', despacho: 'GOMEZ',
     })
     expect(datosFaltantes(completa, HOY)).toEqual([])
   })
@@ -305,7 +322,7 @@ describe('faltantesUrgentes — la tarjeta de HOY', () => {
         eta: '2026-08-18', etd: '2026-07-10', buque: 'X 1W', linea: 'ONE', docNumber: 'B',
         cntr: 'MSKU1234567', pkgs: 1, kg: 1, m3: 1, agente: 'REPREMAR',
         deposito: 'GODILCO', operativa: 'TRASIEGO', transporte: 'TRANSCAL', fiscal: 'RAFAELA',
-        terminal: 'MONTECON', dev: 'MPS', descripcion: 'BICICLETAS',
+        terminal: 'MONTECON', dev: 'MPS', descripcion: 'BICICLETAS', despacho: 'GOMEZ',
       }), ref: 'OK',
     }
     expect(faltantesUrgentes([completa], HOY)).toEqual([])

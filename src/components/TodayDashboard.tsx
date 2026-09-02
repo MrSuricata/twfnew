@@ -35,6 +35,7 @@ import { deriveKnownTransportes, deriveKnownValues, DEPOSITOS_UY, type DbShipmen
 import { faltantesUrgentes, faltantesFuturos, resumenFaltantes, FALTANTES_DIAS_COORDINACION, type FaltanteUrgente, type CampoFaltante } from '@/lib/datosFaltantes'
 import { buildFaltantePatch, columnaDeCampo, FALTANTE_INPUTS, DEVOLUCIONES_PLAZA } from '@/lib/faltantesEdit'
 import ClienteSelect from '@/components/operations/ClienteSelect'
+import { despachantesUsados } from '@/lib/despachante'
 import {
   esCargaSinDatosPago, montosUrgentes, formaPagoEfectiva, parseMontoUY,
   paisDePago, agruparPorPais, MONTO_KEYS, type PagoRubro,
@@ -281,6 +282,8 @@ export default function TodayDashboard({
   }, [checksByRef, applyAvisoStep, applyAvisoCntrs])
 
   // Transportes ya usados en las cargas → sugerencias del combo Transporte del quick-edit.
+  // Despachantes de destino ya usados: alimentan el faltante "Despachante".
+  const knownDespachantes = useMemo(() => despachantesUsados(dbShipments || []), [dbShipments])
   const knownTransportes = useMemo(
     () => deriveKnownTransportes(shipments.flatMap(s => (s.operativas ?? []).map(o => o.TRANSPORTE))),
     [shipments]
@@ -316,6 +319,7 @@ export default function TodayDashboard({
         pkgs: s.pkgs, kg: s.kg, m3: s.m3, descripcion: s.observacion,
         agente: s.agente, deposito: s.deposito,
         operativa: s.operativa, transporte: s.transporte, fiscal: s.fiscal,
+        despacho: s.despacho,
         terminal: s.terminal, dev: s.dev,
         devFecha: s.dev_fecha || (Array.isArray(s.operativas) ? (s.operativas.find(o => o.DEV_FECHA)?.DEV_FECHA || '') : ''),
         libre: s.libre || (Array.isArray(s.operativas) ? (s.operativas.find(o => o.LIBRE)?.LIBRE || '') : ''),
@@ -1161,6 +1165,7 @@ export default function TodayDashboard({
                     transportes={knownTransportes}
                     agentes={knownAgentes}
                     lineas={knownLineas}
+                    despachantes={knownDespachantes}
                     clientes={clients}
                   />
                 )
@@ -1205,6 +1210,7 @@ export default function TodayDashboard({
                             transportes={knownTransportes}
                             agentes={knownAgentes}
                             lineas={knownLineas}
+                            despachantes={knownDespachantes}
                             clientes={clients}
                           />
                         )
@@ -1678,7 +1684,7 @@ function MontosUrgenteRow({ s, onPatchShipment, onOpenDetail }: {
 // visibles como chips ✓ mientras la fila siga desplegada (si desaparecieran al
 // instante, el layout se corre bajo el puntero y se comen clicks); cuando no
 // falta nada, la fila sale sola de la tarjeta.
-function IncompletaRow({ u, dbRow, expanded, onToggle, onPatchShipment, onOpenDetail, transportes, agentes, lineas, clientes }: {
+function IncompletaRow({ u, dbRow, expanded, onToggle, onPatchShipment, onOpenDetail, transportes, agentes, lineas, despachantes, clientes }: {
   u: FaltanteUrgente
   dbRow?: DbShipment
   expanded: boolean
@@ -1688,6 +1694,7 @@ function IncompletaRow({ u, dbRow, expanded, onToggle, onPatchShipment, onOpenDe
   transportes: string[]
   agentes: string[]
   lineas: string[]
+  despachantes: string[]
   clientes: CatalogClient[]
 }) {
   // Snapshot de los faltantes al ABRIR la fila: el panel muestra esa lista fija
@@ -1768,6 +1775,7 @@ function IncompletaRow({ u, dbRow, expanded, onToggle, onPatchShipment, onOpenDe
                   transportes={transportes}
                   agentes={agentes}
                   lineas={lineas}
+                  despachantes={despachantes}
                   clientes={clientes}
                 />
               )
@@ -1803,6 +1811,7 @@ function CampoFaltanteInput({ campo, etiqueta, dbRow, onPatchShipment, transport
   transportes: string[]
   agentes: string[]
   lineas: string[]
+  despachantes: string[]
   clientes: CatalogClient[]
 }) {
   const [draft, setDraft] = useState('')
