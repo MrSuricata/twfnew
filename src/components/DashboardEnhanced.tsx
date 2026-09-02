@@ -579,6 +579,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
                 onPatchShipment={onPatchShipment ?? patchNoDisponible}
                 onOpenDetail={onOpenDetail}
                 onOpenTab={setActiveTab}
+                onReloadFromDB={onReloadFromDB}
               />
             ) : (
               <TodayDashboard
@@ -596,6 +597,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
                 onOpenDetail={onOpenDetail}
                 clients={clients}
                 onOpenTab={setActiveTab}
+                onReloadFromDB={onReloadFromDB}
               />
             )}
           </TabsContent>

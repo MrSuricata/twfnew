@@ -1120,9 +1120,13 @@ export async function desagendarMontecon(ref: string): Promise<void> {
 // ─── Avisos de partners (depósito/transporte proponen, el equipo confirma) ──
 // Contrato: src/lib/partnerAvisos.ts · Spec: docs/superpowers/specs/2026-09-01-partner-hoy-avisos-design.md
 
-/** Partner: sus avisos (30 días). Admin/owner: pendientes + resueltos de 7 días. */
+/** Partner: sus avisos (30 días). Admin/owner: pendientes + resueltos de 7 días.
+ *  Si la entidad `partner-avisos` todavía no existe en el deploy (404 = W1 sin
+ *  mergear), se trata como "sin avisos": la card de HOY no muestra error ni se
+ *  renderiza. Cualquier otro error sí se propaga. */
 export async function fetchPartnerAvisos(): Promise<import('./partnerAvisos').PartnerAviso[]> {
   const res = await authFetch('/api/data/partner-avisos')
+  if (res.status === 404) return []
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const data = await res.json()
   return data.avisos || []
