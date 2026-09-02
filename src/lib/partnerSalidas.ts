@@ -79,6 +79,8 @@ export interface SalidaProgramada {
   imo: boolean
   /** No se puede estibar encima. */
   noApilable: boolean
+  /** Fuera de medida (out of gauge): carretón / unidad especial y permisos. */
+  oog: boolean
 }
 
 export interface DiaDeCarga {
@@ -93,6 +95,9 @@ const medianoche = (d: Date): Date => new Date(d.getFullYear(), d.getMonth(), d.
 const txt = (v: unknown): string => String(v ?? '').trim()
 const num = (v: unknown): number => Number(v) || 0
 const siNo = (v: unknown): boolean => txt(v).toUpperCase().startsWith('SI')
+/** OOG llega desde `shipments.oog` (booleano) o como SI/NO; si la API no lo
+ *  manda, no es OOG. */
+const siNoOBool = (v: unknown): boolean => v === true || siNo(v) || txt(v).toUpperCase() === 'TRUE'
 
 /** Mercadería de la lista especial (máquinas, telas, cubiertas, IMO…). */
 export function esCargaEspecial(descripcion: string): boolean {
@@ -174,6 +179,7 @@ export function salidasProgramadas(
         madera: siNo(op.WOOD),
         imo: siNo(op.IMO),
         noApilable: siNo(op.NO_APILABLE),
+        oog: siNoOBool((op as unknown as Record<string, unknown>).OOG),
       }
 
       const lista = porDia.get(fecha)

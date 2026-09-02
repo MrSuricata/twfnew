@@ -119,6 +119,7 @@ export default function ProximasSalidas({ shipments, rol }: Props) {
                         {c.madera && <Marca texto="🪵" titulo="Embalaje de madera — SENASA en frontera" clase="" />}
                         {c.imo && <Marca texto="IMO" titulo="Carga peligrosa" clase="text-red-600" />}
                         {c.noApilable && <Marca texto="↥" titulo="No apilable" clase="text-violet-600" />}
+                        {c.oog && <Marca texto="OOG" titulo="Sobredimensionada — carretón / unidad especial y permisos" clase="text-violet-700" />}
                       </td>
                       <td className="px-3 py-2">{c.cliente || '—'}</td>
                       <td className="px-3 py-2 text-xs font-mono whitespace-nowrap">
@@ -161,7 +162,7 @@ export default function ProximasSalidas({ shipments, rol }: Props) {
             <span className="font-semibold text-red-600">Kg en rojo</span>: más de 26 t ·{' '}
             <span className="font-semibold text-amber-700">bultos en ámbar</span>: más de 1000 ·{' '}
             ⚡ mercadería especial · 🔔 devolución próxima · 📌 llegada a fiscal en día atípico ·{' '}
-            🪵 madera (SENASA) · IMO carga peligrosa · ↥ no apilable
+            🪵 madera (SENASA) · IMO carga peligrosa · ↥ no apilable · OOG sobredimensionada
           </p>
         </div>
       )}

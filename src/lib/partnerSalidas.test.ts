@@ -189,3 +189,19 @@ describe('llegadaAtipicaAFiscal', () => {
     expect(llegadaAtipicaAFiscal('a confirmar')).toBe(false)
   })
 })
+
+describe('marca OOG en el plan de carga', () => {
+  it('la lee como SI/NO o como booleano (viene de shipments.oog por la API)', () => {
+    const conSi = salidasProgramadas([carga('A1', [{ SALIDA: '2026-09-07', OOG: 'SI' } as Partial<OperativasRecord>])], HOY)
+    const conBool = salidasProgramadas([carga('A2', [{ SALIDA: '2026-09-07', OOG: true } as Partial<OperativasRecord>])], HOY)
+    expect(conSi[0].cargas[0].oog).toBe(true)
+    expect(conBool[0].cargas[0].oog).toBe(true)
+  })
+
+  it('si la API no la manda o dice NO, no es OOG', () => {
+    const sin = salidasProgramadas([carga('A1', [{ SALIDA: '2026-09-07' }])], HOY)
+    const no = salidasProgramadas([carga('A2', [{ SALIDA: '2026-09-07', OOG: 'NO' } as Partial<OperativasRecord>])], HOY)
+    expect(sin[0].cargas[0].oog).toBe(false)
+    expect(no[0].cargas[0].oog).toBe(false)
+  })
+})
