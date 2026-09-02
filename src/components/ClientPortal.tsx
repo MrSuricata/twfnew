@@ -49,6 +49,7 @@ import ShipmentDetailsDialog from './ShipmentDetailsDialog'
 import AgendaCalendar from './agenda/AgendaCalendar'
 import { matchesPattern, findClientByEmail } from '@/lib/clientMatching'
 import { useBrand } from '@/lib/brand'
+import { saludoPersonal } from '@/lib/saludo'
 import { downloadClientStatusPdf } from '@/lib/clientStatusPdf'
 import HoyCliente from './HoyCliente'
 import {
@@ -466,10 +467,8 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
       <div className="max-w-7xl mx-auto px-4 md:px-6 py-8">
         {/* Las alertas críticas viven en la card "Atención" de HOY (abajo) y en la pestaña Alertas. */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">Mis Cargas</h1>
-          <p className="text-muted-foreground">
-            {(currentClient?.name || clientName) ? `Bienvenido/a, ${currentClient?.name || clientName}` : 'Bienvenido/a'}
-          </p>
+          <p className="text-sm text-muted-foreground mb-0.5">{saludoPersonal(currentClient?.name || clientName)}</p>
+          <h1 className="text-3xl font-bold">Mis Cargas</h1>
         </div>
 
         {isLoadingData && serverShipments.length === 0 && (
