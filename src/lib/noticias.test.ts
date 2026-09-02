@@ -9,6 +9,7 @@ const HOY = '2026-08-28'
 const noticia = (over: Partial<Noticia>): Noticia => ({
   id: 'n1', titulo: 'T', bajada: '', cuerpo: '', categoria: 'general',
   imagenUrl: '', alerta: false, activo: true, publicadaAt: '2026-08-28T10:00:00Z',
+  actualizadaAt: '',
   vigenteHasta: '', estilo: '', kicker: '', kickerExtra: '', subtitulo: '',
   mensaje: '', linkUrl: '', ...over,
 })
