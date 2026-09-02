@@ -105,3 +105,57 @@ circuito, en vez de buscar el mail.
 2. ¿Cuántos despachantes distintos hay hoy? ¿Navatta y quién más?
 3. ¿Ve el nombre del cliente? (mi recomendación: sí, es su cliente)
 4. ¿Le mostramos los documentos (BL, factura) para descargar, o solo el estado?
+
+---
+
+## Corrección de Brian (02/09, después de leer esto)
+
+> "El despachante es por carga, pero puede sugerir como hacemos con el
+> transporte según historial. Navatta es un despachante de Uruguay, el único
+> prácticamente que usamos; Pedraja hace los consolidados en Uruguay. Pero el
+> despachante al que me refiero es al despachante en **Argentina**, que es el
+> que **libera** la carga."
+
+Eso ordena el diseño y corrige lo de arriba:
+
+- **El rol del portal es el despachante ARGENTINO**, el que libera en destino.
+  Es el que le falta datos y a quien hoy se le manda todo por mail.
+- **Navatta (Uruguay) no necesita portal por ahora**: es casi el único que
+  usamos de este lado y ya trabaja con nosotros por otra vía (certificaciones,
+  DUA). Si algún día hace falta, va en un campo aparte con Navatta por defecto.
+  Pedraja es consolidados, no despacho: no entra acá.
+- **Es por carga, con sugerencia por historial**: el cliente casi siempre
+  repite despachante, así que se propone el que viene usando, pero se puede
+  cambiar carga por carga. Nunca se escribe solo.
+
+### Ya implementado (etapa 1)
+
+- El dato **no necesitó columna nueva**: `shipments.despacho` ya existía en el
+  modelo y en los formularios, sin un solo uso en 532 cargas. Ese es el
+  despachante de destino. Etiqueta nueva: "Despachante (destino)".
+- `src/lib/despachante.ts` (puro, con tests): `despachantesUsados` para el
+  catálogo (lo ya usado, más frecuente primero, sin duplicar el mismo escrito
+  distinto) y `despachanteSugerido(cliente, fiscal, cargas)`, que mira las
+  últimas 8 cargas de ese cliente y, si el cliente es nuevo, el despachante que
+  más entra a ese depósito fiscal. Devuelve el motivo en palabras
+  ("3 de las últimas 4 de este cliente") para que la sugerencia se pueda
+  discutir, no solo aceptar.
+- En el alta de carga: combo con los ya usados, creable, y debajo el chip
+  "Sugerido: X · motivo" que completa con un toque.
+
+### Lo que sigue
+
+2. **Backfill**: completar el despachante de las cargas vivas argentinas. Sin
+   esto la sugerencia no tiene de dónde aprender. Lo más práctico: que el
+   equipo lo vaya cargando en las nuevas y, en paralelo, Brian pase la lista de
+   despachantes por cliente para una carga masiva.
+3. **Verlo donde se trabaja**: despachante en la ficha, en la grilla y como
+   dato faltante en HOY para las que llegan sin asignar.
+4. **Portal**: rol `customs` en partners, filtrando por carga, con su HOY.
+5. **Avisos**: "DUA presentado", "liberado", confirmados por el equipo.
+
+### Preguntas que quedan
+
+1. ¿Cuántos despachantes argentinos hay, y cuáles? (para el catálogo inicial)
+2. ¿Ve el nombre del cliente? (recomendación: sí, es su cliente)
+3. ¿Le damos los documentos para descargar, o solo el estado?

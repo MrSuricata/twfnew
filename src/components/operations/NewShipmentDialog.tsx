@@ -20,6 +20,7 @@ import { parseCntr } from '@/lib/cntrUtils'
 import { fmtDMY } from '@/lib/salidaCheck'
 import { sugerirEtaFiscal, nombreDia } from '@/lib/transitoFiscal'
 import { type CatalogClient } from '@/lib/clientCatalog'
+import { despachanteSugerido, despachantesUsados } from '@/lib/despachante'
 import ClienteSelect from './ClienteSelect'
 import {
   camposDesdeDatosClave, buscarRefDuplicada, parseNum,
@@ -194,12 +195,23 @@ export default function NewShipmentDialog({
   knownOrigenes?: string[]
   knownDescargas?: string[]
   knownFiscales?: string[]
-  /** Cargas ya existentes: aviso inline de ref repetida (activa) en LCL. */
-  cargasExistentes?: { ref: string; archived?: boolean; cliente?: string }[]
+  /** Cargas ya existentes: aviso inline de ref repetida (activa) en LCL y, con
+   *  `despacho`/`fiscal`/`eta`, la sugerencia de despachante por historial. */
+  cargasExistentes?: { ref: string; archived?: boolean; cliente?: string; despacho?: string | null; fiscal?: string | null; eta?: string | null }[]
 }) {
   // Modalidad SIN default: es obligatoria y el operativo la elige a conciencia.
   const [mode, setMode] = useState<Modality | null>(null)
   const [f, setF] = useState<FormState>(EMPTY_FORM)
+
+  // Despachante de DESTINO (el que libera): catálogo de los ya usados y
+  // sugerencia por historial del cliente — igual que el reparto de transportes,
+  // nunca se escribe solo (Brian 02/09).
+  const despachantesConocidos = useMemo(() => despachantesUsados(cargasExistentes), [cargasExistentes])
+  const sugerenciaDespachante = useMemo(
+    () => despachanteSugerido(f.cliente, f.fiscal, cargasExistentes),
+    [f.cliente, f.fiscal, cargasExistentes],
+  )
+
   const [moreOpen, setMoreOpen] = useState(false)
   // Se prende al intentar guardar con obligatorios vacíos → errores inline.
   const [showErrors, setShowErrors] = useState(false)
@@ -618,7 +630,27 @@ export default function NewShipmentDialog({
               {/* Operativa */}
               <Section title="Operativa">
                 <Field label="Transporte" value={f.transporte} onChange={v => set('transporte', v)} placeholder="Olaverry, PCS…" />
-                <Field label="Despacho" value={f.despacho} onChange={v => set('despacho', v)} />
+                <div className="space-y-1 min-w-0">
+                  <ComboField
+                    label="Despachante (destino)"
+                    value={f.despacho}
+                    options={despachantesConocidos}
+                    onChange={v => set('despacho', v)}
+                    placeholder="Quién libera en destino"
+                    catalogo
+                    listId="ns-list-despachante"
+                  />
+                  {sugerenciaDespachante && f.despacho.trim() === '' && (
+                    <button
+                      type="button"
+                      onClick={() => set('despacho', sugerenciaDespachante.valor)}
+                      className="text-[11px] text-muted-foreground hover:text-foreground underline underline-offset-2 text-left"
+                      title="Según el historial — se puede cambiar"
+                    >
+                      Sugerido: <b>{sugerenciaDespachante.valor}</b> · {sugerenciaDespachante.motivo}
+                    </button>
+                  )}
+                </div>
                 <Field label="DEV (terminal devolución)" value={f.dev} onChange={v => set('dev', v)} placeholder="STL, TCP…" />
                 <Field label="Terminal" value={f.terminal} onChange={v => set('terminal', v)} placeholder="TCP, MONTECON…" />
                 <Field label="Descarga (lugar post-fiscal)" value={f.descarga} onChange={v => set('descarga', v)} placeholder="RÍO SEGUNDO, planta…" />
