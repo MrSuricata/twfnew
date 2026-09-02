@@ -19,7 +19,8 @@ import {
 import { parseCntr } from '@/lib/cntrUtils'
 import { fmtDMY } from '@/lib/salidaCheck'
 import { sugerirEtaFiscal, nombreDia } from '@/lib/transitoFiscal'
-import { canonicalizeCliente, type CatalogClient } from '@/lib/clientCatalog'
+import { type CatalogClient } from '@/lib/clientCatalog'
+import ClienteSelect from './ClienteSelect'
 import {
   camposDesdeDatosClave, buscarRefDuplicada, parseNum,
   type Apilable, type LclDatosClaveState,
@@ -495,27 +496,16 @@ export default function NewShipmentDialog({
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="ns-cli">Cliente / Cnee <span className="text-red-600">*</span></Label>
-                {/* Datalist con los nombres canónicos del catálogo. Texto libre
-                    permitido; si lo tipeado matchea un alias conocido, al blur se
-                    reemplaza por el nombre canónico (unificación de clientes). */}
-                <Input
+                {/* El cliente se ELIGE del catálogo (Brian 02/09): tipear libre
+                    duplicaba el mismo importador con tres nombres distintos. Si no
+                    está, el selector lo crea en el catálogo. */}
+                <ClienteSelect
                   id="ns-cli"
-                  list="ns-cli-list"
                   value={f.cliente}
-                  onChange={e => set('cliente', e.target.value)}
-                  onBlur={() => {
-                    const canon = canonicalizeCliente(f.cliente, clientes)
-                    if (canon !== f.cliente) set('cliente', canon)
-                  }}
-                  placeholder="Cliente"
-                  aria-invalid={showErrors && missingCliente}
-                  className={showErrors && missingCliente ? 'border-red-400' : undefined}
+                  onChange={v => set('cliente', v)}
+                  clientes={clientes}
+                  invalid={showErrors && missingCliente}
                 />
-                <datalist id="ns-cli-list">
-                  {[...clientes].sort((a, b) => a.name.localeCompare(b.name, 'es')).map(c => (
-                    <option key={c.name} value={c.name} />
-                  ))}
-                </datalist>
                 {showErrors && missingCliente && <p className="text-xs text-red-600">Completá el cliente</p>}
               </div>
               {/* ── Datos principales (pedido 14/07): siempre visibles, combos

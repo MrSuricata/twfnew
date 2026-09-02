@@ -13,7 +13,8 @@
 import { useMemo, type ReactNode } from 'react'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { canonicalizeCliente, type CatalogClient } from '@/lib/clientCatalog'
+import { type CatalogClient } from '@/lib/clientCatalog'
+import ClienteSelect from './ClienteSelect'
 import { DEPOSITOS_UY } from '@/lib/operationsTypes'
 import { FISCALES_BASE, LCL_DATOS_CLAVE_ORDEN, type LclDatosClaveState } from '@/lib/lclAlta'
 import { datoClave } from '@/lib/datosClave'
@@ -93,24 +94,15 @@ export default function LclDatosClave({
             <Label htmlFor={`${idPrefix}-cli`} className="text-xs text-muted-foreground">
               {d.label} <span className="text-red-600">*</span>
             </Label>
-            <Input
+            <ClienteSelect
               id={`${idPrefix}-cli`}
-              list={`${idPrefix}-cli-list`}
               value={f.cliente}
-              onChange={e => onChange({ cliente: e.target.value })}
-              onBlur={() => {
-                const canon = canonicalizeCliente(f.cliente, clientes)
-                if (canon !== f.cliente) onChange({ cliente: canon })
-              }}
+              onChange={v => onChange({ cliente: v })}
+              clientes={clientes}
+              invalid={showErrors && missingCliente}
               placeholder={d.label}
-              aria-invalid={showErrors && missingCliente}
-              className={`h-9 text-sm ${showErrors && missingCliente ? 'border-red-400' : ''}`}
+              className="h-9"
             />
-            <datalist id={`${idPrefix}-cli-list`}>
-              {[...clientes].sort((a, b) => a.name.localeCompare(b.name, 'es')).map(c => (
-                <option key={c.name} value={c.name} />
-              ))}
-            </datalist>
             {showErrors && missingCliente && <p className="text-xs text-red-600">Completá el cliente</p>}
           </div>,
         )
