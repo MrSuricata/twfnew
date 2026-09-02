@@ -7,7 +7,9 @@
  * LIBRE=DEVUELTO, stock + desconsol_date, o nada para SENASA).
  *
  * Datos: fetchPartnerAvisos() al montar + cada 60 s + después de cada acción.
- * Si no hay pendientes la card NO se renderiza (cero ruido). Los resueltos de
+ * Si no hay pendientes la card NO se renderiza (cero ruido). Si la API todavía
+ * no expone `partner-avisos` (404), fetchPartnerAvisos devuelve [] y la card
+ * queda oculta sin toast: mergear esta PR antes que la API no rompe HOY. Los resueltos de
  * las últimas 24 h quedan plegados abajo para que se vea el rastro.
  *
  * Misma piel que las cards de HOY (accent-top, pill de conteo, variante Med por
