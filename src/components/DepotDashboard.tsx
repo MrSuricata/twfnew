@@ -20,6 +20,7 @@ import AgendaCalendar from '@/components/agenda/AgendaCalendar'
 import PartnerDashboardShell from '@/components/PartnerDashboardShell'
 import ProximasSalidas from '@/components/ProximasSalidas'
 import AvisoOperativo from '@/components/AvisoOperativo'
+import PanelCard, { PanelFila, FilaTitulo, FilaDatos, Ref, Chip as ChipPanel, Dato, type TonoPanel } from './partner/PanelCard'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
 import { fetchPartnerAvisos, crearPartnerAviso } from '@/lib/dataClient'
 import {
@@ -104,28 +105,25 @@ function EstadoAviso({ aviso }: { aviso: PartnerAviso }) {
   return null
 }
 
-function Seccion({ icono, titulo, subtitulo, cantidad, tono = 'neutral', children }: {
+/** Cada card con su color, para que se distingan de un vistazo (Brian 02/09). */
+function Seccion({ icono, titulo, subtitulo, cantidad, tono = 'neutro', children }: {
   icono: ReactNode
   titulo: string
   subtitulo?: string
   cantidad: number
-  tono?: 'neutral' | 'rojo'
+  tono?: TonoPanel
   children: ReactNode
 }) {
   return (
-    <section className={`rounded-xl border bg-card overflow-hidden ${tono === 'rojo' && cantidad > 0 ? 'border-red-300' : 'border-border'}`}>
-      <div className="flex items-center gap-2 px-4 py-3">
-        <span className="text-primary">{icono}</span>
-        <span className="font-semibold text-sm">{titulo}</span>
-        {subtitulo && <span className="text-xs text-muted-foreground hidden sm:inline">{subtitulo}</span>}
-        <span className={`ml-auto inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-full text-xs font-bold ${
-          cantidad === 0 ? 'bg-muted text-muted-foreground' : tono === 'rojo' ? 'bg-red-600 text-white' : 'bg-primary text-primary-foreground'
-        }`}>
-          {cantidad}
-        </span>
-      </div>
-      <div className="border-t border-border">{children}</div>
-    </section>
+    <PanelCard
+      tono={cantidad === 0 ? 'neutro' : tono}
+      icono={icono}
+      titulo={titulo}
+      subtitulo={subtitulo}
+      contador={cantidad}
+    >
+      {children}
+    </PanelCard>
   )
 }
 
@@ -231,7 +229,7 @@ export default function DepotDashboard({ shipments, depotName, userName, onLogou
         <AvisoOperativo />
 
         {/* 1 · Operativas de hoy */}
-        <Seccion icono={<ArrowsLeftRight size={18} weight="duotone" />} titulo="Operativas de hoy" subtitulo={fmtDateDMY(hoy)} cantidad={hoyOps.length}>
+        <Seccion icono={<ArrowsLeftRight size={22} weight="duotone" />} titulo="Operativas de hoy" subtitulo={fmtDateDMY(hoy)} cantidad={hoyOps.length} tono="ok">
           {hoyOps.length === 0 ? <Vacio texto="Hoy no tenés cargas ni retiros programados." /> : (
             <ul className="divide-y divide-border">
               {hoyOps.map((o, i) => <FilaOperativaHoy key={`${o.ref}-${o.cntr}-${i}`} o={o} />)}
@@ -241,37 +239,18 @@ export default function DepotDashboard({ shipments, depotName, userName, onLogou
 
         {/* 2 · Retiros próximos */}
         <Seccion
-          icono={<Anchor size={18} weight="duotone" />}
+          icono={<Anchor size={22} weight="duotone" />}
           titulo="Retiros próximos"
           subtitulo={`de la terminal a tu depósito · desde hace ${RETIROS_DIAS_ATRAS} días hasta ${RETIROS_DIAS_ADELANTE} adelante`}
           cantidad={retiros.length}
+          tono="info"
         >
           {retiros.length === 0 ? <Vacio texto="No hay contenedores para retirar en estos días." /> : (
             <ul className="divide-y divide-border">
               {retiros.map((r, i) => (
-                <li key={`${r.ref}-${r.cntr}-${i}`} className="px-4 py-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                  <span className="font-semibold text-sm whitespace-nowrap">{r.ref}</span>
-                  {r.terminal && <Chip clase={colorDeposito(r.terminal)} titulo="Terminal de la que se retira">{r.terminal}</Chip>}
-                  <span className="text-xs text-muted-foreground truncate max-w-[180px]" title={r.cliente}>{r.cliente || '—'}</span>
-                  <span className="font-mono text-xs whitespace-nowrap">{r.cntr || '—'}{r.tipo && <span className="ml-1 text-muted-foreground">{r.tipo}</span>}</span>
-                  <Chip titulo="Operativa">{r.operativa}</Chip>
-                  <span className="text-xs whitespace-nowrap">
-                    ETA <b>{r.eta ? fmtDateDMY(r.eta) : '—'}</b>
-                    <span className="text-muted-foreground"> · {r.dias === 0 ? 'hoy' : r.dias > 0 ? `en ${r.dias}d` : `llegó hace ${-r.dias}d`}</span>
-                  </span>
-                  {r.turno && (
-                    <span className="text-xs whitespace-nowrap rounded bg-sky-50 border border-sky-200 px-1.5 py-0.5 text-sky-800">
-                      Turno <b>{fmtDateDMY(r.turno)}</b>
-                    </span>
-                  )}
-                  {r.libre && (
-                    <span className="text-xs whitespace-nowrap text-muted-foreground">
-                      Libre <b className="text-foreground">{/^\d{4}-/.test(r.libre) ? fmtDateDMY(r.libre) : r.libre}</b>
-                    </span>
-                  )}
-                  <Medidas pkgs={r.pkgs} kg={r.kg} m3={r.m3} />
-                  <span className="ml-auto flex items-center gap-2">
-                    {r.aviso?.estado === 'pendiente'
+                <li key={`${r.ref}-${r.cntr}-${i}`}>
+                  <PanelFila
+                    accion={r.aviso?.estado === 'pendiente'
                       ? <EstadoAviso aviso={r.aviso} />
                       : (
                         <>
@@ -287,7 +266,24 @@ export default function DepotDashboard({ shipments, depotName, userName, onLogou
                           </button>
                         </>
                       )}
-                  </span>
+                  >
+                    <FilaTitulo>
+                      <Ref>{r.ref}</Ref>
+                      {r.terminal && <ChipPanel clase={colorDeposito(r.terminal)} title="Terminal de la que se retira">{r.terminal}</ChipPanel>}
+                      <span className="text-sm text-foreground/80 truncate max-w-full sm:max-w-[220px]" title={r.cliente}>{r.cliente || '—'}</span>
+                      <span className="font-mono text-sm whitespace-nowrap">{r.cntr || '—'}{r.tipo && <span className="ml-1 text-muted-foreground">{r.tipo}</span>}</span>
+                      <ChipPanel title="Operativa">{r.operativa}</ChipPanel>
+                    </FilaTitulo>
+                    <FilaDatos>
+                      <Dato label="Llega" fuerte>
+                        {r.eta ? fmtDateDMY(r.eta) : '—'}
+                        <span className="font-normal text-muted-foreground"> · {r.dias === 0 ? 'hoy' : r.dias > 0 ? `en ${r.dias}d` : `hace ${-r.dias}d`}</span>
+                      </Dato>
+                      {r.turno && <Dato label="Turno" fuerte>{fmtDateDMY(r.turno)}</Dato>}
+                      {r.libre && <Dato label="Libre" fuerte>{/^\d{4}-/.test(r.libre) ? fmtDateDMY(r.libre) : r.libre}</Dato>}
+                      <Medidas pkgs={r.pkgs} kg={r.kg} m3={r.m3} />
+                    </FilaDatos>
+                  </PanelFila>
                 </li>
               ))}
             </ul>
@@ -296,29 +292,24 @@ export default function DepotDashboard({ shipments, depotName, userName, onLogou
 
         {/* 3 · LIBRE por vencer / vencidos */}
         <Seccion
-          icono={<ArrowUUpLeft size={18} weight="duotone" />}
-          titulo="LIBRE por vencer / vencidos"
+          icono={<ArrowUUpLeft size={22} weight="duotone" />}
+          titulo="Vacíos a devolver"
           subtitulo={`vacíos a devolver · aviso desde ${LIBRE_DIAS_AVISO} días antes${libresVencidos ? ` · ${libresVencidos} vencido${libresVencidos === 1 ? '' : 's'}` : ''}`}
           cantidad={libres.length}
-          tono="rojo"
+          tono="alerta"
         >
           {libres.length === 0 ? <Vacio texto="Ningún vacío con el libre por vencer. Todo al día." /> : (
-            <ul className="p-2 space-y-1.5">
+            <ul>
               {libres.map((l, i) => {
                 const sev = claseSeveridad[l.severidad]
                 const k = clave(l.ref, l.cntr)
                 const editando = fechaDevolvi[k] !== undefined
                 return (
-                  <li key={`${l.ref}-${l.cntr}-${i}`} className={`rounded-lg border px-3 py-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 ${sev.fila}`}>
-                    <span className="font-semibold text-sm whitespace-nowrap">{l.ref}</span>
-                    <span className="font-mono text-xs whitespace-nowrap">{l.cntr || '—'}{l.tipo && <span className="ml-1 text-muted-foreground">{l.tipo}</span>}</span>
-                    <span className="text-xs text-muted-foreground truncate max-w-[180px]" title={l.cliente}>{l.cliente || '—'}</span>
-                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold ${sev.badge}`}>
-                      {sev.texto(l.dias)}
-                    </span>
-                    <span className="text-xs whitespace-nowrap">Libre <b>{fmtDateDMY(l.libre)}</b></span>
-                    {l.dev && <span className="text-xs text-muted-foreground whitespace-nowrap" title="Dónde se devuelve el vacío">Devolver en <b className="text-foreground">{l.dev}</b></span>}
-                    <span className="ml-auto flex items-center gap-2">
+                  <li key={`${l.ref}-${l.cntr}-${i}`}>
+                    <PanelFila
+                      tinte={sev.fila}
+                      accion={(
+                      <>
                       {l.aviso?.estado === 'pendiente'
                         ? <EstadoAviso aviso={l.aviso} />
                         : editando
@@ -358,7 +349,22 @@ export default function DepotDashboard({ shipments, depotName, userName, onLogou
                               </button>
                             </>
                           )}
-                    </span>
+                      </>
+                      )}
+                    >
+                      <FilaTitulo>
+                        <Ref>{l.ref}</Ref>
+                        <span className="font-mono text-sm whitespace-nowrap">{l.cntr || '—'}{l.tipo && <span className="ml-1 text-muted-foreground">{l.tipo}</span>}</span>
+                        <span className="text-sm text-foreground/80 truncate max-w-full sm:max-w-[220px]" title={l.cliente}>{l.cliente || '—'}</span>
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${sev.badge}`}>
+                          {sev.texto(l.dias)}
+                        </span>
+                      </FilaTitulo>
+                      <FilaDatos>
+                        <Dato label="Libre" fuerte>{fmtDateDMY(l.libre)}</Dato>
+                        {l.dev && <Dato label="Devolver en" fuerte>{l.dev}</Dato>}
+                      </FilaDatos>
+                    </PanelFila>
                   </li>
                 )
               })}
@@ -367,7 +373,7 @@ export default function DepotDashboard({ shipments, depotName, userName, onLogou
         </Seccion>
 
         {/* 4 · LCL a desconsolidar */}
-        <Seccion icono={<Package size={18} weight="duotone" />} titulo="LCL a desconsolidar" subtitulo="llegaron y todavía no tienen Nº de stock" cantidad={lcls.length}>
+        <Seccion icono={<Package size={22} weight="duotone" />} titulo="LCL a desconsolidar" subtitulo="llegaron y todavía no tienen Nº de stock" cantidad={lcls.length} tono="aviso">
           {lcls.length === 0 ? <Vacio texto="No hay LCL esperando desconsolidación en tu depósito." /> : (
             <ul className="divide-y divide-border">
               {lcls.map(c => (
@@ -430,7 +436,7 @@ export default function DepotDashboard({ shipments, depotName, userName, onLogou
         <ProximasSalidas shipments={shipments} rol="depot" />
 
         {/* 6 · Mis avisos */}
-        <Seccion icono={<ChatCircleDots size={18} weight="duotone" />} titulo="Mis avisos" subtitulo="lo que avisaste y qué dijo el equipo · últimos 30 días" cantidad={misAvisos.length}>
+        <Seccion icono={<ChatCircleDots size={22} weight="duotone" />} titulo="Mis avisos" subtitulo="lo que avisaste y qué dijo el equipo · últimos 30 días" cantidad={misAvisos.length}>
           {avisosError && <p className="px-4 py-2 text-xs text-red-700 bg-red-50 border-b border-red-200">{avisosError} · <button type="button" className="underline" onClick={cargarAvisos}>reintentar</button></p>}
           {misAvisos.length === 0 ? <Vacio texto="Todavía no mandaste ningún aviso. Cuando retires, devuelvas o desconsolides, avisá desde las cards de arriba." /> : (
             <ul className="divide-y divide-border">
@@ -449,28 +455,37 @@ export default function DepotDashboard({ shipments, depotName, userName, onLogou
 
 function FilaOperativaHoy({ o }: { o: OperativaHoy }) {
   return (
-    <li className="px-4 py-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-      <Chip clase={o.motivo === 'carga' ? 'bg-emerald-50 text-emerald-800 border-emerald-300' : o.motivo === 'retiro' ? 'bg-sky-50 text-sky-800 border-sky-300' : 'bg-violet-50 text-violet-800 border-violet-300'}>
-        {o.motivo === 'carga' ? 'CARGA CAMIÓN' : o.motivo === 'retiro' ? 'LLEGA DE TERMINAL' : 'LLEGA Y CARGA'}
-      </Chip>
-      <span className="font-semibold text-sm whitespace-nowrap">{o.ref}</span>
-      <span className="text-xs text-muted-foreground truncate max-w-[180px]" title={o.cliente}>{o.cliente || '—'}</span>
-      <span className="font-mono text-xs whitespace-nowrap">{o.cntr || '—'}{o.tipo && <span className="ml-1 text-muted-foreground">{o.tipo}</span>}</span>
-      {o.operativa && <Chip titulo="Operativa">{o.operativa}</Chip>}
-      {o.motivo !== 'retiro' && (
-        <span className="inline-flex items-center gap-1 text-xs whitespace-nowrap" title="Transporte que viene a cargar">
-          <TruckIcon size={14} weight="duotone" className="text-muted-foreground" />
-          <b>{o.transporte || 'transporte a confirmar'}</b>
-          {o.horario && <span className="text-muted-foreground">· {o.horario}</span>}
-        </span>
-      )}
-      {o.fiscal && o.motivo !== 'retiro' && <span className="text-xs text-muted-foreground whitespace-nowrap">→ {o.fiscal}</span>}
-      <Medidas pkgs={o.pkgs} kg={o.kg} m3={o.m3} />
-      {o.descripcion && <span className="text-xs truncate max-w-[220px]" title={o.descripcion}>{o.descripcion}</span>}
-      <span className="ml-auto flex flex-wrap items-center gap-1.5">
-        <AlertasCarga madera={o.madera} imo={o.imo} oog={o.oog} noApilable={o.noApilable} />
-        {o.tlxPendiente && o.motivo !== 'carga' && <AlertaGrande texto="TLX pendiente" titulo="Telex release todavía no liberado" clase="bg-orange-50 text-orange-800 border-orange-300" />}
-      </span>
+    <li>
+      <PanelFila
+        accion={(
+          <span className="flex flex-wrap items-center gap-1.5">
+            <AlertasCarga madera={o.madera} imo={o.imo} oog={o.oog} noApilable={o.noApilable} />
+            {o.tlxPendiente && o.motivo !== 'carga' && <AlertaGrande texto="TLX pendiente" titulo="Telex release todavía no liberado" clase="bg-orange-50 text-orange-800 border-orange-300" />}
+          </span>
+        )}
+      >
+        <FilaTitulo>
+          <ChipPanel clase={o.motivo === 'carga' ? 'bg-emerald-100 text-emerald-800 border-emerald-300' : o.motivo === 'retiro' ? 'bg-sky-100 text-sky-800 border-sky-300' : 'bg-violet-100 text-violet-800 border-violet-300'}>
+            {o.motivo === 'carga' ? 'CARGA CAMIÓN' : o.motivo === 'retiro' ? 'LLEGA DE TERMINAL' : 'LLEGA Y CARGA'}
+          </ChipPanel>
+          <Ref>{o.ref}</Ref>
+          <span className="text-sm text-foreground/80 truncate max-w-full sm:max-w-[220px]" title={o.cliente}>{o.cliente || '—'}</span>
+          <span className="font-mono text-sm whitespace-nowrap">{o.cntr || '—'}{o.tipo && <span className="ml-1 text-muted-foreground">{o.tipo}</span>}</span>
+          {o.operativa && <ChipPanel title="Operativa">{o.operativa}</ChipPanel>}
+        </FilaTitulo>
+        <FilaDatos>
+          {o.motivo !== 'retiro' && (
+            <span className="inline-flex items-center gap-1.5 whitespace-nowrap" title="Transporte que viene a cargar">
+              <TruckIcon size={16} weight="duotone" className="text-muted-foreground" />
+              <b className="text-foreground">{o.transporte || 'transporte a confirmar'}</b>
+              {o.horario && <span>· {o.horario}</span>}
+            </span>
+          )}
+          {o.fiscal && o.motivo !== 'retiro' && <Dato label="Va a">{o.fiscal}</Dato>}
+          <Medidas pkgs={o.pkgs} kg={o.kg} m3={o.m3} />
+          {o.descripcion && <span className="truncate max-w-[260px]" title={o.descripcion}>{o.descripcion}</span>}
+        </FilaDatos>
+      </PanelFila>
     </li>
   )
 }

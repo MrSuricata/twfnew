@@ -36,7 +36,7 @@ export default function PartnerDashboardShell({
           <div className="flex items-center gap-3 min-w-0">
             <div className="p-2 bg-white/10 rounded-lg ring-1 ring-inset ring-white/20 shrink-0 [&_svg]:text-white">{icon}</div>
             <div className="min-w-0">
-              <p className="text-xs text-white/80 leading-tight truncate">{saludoPersonal(userName)}</p>
+              <p className="text-xs text-white/80 leading-tight">{saludoPersonal(userName)}</p>
               <h1 className="titulo-med text-base text-white leading-tight truncate">{title}</h1>
               <div className="flex items-center gap-1.5 text-xs text-white/70">
                 <User size={12} />
@@ -66,7 +66,9 @@ export default function PartnerDashboardShell({
         </div>
       </header>
 
-      <main className="max-w-[1600px] mx-auto p-4">{children}</main>
+      {/* 7xl y no 1600px: con filas de dos renglones, más ancho solo estira
+          el texto y cuesta leerlo (Brian 02/09). */}
+      <main className="max-w-7xl mx-auto p-4 space-y-5">{children}</main>
     </div>
   )
 }

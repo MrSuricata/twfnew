@@ -7,6 +7,7 @@
  * unidades y los choferes.
  */
 import { Fragment, useMemo, useState } from 'react'
+import { PanelPlegable } from './partner/PanelCard'
 import { ClipboardText, CaretDown, CaretRight } from '@phosphor-icons/react'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
 import { salidasProgramadas, totalCargas, SALIDAS_DIAS_ADELANTE, type SalidaProgramada } from '@/lib/partnerSalidas'
@@ -65,22 +66,14 @@ export default function ProximasSalidas({ shipments, rol }: Props) {
   const total = totalCargas(dias)
 
   return (
-    <section className="rounded-xl border border-border bg-card overflow-hidden">
-      <button
-        onClick={() => setAbierto(v => !v)}
-        className="flex w-full items-center gap-2 px-4 py-3 text-left hover:bg-muted/40 transition-colors"
-      >
-        {abierto ? <CaretDown size={14} weight="bold" /> : <CaretRight size={14} weight="bold" />}
-        <ClipboardText size={18} weight="duotone" className="text-primary" />
-        <span className="font-semibold text-sm">
-          Plan de carga · {total} {total === 1 ? 'carga' : 'cargas'}
-        </span>
-        <span className="text-xs text-muted-foreground">
-          próximos {SALIDAS_DIAS_ADELANTE} días · en {dias.length} {dias.length === 1 ? 'jornada' : 'jornadas'}
-        </span>
-      </button>
-
-      {abierto && (
+    <PanelPlegable
+      tono="info"
+      icono={<ClipboardText size={22} weight="duotone" />}
+      titulo="Plan de carga"
+      contador={total}
+      subtitulo={`próximos ${SALIDAS_DIAS_ADELANTE} días · en ${dias.length} ${dias.length === 1 ? 'jornada' : 'jornadas'}`}
+    >
+      {true && (
         <div className="border-t border-border overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-muted/40 text-xs uppercase text-muted-foreground">
@@ -166,6 +159,6 @@ export default function ProximasSalidas({ shipments, rol }: Props) {
           </p>
         </div>
       )}
-    </section>
+    </PanelPlegable>
   )
 }
