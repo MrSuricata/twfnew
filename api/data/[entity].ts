@@ -1282,7 +1282,7 @@ async function partnerShipmentsVisibles(db: any, payload: any): Promise<
     // mode/stock/oog (spec HOY partners 01/09): el modo y el stock de las LCL para
     // el depósito que desconsolida, y la marca OOG para conseguir unidad/permisos.
     // telex: respaldo del TLX de la operativa para el aviso "TLX pendiente".
-    .select('ref,cliente,etd,eta,contenedor,n_cntr,doc_number,linea,buque,terminal,tipo,libre,telex,operativas,archived,deposito,transporte,salida,eta_fiscal,operativa,fiscal,descarga,dev,pkgs,kg,m3,observacion,mode,stock,oog')
+    .select('ref,cliente,etd,eta,contenedor,n_cntr,doc_number,linea,buque,terminal,tipo,libre,telex,operativas,archived,deposito,transporte,salida,eta_fiscal,operativa,fiscal,descarga,dev,pkgs,kg,m3,observacion,mode,stock,oog,wood')
     .neq('source', 'sheet')
     .eq('archived', false)
     .limit(5000)
@@ -1329,6 +1329,10 @@ async function partnerShipmentsVisibles(db: any, payload: any): Promise<
       // de la operativa. No es dato sensible.
       TELEX: !!r.telex,
       MODE: r.mode || '', STOCK: r.stock || '',
+      // Madera a nivel carga: en muchas cargas el WOOD de la operativa viene vacío
+      // aunque la carga tiene wood=true (caso A7958). El partner necesita el aviso
+      // igual: la operativa manda y la carga es el respaldo.
+      WOOD_CARGA: r.wood ? 'SI' : '',
       OOG: r.oog ? 'SI' : '',
       operativas: ops,
     }
@@ -1343,7 +1347,7 @@ async function partnerShipmentsVisibles(db: any, payload: any): Promise<
   // el SELECT no la trae, pero cualquier campo sensible que alguien agregue
   // mañana adentro de operativas saldría solo. Mismo criterio que el portal de
   // clientes (api/_lib/clientShipments.ts).
-  const opSegura = (op: any, rolEsTransporte: boolean, oogCarga: string) => ({
+  const opSegura = (op: any, rolEsTransporte: boolean, oogCarga: string, woodCarga: string) => ({
     CNTR_OP: op.CNTR_OP || '',
     DEPOSITO: op.DEPOSITO || '',
     // El transporte ajeno NO se muestra: en una operativa compartida
@@ -1366,7 +1370,7 @@ async function partnerShipmentsVisibles(db: any, payload: any): Promise<
     TIPO: op.TIPO || '',
     // Marcas que cambian cómo se carga el camión: madera dispara SENASA en
     // frontera, IMO y no apilable mandan en el orden de estiba.
-    WOOD: op.WOOD || '',
+    WOOD: op.WOOD || woodCarga,
     IMO: op.IMO || '',
     NO_APILABLE: op.NO_APILABLE || '',
     TLX: op.TLX || '',
@@ -1397,6 +1401,7 @@ async function partnerShipmentsVisibles(db: any, payload: any): Promise<
     // los muestre, llegaban en el JSON crudo). Se quitan los financieros; se conserva
     // CLIENTE + lo operativo (lo necesitan para operar).
     const safe = { ...shipment }
+    delete safe.WOOD_CARGA
     delete safe.C_TERMINAL; delete safe.C_DEV; delete safe.LOCALES
     delete safe.FLETE; delete safe.FORMA_DE_PAGO; delete safe.VTO
     const esTransporte = payload.role === 'transport'
@@ -1407,7 +1412,7 @@ async function partnerShipmentsVisibles(db: any, payload: any): Promise<
       safe.TURNO_RETIRO = ag?.fecha_retiro || ''
       safe.RETIRADO = ag?.retirado_at || ''
     }
-    return { ...safe, operativas: matchingOps.map((op: any) => opSegura(op, esTransporte, shipment.OOG || '')) }
+    return { ...safe, operativas: matchingOps.map((op: any) => opSegura(op, esTransporte, shipment.OOG || '', shipment.WOOD_CARGA || '')) }
   }).filter(Boolean)
 
   return { shipments: filtered, alcance: rawFilter.trim(), nombre }
