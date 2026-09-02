@@ -129,3 +129,26 @@ describe('filterShipments - solo refs FCL (A####)', () => {
     expect(out.map((s: { REF: string }) => s.REF)).toEqual(['A8000', 'A7611 B'])
   })
 })
+
+describe('patrón EXACTO con "=" (Brian 02/09: VMG vs EQUIPO ORIGINAL VMG)', () => {
+  const VMG = '=VMG SA, =VMG SOCIEDAD ANONIMA'
+  it('matchea el nombre completo, ignorando puntos y espacios de más', () => {
+    expect(matchesClientePattern('VMG SA', VMG)).toBe(true)
+    expect(matchesClientePattern('VMG S.A.', VMG)).toBe(true)
+    expect(matchesClientePattern('vmg sa', VMG)).toBe(true)
+    expect(matchesClientePattern('VMG SOCIEDAD ANONIMA', VMG)).toBe(true)
+  })
+  it('NO matchea cuando el nombre es parte de otro cliente', () => {
+    expect(matchesClientePattern('EQUIPO ORIGINAL VMG SA', VMG)).toBe(false)
+    expect(matchesClientePattern('VMG SA Y ASOCIADOS', VMG)).toBe(false)
+  })
+  it('sin "=" sigue siendo "contiene" (el resto del catálogo no cambia)', () => {
+    expect(matchesClientePattern('EQUIPO ORIGINAL VMG SA', 'VMG SA')).toBe(true)
+    expect(matchesClientePattern('BICI PERETTI S.A.', 'PERETTI')).toBe(true)
+  })
+  it('se pueden mezclar exactos y contiene en el mismo patrón', () => {
+    expect(matchesClientePattern('CHIAPERO Y ASOCIADOS SRL', '=CHIAPERO Y ASOC SRL, =CHIAPERO Y ASOCIADOS SRL')).toBe(true)
+    expect(matchesClientePattern('CHIAPERO Y ASOC. S.R.L.', '=CHIAPERO Y ASOC SRL, =CHIAPERO Y ASOCIADOS SRL')).toBe(true)
+    expect(matchesClientePattern('CHIAPERO HERMANOS', '=CHIAPERO Y ASOC SRL, =CHIAPERO Y ASOCIADOS SRL')).toBe(false)
+  })
+})

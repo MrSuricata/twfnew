@@ -1,15 +1,27 @@
 import type { ParsedShipment } from './shipmentTypes'
 import type { ClientAccount } from './quotationTypes'
 
+/** Para comparar nombres de empresa: mayúsculas, sin puntos ni comas, un solo
+ *  espacio. "VMG S.A." · "VMG S.A" · "vmg sa" → "VMG SA". */
+function normalizarNombre(v: string): string {
+  return v.toUpperCase().replace(/[.,]/g, '').replace(/\s+/g, ' ').trim()
+}
+
 /**
- * Check if a CLIENTE value matches any pattern token.
- * Patterns can be comma-separated (e.g. "PERETTI,ACME").
+ * Espejo EXACTO de `matchesClientePattern` (api/_lib/csvParser.ts): los
+ * contadores del admin y la vista impersonada tienen que dar lo mismo que ve
+ * el cliente.
  *
- * Matching is case-insensitive and word-boundary based — a token only matches
- * when it is flanked by non-alphanumeric chars or string edges, so "PERETTI"
- * does NOT match inside "PERETTIANI". This mirrors the server-side
- * `matchesClientePattern` in api/_lib/csvParser.ts, keeping admin counts and
- * impersonated views consistent with what the client actually sees.
+ * ¿El CLIENTE de una carga pertenece a este cliente del catálogo?
+ *
+ * El patrón es una lista separada por comas. Cada token puede ser:
+ *  · **contiene** (default): "PERETTI" matchea "BICI PERETTI S.A." pero no
+ *    "PERETTIANI" — el token va acotado por caracteres no alfanuméricos.
+ *  · **exacto**, con `=` adelante: "=VMG SA" matchea "VMG SA", "VMG S.A." y
+ *    (se ignoran puntos, comas y espacios de más) pero NO
+ *    "EQUIPO ORIGINAL VMG SA", que es otro cliente (Brian 02/09/2026).
+ *    Es la forma de scopear un cliente cuyo nombre está contenido en el de
+ *    otro: sin esto, VMG veía las cargas de Equipo Original VMG.
  */
 export function matchesPattern(cliente: string, pattern: string): boolean {
   if (!cliente || !pattern) return false
@@ -21,6 +33,7 @@ export function matchesPattern(cliente: string, pattern: string): boolean {
     .filter(Boolean)
   if (patterns.length === 0) return false
   return patterns.some(p => {
+    if (p.startsWith('=')) return normalizarNombre(p.slice(1)) === normalizarNombre(cliente)
     const escaped = p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     const re = new RegExp(`(^|[^A-Z0-9])${escaped}([^A-Z0-9]|$)`)
     return re.test(clienteUpper)

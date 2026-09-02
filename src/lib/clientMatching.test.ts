@@ -43,3 +43,26 @@ describe('matchesPattern (sin cambios — sanidad)', () => {
     expect(matchesPattern('PERETTIANI', 'PERETTI')).toBe(false)
   })
 })
+
+describe('patrón EXACTO con "=" (Brian 02/09: VMG vs EQUIPO ORIGINAL VMG)', () => {
+  const VMG = '=VMG SA, =VMG SOCIEDAD ANONIMA'
+  it('matchea el nombre completo, ignorando puntos y espacios de más', () => {
+    expect(matchesPattern('VMG SA', VMG)).toBe(true)
+    expect(matchesPattern('VMG S.A.', VMG)).toBe(true)
+    expect(matchesPattern('vmg sa', VMG)).toBe(true)
+    expect(matchesPattern('VMG SOCIEDAD ANONIMA', VMG)).toBe(true)
+  })
+  it('NO matchea cuando el nombre es parte de otro cliente', () => {
+    expect(matchesPattern('EQUIPO ORIGINAL VMG SA', VMG)).toBe(false)
+    expect(matchesPattern('VMG SA Y ASOCIADOS', VMG)).toBe(false)
+  })
+  it('sin "=" sigue siendo "contiene" (el resto del catálogo no cambia)', () => {
+    expect(matchesPattern('EQUIPO ORIGINAL VMG SA', 'VMG SA')).toBe(true)
+    expect(matchesPattern('BICI PERETTI S.A.', 'PERETTI')).toBe(true)
+  })
+  it('se pueden mezclar exactos y contiene en el mismo patrón', () => {
+    expect(matchesPattern('CHIAPERO Y ASOCIADOS SRL', '=CHIAPERO Y ASOC SRL, =CHIAPERO Y ASOCIADOS SRL')).toBe(true)
+    expect(matchesPattern('CHIAPERO Y ASOC. S.R.L.', '=CHIAPERO Y ASOC SRL, =CHIAPERO Y ASOCIADOS SRL')).toBe(true)
+    expect(matchesPattern('CHIAPERO HERMANOS', '=CHIAPERO Y ASOC SRL, =CHIAPERO Y ASOCIADOS SRL')).toBe(false)
+  })
+})
