@@ -293,9 +293,11 @@ export default function TodayDashboard({
 
   // Campos pendientes URGENTES: llegan dentro de la semana (o ya llegaron sin
   // salida) con datos faltantes según su etapa — la webapp repartiendo tareas.
+  // Las LCL NO entran acá: tienen su propia card en HOY LCL (Brian 02/09:
+  // "por algo dividimos el dashboard en LCL y FCL").
   const cargasCampos = useMemo(() =>
     (dbShipments || [])
-      .filter(s => !s.archived)
+      .filter(s => !s.archived && String(s.mode || '').toLowerCase() !== 'lcl')
       .map(s => ({
         dbId: s.id, ref: s.ref, mode: s.mode, pais: s.dest_country, cliente: s.cliente,
         clientRef: s.client_ref,
@@ -662,7 +664,7 @@ export default function TodayDashboard({
               </span>
             </div>
             <p className="text-xs text-muted-foreground mb-2.5">
-              MONTECON: agendá el turno contra la ETA — si el buque se corre, la fila se pone en rojo sola. TCP: sin turnos, las filas aparecen al llegar el buque. En ambas, cuando el contenedor sale marcá RETIRADO: queda abajo hasta que avises al cliente que ya está en depósito.
+              MONTECON: agendá el turno contra la ETA — si el buque se corre, la fila se pone en rojo sola. TCP: sin turnos — las que vienen se listan para que sepas qué llega y pasan a RETIRAR el día del arribo. En ambas, cuando el contenedor sale marcá RETIRADO: queda abajo hasta que avises al cliente que ya está en depósito.
             </p>
             <div className="space-y-1">
               {montecon.map(c => (
@@ -736,6 +738,14 @@ export default function TodayDashboard({
                         >
                           Agendada
                         </button>
+                      )}
+                      {c.estado === 'por_llegar' && (
+                        <span
+                          title="TCP no maneja turnos: el día que llegue el buque la fila pasa a RETIRAR"
+                          className="h-7 px-3 rounded-full border border-dashed border-border text-xs text-muted-foreground inline-flex items-center"
+                        >
+                          Sin turno · retirar al llegar
+                        </span>
                       )}
                       {c.estado === 'agendada' && (
                         <button

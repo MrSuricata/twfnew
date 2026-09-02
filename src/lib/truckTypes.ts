@@ -165,6 +165,11 @@ export const TRUCK_STATUS_LABELS: Record<TruckStatus, string> = {
 // pasó la salida → En Ruta · pasó la carga → Cargado · si no, el estado
 // manual. Los botones de estado quedan como atajo que completa la fecha.
 // IMPORTANTE: misma precedencia que deriveTruckCargoStatus (operationsTypes).
+/** Un camión que salió hace más de esto sin arribo cargado ya no es "de hoy"
+ *  (los importados sin arrival_date quedaban "En Frontera" para siempre).
+ *  Lo comparten HOY LCL (camionesLcl) y HOY FCL (trucksEnFronteraHoy). */
+export const DIAS_CAMION_RECIENTE = 10
+
 export function deriveTruckDisplayStatus(t: Truck, today: Date): TruckStatus {
   const reached = (s?: string) => {
     if (!s) return false

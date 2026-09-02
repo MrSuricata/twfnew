@@ -12,7 +12,7 @@
  */
 import type { DbShipment } from './operationsTypes'
 import type { Truck, TruckLoad, TruckStatus, TruckTotals } from './truckTypes'
-import { computeTruckTotals, deriveTruckDisplayInfo, effectiveTruckLoads } from './truckTypes'
+import { computeTruckTotals, deriveTruckDisplayInfo, effectiveTruckLoads, DIAS_CAMION_RECIENTE } from './truckTypes'
 import { estadoLcl, almacenaje, diasEsperando, esLclMontevideo, type Almacenaje } from './lclEstados'
 import { depositoSugerido, type DepositoSugerido } from './lclSugerencias'
 import { reclamables, datosQueFaltan, type DatoClave } from './datosClave'
@@ -289,9 +289,8 @@ export interface CamionLcl {
 
 const ORDEN_STATUS: Record<TruckStatus, number> = { in_transit: 0, loaded: 1, planning: 2, delivered: 3 }
 
-/** Un camión que salió hace más de esto sin arribo cargado ya no es "hoy":
- *  los importados sin arrival_date quedaban "En Frontera" para siempre. */
-export const DIAS_CAMION_RECIENTE = 10
+/** Umbral compartido con HOY FCL — vive en truckTypes. */
+export { DIAS_CAMION_RECIENTE }
 
 /** Camiones publicados con alguna carga LCL que todavía no llegaron a fiscal
  *  y que salieron hace poco (o no salieron). */

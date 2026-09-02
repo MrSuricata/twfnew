@@ -25,7 +25,7 @@ import {
   isPorUruguay,
   estaLiberada,
 } from './checksTypes'
-import { refsEnConsolidado, type Truck, type TruckLoad } from './truckTypes'
+import { refsEnConsolidado, deriveTruckDisplayStatus, DIAS_CAMION_RECIENTE, type Truck, type TruckLoad } from './truckTypes'
 import { cargaFclActiva } from './operationsTypes'
 import { margenSalida, MARGEN_SALIDA_DIAS, etaVigente } from './salidaCheck'
 
@@ -232,12 +232,20 @@ export function trucksSalientesHoy(trucks: Truck[], loads: TruckLoad[]): TruckMa
     .map(t => truckMatch(t, loads))
 }
 
-/** Camiones en frontera: ya salieron y todavía no llegaron a fiscal. */
+/** Camiones en frontera: ya salieron y todavía no llegaron a fiscal.
+ *  Usa el MISMO estado derivado que la pestaña Camiones y HOY LCL
+ *  (deriveTruckDisplayStatus): un camión marcado entregado sin fecha de
+ *  arribo NO está en frontera, y uno que salió hace más de
+ *  DIAS_CAMION_RECIENTE días sin arribo cargado tampoco es "de hoy" — los
+ *  importados del 01/09 (C430–C462) quedaban acá para siempre (Brian 02/09). */
 export function trucksEnFronteraHoy(trucks: Truck[], loads: TruckLoad[]): TruckMatch[] {
+  const hoy = new Date()
+  hoy.setHours(0, 0, 0, 0)
   return trucks
     .filter(t => t && !t.draft)
     .filter(t => isValidDate(t.departureDate) && isDatePast(t.departureDate))
-    .filter(t => !isValidDate(t.arrivalDate) || (!isDatePast(t.arrivalDate) && !isDateToday(t.arrivalDate)))
+    .filter(t => deriveTruckDisplayStatus(t, hoy) === 'in_transit')
+    .filter(t => (daysSince(t.departureDate) ?? 0) <= DIAS_CAMION_RECIENTE)
     .map(t => truckMatch(t, loads))
 }
 
