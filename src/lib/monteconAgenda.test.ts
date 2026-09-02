@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  cargasMontecon, estadoAgenda, MONTECON_DIAS_ADELANTE, MONTECON_DIAS_ATRAS,
+  cargasMontecon, cargasSinTerminal, estadoAgenda, MONTECON_DIAS_ADELANTE, MONTECON_DIAS_ATRAS,
   RETIRADO_DIAS_RECORDATORIO,
   type CargaMonteconInput, type AgendaRow,
 } from './monteconAgenda'
@@ -44,7 +44,7 @@ describe('cargasMontecon — quién entra y cómo se ordena', () => {
     expect(l[1].terminal).toBe('TCP')
   })
 
-  it('la ventana: llegadas recientes (retiro pendiente) y próximas dos semanas', () => {
+  it('la ventana: llegadas recientes (retiro pendiente) y próximos 8 días (Brian 02/09)', () => {
     const dia = (n: number) => {
       const d = new Date(2026, 7, 22 + n)
       const mm = String(d.getMonth() + 1).padStart(2, '0')
@@ -200,5 +200,117 @@ describe('cargasMontecon — TCP sin turnos (Brian 26/08)', () => {
     expect(l.map(c => c.ref + ':' + c.estado)).toEqual([
       'MOVIDA:reagendar', 'RETIRAR:retirar', 'NUEVA:sin_agendar', 'OK:agendada', 'VIENE:por_llegar', 'RETIRADA:retirado',
     ])
+  })
+})
+
+describe('cargasSinTerminal — llegan sin terminal confirmada (Brian 02/09)', () => {
+  const dia = (n: number) => {
+    const d = new Date(2026, 7, 22 + n)
+    const mm = String(d.getMonth() + 1).padStart(2, '0')
+    const dd = String(d.getDate()).padStart(2, '0')
+    return d.getFullYear() + '-' + mm + '-' + dd
+  }
+  const sinTerm = (c: Partial<CargaMonteconInput> = {}) => carga({ terminal: '', pais: 'UY', ...c })
+
+  it('solo FCL vivas por Uruguay con la terminal vacía; ordenadas por llegada', () => {
+    const l = cargasSinTerminal([
+      sinTerm({ ref: 'EN4', eta: dia(4) }),
+      sinTerm({ ref: 'LLEGO', eta: dia(-1) }),
+      sinTerm({ ref: 'CONTERM', terminal: 'TCP' }),           // dato cargado
+      sinTerm({ ref: 'OTRATERM', terminal: 'TRP' }),          // terminal ajena, no es faltante
+      sinTerm({ ref: 'BSAS', pais: 'AR' }),                   // Buenos Aires directo
+      sinTerm({ ref: 'CHILE', pais: 'CL' }),
+      sinTerm({ ref: 'SINPAIS', pais: '' }),
+      sinTerm({ ref: 'LCL1', mode: 'lcl' }),
+      sinTerm({ ref: 'ARCH', archived: true }),
+      sinTerm({ ref: 'SINETA', eta: '' }),
+    ], HOY)
+    expect(l.map(c => c.ref + ':' + c.dias)).toEqual(['LLEGO:-1', 'EN4:4'])
+  })
+
+  it('una terminal de solo espacios cuenta como vacía', () => {
+    expect(cargasSinTerminal([sinTerm({ terminal: '   ' })], HOY)).toHaveLength(1)
+  })
+
+  it('usa la MISMA ventana que los retiros', () => {
+    const dentro = cargasSinTerminal([
+      sinTerm({ ref: 'ATRAS', eta: dia(-MONTECON_DIAS_ATRAS) }),
+      sinTerm({ ref: 'ADELANTE', eta: dia(MONTECON_DIAS_ADELANTE) }),
+    ], HOY)
+    expect(dentro.map(c => c.ref)).toEqual(['ATRAS', 'ADELANTE'])
+    const fuera = cargasSinTerminal([
+      sinTerm({ ref: 'VIEJA', eta: dia(-MONTECON_DIAS_ATRAS - 1) }),
+      sinTerm({ ref: 'LEJOS', eta: dia(MONTECON_DIAS_ADELANTE + 1) }),
+    ], HOY)
+    expect(fuera).toEqual([])
+  })
+
+  it('lleva lo que la fila necesita mostrar (dbId, cliente, contenedor, eta)', () => {
+    const [c] = cargasSinTerminal([sinTerm({ dbId: 'db-1', eta: dia(2) })], HOY)
+    expect(c).toEqual({ dbId: 'db-1', ref: 'A8045', cliente: 'CHIAPERO', cntr: 'FANU1858496', eta: dia(2), dias: 2 })
+  })
+
+  it('la ventana de los retiros es de 8 días hacia adelante (Brian 02/09)', () => {
+    expect(MONTECON_DIAS_ADELANTE).toBe(8)
+  })
+})
+
+describe('cargasMontecon — la ventana no esconde lo urgente (revisión 02/09)', () => {
+  it('REAGENDAR no se esconde aunque la ETA nueva caiga más allá de la ventana', () => {
+    // Agendada contra el 24/08; el buque se corre 10 días (más que la ventana de 8)
+    const l = cargasMontecon([carga({ eta: '2026-09-03' })], [agenda('A8045', '2026-08-24')], HOY)
+    expect(l.map(c => c.ref + ':' + c.estado)).toEqual(['A8045:reagendar'])
+    expect(l[0].dias).toBe(12)
+  })
+
+  it('agendada/sin agendar/TCP por llegar SÍ respetan el tope de 8 días', () => {
+    const l = cargasMontecon([
+      carga({ ref: 'AGENDADA', eta: '2026-09-03' }),
+      carga({ ref: 'NUEVA', eta: '2026-09-03' }),
+      carga({ ref: 'TCPLEJOS', terminal: 'TCP', eta: '2026-09-03' }),
+    ], [agenda('AGENDADA', '2026-09-03')], HOY)
+    expect(l).toEqual([])
+  })
+
+  it('una carga con SALIDA ya pasada salió de la terminal: no es retiro pendiente', () => {
+    const l = cargasMontecon([
+      carga({ ref: 'SALIO', eta: '2026-08-20', salida: '2026-08-21' }),
+      carga({ ref: 'SALEMANANA', eta: '2026-08-20', salida: '2026-08-23' }),
+      carga({ ref: 'SINSALIDA', eta: '2026-08-20' }),
+    ], [], HOY)
+    expect(l.map(c => c.ref).sort()).toEqual(['SALEMANANA', 'SINSALIDA'])
+  })
+})
+
+describe('cargasSinTerminal ↔ cargasMontecon — ida y vuelta (la promesa del toast)', () => {
+  const dia = (n: number) => {
+    const d = new Date(2026, 7, 22 + n)
+    const mm = String(d.getMonth() + 1).padStart(2, '0')
+    const dd = String(d.getDate()).padStart(2, '0')
+    return d.getFullYear() + '-' + mm + '-' + dd
+  }
+  const base = [-MONTECON_DIAS_ATRAS, 0, MONTECON_DIAS_ADELANTE].map((n, i) =>
+    carga({ ref: 'R' + i, terminal: '', pais: 'UY', eta: dia(n) }))
+
+  it('sin terminal: están en sinTerminal y en ningún retiro', () => {
+    expect(cargasSinTerminal(base, HOY).map(c => c.ref)).toEqual(['R0', 'R1', 'R2'])
+    expect(cargasMontecon(base, [], HOY)).toEqual([])
+  })
+
+  it('al completar TCP salen de sinTerminal y entran a retiros con el estado que corresponde', () => {
+    const conTcp = base.map(c => ({ ...c, terminal: 'TCP' }))
+    expect(cargasSinTerminal(conTcp, HOY)).toEqual([])
+    expect(cargasMontecon(conTcp, [], HOY).map(c => c.ref + ':' + c.estado)).toEqual(['R0:retirar', 'R1:retirar', 'R2:por_llegar'])
+  })
+
+  it('al completar MONTECON entran como sin agendar', () => {
+    const conMon = base.map(c => ({ ...c, terminal: 'MONTECON' }))
+    expect(cargasSinTerminal(conMon, HOY)).toEqual([])
+    expect(cargasMontecon(conMon, [], HOY).every(c => c.estado === 'sin_agendar')).toBe(true)
+    expect(cargasMontecon(conMon, [], HOY)).toHaveLength(3)
+  })
+
+  it('una carga sin terminal que ya salió tampoco se reclama', () => {
+    expect(cargasSinTerminal([carga({ terminal: '', pais: 'UY', eta: dia(-2), salida: dia(-1) })], HOY)).toEqual([])
   })
 })

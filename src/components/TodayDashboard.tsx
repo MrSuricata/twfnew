@@ -59,7 +59,7 @@ import { getAdminName } from '@/lib/authClient'
 import { useBrand } from '@/lib/brand'
 import { fmtDateDMY } from '@/lib/format'
 import AvisosPartnersCard from './AvisosPartnersCard'
-import { cargasMontecon, type AgendaRow, type CargaMontecon } from '@/lib/monteconAgenda'
+import { cargasMontecon, cargasSinTerminal, MONTECON_DIAS_ADELANTE, type AgendaRow, type CargaMontecon, type CargaSinTerminal } from '@/lib/monteconAgenda'
 import { fetchMonteconAgenda, agendarMontecon, desagendarMontecon, marcarMontecon } from '@/lib/dataClient'
 import { fmtDMY } from '@/lib/salidaCheck'
 import { isSinTelex } from '@/lib/telexCheck'
@@ -121,7 +121,8 @@ interface TodayDashboardProps {
   /** Catálogo de clientes — canonicaliza el cliente tipeado en el editor de faltantes. */
   clients?: CatalogClient[]
   /** Navega a otra pestaña del dashboard (el contador de montos abre Pagos). */
-  onOpenTab?: (tab: string) => void
+  /** Cambia de pestaña. `opts.ref` (solo 'checks'): la pestaña abre buscando esa ref. */
+  onOpenTab?: (tab: string, opts?: { ref?: string }) => void
   /** Recarga TODO desde la DB (App.loadDataFromDB). Lo usa la card de avisos
    *  de partners después de confirmar: LIBRE=DEVUELTO o stock cambian en
    *  `shipments` y hay que verlos sin F5. */
@@ -169,12 +170,19 @@ export default function TodayDashboard({
   // Fuente de verdad = ref_checks. Los 3 pasos-aviso son POR CONTENEDOR: cada
   // tarjeta (= un contenedor) marca SU aviso; la pestaña Checks agrega.
   const [checksByRef, setChecksByRef] = useState<Map<string, RefCheckSteps>>(new Map())
+  // Hasta que ref_checks llegó, "no liberada" no se sabe: la etiqueta de la
+  // fila de retiros espera este flag (si no, todo parpadea en rojo al abrir).
+  const [checksCargados, setChecksCargados] = useState(false)
   const refreshChecks = useCallback(async () => {
     try {
       const rows = await fetchRefChecks()
       setChecksByRef(new Map(rows.map(r => [normalizeRef(r.ref), r.steps || {}])))
     } catch (err) {
       console.warn('[hoy] no se pudieron cargar los avisos:', err)
+    } finally {
+      // Como ChecksBoard: el fallo también "cargó" — las dos cards de HOY
+      // pasan a decir lo mismo (todo sin liberar) en vez de contradecirse.
+      setChecksCargados(true)
     }
   }, [])
   // El snapshot se arma DESPUÉS de checksByRef: la alerta "llegan sin liberar"
@@ -357,19 +365,48 @@ export default function TodayDashboard({
     () => (dbShipments || []).map(s => ({ ref: s.ref, mode: s.mode })),
     [dbShipments],
   )
-  const montecon = useMemo(
-    () => cargasMontecon(
-      (dbShipments || []).map(s => ({
-        dbId: s.id, ref: s.ref, cliente: s.cliente, terminal: s.terminal,
-        contenedor: s.contenedor, eta: s.eta, mode: s.mode, archived: s.archived,
-      })),
-      agendaMontecon,
-      todayIso(),
-    ),
-    [dbShipments, agendaMontecon],
+  const cargasTerminalInput = useMemo(
+    () => (dbShipments || []).map(s => ({
+      dbId: s.id, ref: s.ref, cliente: s.cliente, terminal: s.terminal, pais: s.dest_country,
+      contenedor: s.contenedor, eta: s.eta, mode: s.mode, archived: s.archived,
+      salida: s.salida || (Array.isArray(s.operativas) ? (s.operativas.find(o => o.SALIDA)?.SALIDA || '') : ''),
+    })),
+    [dbShipments],
   )
+  const montecon = useMemo(
+    () => cargasMontecon(cargasTerminalInput, agendaMontecon, todayIso()),
+    [cargasTerminalInput, agendaMontecon],
+  )
+  // Llegan sin terminal confirmada (Brian 02/09): sin terminal no entran a
+  // ningún retiro — se reclaman arriba de la card con MONTECON / TCP a un toque.
+  const sinTerminal = useMemo(() => cargasSinTerminal(cargasTerminalInput, todayIso()), [cargasTerminalInput])
   const monteconReagendar = montecon.filter(c => c.estado === 'reagendar').length
   const monteconAvisar = montecon.filter(c => c.estado === 'retirado').length
+  // Etiqueta "NO LIBERADA" en la fila (Brian 02/09): LA MISMA lista que la
+  // card "Llegan sin liberar" (sinLiberarAlerts: paso LIBERADO de ref_checks,
+  // carga activa en el universo de Checks, sin SALIDA pasada). Una sola regla,
+  // así "Ir a checks" siempre cae en una fila que existe. SIN_LIBERAR_DIAS (10)
+  // cubre la ventana de retiros (8). El flag evita pintar todo en rojo antes
+  // de que ref_checks haya respondido.
+  const refsSinLiberar = useMemo(
+    () => new Set(snapshot.sinLiberar.map(a => normalizeRef(a.shipment.REF))),
+    [snapshot.sinLiberar],
+  )
+  const noLiberada = (ref: string) => checksCargados && refsSinLiberar.has(normalizeRef(ref))
+  // Completar la terminal desde la card: mismo camino que la edición inline de
+  // faltantes (buildFaltantePatch → onPatchShipment optimista con revert).
+  const marcarTerminal = (c: CargaSinTerminal, terminal: 'MONTECON' | 'TCP') => {
+    if (!onPatchShipment || !c.dbId) return
+    const fila = (dbShipments || []).find(s => s.id === c.dbId)
+    const r = buildFaltantePatch('terminal', terminal, fila?.operativas)
+    if (!r.ok) { toast.error(`Terminal: ${r.error}`, { description: c.ref }); return }
+    const previo = fila?.terminal ?? ''
+    onPatchShipment(c.dbId, r.patch)
+    toast.success(`Terminal ${terminal} · ${c.ref}`, {
+      description: 'Ya aparece en los retiros de terminal.',
+      action: { label: 'Deshacer', onClick: () => onPatchShipment(c.dbId, { terminal: previo }) },
+    })
+  }
 
   // Upsert local de una fila de agenda (el server ya guardó): preserva la ETA
   // agendada si existía — pisarla haría "reagendar" fantasma al deshacer.
@@ -639,7 +676,7 @@ export default function TodayDashboard({
       {/* ── Retiros de terminal (Brian 22/08 Montecon + 26/08 TCP): primera de
           las cards — turnos escasos en Montecon, y en ambas terminales el
           retiro termina con el aviso al cliente del traslado a depósito */}
-      {montecon.length > 0 && (
+      {(montecon.length > 0 || sinTerminal.length > 0) && (
         <Card className={med ? 'overflow-hidden bg-med-info-tinte border-2 border-med-info-borde' : 'accent-top overflow-hidden bg-sky-500/[0.04] border-sky-500/25'} style={{ ['--bar-color' as any]: 'rgb(14 165 233)' }}>
           <CardContent className="pt-5 pb-4">
             <div className="flex items-center gap-2.5 mb-1">
@@ -649,6 +686,7 @@ export default function TodayDashboard({
               <h2 className={med ? 'titulo-med text-[17px] text-med-violeta' : 'text-sm font-semibold uppercase tracking-wide text-sky-700'}>
                 Retiros de terminal — Montecon y TCP
               </h2>
+              <span className="text-[10px] text-muted-foreground whitespace-nowrap">próx. {MONTECON_DIAS_ADELANTE} días</span>
               {monteconReagendar > 0 && (
                 <span className={med ? 'inline-flex items-center gap-1 text-xs font-bold text-med-error bg-med-error/10 border border-med-error/30 rounded-full px-2 py-0.5' : 'inline-flex items-center gap-1 text-xs font-bold text-red-700 bg-red-500/10 border border-red-500/30 rounded-full px-2 py-0.5'}>
                   {monteconReagendar} para reagendar
@@ -659,12 +697,79 @@ export default function TodayDashboard({
                   {monteconAvisar} avisar cliente
                 </span>
               )}
+              {sinTerminal.length > 0 && (
+                <span className={med ? 'inline-flex items-center gap-1 text-xs font-bold text-med-error bg-med-error/10 border border-med-error/30 rounded-full px-2 py-0.5' : 'inline-flex items-center gap-1 text-xs font-bold text-red-700 bg-red-500/10 border border-red-500/30 rounded-full px-2 py-0.5'}>
+                  {sinTerminal.length} sin terminal
+                </span>
+              )}
               <span className={med ? 'ml-auto inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-full bg-med-violeta text-med-celeste text-xs font-bold' : 'ml-auto inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-full bg-sky-500 text-white text-xs font-bold'}>
-                {montecon.length}
+                {montecon.length + sinTerminal.length}
               </span>
             </div>
+            {sinTerminal.length > 0 && (
+              <div className={med ? 'mt-1.5 mb-2.5 rounded-lg border border-med-error/40 bg-med-error/[0.06] px-2.5 py-2' : 'mt-1.5 mb-2.5 rounded-lg border border-red-500/40 bg-red-500/[0.06] px-2.5 py-2'}>
+                <div className="flex items-center gap-2 mb-1">
+                  <Warning size={16} weight="fill" className={med ? 'text-med-error shrink-0' : 'text-red-600 shrink-0'} />
+                  <h3 className={med ? 'text-xs font-bold uppercase tracking-wide text-med-error' : 'text-xs font-bold uppercase tracking-wide text-red-700'}>
+                    Llegan sin terminal confirmada
+                  </h3>
+                  <span className={med ? 'ml-auto text-xs font-bold text-med-error' : 'ml-auto text-xs font-bold text-red-700'}>{sinTerminal.length}</span>
+                </div>
+                <p className={med ? 'text-[11px] text-med-error/80 mb-1.5' : 'text-[11px] text-red-700/80 mb-1.5'}>
+                  Sin terminal no entran a los retiros. Marcá dónde descarga el buque y la fila baja sola a la lista.
+                </p>
+                <div className="space-y-1">
+                  {sinTerminal.map(c => (
+                    <div key={c.dbId || c.ref} className={med ? 'rounded-md border border-med-error/30 bg-white px-2.5 py-2 flex flex-wrap items-center gap-x-2.5 gap-y-1' : 'rounded-md border border-red-500/30 bg-background/60 px-2.5 py-2 flex flex-wrap items-center gap-x-2.5 gap-y-1'}>
+                      <button type="button" onClick={() => onOpenDetail?.(c.ref)} className="ref-med text-sm hover:underline">
+                        {c.ref}
+                      </button>
+                      <span className="text-xs text-muted-foreground truncate max-w-[160px]" title={c.cliente}>{c.cliente || '—'}</span>
+                      {c.cntr && <span className="font-mono text-[11px] text-muted-foreground">{c.cntr}</span>}
+                      {c.eta && (
+                        <span className="text-xs whitespace-nowrap">
+                          ETA <b>{fmtDateDMY(c.eta)}</b>
+                          <span className="text-muted-foreground"> · {c.dias === 0 ? 'hoy' : c.dias > 0 ? `en ${c.dias}d` : `llegó hace ${-c.dias}d`}</span>
+                        </span>
+                      )}
+                      {noLiberada(c.ref) && (
+                        <span className="inline-flex items-center gap-1.5">
+                          <span
+                            title="La naviera todavía no confirmó la liberación — sin eso el contenedor no se retira"
+                            className={med ? 'inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-med-error/10 text-med-error border border-med-error/30' : 'inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-500/10 text-red-700 border border-red-500/30'}
+                          >
+                            <LockKey size={11} weight="fill" /> NO LIBERADA
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => onOpenTab?.('checks', { ref: c.ref })}
+                            className={med ? 'text-[11px] font-semibold underline underline-offset-2 text-med-error hover:opacity-80' : 'text-[11px] font-semibold underline underline-offset-2 text-red-700 hover:opacity-80'}
+                          >
+                            Ir a checks
+                          </button>
+                        </span>
+                      )}
+                      <span className="ml-auto flex items-center gap-1.5">
+                        {(['MONTECON', 'TCP'] as const).map(term => (
+                          <button
+                            key={term}
+                            type="button"
+                            disabled={!onPatchShipment || !c.dbId}
+                            onClick={() => marcarTerminal(c, term)}
+                            title={`Descarga en ${term}`}
+                            className={med ? 'h-7 px-3 rounded-full border border-med-violeta/40 text-xs font-bold text-med-violeta hover:bg-med-violeta/10 transition-colors disabled:opacity-50' : 'h-7 px-3 rounded-full border border-sky-500/40 text-xs font-bold text-sky-700 hover:bg-sky-500/10 transition-colors disabled:opacity-50'}
+                          >
+                            {term}
+                          </button>
+                        ))}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <p className="text-xs text-muted-foreground mb-2.5">
-              MONTECON: agendá el turno contra la ETA — si el buque se corre, la fila se pone en rojo sola. TCP: sin turnos — las que vienen se listan para que sepas qué llega y pasan a RETIRAR el día del arribo. En ambas, cuando el contenedor sale marcá RETIRADO: queda abajo hasta que avises al cliente que ya está en depósito.
+              MONTECON: agendá el turno contra la ETA (si el buque se corre, la fila se pone en rojo sola). TCP: sin turnos, pasa a RETIRAR cuando llega el buque. <b>NO LIBERADA</b>: la naviera no confirmó la liberación → Ir a checks. Cuando el contenedor sale marcá RETIRADO y después AVISADO al cliente.
             </p>
             <div className="space-y-1">
               {montecon.map(c => (
@@ -695,6 +800,24 @@ export default function TodayDashboard({
                       <span className="text-xs whitespace-nowrap">
                         ETA <b>{fmtDateDMY(c.eta)}</b>
                         <span className="text-muted-foreground"> · {c.dias === 0 ? 'hoy' : c.dias > 0 ? `en ${c.dias}d` : `llegó hace ${-c.dias}d`}</span>
+                      </span>
+                    )}
+                    {c.estado !== 'retirado' && noLiberada(c.ref) && (
+                      <span className="inline-flex items-center gap-1.5">
+                        <span
+                          title="La naviera todavía no confirmó la liberación — sin eso el contenedor no se retira"
+                          className={med ? 'inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-med-error/10 text-med-error border border-med-error/30' : 'inline-flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-500/10 text-red-700 border border-red-500/30'}
+                        >
+                          <LockKey size={11} weight="fill" /> NO LIBERADA
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => onOpenTab?.('checks', { ref: c.ref })}
+                          title="Ver qué le falta en la pestaña Checks"
+                          className={med ? 'text-[11px] font-semibold underline underline-offset-2 text-med-error hover:opacity-80' : 'text-[11px] font-semibold underline underline-offset-2 text-red-700 hover:opacity-80'}
+                        >
+                          Ir a checks
+                        </button>
                       </span>
                     )}
                     <span className="ml-auto flex items-center gap-1.5">

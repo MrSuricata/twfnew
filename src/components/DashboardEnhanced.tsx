@@ -172,6 +172,10 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
   // Nico arranca en Seguimientos, el resto donde diga su selector de Equipo.
   // Validada contra las pestañas reales — un valor inválido (o 'equipo' sin
   // ser owner) caería en un dashboard en blanco.
+  // "Ir a checks" desde la card de retiros de HOY: la pestaña Checks abre
+  // buscando esa ref. Se limpia al SALIR de Checks por cualquier camino (barra,
+  // paleta, logo) — ver el efecto sobre activeTab más abajo.
+  const [checksFocusRef, setChecksFocusRef] = useState('')
   const [activeTab, setActiveTab] = useState(() => {
     if (typeof window !== 'undefined' && window.location.pathname.toLowerCase() === '/mirendimiento' && ops) {
       return 'rendimiento'
@@ -190,6 +194,11 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
     if (area === 'lcl') return 'hoy'
     return validas.has(area) ? area : brandDefault
   })
+  // Al salir de Checks (por la barra, la paleta o el logo) la ref enfocada
+  // deja de aplicar: la próxima visita a Checks abre el tablero entero.
+  useEffect(() => {
+    if (activeTab !== 'checks') setChecksFocusRef('')
+  }, [activeTab])
   // Área de la pantalla HOY: "Uruguay FCL" (TodayDashboard, la de Brian) o
   // "LCL Montevideo" (HoyLcl, la del equipo de consolidados). El home_area del
   // usuario manda al entrar (el equipo LCL arranca en la suya aunque haya
@@ -596,7 +605,10 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
                 onPatchShipment={onPatchShipment}
                 onOpenDetail={onOpenDetail}
                 clients={clients}
-                onOpenTab={setActiveTab}
+                onOpenTab={(tab, opts) => {
+                  if (tab === 'checks' && opts?.ref) setChecksFocusRef(String(opts.ref))
+                  setActiveTab(tab)
+                }}
                 onReloadFromDB={onReloadFromDB}
               />
             )}
@@ -744,6 +756,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
               dbShipments={dbShipments}
               onPatchShipment={onPatchShipment}
               onOpenDetail={onOpenDetail}
+              focusRef={checksFocusRef}
             />
           </TabsContent>
 
