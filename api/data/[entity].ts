@@ -3183,10 +3183,14 @@ async function handlePartnerAvisos(req: VercelRequest, res: VercelResponse, db: 
     const partnerEmail = String((payload as any).email || '').trim().toLowerCase()
     const partnerRole = payload.role as 'depot' | 'transport'
 
-    // Un pendiente por (tipo, ref, cntr): si vuelve a apretar, se reusa.
+    // Un pendiente por (tipo, ref, cntr) POR PARTNER: si vuelve a apretar, se reusa.
+    // Misma clave que el GET (partner_role + partner_filter): otro depósito/transporte con
+    // la misma ref en alcance nunca recibe un aviso ajeno (ni su email/nombre).
     const { data: previo, error: errPrevio } = await db.from('partner_avisos')
       .select(AVISO_COLS)
       .eq('tipo', tipo).eq('ref', ref).eq('cntr', cntr).eq('estado', 'pendiente')
+      .eq('partner_role', partnerRole)
+      .ilike('partner_filter', ilikeExacto(vis.alcance))
       .order('created_at', { ascending: false })
       .limit(1)
     if (errPrevio) throw errPrevio
