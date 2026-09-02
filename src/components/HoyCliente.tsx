@@ -23,6 +23,7 @@ import {
 } from '@/lib/hoyCliente'
 import { fmtDateDMY } from '@/lib/format'
 import { useBrand } from '@/lib/brand'
+import PanelCard from './partner/PanelCard'
 
 interface HoyClienteProps {
   /** Cargas activas del cliente, YA filtradas por ruta/tipo (sin el buscador de la lista). */
@@ -43,7 +44,7 @@ interface HoyClienteProps {
 type Tono = 'info' | 'aviso' | 'error'
 const MAX_FILAS = 6
 
-function CardHoy({ med, tono, icon, titulo, subtitulo, count, children, onVerMas }: {
+function CardHoy({ tono, icon, titulo, subtitulo, count, children, onVerMas }: {
   med: boolean
   tono: Tono
   icon: ReactNode
@@ -53,44 +54,23 @@ function CardHoy({ med, tono, icon, titulo, subtitulo, count, children, onVerMas
   children: ReactNode
   onVerMas?: () => void
 }) {
-  const card = tono === 'error'
-    ? (med ? 'overflow-hidden bg-med-error/[0.06] border-2 border-med-error/40' : 'accent-top overflow-hidden bg-red-500/[0.04] border-red-500/25')
-    : tono === 'aviso'
-      ? (med ? 'overflow-hidden bg-med-aviso-tinte border-2 border-med-aviso-borde' : 'accent-top overflow-hidden bg-amber-500/[0.04] border-amber-500/25')
-      : (med ? 'overflow-hidden bg-med-info-tinte border-2 border-med-info-borde' : 'accent-top overflow-hidden bg-sky-500/[0.04] border-sky-500/25')
-  const bar = tono === 'error' ? 'rgb(239 68 68)' : tono === 'aviso' ? 'rgb(245 158 11)' : 'rgb(14 165 233)'
-  const iconBox = tono === 'error'
-    ? (med ? 'p-1.5 bg-med-error/10 rounded-md text-med-error' : 'p-1.5 bg-red-500/10 rounded-md text-red-600')
-    : tono === 'aviso'
-      ? (med ? 'p-1.5 bg-med-aviso/10 rounded-md text-med-aviso' : 'p-1.5 bg-amber-500/10 rounded-md text-amber-600')
-      : (med ? 'p-1.5 bg-med-violeta/10 rounded-md text-med-violeta' : 'p-1.5 bg-sky-500/10 rounded-md text-sky-600')
-  const title = tono === 'error'
-    ? (med ? 'titulo-med text-[17px] text-med-error' : 'text-sm font-semibold uppercase tracking-wide text-red-700')
-    : tono === 'aviso'
-      ? (med ? 'titulo-med text-[17px] text-med-aviso-texto' : 'text-sm font-semibold uppercase tracking-wide text-amber-700')
-      : (med ? 'titulo-med text-[17px] text-med-violeta' : 'text-sm font-semibold uppercase tracking-wide text-sky-700')
-  const badge = tono === 'error'
-    ? (med ? 'bg-med-error text-white' : 'bg-red-500 text-white')
-    : tono === 'aviso'
-      ? (med ? 'bg-med-aviso text-white' : 'bg-amber-500 text-white')
-      : (med ? 'bg-med-violeta text-med-celeste' : 'bg-sky-500 text-white')
+  // Misma piel que depósito y transporte (partner/PanelCard): color por card,
+  // título grande y contador en pill — Brian 02/09.
   return (
-    <Card className={card} style={{ ['--bar-color' as string]: bar } as CSSProperties}>
-      <CardContent className="pt-5 pb-4">
-        <div className="flex items-center gap-2.5 mb-1">
-          <div className={iconBox}>{icon}</div>
-          <h2 className={title}>{titulo}</h2>
-          <span className={`ml-auto inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-full text-xs font-bold ${badge}`}>{count}</span>
-        </div>
-        <p className="text-xs text-muted-foreground mb-2.5">{subtitulo}</p>
-        <div className="space-y-1">{children}</div>
-        {count > MAX_FILAS && (
-          <button type="button" onClick={onVerMas} className="mt-2 text-xs underline underline-offset-2 text-muted-foreground hover:text-foreground">
-            y {count - MAX_FILAS} más en la lista de abajo
-          </button>
-        )}
-      </CardContent>
-    </Card>
+    <PanelCard
+      tono={tono === 'error' ? 'alerta' : tono}
+      icono={icon}
+      titulo={titulo}
+      subtitulo={subtitulo}
+      contador={count}
+    >
+      {children}
+      {count > MAX_FILAS && (
+        <button type="button" onClick={onVerMas} className="w-full px-4 py-2.5 text-left text-sm underline underline-offset-2 text-muted-foreground hover:text-foreground">
+          y {count - MAX_FILAS} más en la lista de abajo
+        </button>
+      )}
+    </PanelCard>
   )
 }
 
