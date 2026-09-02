@@ -36,6 +36,14 @@ import {
   EventoCalendarioSchema,
 } from '../_lib/schemas.js'
 import { rollupFromOperativasApi } from '../_lib/operativasRollup.js'
+import { montevideoTodayIso } from '../_lib/pushAlerts.js'
+import {
+  validarNuevoAviso,
+  cntrPerteneceACarga,
+  mapFilaToAviso,
+  patchDevolvi,
+  patchDesconsolide,
+} from '../_lib/partnerAvisosRules.js'
 import { broadcastTrucksLive, clientIdFromRequest } from '../_lib/realtimeBroadcast.js'
 import { z } from 'zod'
 import { uploadPhotoObjects, deletePhotoObjects, signPhotoUrls, signPhotoUrl, THUMB_TTL, FULL_TTL } from '../_lib/photoStorage.js'
@@ -90,6 +98,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     try { return handlePartnerShipments(req, res, db, payload) }
     catch (e: any) { console.error('[partner-shipments] error:', e?.message); return res.status(500).json({ error: 'Database error' }) }
+  }
+
+  // Avisos de partners: el depósito/transporte los CREA y lee los suyos; el
+  // equipo (admin/owner) los lee todos y los confirma o rechaza. Es la única
+  // entidad compartida entre ambos mundos — el reparto fino por rol y método
+  // vive en handlePartnerAvisos.
+  if (entity === 'partner-avisos') {
+    if (!payload || (payload.role !== 'depot' && payload.role !== 'transport' && payload.role !== 'admin')) {
+      return res.status(401).json({ error: 'Authentication required' })
+    }
+    try { return await handlePartnerAvisos(req, res, db, payload) }
+    catch (e: any) { console.error('[partner-avisos] error:', e?.message); return res.status(500).json({ error: 'Database error' }) }
   }
 
   // All other endpoints require admin auth
@@ -1213,7 +1233,19 @@ async function handleShipmentsCache(req: VercelRequest, res: VercelResponse, db:
 
 async function handlePartnerShipments(req: VercelRequest, res: VercelResponse, db: any, payload: any) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
+  const visibles = await partnerShipmentsVisibles(db, payload)
+  if ('status' in visibles) return res.status(visibles.status).json({ error: visibles.error })
+  return res.status(200).json({ shipments: visibles.shipments, syncedAt: new Date().toISOString() })
+}
 
+/** Lo que el partner tiene derecho a ver: alcance FRESCO de partner_users +
+ *  shipments filtradas y saneadas (lista blanca opSegura). Lo comparten
+ *  partner-shipments (la lista) y partner-avisos (para saber sobre qué refs
+ *  puede avisar). Devuelve {status:403} si el acceso fue desactivado. */
+async function partnerShipmentsVisibles(db: any, payload: any): Promise<
+  { status: 403; error: string } | { shipments: any[]; alcance: string; nombre: string }
+> {
+  let nombre = String(payload?.name || '').trim()
   // Revocación efectiva (auditoría 01/09): el JWT dura 12 h y sólo se validaba
   // la firma, así que un partner dado de baja seguía entrando hasta medio día,
   // y si le cambiabas el transporte seguía viendo el viejo. Se relee la fila
@@ -1224,14 +1256,15 @@ async function handlePartnerShipments(req: VercelRequest, res: VercelResponse, d
   const emailToken = String(payload?.email || '').trim().toLowerCase()
   if (emailToken) {
     const { data: fila, error: errFila } = await db.from('partner_users')
-      .select('active, filter_value')
+      .select('active, filter_value, name')
       .eq('email', emailToken)
       .maybeSingle()
     if (!errFila) {
       if (!fila || fila.active === false) {
-        return res.status(403).json({ error: 'Tu acceso fue desactivado. Escribinos para reactivarlo.' })
+        return { status: 403, error: 'Tu acceso fue desactivado. Escribinos para reactivarlo.' }
       }
       alcanceVivo = String(fila.filter_value || '').trim() || null
+      if (String(fila.name || '').trim()) nombre = String(fila.name).trim()
     }
   }
 
@@ -1246,11 +1279,28 @@ async function handlePartnerShipments(req: VercelRequest, res: VercelResponse, d
   // El fallback al shipments_cache (congelado en el cutover) se ELIMINÓ: servir
   // datos podridos en silencio es peor que fallar.
   const { data: rows, error } = await db.from('shipments')
-    .select('ref,cliente,etd,eta,contenedor,n_cntr,doc_number,linea,buque,terminal,tipo,libre,operativas,archived,deposito,transporte,salida,eta_fiscal,operativa,fiscal,descarga,dev,pkgs,kg,m3,observacion')
+    // mode/stock/oog (spec HOY partners 01/09): el modo y el stock de las LCL para
+    // el depósito que desconsolida, y la marca OOG para conseguir unidad/permisos.
+    .select('ref,cliente,etd,eta,contenedor,n_cntr,doc_number,linea,buque,terminal,tipo,libre,operativas,archived,deposito,transporte,salida,eta_fiscal,operativa,fiscal,descarga,dev,pkgs,kg,m3,observacion,mode,stock,oog')
     .neq('source', 'sheet')
     .eq('archived', false)
     .limit(5000)
   if (error) throw error
+  // Turnos de Montecon (solo depósito): fecha del turno conseguido y si ya se
+  // retiró. Viaja únicamente cuando la terminal de la carga es MONTECON.
+  const agendaPorRef = new Map<string, { fecha_retiro: string; retirado_at: string }>()
+  if (payload?.role === 'depot') {
+    const { data: agenda, error: errAgenda } = await db.from('montecon_agenda')
+      .select('ref, fecha_retiro, retirado_at').limit(2000)
+    if (!errAgenda) {
+      for (const a of (agenda || [])) {
+        agendaPorRef.set(String(a.ref || '').trim().toUpperCase(), {
+          fecha_retiro: String(a.fecha_retiro || '').slice(0, 10),
+          retirado_at: a.retirado_at ? String(a.retirado_at).slice(0, 10) : '',
+        })
+      }
+    }
+  }
   const allShipments = (rows || []).map((r: any) => {
     const ops = Array.isArray(r.operativas) && r.operativas.length
       ? r.operativas
@@ -1267,10 +1317,11 @@ async function handlePartnerShipments(req: VercelRequest, res: VercelResponse, d
       CNTR: r.contenedor || '', N: r.n_cntr || '', MBL: r.doc_number || '',
       LINEA: r.linea || '', BUQUE: r.buque || '', TERMINAL: r.terminal || '', TIPO: r.tipo || '',
       LIBRE_HASTA: r.libre || '',
+      MODE: r.mode || '', STOCK: r.stock || '',
+      OOG: r.oog ? 'SI' : '',
       operativas: ops,
     }
   })
-  const syncedAt = new Date().toISOString()
   // Support both legacy (depotName/transportName) and new (filterValue) JWT payloads.
   // El alcance FRESCO de la DB manda sobre el del token (ver revocación arriba).
   const rawFilter: string = alcanceVivo || payload.filterValue || payload.depotName || payload.transportName || ''
@@ -1281,7 +1332,7 @@ async function handlePartnerShipments(req: VercelRequest, res: VercelResponse, d
   // el SELECT no la trae, pero cualquier campo sensible que alguien agregue
   // mañana adentro de operativas saldría solo. Mismo criterio que el portal de
   // clientes (api/_lib/clientShipments.ts).
-  const opSegura = (op: any, rolEsTransporte: boolean) => ({
+  const opSegura = (op: any, rolEsTransporte: boolean, oogCarga: string) => ({
     CNTR_OP: op.CNTR_OP || '',
     DEPOSITO: op.DEPOSITO || '',
     // El transporte ajeno NO se muestra: en una operativa compartida
@@ -1308,6 +1359,9 @@ async function handlePartnerShipments(req: VercelRequest, res: VercelResponse, d
     IMO: op.IMO || '',
     NO_APILABLE: op.NO_APILABLE || '',
     TLX: op.TLX || '',
+    // OOG (sobredimensionada) es dato de la CARGA (shipments.oog): el
+    // transporte necesita unidad especial y el depósito, permisos.
+    OOG: oogCarga,
     // Descripción de la mercadería: la necesitan para saber qué cargan.
     DESCRIPCION: op.DESCRIPCION || '',
   })
@@ -1335,10 +1389,17 @@ async function handlePartnerShipments(req: VercelRequest, res: VercelResponse, d
     delete safe.C_TERMINAL; delete safe.C_DEV; delete safe.LOCALES
     delete safe.FLETE; delete safe.FORMA_DE_PAGO; delete safe.VTO
     const esTransporte = payload.role === 'transport'
-    return { ...safe, operativas: matchingOps.map((op: any) => opSegura(op, esTransporte)) }
+    // Depósito: turno de retiro / retirado de Montecon (solo si la terminal es MONTECON).
+    if (payload.role === 'depot') {
+      const esMontecon = String(shipment.TERMINAL || '').toUpperCase().includes('MONTECON')
+      const ag = esMontecon ? agendaPorRef.get(String(shipment.REF || '').trim().toUpperCase()) : undefined
+      safe.TURNO_RETIRO = ag?.fecha_retiro || ''
+      safe.RETIRADO = ag?.retirado_at || ''
+    }
+    return { ...safe, operativas: matchingOps.map((op: any) => opSegura(op, esTransporte, shipment.OOG || '')) }
   }).filter(Boolean)
 
-  return res.status(200).json({ shipments: filtered, syncedAt })
+  return { shipments: filtered, alcance: rawFilter.trim(), nombre }
 }
 
 // ── Partner Users (admin CRUD) ──────────────────────────────────────
@@ -2182,6 +2243,61 @@ function filterByAllowedRef<T>(items: T[], allowed: Set<string> | null, getRef: 
   return items.filter(i => allowed.has(refOf(getRef(i))))
 }
 
+/**
+ * El PATCH normal de columnas de `shipments` (whitelist SHIPMENT_COLS + rollup
+ * de operativas[] + estampa de pagos + auditoría + timbre de co-edición).
+ * Lo usan el PATCH de la entidad shipments (grilla, quick edit, armador) y la
+ * confirmación de avisos de partners (devolvi / desconsolide): mismo camino,
+ * mismo rastro. El scoping por cliente lo hace el caller ANTES de llamar.
+ */
+async function aplicarPatchShipment(
+  db: any, payload: TokenPayload | null, id: string, body: Record<string, unknown>, clientId?: string,
+): Promise<{ status: 200 | 400; json: Record<string, unknown> }> {
+  const updates: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(body)) {
+    if (SHIPMENT_COLS.has(k)) updates[k] = v
+  }
+  // When operativas[] is written, recompute the flat rollup columns so the
+  // grid / agenda / billing / tracking (which read the scalar columns) stay
+  // in sync without requiring a separate PATCH.
+  if (Array.isArray(updates.operativas) && updates.operativas.length > 0) {
+    const r = rollupFromOperativasApi(updates.operativas as Record<string, unknown>[])
+    updates.salida = r.salida
+    updates.eta_fiscal = r.eta_fiscal
+    updates.deposito = r.deposito
+    updates.operativa = r.operativa
+    updates.descarga = r.descarga
+    updates.dev = r.dev
+    updates.contenedor = r.contenedor
+    // Peso/Volumen/Bultos TOTAL = suma de los contenedores. Pero NO pisar el
+    // total con 0 cuando los contenedores no tienen el peso desglosado: eso
+    // perdería el total cargado a nivel carga (ej. carga multi-cntr importada
+    // con el total solo en la columna). Solo actualizar si hay suma > 0.
+    if (r.pkgs > 0) updates.pkgs = r.pkgs
+    if (r.kg > 0) updates.kg = r.kg
+    if (r.m3 > 0) updates.m3 = r.m3
+  }
+  if (Object.keys(updates).length === 0) return { status: 400, json: { error: 'No valid fields' } }
+  // Pagos: el "quién pagó" lo estampa SIEMPRE el server desde el token.
+  // Marcar (fecha) → by = usuario del token · desmarcar (null) → by = null.
+  let esPago = false
+  for (const k of Object.keys(updates)) {
+    const m = /^pago_(flete|locales|terminal|devolucion)_at$/.exec(k)
+    if (m) { esPago = true; updates[`pago_${m[1]}_by`] = updates[k] ? auditUser(payload as any) : null }
+  }
+  updates.updated_at_ts = Date.now()
+  const { data: updRow, error } = await db.from('shipments').update(updates).eq('id', id).select('ref').maybeSingle()
+  if (error) throw error
+  logAudit(db, payload, 'archived' in updates && Object.keys(updates).length === 1
+    ? (updates.archived ? 'archivar' : 'restaurar')
+    : esPago ? 'pago' : 'editar', 'shipments', updRow?.ref || id, updates)
+  // Timbre de co-edición: avisa a los demás browsers que una carga cambió,
+  // para que refetcheen. Sin esto, el que tenía la grilla abierta seguía
+  // viendo el transporte viejo hasta recargar la página (Brian 31/08).
+  void broadcastTrucksLive('shipment', undefined, clientId)
+  return { status: 200, json: { updated: true } }
+}
+
 async function handleShipments(req: VercelRequest, res: VercelResponse, db: any, payload: TokenPayload | null) {
   if (req.method === 'GET') {
     // source='sheet' = filas espejo de la migración FCL: por defecto invisibles.
@@ -2274,49 +2390,8 @@ async function handleShipments(req: VercelRequest, res: VercelResponse, db: any,
     }
 
     // (El scoping por cliente ya corrió arriba, antes de renameRef/?fcl=1.)
-    const updates: Record<string, unknown> = {}
-    for (const [k, v] of Object.entries(body)) {
-      if (SHIPMENT_COLS.has(k)) updates[k] = v
-    }
-    // When operativas[] is written, recompute the flat rollup columns so the
-    // grid / agenda / billing / tracking (which read the scalar columns) stay
-    // in sync without requiring a separate PATCH.
-    if (Array.isArray(updates.operativas) && updates.operativas.length > 0) {
-      const r = rollupFromOperativasApi(updates.operativas as Record<string, unknown>[])
-      updates.salida = r.salida
-      updates.eta_fiscal = r.eta_fiscal
-      updates.deposito = r.deposito
-      updates.operativa = r.operativa
-      updates.descarga = r.descarga
-      updates.dev = r.dev
-      updates.contenedor = r.contenedor
-      // Peso/Volumen/Bultos TOTAL = suma de los contenedores. Pero NO pisar el
-      // total con 0 cuando los contenedores no tienen el peso desglosado: eso
-      // perdería el total cargado a nivel carga (ej. carga multi-cntr importada
-      // con el total solo en la columna). Solo actualizar si hay suma > 0.
-      if (r.pkgs > 0) updates.pkgs = r.pkgs
-      if (r.kg > 0) updates.kg = r.kg
-      if (r.m3 > 0) updates.m3 = r.m3
-    }
-    if (Object.keys(updates).length === 0) return res.status(400).json({ error: 'No valid fields' })
-    // Pagos: el "quién pagó" lo estampa SIEMPRE el server desde el token.
-    // Marcar (fecha) → by = usuario del token · desmarcar (null) → by = null.
-    let esPago = false
-    for (const k of Object.keys(updates)) {
-      const m = /^pago_(flete|locales|terminal|devolucion)_at$/.exec(k)
-      if (m) { esPago = true; updates[`pago_${m[1]}_by`] = updates[k] ? auditUser(payload as any) : null }
-    }
-    updates.updated_at_ts = Date.now()
-    const { data: updRow, error } = await db.from('shipments').update(updates).eq('id', id).select('ref').maybeSingle()
-    if (error) throw error
-    logAudit(db, payload, 'archived' in updates && Object.keys(updates).length === 1
-      ? (updates.archived ? 'archivar' : 'restaurar')
-      : esPago ? 'pago' : 'editar', 'shipments', updRow?.ref || id, updates)
-    // Timbre de co-edición: avisa a los demás browsers que una carga cambió,
-    // para que refetcheen. Sin esto, el que tenía la grilla abierta seguía
-    // viendo el transporte viejo hasta recargar la página (Brian 31/08).
-    void broadcastTrucksLive('shipment', undefined, clientIdFromRequest(req))
-    return res.status(200).json({ updated: true })
+    const r = await aplicarPatchShipment(db, payload, id, body, clientIdFromRequest(req))
+    return res.status(r.status).json(r.json)
   }
 
   if (req.method === 'POST') {
@@ -2839,6 +2914,34 @@ async function handleDepositoActas(req: VercelRequest, res: VercelResponse, db: 
 // Guarda la ETA CONTRA la que se agendo el retiro: la pantalla deriva
 // "reagendar" cuando la ETA actual difiere (Brian 22/08, turnos escasos).
 
+/** Estampar / deshacer RETIRADO o AVISADO en montecon_agenda. Lo usan el POST
+ *  de montecon-agenda (botones de HOY) y la confirmación del aviso `retire`
+ *  del depósito: misma escritura, misma auditoría. */
+async function marcarMontecon(
+  db: any, payload: TokenPayload | null, ref: string, campo: 'retirado' | 'avisado', marcando: boolean,
+): Promise<{ ok: true } | { ok: false; status: 404; error: string }> {
+  const usuario = auditUser(payload as { user?: string; name?: string } | null)
+  const nowIso = new Date().toISOString()
+  const patch: Record<string, unknown> = {
+    [`${campo}_at`]: marcando ? nowIso : null,
+    [`${campo}_por`]: marcando ? usuario : null,
+    updated_at: nowIso,
+  }
+  const { data: upd, error } = await db.from('montecon_agenda')
+    .update(patch).eq('ref', ref).select('ref')
+  if (error) throw error
+  if (!upd?.length) {
+    // Se puede marcar RETIRADO sin haber agendado antes (retiro directo):
+    // nace la fila con eta_agendada vacía. Desmarcar sin fila no existe.
+    if (!marcando) return { ok: false, status: 404, error: 'Esa carga no tiene agenda de Montecon' }
+    const { error: insErr } = await db.from('montecon_agenda')
+      .insert({ ref, eta_agendada: '', usuario, ...patch })
+    if (insErr) throw insErr
+  }
+  logAudit(db, payload, `${marcando ? 'marcar' : 'desmarcar'} ${campo} montecon`, 'montecon_agenda', ref)
+  return { ok: true }
+}
+
 async function handleMonteconAgenda(req: VercelRequest, res: VercelResponse, db: any, payload: TokenPayload | null) {
   if (req.method === 'GET') {
     const { data, error } = await db.from('montecon_agenda').select('*').limit(2000)
@@ -2867,25 +2970,9 @@ async function handleMonteconAgenda(req: VercelRequest, res: VercelResponse, db:
     const nowIso = new Date().toISOString()
 
     if (v.data.marcar || v.data.desmarcar) {
-      const campo = v.data.marcar || v.data.desmarcar
-      const marcando = Boolean(v.data.marcar)
-      const patch: Record<string, unknown> = {
-        [`${campo}_at`]: marcando ? nowIso : null,
-        [`${campo}_por`]: marcando ? usuario : null,
-        updated_at: nowIso,
-      }
-      const { data: upd, error } = await db.from('montecon_agenda')
-        .update(patch).eq('ref', ref).select('ref')
-      if (error) throw error
-      if (!upd?.length) {
-        // Se puede marcar RETIRADO sin haber agendado antes (retiro directo):
-        // nace la fila con eta_agendada vacía. Desmarcar sin fila no existe.
-        if (!marcando) return res.status(404).json({ error: 'Esa carga no tiene agenda de Montecon' })
-        const { error: insErr } = await db.from('montecon_agenda')
-          .insert({ ref, eta_agendada: '', usuario, ...patch })
-        if (insErr) throw insErr
-      }
-      logAudit(db, payload, `${marcando ? 'marcar' : 'desmarcar'} ${campo} montecon`, 'montecon_agenda', ref)
+      const campo = (v.data.marcar || v.data.desmarcar) as 'retirado' | 'avisado'
+      const r = await marcarMontecon(db, payload, ref, campo, Boolean(v.data.marcar))
+      if (!r.ok) return res.status(r.status).json({ error: r.error })
       return res.status(200).json({ saved: true })
     }
 
@@ -2950,6 +3037,229 @@ async function handleOperatorAssignments(req: VercelRequest, res: VercelResponse
     const { error } = await db.from('operator_assignments').delete().eq('ref', ref)
     if (error) throw error
     return res.status(200).json({ deleted: true })
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' })
+}
+
+// ── Avisos de partners (partner_avisos) ─────────────────────────────────
+// El depósito / transporte PROPONE ("retiré", "devolví el vacío", "desconsolidé
+// stock Nº", "SENASA solicitado") y el equipo CONFIRMA desde HOY. El partner
+// jamás escribe en shipments/trucks: su única escritura es crear el aviso, y
+// solo sobre cargas de su alcance. Confirmar ejecuta la acción que YA existe
+// en la app (misma función, mismo rastro). Spec:
+// docs/superpowers/specs/2026-09-01-partner-hoy-avisos-design.md
+// GET   → partner: los suyos (30 d) · admin: pendientes + resueltos de 7 d
+// POST  → solo depot/transport: {tipo, ref, cntr?, dato?}
+// PATCH ?id= → solo admin/owner: {accion:'confirmar'|'rechazar', motivo?}
+
+const AVISOS_DIAS_PARTNER = 30
+const AVISOS_DIAS_RESUELTOS_ADMIN = 7
+
+const AVISO_COLS = 'id,tipo,ref,cntr,partner_role,partner_filter,partner_email,partner_name,dato,estado,motivo_rechazo,created_at,resolved_at,resolved_by'
+
+/** Patrón para `.ilike()` que matchea EXACTO sin importar mayúsculas: escapa
+ *  los comodines de LIKE (%, _) para que "LCL_201" no matchee "LCLX201". */
+const ilikeExacto = (v: string): string => v.replace(/[\\%_]/g, m => '\\' + m)
+
+const ResolverAvisoSchema = z.object({
+  accion: z.enum(['confirmar', 'rechazar']),
+  motivo: z.string().max(500).optional(),
+})
+
+/** Filas VIVAS de shipments para una ref (case-insensitive, sin archivadas ni
+ *  espejo). Una ref puede tener más de una fila (2 clientes en el mismo
+ *  contenedor): la acción se aplica a todas — físicamente es la misma carga. */
+async function shipmentsVivasPorRef(db: any, ref: string, cols: string): Promise<any[]> {
+  const { data, error } = await db.from('shipments')
+    .select(cols)
+    .ilike('ref', ilikeExacto(ref))
+    .neq('source', 'sheet')
+    .eq('archived', false)
+    .limit(20)
+  if (error) throw error
+  return data || []
+}
+
+/** Ejecuta la acción real de un aviso confirmado. Lanza Error con mensaje
+ *  claro si algo falla: el caller NO marca el aviso como confirmado. */
+async function ejecutarAccionAviso(db: any, payload: TokenPayload | null, aviso: any, clientId?: string): Promise<void> {
+  const ref = refOf(aviso.ref)
+  const dato = (aviso.dato && typeof aviso.dato === 'object') ? aviso.dato : {}
+  const hoy = montevideoTodayIso()
+
+  if (aviso.tipo === 'retire') {
+    // Si está agendada en Montecon → mismo "marcar retirado" que el botón de
+    // HOY. Si no (TCP u otra terminal), sólo se cierra el aviso; la card de HOY
+    // sigue ofreciendo "Avisar al cliente" como hasta ahora.
+    const { data: ag, error } = await db.from('montecon_agenda').select('ref').eq('ref', ref).maybeSingle()
+    if (error) throw new Error(`No pude leer la agenda de Montecon: ${error.message}`)
+    if (ag) {
+      const r = await marcarMontecon(db, payload, ref, 'retirado', true)
+      if (!r.ok) throw new Error(r.error)
+    }
+    return
+  }
+
+  if (aviso.tipo === 'devolvi') {
+    // LIBRE = DEVUELTO por el MISMO camino que el quick edit de LIBRE: patch
+    // nivel carga (columna + todos los contenedores) → aplicarPatchShipment.
+    // LIBRE es dato de la carga, no del contenedor: aunque el aviso traiga un
+    // cntr, se marca la carga entera (ver patchDevolvi).
+    const filas = await shipmentsVivasPorRef(db, ref, 'id, ref, operativas')
+    if (!filas.length) throw new Error(`No encontré la carga ${ref} (¿archivada?). El aviso sigue pendiente.`)
+    for (const fila of filas) {
+      const r = await aplicarPatchShipment(db, payload, fila.id, patchDevolvi(fila), clientId)
+      if (r.status !== 200) throw new Error(String(r.json.error || 'No se pudo marcar DEVUELTO'))
+    }
+    return
+  }
+
+  if (aviso.tipo === 'desconsolide') {
+    // stock + desconsol_date (si estaba vacía) — mismo criterio que la bandeja
+    // de stock, por el mismo PATCH.
+    const filas = await shipmentsVivasPorRef(db, ref, 'id, ref, desconsol_date')
+    if (!filas.length) throw new Error(`No encontré la carga ${ref} (¿archivada?). El aviso sigue pendiente.`)
+    for (const fila of filas) {
+      const r = await aplicarPatchShipment(db, payload, fila.id, patchDesconsolide(fila, dato, hoy), clientId)
+      if (r.status !== 200) throw new Error(String(r.json.error || 'No se pudo guardar el stock'))
+    }
+    return
+  }
+
+  // senasa: el aviso confirmado ES el dato. No toca la operación.
+}
+
+async function handlePartnerAvisos(req: VercelRequest, res: VercelResponse, db: any, payload: TokenPayload) {
+  const esPartner = payload.role === 'depot' || payload.role === 'transport'
+  const esAdmin = payload.role === 'admin'
+
+  if (req.method === 'GET') {
+    if (esPartner) {
+      const vis = await partnerShipmentsVisibles(db, payload)
+      if ('status' in vis) return res.status(vis.status).json({ error: vis.error })
+      if (!vis.alcance) return res.status(200).json({ avisos: [] })
+      const desde = new Date(Date.now() - AVISOS_DIAS_PARTNER * 86_400_000).toISOString()
+      const { data, error } = await db.from('partner_avisos')
+        .select(AVISO_COLS)
+        .eq('partner_role', payload.role)
+        .ilike('partner_filter', ilikeExacto(vis.alcance))
+        .gte('created_at', desde)
+        .order('created_at', { ascending: false })
+        .limit(500)
+      if (error) throw error
+      return res.status(200).json({ avisos: (data || []).map(mapFilaToAviso) })
+    }
+    // Admin/owner: todos los pendientes + los resueltos de los últimos 7 días.
+    const desde = new Date(Date.now() - AVISOS_DIAS_RESUELTOS_ADMIN * 86_400_000).toISOString()
+    const { data, error } = await db.from('partner_avisos')
+      .select(AVISO_COLS)
+      .or(`estado.eq.pendiente,resolved_at.gte.${desde}`)
+      .order('created_at', { ascending: false })
+      .limit(1000)
+    if (error) throw error
+    const allowed = await allowedRefsForPayload(db, payload)
+    return res.status(200).json({ avisos: filterByAllowedRef(data || [], allowed, (r: any) => r.ref).map(mapFilaToAviso) })
+  }
+
+  if (req.method === 'POST') {
+    if (!esPartner) return res.status(403).json({ error: 'Los avisos los crea el depósito o el transporte.' })
+    const hoy = montevideoTodayIso()
+    const v = validarNuevoAviso(payload.role, req.body, hoy)
+    if (!v.ok) return res.status(v.status).json({ error: v.error })
+    const { tipo, ref, cntr, dato } = v.data
+
+    // Alcance FRESCO: sólo sobre cargas que el partner ve en su portal.
+    const vis = await partnerShipmentsVisibles(db, payload)
+    if ('status' in vis) return res.status(vis.status).json({ error: vis.error })
+    const cargas = vis.shipments.filter((s: any) => refOf(s.REF) === ref)
+    if (!cargas.length) {
+      return res.status(403).json({ error: `La carga ${ref} no está en tu alcance.` })
+    }
+    if (cntr && !cargas.some((s: any) => cntrPerteneceACarga(cntr, s))) {
+      return res.status(400).json({ error: `El contenedor ${cntr} no es de la carga ${ref}.` })
+    }
+
+    const partnerEmail = String((payload as any).email || '').trim().toLowerCase()
+    const partnerRole = payload.role as 'depot' | 'transport'
+
+    // Un pendiente por (tipo, ref, cntr): si vuelve a apretar, se reusa.
+    const { data: previo, error: errPrevio } = await db.from('partner_avisos')
+      .select(AVISO_COLS)
+      .eq('tipo', tipo).eq('ref', ref).eq('cntr', cntr).eq('estado', 'pendiente')
+      .order('created_at', { ascending: false })
+      .limit(1)
+    if (errPrevio) throw errPrevio
+    if (previo?.length) return res.status(200).json({ aviso: mapFilaToAviso(previo[0]) })
+
+    const { data: nuevo, error } = await db.from('partner_avisos')
+      .insert({
+        tipo, ref, cntr, dato,
+        partner_role: partnerRole,
+        partner_filter: vis.alcance,
+        partner_email: partnerEmail,
+        partner_name: vis.nombre || null,
+        estado: 'pendiente',
+      })
+      .select(AVISO_COLS)
+      .single()
+    if (error) throw error
+    // Auditoría con el EMAIL del partner (no hay name/user de admin en su token).
+    logAudit(db, { email: partnerEmail } as any, `aviso_partner:${tipo}`, 'partner_avisos', ref, { id: nuevo.id, cntr, dato, partner_filter: vis.alcance })
+    return res.status(200).json({ aviso: mapFilaToAviso(nuevo) })
+  }
+
+  if (req.method === 'PATCH') {
+    if (!esAdmin) return res.status(403).json({ error: 'Los avisos los confirma o rechaza el equipo.' })
+    const id = String(req.query.id || '').trim()
+    if (!id) return res.status(400).json({ error: 'id required' })
+    const v = validate(ResolverAvisoSchema, req.body)
+    if (!v.ok) return res.status(400).json({ error: v.error })
+    const motivo = String(v.data.motivo || '').trim()
+    if (v.data.accion === 'rechazar' && !motivo) {
+      return res.status(400).json({ error: 'Para rechazar hace falta un motivo (el partner lo va a ver).' })
+    }
+
+    const { data: aviso, error: errAviso } = await db.from('partner_avisos').select(AVISO_COLS).eq('id', id).maybeSingle()
+    if (errAviso) throw errAviso
+    if (!aviso) return res.status(404).json({ error: 'Aviso no encontrado' })
+    // Admin acotado por cliente: fuera de su cartera → 404 (igual que shipments).
+    const allowed = await allowedRefsForPayload(db, payload)
+    if (allowed && !allowed.has(refOf(aviso.ref))) return res.status(404).json({ error: 'Aviso no encontrado' })
+    if (aviso.estado !== 'pendiente') {
+      return res.status(409).json({ error: `Ese aviso ya fue ${aviso.estado} por ${aviso.resolved_by || 'alguien del equipo'}.` })
+    }
+
+    const resolvedBy = auditUser(payload as any)
+    const nowIso = new Date().toISOString()
+
+    if (v.data.accion === 'confirmar') {
+      // Primero la acción real; si falla, el aviso queda pendiente y se avisa.
+      try {
+        await ejecutarAccionAviso(db, payload, aviso, clientIdFromRequest(req))
+      } catch (e: any) {
+        console.error('[partner-avisos] confirmar falló:', e?.message)
+        return res.status(500).json({ error: `No pude aplicar el aviso: ${e?.message || 'error desconocido'}. Quedó pendiente.` })
+      }
+    }
+
+    const { data: upd, error } = await db.from('partner_avisos')
+      .update({
+        estado: v.data.accion === 'confirmar' ? 'confirmado' : 'rechazado',
+        motivo_rechazo: v.data.accion === 'rechazar' ? motivo : null,
+        resolved_at: nowIso,
+        resolved_by: resolvedBy,
+      })
+      .eq('id', id)
+      .eq('estado', 'pendiente')
+      .select(AVISO_COLS)
+      .maybeSingle()
+    if (error) throw error
+    if (!upd) return res.status(409).json({ error: 'Ese aviso lo resolvió otra persona hace un instante.' })
+    logAudit(db, payload, `aviso_partner_${v.data.accion}`, 'partner_avisos', refOf(aviso.ref), {
+      id, tipo: aviso.tipo, cntr: aviso.cntr, partner: aviso.partner_filter, dato: aviso.dato, motivo: motivo || undefined,
+    })
+    return res.status(200).json({ aviso: mapFilaToAviso(upd) })
   }
 
   return res.status(405).json({ error: 'Method not allowed' })
