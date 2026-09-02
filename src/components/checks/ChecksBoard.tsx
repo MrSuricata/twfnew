@@ -71,6 +71,10 @@ interface ChecksBoardProps {
   /** Abre la ficha completa de la carga (overlay del panel de detalle) — la ref
    *  de cada fila pasa a ser clickeable (pedido Brian 16/07). */
   onOpenDetail?: (key: string) => void
+  /** Ref a buscar al abrir la pestaña ("Ir a checks" desde HOY, Brian 02/09).
+   *  Cada cambio del valor vuelve a cargar el buscador; el usuario lo puede
+   *  borrar para ver el tablero entero. */
+  focusRef?: string
 }
 
 const EMPTY_ASSIGNMENTS = new Map<string, string | null>()
@@ -87,7 +91,7 @@ function shortWho(by: string | undefined): string {
   return String(by || '').split('@')[0]
 }
 
-export default function ChecksBoard({ shipments = [], dbShipments = [], onPatchShipment, onOpenDetail }: ChecksBoardProps) {
+export default function ChecksBoard({ shipments = [], dbShipments = [], onPatchShipment, onOpenDetail, focusRef }: ChecksBoardProps) {
   // Hoy a medianoche local — para isOperationActive (vía buildChecksUniverse).
   const today = useMemo(() => {
     const d = new Date()
@@ -131,10 +135,20 @@ export default function ChecksBoard({ shipments = [], dbShipments = [], onPatchS
     return () => { if (timer) clearTimeout(timer); unsub() }
   }, [refresh])
 
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useState(() => String(focusRef || '').trim())
   const [soloPendientes, setSoloPendientes] = useState(false)
   const [verLiberadas, setVerLiberadas] = useState(false)
   const [expandedRef, setExpandedRef] = useState<string | null>(null)
+  // "Ir a checks" desde HOY: la pestaña abre filtrada por esa ref Y con la fila
+  // desplegada (en el celular la fila plegada solo muestra "2/5", no QUÉ falta),
+  // arriba de todo (el usuario viene scrolleado desde HOY).
+  useEffect(() => {
+    const q = String(focusRef || '').trim()
+    if (!q) return
+    setSearch(q)
+    setExpandedRef(normalizeRef(q))
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0 })
+  }, [focusRef])
   // Bitácora de gestiones (ref_notas) — compartida con la tarjeta de HOY.
   const { notas, agregar: agregarNota } = useRefNotas()
 

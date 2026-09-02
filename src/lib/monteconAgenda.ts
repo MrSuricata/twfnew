@@ -26,9 +26,16 @@
  * carga a 4 días que acá no existía. Ahora TCP entra en la MISMA ventana que
  * Montecon, en estado 'por_llegar' (informativo, sin botones): se ve qué
  * viene, y el día que llega pasa sola a 'retirar'.
+ *
+ * Sin terminal confirmada (Brian 02/09, segunda vuelta): una FCL por Uruguay
+ * que llega en la ventana y no tiene terminal cargada no entra a ningún retiro
+ * — la card la reclama arriba ("Llegan sin terminal confirmada") con MONTECON /
+ * TCP a un toque. Al completarla, la fila pasa sola a los retiros
+ * (derive-on-read: nada que sincronizar).
  */
 
 import { parseLocalDate } from './shipmentTypes'
+import { isPorUruguay } from './checksTypes'
 
 export type EstadoAgenda = 'sin_agendar' | 'agendada' | 'reagendar' | 'por_llegar' | 'retirar' | 'retirado'
 
@@ -66,9 +73,11 @@ export interface CargaMontecon {
 }
 
 /** Ventana: ya llegadas hace poco (el retiro es DESPUÉS del arribo) + las que
- *  vienen en las próximas dos semanas — el plazo real para pelear un turno. */
+ *  vienen en los próximos 8 días (Brian 02/09: "que esa card muestre los
+ *  retiros que se vienen los próximos 8 días" — eran 14; con TCP adentro la
+ *  card se llenaba de filas informativas). */
 export const MONTECON_DIAS_ATRAS = 5
-export const MONTECON_DIAS_ADELANTE = 14
+export const MONTECON_DIAS_ADELANTE = 8
 
 /** Retirado sin AVISADO: recordatorio visible "un par de días" (Brian 26/08).
  *  Tope de higiene por si nunca lo marcan — lo normal es que salga al avisar. */
@@ -101,6 +110,24 @@ export interface CargaMonteconInput {
   eta?: string | null
   mode?: string | null
   archived?: boolean
+  /** País/zona de destino (dest_country): 'UY' = opera por Montevideo. Solo lo
+   *  usa `cargasSinTerminal` — las de Buenos Aires directo o Chile no tienen
+   *  terminal uruguaya que reclamar. */
+  pais?: string | null
+  /** SALIDA del contenedor (YYYY-MM-DD, la primera operativa o la columna).
+   *  Si ya pasó, el contenedor salió de la terminal: no hay retiro pendiente. */
+  salida?: string | null
+}
+
+/** FCL viva: no archivada y modalidad fcl (LCL/aéreo no retiran contenedor). */
+const esFclViva = (c: CargaMonteconInput): boolean =>
+  !c.archived && txt(c.mode).toLowerCase() === 'fcl'
+
+/** Ya salió de la terminal (SALIDA cargada y ≤ hoy): el retiro dejó de ser
+ *  pendiente aunque nadie haya apretado RETIRADO. */
+const yaSalio = (c: CargaMonteconInput, hoy: string): boolean => {
+  const d = diffDias(txt(c.salida), hoy)
+  return d !== null && d >= 0
 }
 
 /**
@@ -121,7 +148,7 @@ export function cargasMontecon(
 
   const out: CargaMontecon[] = []
   for (const c of cargas || []) {
-    if (c.archived || txt(c.mode).toLowerCase() !== 'fcl') continue
+    if (!esFclViva(c)) continue
     const term = txt(c.terminal).toUpperCase()
     const terminal: CargaMontecon['terminal'] | null =
       term.includes('MONTECON') ? 'MONTECON' : term.includes('TCP') ? 'TCP' : null
@@ -154,13 +181,19 @@ export function cargasMontecon(
       continue
     }
 
+    if (yaSalio(c, hoy)) continue // salió de la terminal sin pasar por RETIRADO
     const dias = diffDias(hoy, eta)
     if (dias === null) continue
-    if (dias < -MONTECON_DIAS_ATRAS || dias > MONTECON_DIAS_ADELANTE) continue
+    if (dias < -MONTECON_DIAS_ATRAS) continue
     let estado: EstadoAgenda
     if (terminal === 'MONTECON') {
       estado = estadoAgenda(eta, a)
+      // REAGENDAR ignora el tope hacia adelante (revisión 02/09): si el buque se
+      // corrió más allá de la ventana, el turno viejo sigue colgado y es justo
+      // lo que hay que ver — con 8 días, un corrimiento así es lo normal.
+      if (dias > MONTECON_DIAS_ADELANTE && estado !== 'reagendar') continue
     } else {
+      if (dias > MONTECON_DIAS_ADELANTE) continue
       // TCP no maneja turnos (Brian 26/08): mientras el buque viene la fila es
       // informativa ('por_llegar', misma ventana que Montecon — Brian 02/09);
       // cuando llegó hay contenedor para retirar. El ciclo es directo:
@@ -189,4 +222,46 @@ export function cargasMontecon(
     if (a.dias !== b.dias) return a.dias - b.dias
     return a.ref.localeCompare(b.ref)
   })
+}
+
+// ── Llegan sin terminal confirmada ───────────────────────────────────────
+
+export interface CargaSinTerminal {
+  dbId: string
+  ref: string
+  cliente: string
+  cntr: string
+  eta: string
+  /** 0 = llega hoy · >0 = por llegar · <0 = ya llegó. */
+  dias: number
+}
+
+/**
+ * FCL vivas que operan por Uruguay, con la terminal VACÍA y ETA dentro de la
+ * misma ventana que los retiros. Sin terminal no se sabe si hay que pelear
+ * turno (Montecon) o esperar el buque (TCP): la card las reclama arriba.
+ * Una terminal distinta de MONTECON/TCP (p. ej. TRP en Buenos Aires) es un
+ * dato cargado, no un faltante — no entra acá. Orden: la que llega antes primero.
+ */
+export function cargasSinTerminal(cargas: CargaMonteconInput[], hoy: string): CargaSinTerminal[] {
+  const out: CargaSinTerminal[] = []
+  for (const c of cargas || []) {
+    if (!esFclViva(c)) continue
+    if (!isPorUruguay(c.pais)) continue
+    if (txt(c.terminal)) continue
+    if (yaSalio(c, hoy)) continue
+    const eta = txt(c.eta)
+    const dias = diffDias(hoy, eta)
+    if (dias === null) continue
+    if (dias < -MONTECON_DIAS_ATRAS || dias > MONTECON_DIAS_ADELANTE) continue
+    out.push({
+      dbId: txt(c.dbId),
+      ref: txt(c.ref),
+      cliente: txt(c.cliente),
+      cntr: txt(c.contenedor),
+      eta,
+      dias,
+    })
+  }
+  return out.sort((a, b) => (a.dias !== b.dias ? a.dias - b.dias : a.ref.localeCompare(b.ref)))
 }
