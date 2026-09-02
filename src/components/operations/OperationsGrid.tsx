@@ -1101,6 +1101,7 @@ export default function OperationsGrid({
         open={pasteOpen}
         onOpenChange={setPasteOpen}
         dbShipments={dbShipments}
+        clientes={clients}
         onPatch={onPatchShipment}
       />
 
