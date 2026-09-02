@@ -54,7 +54,13 @@ function validateBatch<T>(itemSchema: z.ZodSchema<T>, body: unknown): { ok: true
   const results: T[] = []
   for (let i = 0; i < arr.length; i++) {
     const r = validate(itemSchema, arr[i])
-    if (!r.ok) return { ok: false, error: `item[${i}]: ${r.error}` }
+    if (!r.ok) {
+      // Decir CUÁL fila falló: el array viaja entero, así que "item[0]" mandaba
+      // a mirar el cliente equivocado (Cata, 02/09 — el que fallaba era otro).
+      const fila = arr[i] as { name?: unknown; ref?: unknown; id?: unknown } | null
+      const quien = String(fila?.name || fila?.ref || fila?.id || `item ${i + 1}`)
+      return { ok: false, error: `${quien}: ${r.error}` }
+    }
     results.push(r.data)
   }
   return { ok: true, items: results }

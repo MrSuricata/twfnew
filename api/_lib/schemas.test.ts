@@ -139,3 +139,27 @@ describe('ClientLoginSchema', () => {
     expect(ClientLoginSchema.safeParse({ email: 'a@b.co', password: 'x', type: 'partner' }).success).toBe(false)
   })
 })
+
+describe('ClientRowSchema — patrón de cliente', () => {
+  const base = { id: 'cl-x', name: 'X S.A.' }
+  const ok = (pattern: string) => ClientRowSchema.safeParse({ ...base, clientePattern: pattern }).success
+
+  it('acepta el "=" de coincidencia exacta (Brian 02/09: VMG vs EQUIPO ORIGINAL VMG)', () => {
+    expect(ok('=VMG SA')).toBe(true)
+    expect(ok('=VMG SA, =VMG SOCIEDAD ANONIMA')).toBe(true)
+    expect(ok('=CHIAPERO Y ASOC SRL,=CHIAPERO Y ASOCIADOS SRL')).toBe(true)
+  })
+  it('sigue aceptando los patrones de siempre', () => {
+    expect(ok('PERETTI')).toBe(true)
+    expect(ok('BICI PERETTI S.A., PERETTI')).toBe(true)
+    expect(ok('')).toBe(true)
+  })
+  it('los caracteres que no son de un nombre siguen afuera', () => {
+    expect(ok('VMG <script>')).toBe(false)
+    expect(ok('VMG; DROP')).toBe(false)
+  })
+  it('el "=" no cuenta para el mínimo de 4 caracteres', () => {
+    expect(ok('=ABC')).toBe(false)
+    expect(ok('=ABCD')).toBe(true)
+  })
+})

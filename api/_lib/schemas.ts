@@ -44,7 +44,10 @@ export const QuoteRowSchema = z.object({
  *  Nada es obligatorio salvo `name`: el catálogo de clientes existe aunque no
  *  tenga email ni datos legales todavía. El patrón es opcional — si falta, el
  *  login del portal lo deriva de name+aliases (ver admin-login.ts). */
-const clientePatternRe = /^[A-Z0-9ÁÉÍÓÚÜÑ .&,/-]+(,[A-Z0-9ÁÉÍÓÚÜÑ .&,/-]+)*$/i
+// El "=" al principio de un token pide coincidencia EXACTA del nombre
+// (matchesClientePattern, 02/09/2026): sin él acá, guardar el catálogo fallaba
+// con "invalid chars" para CUALQUIER cliente, porque el array viaja entero.
+const clientePatternRe = /^=?[A-Z0-9ÁÉÍÓÚÜÑ .&,/-]+(, *=?[A-Z0-9ÁÉÍÓÚÜÑ .&,/-]+)*$/i
 const optTrimmed = (max: number) => z.string().max(max).transform(s => s.trim()).optional()
 export const ClientRowSchema = z.object({
   id: z.string().min(1).max(100),
@@ -61,7 +64,7 @@ export const ClientRowSchema = z.object({
   createdAt: z.number().int().optional(),
   created_at_ts: z.number().int().optional(),
   clientePattern: z.string().max(400).regex(clientePatternRe, 'invalid chars').refine(
-    (s) => s.split(',').map(t => t.trim()).every(t => t.length >= 4),
+    (s) => s.split(',').map(t => t.trim().replace(/^=/, '')).every(t => t.length >= 4),
     { message: 'cada cliente del patrón (separado por coma) debe tener al menos 4 caracteres' }
   ).optional().or(z.literal('')),
   digestActive: z.boolean().optional(),
