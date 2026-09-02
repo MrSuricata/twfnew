@@ -89,7 +89,7 @@ function AlertaGrande({ tipo }: { tipo: TipoAlerta }) {
 function AlertaTlx() {
   return (
     <span
-      title="La naviera todavía no liberó el telex: sin telex no se puede retirar el contenedor de la terminal."
+      title="Retiro de terminal y la naviera todavía no liberó el telex: sin telex no se puede retirar el contenedor. Consultá antes de mandar la unidad."
       className="inline-flex items-center gap-1.5 rounded-md border border-red-400 bg-white px-2.5 py-1 text-sm font-bold text-red-700"
     >
       <Warning size={16} weight="fill" />

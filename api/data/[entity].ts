@@ -1246,16 +1246,23 @@ async function handlePartnerShipments(req: VercelRequest, res: VercelResponse, d
   // El fallback al shipments_cache (congelado en el cutover) se ELIMINÓ: servir
   // datos podridos en silencio es peor que fallar.
   const { data: rows, error } = await db.from('shipments')
-    .select('ref,cliente,etd,eta,contenedor,n_cntr,doc_number,linea,buque,terminal,tipo,libre,operativas,archived,deposito,transporte,salida,eta_fiscal,operativa,fiscal,descarga,dev,pkgs,kg,m3,observacion')
+    .select('ref,cliente,etd,eta,contenedor,n_cntr,doc_number,linea,buque,terminal,tipo,libre,telex,operativas,archived,deposito,transporte,salida,eta_fiscal,operativa,fiscal,descarga,dev,pkgs,kg,m3,observacion')
     .neq('source', 'sheet')
     .eq('archived', false)
     .limit(5000)
   if (error) throw error
   const allShipments = (rows || []).map((r: any) => {
+    // TLX: el telex vive en la columna booleana `telex` (nivel carga); el TLX
+    // del array sólo está al día si el toggle lo reescribió (post 10/07). Se
+    // deriva igual que dbFclToParsedShipment y el portal de clientes: si el
+    // array no lo tiene, manda la columna. Sin esto el transporte veía "TLX
+    // pendiente" en cargas con el telex liberado (revisión PR #316).
+    const tlxCarga = r.telex ? 'SI' : ''
     const ops = Array.isArray(r.operativas) && r.operativas.length
-      ? r.operativas
+      ? r.operativas.map((op: any) => ({ ...op, TLX: op.TLX || tlxCarga }))
       : ((r.deposito || r.transporte || r.salida || r.eta_fiscal || r.operativa)
           ? [{
+              TLX: tlxCarga,
               DEPOSITO: r.deposito || '', TRANSPORTE: r.transporte || '', SALIDA: r.salida || '',
               ETA_FISC: r.eta_fiscal || '', OPERATIVA: r.operativa || '', CNTR_OP: r.contenedor || '',
               PKGS: r.pkgs || 0, KG: r.kg || 0, M3: r.m3 || 0, DESCRIPCION: r.observacion || '',
@@ -1267,6 +1274,9 @@ async function handlePartnerShipments(req: VercelRequest, res: VercelResponse, d
       CNTR: r.contenedor || '', N: r.n_cntr || '', MBL: r.doc_number || '',
       LINEA: r.linea || '', BUQUE: r.buque || '', TERMINAL: r.terminal || '', TIPO: r.tipo || '',
       LIBRE_HASTA: r.libre || '',
+      // Telex a nivel carga (booleano): el panel lo usa como respaldo del TLX
+      // de la operativa. No es dato sensible.
+      TELEX: !!r.telex,
       operativas: ops,
     }
   })

@@ -108,20 +108,47 @@ const diasEntre = (desdeISO: string, hastaISO: string): number =>
  *  opcionales: si la API vieja no los manda, se toleran ausentes. */
 type OpPartner = OperativasRecord & { OOG?: unknown; MODE?: unknown; STOCK?: unknown; ETA?: unknown }
 
-export function alertasDe(op: OperativasRecord): AlertasCarga {
+/** Terminales de Montevideo: si el camión carga ahí, retira el contenedor. */
+const TERMINALES = ['TCP', 'MONTECON']
+
+/** ¿El camión retira el contenedor de la terminal? Sólo ahí el telex es
+ *  problema suyo: en un trasiego o carga a piso carga en el depósito (GODILCO,
+ *  PLANIR) y el telex lo resolvió el depósito antes. Retiro directo =
+ *  OPERATIVA 'CONTENEDOR…' (mismo criterio que salidaCheck/todayFilters) o el
+ *  lugar de carga es una terminal. */
+export function retiraDeTerminal(op: OperativasRecord): boolean {
+  if (txt(op.OPERATIVA).toUpperCase().startsWith('CONTENEDOR')) return true
+  const lugar = (txt(op.LUGAR_SALIDA) || txt(op.DEPOSITO)).toUpperCase()
+  return TERMINALES.some(t => lugar === t || lugar.startsWith(t + ' '))
+}
+
+/**
+ * Las marcas de una operativa. `cab` es la cabecera de la carga: trae `TELEX`
+ * (booleano, nivel carga) como respaldo del `TLX` de la operativa.
+ *
+ * TLX pendiente se marca SÓLO cuando se cumplen las tres:
+ *  1. el dato viaja (la clave `TLX` existe; el server la deriva de la columna
+ *     `telex` cuando el array no la tiene — sin la clave no se sabe y no se
+ *     inventa);
+ *  2. ni la operativa ni la carga lo tienen liberado;
+ *  3. el camión retira de terminal (ver `retiraDeTerminal`).
+ * Una LCL no tiene telex que liberar.
+ */
+export function alertasDe(op: OperativasRecord, cab?: Record<string, unknown>): AlertasCarga {
   const o = op as OpPartner
   const esLcl = txt(o.MODE).toLowerCase() === 'lcl'
   const madera = esSi(o.WOOD)
   const imo = esSi(o.IMO)
   const oog = esSi(o.OOG)
   const noApilable = esSi(o.NO_APILABLE)
+  const tlxViaja = 'TLX' in (o as object)
+  const tlxLiberado = !isSinTelex(o.TLX) || cab?.TELEX === true
   return {
     madera,
     imo,
     oog,
     noApilable,
-    // Sólo si el dato viaja: sin la clave no se sabe, y una LCL no tiene telex.
-    tlxPendiente: !esLcl && 'TLX' in (o as object) && isSinTelex(o.TLX),
+    tlxPendiente: !esLcl && tlxViaja && !tlxLiberado && retiraDeTerminal(op),
     alguna: madera || imo || oog || noApilable,
   }
 }
@@ -157,7 +184,7 @@ export function hoyCargan(shipments: ParsedShipment[], hoyISO: string): CargaHoy
       pkgs: num(op.PKGS),
       kg: num(op.KG),
       m3: num(op.M3),
-      alertas: alertasDe(op),
+      alertas: alertasDe(op, cab),
     })
   }
   // Con horario primero (en orden), después por depósito: una parada por vez.
@@ -190,7 +217,7 @@ export function cargasEspeciales(
 ): GrupoEspecial[] {
   const porTipo = new Map<TipoAlerta, CargaEspecial[]>()
   for (const { cab, op } of operativasDe(shipments)) {
-    const alertas = alertasDe(op)
+    const alertas = alertasDe(op, cab)
     if (!alertas.alguna) continue
 
     const salida = soloDia(op.SALIDA)

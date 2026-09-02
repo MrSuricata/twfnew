@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   alertasDe,
+  retiraDeTerminal,
   hoyCargan,
   cargasEspeciales,
   avisosRecientes,
@@ -38,17 +39,39 @@ describe('alertasDe — las marcas que cambian cómo se carga', () => {
     expect(alertasDe(op({})).oog).toBe(false)
   })
 
-  it('TLX pendiente sólo cuando el dato viaja y no está liberado', () => {
-    expect(alertasDe(op({ TLX: '' })).tlxPendiente).toBe(true)
-    expect(alertasDe(op({ TLX: 'SI' })).tlxPendiente).toBe(false)
-    expect(alertasDe(op({ TLX: 'TRUE' })).tlxPendiente).toBe(false)
-    const sinDato = op({}) as unknown as Record<string, unknown>
+  it('TLX pendiente: retiro directo de terminal sin telex liberado', () => {
+    expect(alertasDe(op({ TLX: '', OPERATIVA: 'CONTENEDOR' })).tlxPendiente).toBe(true)
+    expect(alertasDe(op({ TLX: '', OPERATIVA: 'CONTENEDOR DIRECTO' })).tlxPendiente).toBe(true)
+    expect(alertasDe(op({ TLX: 'SI', OPERATIVA: 'CONTENEDOR' })).tlxPendiente).toBe(false)
+    expect(alertasDe(op({ TLX: 'TRUE', OPERATIVA: 'CONTENEDOR' })).tlxPendiente).toBe(false)
+  })
+
+  it('también cuando el camión carga en una terminal (LUGAR_SALIDA o DEPOSITO en TCP/MONTECON)', () => {
+    expect(alertasDe(op({ TLX: '', OPERATIVA: 'TRASIEGO', LUGAR_SALIDA: 'MONTECON', DEPOSITO: 'GODILCO' })).tlxPendiente).toBe(true)
+    expect(alertasDe(op({ TLX: '', OPERATIVA: '', DEPOSITO: 'TCP' })).tlxPendiente).toBe(true)
+    expect(retiraDeTerminal(op({ OPERATIVA: 'TRASIEGO', DEPOSITO: 'PLANIR' }))).toBe(false)
+  })
+
+  it('en un trasiego o carga a piso el camión carga en el depósito: el telex no es problema suyo', () => {
+    expect(alertasDe(op({ TLX: '', OPERATIVA: 'TRASIEGO', DEPOSITO: 'GODILCO' })).tlxPendiente).toBe(false)
+    expect(alertasDe(op({ TLX: '', OPERATIVA: 'CARGA A PISO', DEPOSITO: 'PLANIR' })).tlxPendiente).toBe(false)
+  })
+
+  it('sin la clave TLX (operativa sintetizada por una API vieja) no se inventa: sin alerta', () => {
+    const sinDato = op({ OPERATIVA: 'CONTENEDOR' }) as unknown as Record<string, unknown>
     delete sinDato.TLX
     expect(alertasDe(sinDato as unknown as OperativasRecord).tlxPendiente).toBe(false)
   })
 
+  it('TLX vacío en la operativa pero telex liberado a nivel carga (cabecera TELEX): sin alerta', () => {
+    const o = op({ TLX: '', OPERATIVA: 'CONTENEDOR' })
+    expect(alertasDe(o, { TELEX: true }).tlxPendiente).toBe(false)
+    expect(alertasDe(o, { TELEX: false }).tlxPendiente).toBe(true)
+    expect(alertasDe(o, {}).tlxPendiente).toBe(true)
+  })
+
   it('una LCL no tiene telex que liberar: nunca marca TLX pendiente', () => {
-    expect(alertasDe(op({ TLX: '', MODE: 'lcl' })).tlxPendiente).toBe(false)
+    expect(alertasDe(op({ TLX: '', MODE: 'lcl', OPERATIVA: 'CONTENEDOR' })).tlxPendiente).toBe(false)
   })
 
   it('alguna = hay al menos una alerta grande (TLX no cuenta como especial)', () => {
@@ -92,6 +115,13 @@ describe('hoyCargan — lo que el transporte carga hoy', () => {
       descripcion: 'AUTOPARTES', horario: '08:00', pkgs: 24, kg: 12900, m3: 21.75,
     })
     expect(filas[0].alertas.madera).toBe(true)
+  })
+
+  it('retiro directo con el telex liberado a nivel carga (cabecera TELEX) no marca TLX pendiente', () => {
+    const [liberada] = hoyCargan([carga('A1', [{ SALIDA: '2026-09-01', OPERATIVA: 'CONTENEDOR', TLX: '' }], { TELEX: true })], HOY)
+    const [sinTelex] = hoyCargan([carga('A2', [{ SALIDA: '2026-09-01', OPERATIVA: 'CONTENEDOR', TLX: '' }], { TELEX: false })], HOY)
+    expect(liberada.alertas.tlxPendiente).toBe(false)
+    expect(sinTelex.alertas.tlxPendiente).toBe(true)
   })
 
   it('sin LUGAR_SALIDA carga en el depósito de la carga; sin CLIENTE_OP usa el de la cabecera', () => {
