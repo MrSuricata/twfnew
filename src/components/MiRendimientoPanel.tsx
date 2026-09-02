@@ -30,6 +30,7 @@ import {
 } from '@/lib/checksTypes'
 import { getAdminName, getAdminUser } from '@/lib/authClient'
 import { fmtDateDMY } from '@/lib/format'
+import { etaVigente } from '@/lib/salidaCheck'
 
 /** Lunes de la semana de `d`, en ISO local. */
 function lunesDe(d: Date): string {
@@ -123,7 +124,7 @@ export default function MiRendimientoPanel({ dbShipments, reports = [], originPh
       mode: s.mode, archived: s.archived,
       // Fechas por contenedor: cada uno sale su propio día.
       operativas: (s.operativas || []).map(o => ({
-        cntr: String(o.CNTR_OP || ''), salida: o.SALIDA, eta: o.ETA_OP,
+        cntr: String(o.CNTR_OP || ''), salida: o.SALIDA, eta: etaVigente(s.eta, o.ETA_OP),
       })),
     })),
     checksByRef, fotosPorCntr, refsConFotosSinCntr, informesPorCntr, refsConInformeSinCntr, identidades,

@@ -37,7 +37,7 @@ import ContainerQuickEdit, { buildPatchedOperativas } from '../operations/Contai
 import { deriveKnownTransportes } from '@/lib/operationsTypes'
 import { dropPatch, dropPatchTruck } from './agendaDnd'
 import { fmtDateDMY } from '@/lib/format'
-import { avisoSalida, fmtDMY } from '@/lib/salidaCheck'
+import { avisoSalida, fmtDMY, etaVigente } from '@/lib/salidaCheck'
 import { sugerirEtaFiscal, nombreDia } from '@/lib/transitoFiscal'
 import { isSinTelex, mensajeConfirmarSinTelex } from '@/lib/telexCheck'
 import { toast } from 'sonner'
@@ -321,8 +321,9 @@ export default function AgendaCalendar({
         if (!hasCntr) continue
         const hasSalida = (op.SALIDA || '').trim() !== ''
         if (hasSalida) continue
-        // ETA: use operativa-specific ETA_OP if present, fall back to shipment ETA
-        const etaStr = (op.ETA_OP || s.ETA || '').trim()
+        // ETA: la de la CARGA manda (ETA_OP es una copia congelada al hornear);
+        // el contenedor solo si la carga no tiene fecha. Misma regla que HOY.
+        const etaStr = etaVigente(s.ETA, op.ETA_OP)
         const etaDate = parseLocalDate(etaStr)
         if (!etaDate) continue // No ETA → not actionable yet
         const daysUntilEta = Math.ceil((etaDate.getTime() - today.getTime()) / MS_DAY)

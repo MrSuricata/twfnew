@@ -15,6 +15,7 @@
  */
 import type { ParsedShipment, OperativasRecord } from './shipmentTypes'
 import { parseLocalDate } from './shipmentTypes'
+import { etaVigente } from './salidaCheck'
 import { ultimoAviso, type PartnerAviso, type PartnerAvisoTipo } from './partnerAvisos'
 
 /**
@@ -96,9 +97,12 @@ const devuelto = (op: OperativaPartner, cab: ParsedShipment): boolean =>
 const yaRetirado = (op: OperativaPartner): boolean => !!txt(op.RETIRADO)
 
 /** Fecha en que el contenedor sale de la terminal: el turno de Montecon si lo
- *  hay, si no la ETA del buque (la operativa la trae; si no, la cabecera). */
+ *  hay, si no la ETA del buque. La ETA de la CARGA manda: la copia por contenedor
+ *  (ETA_OP) queda congelada al hornear y no se actualiza cuando el buque se corre
+ *  (caso A8163, 02/09: ETA_OP 02/09 con la carga en 11/10). Misma regla que HOY
+ *  admin (etaVigente). */
 const fechaRetiro = (op: OperativaPartner, cab: ParsedShipment): string =>
-  fechaISO(op.TURNO_RETIRO) || fechaISO(op.ETA) || fechaISO(op.ETA_OP) || fechaISO(cab.ETA)
+  fechaISO(op.TURNO_RETIRO) || fechaISO(etaVigente(cab.ETA, op.ETA || op.ETA_OP))
 
 const libreDe = (op: OperativaPartner, cab: ParsedShipment): string =>
   txt(op.LIBRE) || txt(cab.LIBRE_HASTA) || txt(cab.calculatedLibreHasta)
@@ -242,7 +246,7 @@ export function retirosProximos(
         ...base,
         aviso,
         terminal: txt(cab.TERMINAL),
-        eta: fechaISO(op.ETA) || fechaISO(op.ETA_OP) || fechaISO(cab.ETA),
+        eta: fechaISO(etaVigente(cab.ETA, op.ETA || op.ETA_OP)),
         turno: fechaISO(op.TURNO_RETIRO),
         libre: libreDe(op, cab),
         fecha,

@@ -455,11 +455,17 @@ describe('previsión: los pendientes de coordinar también hay que repartirlos',
     expect(d.pendientes).toBe(0)
   })
 
-  it('usa la ETA del contenedor si la tiene, y si no la de la carga', () => {
-    const d = calcularDistribucion(
+  it('la ETA de la carga manda; la del contenedor (ETA_OP, copia congelada) solo si la carga no tiene', () => {
+    // Carga en diciembre con ETA_OP vieja: NO es trabajo de esta semana (caso A8163).
+    const lejos = calcularDistribucion(
       [ship({ ETA: '2026-12-01', operativas: [sinSalida({ ETA_OP: '2026-08-19' })] })],
       CUOTAS, 'semana', HOY, 'prevision')
-    expect(d.pendientes).toBe(1)
+    expect(lejos.pendientes).toBe(0)
+    // Sin ETA en la carga, vale la del contenedor.
+    const soloOp = calcularDistribucion(
+      [ship({ ETA: '', operativas: [sinSalida({ ETA_OP: '2026-08-19' })] })],
+      CUOTAS, 'semana', HOY, 'prevision')
+    expect(soloOp.pendientes).toBe(1)
   })
 
   it('RDM pendiente va al bloque de RDM, no al reparto', () => {
