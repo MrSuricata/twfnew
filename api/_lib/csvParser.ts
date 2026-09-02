@@ -579,6 +579,24 @@ export function fclMirrorRows(shipments: ParsedShipment[], now: number): Record<
  *   so "SA" would not match inside "SANTOS" if it were allowed. Regex metacharacters in
  *   the pattern are escaped.
  */
+/** Para comparar nombres de empresa: mayúsculas, sin puntos ni comas, un solo
+ *  espacio. "VMG S.A." · "VMG S.A" · "vmg sa" → "VMG SA". */
+function normalizarNombre(v: string): string {
+  return v.toUpperCase().replace(/[.,]/g, '').replace(/\s+/g, ' ').trim()
+}
+
+/**
+ * ¿El CLIENTE de una carga pertenece a este cliente del catálogo?
+ *
+ * El patrón es una lista separada por comas. Cada token puede ser:
+ *  · **contiene** (default): "PERETTI" matchea "BICI PERETTI S.A." pero no
+ *    "PERETTIANI" — el token va acotado por caracteres no alfanuméricos.
+ *  · **exacto**, con `=` adelante: "=VMG SA" matchea "VMG SA", "VMG S.A." y
+ *    (se ignoran puntos, comas y espacios de más) pero NO
+ *    "EQUIPO ORIGINAL VMG SA", que es otro cliente (Brian 02/09/2026).
+ *    Es la forma de scopear un cliente cuyo nombre está contenido en el de
+ *    otro: sin esto, VMG veía las cargas de Equipo Original VMG.
+ */
 export function matchesClientePattern(cliente: string, pattern: string): boolean {
   if (!cliente || !pattern) return false
   const clienteUpper = cliente.toUpperCase()
@@ -589,6 +607,7 @@ export function matchesClientePattern(cliente: string, pattern: string): boolean
     .filter(p => p.length >= 4)
   if (patterns.length === 0) return false
   return patterns.some(p => {
+    if (p.startsWith('=')) return normalizarNombre(p.slice(1)) === normalizarNombre(cliente)
     const escaped = p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     const re = new RegExp(`(^|[^A-Z0-9])${escaped}([^A-Z0-9]|$)`)
     return re.test(clienteUpper)
