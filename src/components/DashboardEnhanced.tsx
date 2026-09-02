@@ -54,6 +54,12 @@ import ClientManager from './ClientManager'
 import PartnerManager from './PartnerManager'
 import QuotesManagement from './QuotesManagement'
 import CommandPalette from './CommandPalette'
+import VistaComoMenu from './VistaComoMenu'
+import VistaComoBarra from './VistaComoBarra'
+import DepotDashboard from './DepotDashboard'
+import TransportDashboard from './TransportDashboard'
+import ClientPortal from './ClientPortal'
+import { cargasDePartner, type VistaComo } from '@/lib/vistaComo'
 import TrucksManagement from './trucks/TrucksManagement'
 import DistribucionTransportes from './DistribucionTransportes'
 import BrandLogo from './BrandLogo'
@@ -172,6 +178,11 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
   // Nico arranca en Seguimientos, el resto donde diga su selector de Equipo.
   // Validada contra las pestañas reales — un valor inválido (o 'equipo' sin
   // ser owner) caería en un dashboard en blanco.
+  // "Ver como" (Brian 02/09): el admin mira la pantalla de un depósito, un
+  // transporte o un cliente sin cambiar de sesión. Es una vista previa: los
+  // datos salen de lo que el admin ya tiene y nada se guarda.
+  const [vistaComo, setVistaComo] = useState<VistaComo | null>(null)
+
   // "Ir a checks" desde la card de retiros de HOY: la pestaña Checks abre
   // buscando esa ref. Se limpia al SALIR de Checks por cualquier camino (barra,
   // paleta, logo) — ver el efecto sobre activeTab más abajo.
@@ -345,6 +356,35 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
     return [{ label: breadcrumbMap[activeTab] || 'Dashboard' }]
   }
 
+  if (vistaComo) {
+    const salir = () => setVistaComo(null)
+    const cargasRol = vistaComo.rol === 'client'
+      ? fclShipments
+      : cargasDePartner(fclShipments, vistaComo.rol, vistaComo.valor)
+    return (
+      <div className="min-h-screen bg-background">
+        <VistaComoBarra vista={vistaComo} onSalir={salir} />
+        {vistaComo.rol === 'depot' && (
+          <DepotDashboard shipments={cargasRol} depotName={vistaComo.nombre} userName={`${vistaComo.nombre} (vista previa)`} onLogout={salir} preview />
+        )}
+        {vistaComo.rol === 'transport' && (
+          <TransportDashboard shipments={cargasRol} transportName={vistaComo.nombre} userName={`${vistaComo.nombre} (vista previa)`} onLogout={salir} preview />
+        )}
+        {vistaComo.rol === 'client' && (
+          <ClientPortal
+            clientEmail={vistaComo.valor.includes('@') ? vistaComo.valor : ''}
+            clientName={vistaComo.nombre}
+            clients={clients}
+            reports={reports}
+            shipments={cargasRol}
+            onLogout={salir}
+            preview
+          />
+        )}
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <CommandPalette
@@ -362,6 +402,14 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
               <span className="shrink-0 rounded-full border border-white/40 px-3 py-1 text-[11px] font-bold tracking-widest uppercase text-white/90">Admin</span>
             </div>
             <div className="flex items-center gap-2">
+              {ops && (
+                <VistaComoMenu
+                  shipments={fclShipments}
+                  clients={clients}
+                  onElegir={setVistaComo}
+                  botonClass={`inline-flex items-center gap-1.5 px-3 h-9 ${brand.id === 'med' ? 'rounded-full' : 'rounded-md'} text-sm bg-primary-foreground/10 hover:bg-primary-foreground/20 text-primary-foreground/85 hover:text-primary-foreground transition-colors border border-primary-foreground/10`}
+                />
+              )}
               {ops && <PushBell />}
               {ops && (
               <button

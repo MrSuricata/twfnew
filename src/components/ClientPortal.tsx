@@ -67,9 +67,12 @@ interface ClientPortalProps {
   shipments?: ParsedShipment[]
   clients?: ClientAccount[]
   reports?: OperativeReport[]
+  /** Vista previa desde el admin ("Ver como"): las cargas llegan por props
+   *  (el endpoint del cliente rechaza el token del admin). */
+  preview?: boolean
 }
 
-export default function ClientPortal({ onLogout, clientEmail, clientName = '', shipments = [], clients = [], reports = [] }: ClientPortalProps) {
+export default function ClientPortal({ onLogout, clientEmail, clientName = '', shipments = [], clients = [], reports = [], preview = false }: ClientPortalProps) {
   const [activeTab, setActiveTab] = useState('active')
   const [selectedShipment, setSelectedShipment] = useState<ParsedShipment | null>(null)
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false)
@@ -135,6 +138,9 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
 
   // Fetch client-specific data from server (shipments + reports)
   useEffect(() => {
+    // Vista previa del admin: sus cargas ya vienen por props y el endpoint del
+    // cliente rechazaría su token (401). Ni se intenta.
+    if (preview) { setIsLoadingData(false); return }
     const fetchClientData = async () => {
       try {
         const [shipmentsRes, reportsData, photosData] = await Promise.allSettled([
@@ -158,7 +164,7 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
       }
     }
     fetchClientData()
-  }, [clientEmail])
+  }, [clientEmail, preview])
 
   // Por email SOLO si hay email (email vacío matcheaba al primer cliente sin
   // email del catálogo — "Bienvenido CENA HNOS"); sin match, manda el token.
