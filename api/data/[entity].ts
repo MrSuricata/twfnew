@@ -529,7 +529,14 @@ async function handleClients(req: VercelRequest, res: VercelResponse, db: any) {
       console.warn('[clients] could not pre-check new emails:', e)
     }
 
-    const { error } = await db.from('clients').upsert(rows, { onConflict: 'id' })
+    // defaultToNull:false → PostgREST manda `Prefer: missing=default`. Cuando el
+    // lote viene MEZCLADO (las filas viejas traen digest_active/digest_emails y
+    // la nueva no, que es lo que pasa al crear un cliente desde una carga),
+    // supabase-js arma `columns=` con la unión de claves y a la fila que no
+    // trae la clave le mete NULL — y las dos columnas son NOT NULL. Eso era el
+    // "HTTP 500" de Cata al crear RUEDAS DEL CERRO (02/09). Con el default
+    // (false / '') la fila nueva entra y las demás conservan lo suyo.
+    const { error } = await db.from('clients').upsert(rows, { onConflict: 'id', defaultToNull: false })
     if (error) throw error
 
     // Fire-and-forget welcome emails for new clients (does not block response).
