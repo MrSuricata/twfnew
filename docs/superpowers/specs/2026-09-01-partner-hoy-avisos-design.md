@@ -41,8 +41,10 @@ equipo.
 | estado | `pendiente` · `confirmado` · `rechazado` | |
 | motivo_rechazo, resolved_at, resolved_by | | quién y por qué lo resolvió |
 
-Un aviso pendiente es único por (tipo, ref, cntr): si el partner vuelve a apretar, se
-reusa el pendiente (no se duplica).
+Un aviso pendiente es único por (tipo, ref, cntr) **por partner** (`partner_role` +
+`partner_filter`): si el mismo partner vuelve a apretar, se reusa el pendiente (no se
+duplica). Dos partners con la misma ref en alcance (p. ej. carga repartida entre dos
+depósitos) generan avisos separados: nunca se devuelve un aviso ajeno ni sus contactos.
 
 ## API — entidad `partner-avisos` dentro de `api/data/[entity].ts` (sin función nueva: Hobby tiene 12/12)
 

@@ -58,6 +58,7 @@ import { RefNotaLine, useRefNotas } from './RefNotaLine'
 import { getAdminName } from '@/lib/authClient'
 import { useBrand } from '@/lib/brand'
 import { fmtDateDMY } from '@/lib/format'
+import AvisosPartnersCard from './AvisosPartnersCard'
 import { cargasMontecon, type AgendaRow, type CargaMontecon } from '@/lib/monteconAgenda'
 import { fetchMonteconAgenda, agendarMontecon, desagendarMontecon, marcarMontecon } from '@/lib/dataClient'
 import { fmtDMY } from '@/lib/salidaCheck'
@@ -121,6 +122,10 @@ interface TodayDashboardProps {
   clients?: CatalogClient[]
   /** Navega a otra pestaña del dashboard (el contador de montos abre Pagos). */
   onOpenTab?: (tab: string) => void
+  /** Recarga TODO desde la DB (App.loadDataFromDB). Lo usa la card de avisos
+   *  de partners después de confirmar: LIBRE=DEVUELTO o stock cambian en
+   *  `shipments` y hay que verlos sin F5. */
+  onReloadFromDB?: () => Promise<void>
 }
 
 /**
@@ -144,6 +149,7 @@ export default function TodayDashboard({
   onOpenDetail,
   clients = [],
   onOpenTab,
+  onReloadFromDB,
 }: TodayDashboardProps) {
   const [selected, setSelected] = useState<ParsedShipment | null>(null)
   const [open, setOpen] = useState(false)
@@ -338,6 +344,17 @@ export default function TodayDashboard({
   useEffect(() => {
     fetchMonteconAgenda().then(setAgendaMontecon).catch(() => { /* card muestra sin agenda */ })
   }, [])
+  // Después de confirmar un aviso de partner: `retire` marca retirado en la
+  // agenda Montecon (refetch local) y `devolvi` deja LIBRE=DEVUELTO en la
+  // carga (recarga desde la DB). Todo derive-on-read: nada se copia acá.
+  const onAvisoResuelto = useCallback(async () => {
+    const agenda = fetchMonteconAgenda().then(setAgendaMontecon).catch(() => { /* la card sigue con la agenda vieja */ })
+    await Promise.all([agenda, onReloadFromDB?.()])
+  }, [onReloadFromDB])
+  const shipmentsModo = useMemo(
+    () => (dbShipments || []).map(s => ({ ref: s.ref, mode: s.mode })),
+    [dbShipments],
+  )
   const montecon = useMemo(
     () => cargasMontecon(
       (dbShipments || []).map(s => ({
@@ -539,6 +556,9 @@ export default function TodayDashboard({
           )}
         </div>
       </div>
+
+      {/* ── Avisos de partners (depósito/transporte proponen, el equipo confirma) ── */}
+      <AvisosPartnersCard area="fcl" shipmentsModo={shipmentsModo} onResuelto={onAvisoResuelto} />
 
       {/* ── Estado de carga inicial (sincronizando, sin datos aún) ── */}
       {initialLoading && (
