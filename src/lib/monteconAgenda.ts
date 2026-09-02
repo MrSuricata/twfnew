@@ -18,13 +18,19 @@
  *
  * TCP (Brian 26/08, segunda vuelta): en TCP también hay que retirar el
  * contenedor cuando llega el buque y avisar al cliente — pero SIN turnos, así
- * que nada de agenda/reagenda. Sus filas recién aparecen cuando el buque llegó,
- * en estado 'retirar', y siguen el mismo ciclo RETIRADO → AVISADO.
+ * que nada de agenda/reagenda. Al llegar el buque la fila pasa a 'retirar' y
+ * sigue el mismo ciclo RETIRADO → AVISADO.
+ *
+ * TCP por llegar (Brian 02/09): la card mostraba solo Montecon a dos semanas
+ * y las de TCP recién el día del arribo — "Llegan sin liberar" avisaba de una
+ * carga a 4 días que acá no existía. Ahora TCP entra en la MISMA ventana que
+ * Montecon, en estado 'por_llegar' (informativo, sin botones): se ve qué
+ * viene, y el día que llega pasa sola a 'retirar'.
  */
 
 import { parseLocalDate } from './shipmentTypes'
 
-export type EstadoAgenda = 'sin_agendar' | 'agendada' | 'reagendar' | 'retirar' | 'retirado'
+export type EstadoAgenda = 'sin_agendar' | 'agendada' | 'reagendar' | 'por_llegar' | 'retirar' | 'retirado'
 
 export interface AgendaRow {
   ref: string
@@ -99,10 +105,11 @@ export interface CargaMonteconInput {
 
 /**
  * Las cargas FCL a retirar de terminal: MONTECON (con su estado de agenda de
- * turnos) y TCP (sin turnos — entran recién al llegar el buque, en 'retirar').
+ * turnos) y TCP (sin turnos — 'por_llegar' mientras viene, 'retirar' cuando
+ * el buque llegó). Misma ventana para las dos terminales.
  * Orden: reagendar (el fuego) → TCP llegadas por retirar → sin agendar →
- * agendadas → al FONDO las retiradas pendientes de avisar al cliente. Una
- * fila de agenda de una carga fuera de ventana queda inocua.
+ * agendadas → TCP por llegar → al FONDO las retiradas pendientes de avisar al
+ * cliente. Una fila de agenda de una carga fuera de ventana queda inocua.
  */
 export function cargasMontecon(
   cargas: CargaMonteconInput[],
@@ -149,16 +156,16 @@ export function cargasMontecon(
 
     const dias = diffDias(hoy, eta)
     if (dias === null) continue
+    if (dias < -MONTECON_DIAS_ATRAS || dias > MONTECON_DIAS_ADELANTE) continue
     let estado: EstadoAgenda
     if (terminal === 'MONTECON') {
-      if (dias < -MONTECON_DIAS_ATRAS || dias > MONTECON_DIAS_ADELANTE) continue
       estado = estadoAgenda(eta, a)
     } else {
-      // TCP no maneja turnos (Brian 26/08): la fila recién aparece cuando el
-      // buque llegó y hay contenedor para retirar. El ciclo es directo:
+      // TCP no maneja turnos (Brian 26/08): mientras el buque viene la fila es
+      // informativa ('por_llegar', misma ventana que Montecon — Brian 02/09);
+      // cuando llegó hay contenedor para retirar. El ciclo es directo:
       // RETIRADO → avisar al cliente el traslado a depósito → AVISADO.
-      if (dias > 0 || dias < -MONTECON_DIAS_ATRAS) continue
-      estado = 'retirar'
+      estado = dias > 0 ? 'por_llegar' : 'retirar'
     }
     out.push({
       dbId: txt(c.dbId),
@@ -176,7 +183,7 @@ export function cargasMontecon(
   }
 
   const rango = (e: EstadoAgenda) =>
-    e === 'reagendar' ? 0 : e === 'retirar' ? 1 : e === 'sin_agendar' ? 2 : e === 'agendada' ? 3 : 4
+    e === 'reagendar' ? 0 : e === 'retirar' ? 1 : e === 'sin_agendar' ? 2 : e === 'agendada' ? 3 : e === 'por_llegar' ? 4 : 5
   return out.sort((a, b) => {
     if (rango(a.estado) !== rango(b.estado)) return rango(a.estado) - rango(b.estado)
     if (a.dias !== b.dias) return a.dias - b.dias

@@ -341,6 +341,18 @@ describe('consolidados en las columnas de HOY', () => {
     expect(trucksEnFronteraHoy(viejo, [])).toHaveLength(1)
   })
 
+  it('un camión marcado ENTREGADO sin fecha de arribo no está en frontera (importados 01/09)', () => {
+    const entregado = [mkTruck({ id: 't3', departureDate: THREE_DAYS_AGO, arrivalDate: '', status: 'delivered' })]
+    expect(trucksEnFronteraHoy(entregado, [])).toHaveLength(0)
+  })
+
+  it('un camión que salió hace más de 10 días sin arribo cargado ya no es "de hoy"', () => {
+    const d = new Date(); d.setDate(d.getDate() - 11)
+    const hace11 = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    const olvidado = [mkTruck({ id: 't4', departureDate: hace11, arrivalDate: '' })]
+    expect(trucksEnFronteraHoy(olvidado, [])).toHaveLength(0)
+  })
+
   it('un camión que llega hoy va a fiscal y sale de frontera', () => {
     const trucks = [mkTruck({ id: 't1', departureDate: TWO_DAYS_AGO, arrivalDate: TODAY })]
     expect(trucksLlegandoFiscalHoy(trucks, [])).toHaveLength(1)
