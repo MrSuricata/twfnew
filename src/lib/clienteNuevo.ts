@@ -68,6 +68,10 @@ export async function crearClienteEnCatalogo(nombreCrudo: string): Promise<AltaC
     company: nombre,
     createdAt: Date.now(),
     clientePattern: deriveClientePattern(nombre),
+    // Explícitos: el lote viaja junto con los clientes que ya tienen estos
+    // campos, y una fila sin ellos caía en NOT NULL (02/09/2026).
+    digestActive: false,
+    digestEmails: '',
   }
   await saveClients([...actuales, cliente])
   return { cliente, creado: true }

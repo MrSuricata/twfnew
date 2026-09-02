@@ -1,6 +1,14 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import type { ClientAccount } from './quotationTypes'
-import { idDeCliente, clienteExistente } from './clienteNuevo'
+import { idDeCliente, clienteExistente, crearClienteEnCatalogo } from './clienteNuevo'
+
+const guardado = vi.fn(async (_rows: unknown[]) => {})
+vi.mock('./dataClient', () => ({
+  fetchClients: vi.fn(async () => [
+    { id: 'cl-vmg', name: 'VMG S.A.', email: '', company: 'VMG S.A.', createdAt: 0, clientePattern: '=VMG SA', digestActive: true, digestEmails: 'a@b.co' },
+  ]),
+  saveClients: (rows: unknown[]) => guardado(rows as never),
+}))
 
 const cli = (id: string, name: string, aliases = ''): ClientAccount => ({
   id, name, email: '', company: name, createdAt: 0, aliases,
@@ -36,5 +44,32 @@ describe('clienteExistente — no duplicar el mismo cliente escrito distinto', (
   it('sin nombre no devuelve nada', () => {
     expect(clienteExistente('', catalogo)).toBeUndefined()
     expect(clienteExistente('NUEVO IMPORTADOR SRL', catalogo)).toBeUndefined()
+  })
+})
+
+describe('crearClienteEnCatalogo — el alta desde una carga', () => {
+  it('manda el cliente nuevo con TODOS los campos que el lote ya trae (digest incluido)', async () => {
+    // 02/09/2026: Cata creaba "RUEDAS DEL CERRO" y el server daba 500. La fila
+    // nueva viajaba sin digest_active/digest_emails junto a filas que sí los
+    // traen; PostgREST le metía NULL y las columnas son NOT NULL.
+    const r = await crearClienteEnCatalogo('RUEDAS DEL CERRO')
+    expect(r.creado).toBe(true)
+    expect(r.cliente).toMatchObject({
+      id: 'cl-ruedas-del-cerro', name: 'RUEDAS DEL CERRO', clientePattern: 'RUEDAS DEL CERRO',
+      digestActive: false, digestEmails: '',
+    })
+    const lote = (guardado.mock.calls[0] as unknown as [Array<Record<string, unknown>>])[0]
+    expect(lote).toHaveLength(2)
+    for (const fila of lote) {
+      expect(fila).toHaveProperty('digestActive')
+      expect(fila).toHaveProperty('digestEmails')
+    }
+  })
+  it('si ya está en el catálogo no guarda nada y devuelve el existente', async () => {
+    guardado.mockClear()
+    const r = await crearClienteEnCatalogo('VMG SA')
+    expect(r.creado).toBe(false)
+    expect(r.cliente.id).toBe('cl-vmg')
+    expect(guardado).not.toHaveBeenCalled()
   })
 })
