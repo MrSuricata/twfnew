@@ -35,6 +35,9 @@ interface TransportDashboardProps {
   transportName: string
   userName: string
   onLogout: () => void
+  /** Vista previa desde el admin ("Ver como"): no se piden ni se mandan avisos
+   *  (el token es de admin y escribir sería actuar por el partner). */
+  preview?: boolean
 }
 
 // ── Piezas visuales ─────────────────────────────────────────────────────
@@ -162,7 +165,7 @@ const fechaCorta = (iso: string): string => (iso ? fmtDateDMY(iso.slice(0, 10)) 
 
 // ── Panel ───────────────────────────────────────────────────────────────
 
-export default function TransportDashboard({ shipments, transportName, userName, onLogout }: TransportDashboardProps) {
+export default function TransportDashboard({ shipments, transportName, userName, onLogout, preview = false }: TransportDashboardProps) {
   const hoy = hoyISO()
   const [avisos, setAvisos] = useState<PartnerAviso[]>([])
   const [avisosError, setAvisosError] = useState<string | null>(null)
@@ -182,7 +185,7 @@ export default function TransportDashboard({ shipments, transportName, userName,
       setAvisosCargados(true)
     }
   }, [])
-  useEffect(() => { void cargarAvisos() }, [cargarAvisos])
+  useEffect(() => { if (!preview) void cargarAvisos() }, [cargarAvisos, preview])
 
   const deHoy = useMemo(() => hoyCargan(shipments, hoy), [shipments, hoy])
   const especiales = useMemo(() => cargasEspeciales(shipments, hoy), [shipments, hoy])
@@ -190,6 +193,10 @@ export default function TransportDashboard({ shipments, transportName, userName,
   const totalEspeciales = useMemo(() => new Set(especiales.flatMap(g => g.cargas.map(c => `${c.ref}|${c.cntr}`))).size, [especiales])
 
   const solicitarSenasa = async (c: CargaHoy) => {
+    if (preview) {
+      toast.info('Vista previa', { description: 'Acá el transporte avisa que pidió SENASA y el equipo lo confirma desde HOY.' })
+      return
+    }
     const clave = `${c.ref}|${c.cntr}`
     setEnviando(clave)
     try {

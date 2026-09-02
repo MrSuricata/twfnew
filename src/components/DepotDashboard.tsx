@@ -40,6 +40,9 @@ interface DepotDashboardProps {
   depotName: string
   userName: string
   onLogout: () => void
+  /** Vista previa desde el admin ("Ver como"): no se piden ni se mandan avisos
+   *  (el token es de admin y escribir sería actuar por el partner). */
+  preview?: boolean
 }
 
 // ── Piezas chicas ─────────────────────────────────────────────────────
@@ -144,7 +147,7 @@ const claseSeveridad: Record<SeveridadLibre, { fila: string; badge: string; text
 
 // ── Panel ─────────────────────────────────────────────────────────────
 
-export default function DepotDashboard({ shipments, depotName, userName, onLogout }: DepotDashboardProps) {
+export default function DepotDashboard({ shipments, depotName, userName, onLogout, preview = false }: DepotDashboardProps) {
   const hoy = hoyISO()
   const [avisos, setAvisos] = useState<PartnerAviso[]>([])
   const [avisosError, setAvisosError] = useState<string | null>(null)
@@ -162,7 +165,7 @@ export default function DepotDashboard({ shipments, depotName, userName, onLogou
     }
   }, [])
 
-  useEffect(() => { cargarAvisos() }, [cargarAvisos])
+  useEffect(() => { if (!preview) cargarAvisos() }, [cargarAvisos, preview])
 
   const hoyOps = useMemo(() => operativasDeHoy(shipments, hoy, depotName), [shipments, hoy, depotName])
   const retiros = useMemo(() => retirosProximos(shipments, hoy, depotName, avisos), [shipments, hoy, depotName, avisos])
@@ -175,6 +178,10 @@ export default function DepotDashboard({ shipments, depotName, userName, onLogou
 
   /** Crea el aviso y lo refleja al instante; después se resincroniza con el server. */
   const mandarAviso = async (input: NuevoPartnerAviso, ok: string) => {
+    if (preview) {
+      toast.info('Vista previa', { description: 'Acá el depósito manda el aviso y el equipo lo confirma desde HOY.' })
+      return false
+    }
     const k = `${input.tipo}|${clave(input.ref, input.cntr || '')}`
     if (enviando.has(k)) return
     setEnviando(prev => new Set(prev).add(k))
