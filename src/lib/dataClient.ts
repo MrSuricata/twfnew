@@ -1116,3 +1116,45 @@ export async function desagendarMontecon(ref: string): Promise<void> {
     throw new Error(err.error || `HTTP ${res.status}`)
   }
 }
+
+// ─── Avisos de partners (depósito/transporte proponen, el equipo confirma) ──
+// Contrato: src/lib/partnerAvisos.ts · Spec: docs/superpowers/specs/2026-09-01-partner-hoy-avisos-design.md
+
+/** Partner: sus avisos (30 días). Admin/owner: pendientes + resueltos de 7 días. */
+export async function fetchPartnerAvisos(): Promise<import('./partnerAvisos').PartnerAviso[]> {
+  const res = await authFetch('/api/data/partner-avisos')
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const data = await res.json()
+  return data.avisos || []
+}
+
+/** Partner: proponer una acción sobre una carga de su alcance. Devuelve el aviso
+ *  (el pendiente ya existente si volvió a apretar). */
+export async function crearPartnerAviso(input: import('./partnerAvisos').NuevoPartnerAviso): Promise<import('./partnerAvisos').PartnerAviso> {
+  const res = await authFetch('/api/data/partner-avisos', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
+  const data = await res.json()
+  return data.aviso
+}
+
+/** Admin/owner: confirmar (ejecuta la acción real) o rechazar (con motivo). */
+export async function resolverPartnerAviso(id: string, accion: 'confirmar' | 'rechazar', motivo?: string): Promise<import('./partnerAvisos').PartnerAviso> {
+  const res = await authFetch(`/api/data/partner-avisos?id=${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(motivo ? { accion, motivo } : { accion }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
+  const data = await res.json()
+  return data.aviso
+}
