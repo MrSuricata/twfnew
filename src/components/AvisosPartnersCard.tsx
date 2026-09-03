@@ -24,7 +24,7 @@ import { Textarea } from '@/components/ui/textarea'
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
 } from '@/components/ui/dialog'
-import { Bell, Check, X, CaretDown, CaretRight, CircleNotch, Warehouse, Truck as TruckIcon } from '@phosphor-icons/react'
+import { Bell, Check, X, CaretDown, CaretRight, CircleNotch, Warehouse, Truck as TruckIcon, ArrowUUpLeft } from '@phosphor-icons/react'
 import { useBrand } from '@/lib/brand'
 import { fetchPartnerAvisos, resolverPartnerAviso } from '@/lib/dataClient'
 import type { PartnerAviso } from '@/lib/partnerAvisos'
@@ -46,9 +46,14 @@ interface AvisosPartnersCardProps {
    *  lo suyo (shipments, agenda Montecon…). El aviso resuelto viaja para que
    *  cada HOY decida qué recargar. */
   onResuelto?: (aviso: PartnerAviso) => void | Promise<unknown>
+  /** Abre el panel de la carga desde la referencia (Brian 03/09: "apretar donde
+   *  dice A8050 y que se abra el modal, linkeado"). La resuelve el que monta la
+   *  card, que es quien tiene las filas (dbId ≫ ref). Si no se pasa, la ref
+   *  queda como texto plano — la card no depende de esto para funcionar. */
+  onAbrirCarga?: (ref: string) => void
 }
 
-export default function AvisosPartnersCard({ area, shipmentsModo = [], onResuelto }: AvisosPartnersCardProps) {
+export default function AvisosPartnersCard({ area, shipmentsModo = [], onResuelto, onAbrirCarga }: AvisosPartnersCardProps) {
   const med = useBrand().id === 'med'
   const [avisos, setAvisos] = useState<PartnerAviso[]>([])
   const [cargado, setCargado] = useState(false)
@@ -162,7 +167,21 @@ export default function AvisosPartnersCard({ area, shipmentsModo = [], onResuelt
                     {quienPartner(a)}
                   </span>
                   <span className="text-sm">{etiquetaAviso(a.tipo)}</span>
-                  <span className="ref-med text-sm font-semibold">{a.ref}</span>
+                  {/* La ref abre la carga (Brian 03/09). <button> real, no un
+                      div con onClick: se llega con Tab y se dispara con Enter.
+                      Sin la prop queda el mismo <span> de antes. */}
+                  {onAbrirCarga
+                    ? (
+                      <button
+                        type="button"
+                        className="ref-med text-sm font-semibold hover:underline focus-visible:underline"
+                        onClick={() => onAbrirCarga(a.ref)}
+                        title={`Abrir la carga ${a.ref}`}
+                      >
+                        {a.ref}
+                      </button>
+                    )
+                    : <span className="ref-med text-sm font-semibold">{a.ref}</span>}
                   {a.cntr && <span className="text-xs font-mono text-muted-foreground">{a.cntr}</span>}
                   {dato && <Badge variant="outline" className="text-[10px] tabular-nums">{dato}</Badge>}
                   <span className="text-[11px] text-muted-foreground" title={new Date(a.createdAt).toLocaleString('es-UY')}>
@@ -209,9 +228,13 @@ export default function AvisosPartnersCard({ area, shipmentsModo = [], onResuelt
                 <ul className="mt-1.5 space-y-1">
                   {recientes.map(a => (
                     <li key={a.id} className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+                      {/* `cancelado` = lo deshizo el propio partner (Brian 03/09):
+                          no es un rechazo del equipo, va con icono neutro. */}
                       {a.estado === 'confirmado'
                         ? <Check size={12} weight="bold" className="text-emerald-600 shrink-0" />
-                        : <X size={12} weight="bold" className="text-destructive shrink-0" />}
+                        : a.estado === 'cancelado'
+                          ? <ArrowUUpLeft size={12} weight="bold" className="text-muted-foreground shrink-0" />
+                          : <X size={12} weight="bold" className="text-destructive shrink-0" />}
                       <span>{resumenResuelto(a)}</span>
                       {a.resolvedAt && <span className="text-[10px]">{haceCuanto(a.resolvedAt, ahora)}</span>}
                     </li>

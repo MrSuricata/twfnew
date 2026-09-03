@@ -10,7 +10,7 @@
  */
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
-import { Truck, Sun, Lightning, Bell, CheckCircle, Clock, Warning, CaretDown, CaretRight } from '@phosphor-icons/react'
+import { Truck, Sun, Lightning, Bell, CheckCircle, Clock, Warning, CaretDown, CaretRight, ArrowUUpLeft } from '@phosphor-icons/react'
 import AgendaCalendar from '@/components/agenda/AgendaCalendar'
 import PartnerDashboardShell from '@/components/PartnerDashboardShell'
 import ProximasSalidas from '@/components/ProximasSalidas'
@@ -21,9 +21,9 @@ import { Button } from '@/components/ui/button'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
 import { fmtDateDMY, fmtNum, hoyISO } from '@/lib/format'
 import { formatKg, formatM3 } from '@/lib/truckUtils'
-import { fetchPartnerAvisos, crearPartnerAviso } from '@/lib/dataClient'
+import { fetchPartnerAvisos, crearPartnerAviso, cancelarPartnerAviso } from '@/lib/dataClient'
 import {
-  avisoPendiente, senasaSolicitado, ultimoAviso, PARTNER_AVISO_LABEL,
+  avisoPendiente, senasaSolicitado, ultimoAviso, PARTNER_AVISO_LABEL, puedeCancelarAviso,
   type PartnerAviso, type PartnerAvisoEstado,
 } from '@/lib/partnerAvisos'
 import {
@@ -95,11 +95,17 @@ function AlertaTlx() {
 }
 
 /** Botón SENASA con sus tres estados: pedir · esperando confirmación · ✓. */
-function BotonSenasa({ carga, avisos, enviando, onSolicitar }: {
+/** Deshacer: discreto a propósito — es la salida de emergencia, no una acción del día. */
+const btnDeshacer = 'text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground disabled:opacity-50 disabled:no-underline'
+
+function BotonSenasa({ carga, avisos, enviando, onSolicitar, onDeshacer, deshaciendo = false }: {
   carga: CargaHoy
   avisos: PartnerAviso[]
   enviando: boolean
   onSolicitar: (c: CargaHoy) => void
+  /** Sin la prop no hay Deshacer (vista previa del admin). */
+  onDeshacer?: (a: PartnerAviso) => void
+  deshaciendo?: boolean
 }) {
   if (senasaSolicitado(avisos, carga.ref, carga.cntr)) {
     return (
@@ -112,12 +118,26 @@ function BotonSenasa({ carga, avisos, enviando, onSolicitar }: {
   const pendiente = avisoPendiente(avisos, 'senasa', carga.ref, carga.cntr)
   if (pendiente) {
     return (
-      <span
-        title={`Avisado el ${fmtDateDMY(pendiente.dato?.fecha) || fmtDateDMY(pendiente.createdAt.slice(0, 10))}. El equipo lo confirma desde HOY.`}
-        className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-amber-400 bg-amber-50 px-2.5 py-1 text-sm font-semibold text-amber-800"
-      >
-        <Clock size={16} weight="fill" />
-        SENASA · esperando confirmación
+      <span className="inline-flex items-center gap-1.5">
+        <span
+          title={`Avisado el ${fmtDateDMY(pendiente.dato?.fecha) || fmtDateDMY(pendiente.createdAt.slice(0, 10))}. El equipo lo confirma desde HOY.`}
+          className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-amber-400 bg-amber-50 px-2.5 py-1 text-sm font-semibold text-amber-800"
+        >
+          <Clock size={16} weight="fill" />
+          SENASA · esperando confirmación
+        </span>
+        {/* Deshacer mientras nadie lo confirmó (Brian 03/09). */}
+        {onDeshacer && (
+          <button
+            type="button"
+            className={btnDeshacer}
+            disabled={deshaciendo}
+            onClick={() => onDeshacer(pendiente)}
+            title="Lo mandaste por error: se da de baja. El equipo ve que hubo un aviso y que lo cancelaste."
+          >
+            {deshaciendo ? 'Deshaciendo…' : 'Deshacer'}
+          </button>
+        )}
       </span>
     )
   }
@@ -152,6 +172,8 @@ const ESTADO_AVISO: Record<PartnerAvisoEstado, { texto: string; clase: string; i
   pendiente: { texto: 'Esperando confirmación', clase: 'bg-amber-50 text-amber-800 border-amber-300', icono: <Clock size={14} weight="fill" /> },
   confirmado: { texto: 'Confirmado', clase: 'bg-green-100 text-green-800 border-green-300', icono: <CheckCircle size={14} weight="fill" /> },
   rechazado: { texto: 'Rechazado', clase: 'bg-red-100 text-red-800 border-red-300', icono: <Warning size={14} weight="fill" /> },
+  // Lo deshizo el propio transporte (Brian 03/09): queda a la vista, no se borra.
+  cancelado: { texto: 'Deshecho por vos', clase: 'bg-muted text-muted-foreground border-border', icono: <ArrowUUpLeft size={14} weight="fill" /> },
 }
 
 const fechaCorta = (iso: string): string => (iso ? fmtDateDMY(iso.slice(0, 10)) : '')
@@ -206,6 +228,31 @@ export default function TransportDashboard({ shipments, transportName, userName,
     }
   }
 
+  // Deshacer un aviso mandado por error (Brian 03/09). Solo mientras sigue
+  // PENDIENTE: confirmado significa que el equipo ya lo dio por hecho y lo
+  // corrigen ellos. El server revalida los dos candados (propio + pendiente).
+  const [deshaciendo, setDeshaciendo] = useState<string | null>(null)
+  const quienSoy = useMemo(() => ({ rol: 'transport', alcance: transportName }), [transportName])
+  const puedoDeshacer = (a: PartnerAviso | undefined) => !!a && !preview && puedeCancelarAviso(a, quienSoy).puede
+
+  const deshacerAviso = async (a: PartnerAviso) => {
+    if (deshaciendo) return
+    if (!window.confirm(`¿Deshacer el aviso "${PARTNER_AVISO_LABEL[a.tipo].toLowerCase()} · ${a.ref}"? El equipo va a ver que lo cancelaste.`)) return
+    setDeshaciendo(a.id)
+    try {
+      const cancelado = await cancelarPartnerAviso(a.id)
+      setAvisos(prev => prev.map(x => (x.id === cancelado.id ? cancelado : x)))
+      toast.success('Aviso deshecho', { description: 'Podés volver a avisar cuando corresponda.' })
+      void cargarAvisos()
+    } catch (err) {
+      // El 409 del server ("el equipo ya lo confirmó") trae su propio mensaje.
+      toast.error('No se pudo deshacer el aviso', { description: (err as Error)?.message || 'sin detalles' })
+      void cargarAvisos()
+    } finally {
+      setDeshaciendo(null)
+    }
+  }
+
   return (
     <PartnerDashboardShell
       icon={<Truck size={24} className="text-primary" weight="duotone" />}
@@ -254,7 +301,14 @@ export default function TransportDashboard({ shipments, transportName, userName,
                   </div>
                   <ListaAlertas alertas={c.alertas}>
                     {c.alertas.madera && (
-                      <BotonSenasa carga={c} avisos={avisos} enviando={enviando === `${c.ref}|${c.cntr}`} onSolicitar={solicitarSenasa} />
+                      <BotonSenasa
+                        carga={c}
+                        avisos={avisos}
+                        enviando={enviando === `${c.ref}|${c.cntr}`}
+                        onSolicitar={solicitarSenasa}
+                        onDeshacer={puedoDeshacer(avisoPendiente(avisos, 'senasa', c.ref, c.cntr)) ? deshacerAviso : undefined}
+                        deshaciendo={deshaciendo === avisoPendiente(avisos, 'senasa', c.ref, c.cntr)?.id}
+                      />
                     )}
                   </ListaAlertas>
                 </li>
@@ -354,8 +408,15 @@ export default function TransportDashboard({ shipments, transportName, userName,
                     <span>{PARTNER_AVISO_LABEL[a.tipo]}</span>
                     <span className="text-xs text-muted-foreground">
                       {fechaCorta(a.dato?.fecha || a.createdAt)}
-                      {a.resolvedAt && a.resolvedBy && ` · ${a.estado === 'confirmado' ? 'confirmó' : 'rechazó'} ${a.resolvedBy} el ${fechaCorta(a.resolvedAt)}`}
+                      {/* 'cancelado' lo deshizo el propio transporte: decir "rechazó" ahí sería mentira. */}
+                      {a.resolvedAt && a.resolvedBy && a.estado !== 'cancelado' && ` · ${a.estado === 'confirmado' ? 'confirmó' : 'rechazó'} ${a.resolvedBy} el ${fechaCorta(a.resolvedAt)}`}
+                      {a.resolvedAt && a.estado === 'cancelado' && ` · deshecho el ${fechaCorta(a.resolvedAt)}`}
                     </span>
+                    {a.estado === 'pendiente' && puedoDeshacer(a) && (
+                      <button type="button" className={btnDeshacer} disabled={deshaciendo === a.id} onClick={() => void deshacerAviso(a)}>
+                        {deshaciendo === a.id ? 'Deshaciendo…' : 'Deshacer'}
+                      </button>
+                    )}
                     {a.estado === 'rechazado' && a.motivoRechazo && (
                       <span className="basis-full text-xs text-red-700">Motivo: {a.motivoRechazo}</span>
                     )}

@@ -7,8 +7,13 @@ import {
   cntrPerteneceACarga,
   patchDevolvi,
   patchDesconsolide,
+  puedeCancelarAvisoAPI,
+  filaCancelable,
 } from './partnerAvisosRules.js'
-import { TIPOS_POR_ROL, stockValido } from '../../src/lib/partnerAvisos.js'
+import {
+  TIPOS_POR_ROL, stockValido, puedeCancelarAviso,
+  type PartnerAvisoEstado, type PartnerRol,
+} from '../../src/lib/partnerAvisos.js'
 
 describe('TIPOS_POR_ROL_API sigue al contrato', () => {
   it('es idéntico a TIPOS_POR_ROL de src/lib/partnerAvisos.ts', () => {
@@ -187,5 +192,73 @@ describe('patchDesconsolide (mismo criterio que la bandeja de stock)', () => {
   it('si la carga ya tenía desconsol_date, se respeta', () => {
     expect(patchDesconsolide({ desconsol_date: '2026-08-20' }, { stock: '45678', fecha: '2026-08-30' }, '2026-09-01'))
       .toEqual({ stock: '45678', desconsol_date: '2026-08-20' })
+  })
+})
+
+// ── Deshacer un aviso (Brian 03/09) ───────────────────────────────────────
+// La API tiene su propia copia de la regla (no importa código de src/): estos
+// tests corren las DOS implementaciones sobre la misma matriz y exigen que
+// respondan idéntico. Si alguien toca una y se olvida de la otra, rompe acá.
+
+describe('puedeCancelarAvisoAPI: los dos candados', () => {
+  const propioPendiente = { partner_role: 'depot', partner_filter: 'PLANIR', estado: 'pendiente' }
+  const planir = { rol: 'depot', alcance: 'PLANIR' }
+
+  it('propio y pendiente → sí', () => {
+    expect(puedeCancelarAvisoAPI(filaCancelable(propioPendiente), planir)).toEqual({ puede: true })
+  })
+
+  it('propio pero ya confirmado → no (esa acción ya se aplicó sobre la carga)', () => {
+    const r = puedeCancelarAvisoAPI(filaCancelable({ ...propioPendiente, estado: 'confirmado' }), planir)
+    expect(r.puede).toBe(false)
+    if (!r.puede) expect(r.motivo).toBe('resuelto')
+  })
+
+  it('propio pero rechazado o ya cancelado → no', () => {
+    for (const estado of ['rechazado', 'cancelado']) {
+      const r = puedeCancelarAvisoAPI(filaCancelable({ ...propioPendiente, estado }), planir)
+      expect(r.puede).toBe(false)
+      if (!r.puede) expect(r.motivo).toBe('resuelto')
+    }
+  })
+
+  it('de otro depósito, o del transporte → no, y ni dice en qué estado está', () => {
+    const ajeno = puedeCancelarAvisoAPI(filaCancelable({ ...propioPendiente, partner_filter: 'GODILCO' }), planir)
+    expect(ajeno).toEqual({ puede: false, motivo: 'ajeno', mensaje: 'Ese aviso no es tuyo.' })
+    const otroRol = puedeCancelarAvisoAPI(filaCancelable(propioPendiente), { rol: 'transport', alcance: 'PLANIR' })
+    expect(otroRol).toEqual({ puede: false, motivo: 'ajeno', mensaje: 'Ese aviso no es tuyo.' })
+  })
+
+  it('alcance vacío (partner sin depósito asignado) → no', () => {
+    expect(puedeCancelarAvisoAPI(filaCancelable(propioPendiente), { rol: 'depot', alcance: '' }).puede).toBe(false)
+  })
+
+  it('filaCancelable tolera una fila con columnas nulas', () => {
+    expect(filaCancelable({})).toEqual({ partnerRole: '', partnerFilter: '', estado: '' })
+  })
+})
+
+describe('la copia de la API responde igual que el contrato', () => {
+  it('misma respuesta en toda la matriz rol × alcance × estado', () => {
+    const roles: PartnerRol[] = ['depot', 'transport']
+    const alcances = ['PLANIR', ' planir ', 'GODILCO', '']
+    const estados: PartnerAvisoEstado[] = ['pendiente', 'confirmado', 'rechazado', 'cancelado']
+    let casos = 0
+    for (const rolAviso of roles) {
+      for (const filtroAviso of alcances) {
+        for (const estado of estados) {
+          for (const rolQuien of roles) {
+            for (const alcanceQuien of alcances) {
+              const fila = { partner_role: rolAviso, partner_filter: filtroAviso, estado }
+              const quien = { rol: rolQuien, alcance: alcanceQuien }
+              expect(puedeCancelarAvisoAPI(filaCancelable(fila), quien))
+                .toEqual(puedeCancelarAviso(filaCancelable(fila), quien))
+              casos++
+            }
+          }
+        }
+      }
+    }
+    expect(casos).toBe(2 * 4 * 4 * 2 * 4)
   })
 })
