@@ -206,7 +206,14 @@ export default function HoyCliente({ shipments, alerts, hoyISO, mostrarRuta, mos
               <Marcas ruta={f.ruta} tipo={f.tipo} {...(esperandoEnPuerto ? marcasSoloTipo : marcasMixtas)} />
               <Desc texto={f.descripcion} />
               <Cntr cntr={f.cntr} />
-              <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">En {f.lugar}</span>
+              <span
+                title={f.retirado ? `Retirada de la terminal el ${fmtDateDMY(f.retirado)}` : undefined}
+                className={f.retirado
+                  ? 'text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800'
+                  : 'text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800'}
+              >
+                En {f.lugar}{f.retirado ? ` desde ${fmtDateDMY(f.retirado)}` : ''}
+              </span>
               <Derecha label="Llegó" valor={fmtDateDMY(f.desde)} detalle={`hace ${f.dias}d`} />
             </Fila>
           ))}

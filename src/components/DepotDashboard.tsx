@@ -36,6 +36,7 @@ import {
 import { fmtDateDMY, fmtNum, hoyISO } from '@/lib/format'
 import { formatKg, formatM3 } from '@/lib/truckUtils'
 import { colorDeposito } from '@/lib/depositoColor'
+import { ETIQUETA_RETIRO, DETALLE_RETIRO } from '@/lib/hoyDeposito'
 
 interface DepotDashboardProps {
   shipments: ParsedShipment[]
@@ -242,7 +243,7 @@ export default function DepotDashboard({ shipments, depotName, userName, onLogou
         <Seccion
           icono={<Anchor size={22} weight="duotone" />}
           titulo="Retiros próximos"
-          subtitulo={`de la terminal a tu depósito · desde hace ${RETIROS_DIAS_ATRAS} días hasta ${RETIROS_DIAS_ADELANTE} adelante`}
+          subtitulo={`de la terminal a tu depósito · en verde, las que ya podés ir a buscar · desde hace ${RETIROS_DIAS_ATRAS} días hasta ${RETIROS_DIAS_ADELANTE} adelante`}
           cantidad={retiros.length}
           tono="info"
         >
@@ -251,6 +252,7 @@ export default function DepotDashboard({ shipments, depotName, userName, onLogou
               {retiros.map((r, i) => (
                 <li key={`${r.ref}-${r.cntr}-${i}`}>
                   <PanelFila
+                    tinte={r.estado === 'listo' ? 'bg-emerald-50/70' : undefined}
                     accion={r.aviso?.estado === 'pendiente'
                       ? <EstadoAviso aviso={r.aviso} />
                       : (
@@ -270,6 +272,16 @@ export default function DepotDashboard({ shipments, depotName, userName, onLogou
                   >
                     <FilaTitulo>
                       <Ref>{r.ref}</Ref>
+                      {/* Lo primero que mira el depósito: ¿puedo ir a buscarlo?
+                          Liberación de la naviera + terminal paga (Brian 03/09). */}
+                      <ChipPanel
+                        title={DETALLE_RETIRO[r.estado]}
+                        clase={r.estado === 'listo'
+                          ? 'bg-emerald-600 text-white border-emerald-700'
+                          : 'bg-amber-100 text-amber-900 border-amber-400'}
+                      >
+                        {ETIQUETA_RETIRO[r.estado]}
+                      </ChipPanel>
                       {r.terminal && <ChipPanel clase={colorDeposito(r.terminal)} title="Terminal de la que se retira">{r.terminal}</ChipPanel>}
                       <span className="text-sm text-foreground/80 truncate max-w-full sm:max-w-[220px]" title={r.cliente}>{r.cliente || '—'}</span>
                       <span className="font-mono text-sm whitespace-nowrap">{r.cntr || '—'}{r.tipo && <span className="ml-1 text-muted-foreground">{r.tipo}</span>}</span>

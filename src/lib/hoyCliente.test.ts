@@ -409,3 +409,31 @@ describe('textoDias', () => {
     expect([null, 0, 1, 4, -1, -3].map(textoDias)).toEqual(['', 'hoy', 'mañana', 'en 4d', 'ayer', 'hace 3d'])
   })
 })
+
+describe('el cliente ve "en depósito" cuando el contenedor ya se retiró (Brian 03/09)', () => {
+  const hoy = '2026-09-10'
+  const carga = (extra: Record<string, unknown>, op: Record<string, unknown>) => ({
+    REF: 'A9100', CLIENTE: 'DEMO', ETD: '2026-08-01', ETA: '2026-09-05',
+    PAIS: 'UY', POD: 'MONTEVIDEO', TERMINAL: 'TCP', N: 1, CNTR: 'X1', MODE: 'fcl',
+    operativas: [{ REF: 'A9100', CNTR_OP: 'X1', OPERATIVA: 'TRASIEGO', ...op }],
+    ...extra,
+  }) as unknown as Parameters<typeof esperandoSalida>[0][number]
+
+  it('sin retirar dice dónde está: la terminal', () => {
+    const [f] = esperandoSalida([carga({}, {})], hoy)
+    expect(f.lugar).toBe('terminal TCP')
+    expect(f.retirado).toBe('')
+  })
+  it('retirada dice el depósito y desde cuándo', () => {
+    const [f] = esperandoSalida([carga({ RETIRADO: '2026-09-08' }, { DEPOSITO: 'GODILCO' })], hoy)
+    expect(f.lugar).toBe('depósito GODILCO')
+    expect(f.retirado).toBe('2026-09-08')
+  })
+  it('retirada sin depósito cargado no inventa el nombre', () => {
+    const [f] = esperandoSalida([carga({ RETIRADO: '2026-09-08' }, {})], hoy)
+    expect(f.lugar).toBe('depósito')
+  })
+  it('con salida cargada ya no espera: sale de esta card', () => {
+    expect(esperandoSalida([carga({ RETIRADO: '2026-09-08' }, { SALIDA: '2026-09-09' })], hoy)).toEqual([])
+  })
+})

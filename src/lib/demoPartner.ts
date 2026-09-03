@@ -36,6 +36,8 @@ const carga = (
   MBL: 'DEMO' + ref, LINEA: 'MAERSK', BUQUE: 'DEMO VESSEL ' + ref.slice(-1),
   TERMINAL: 'TCP', LIBRE_HASTA: '', PAIS: 'UY', POL: 'SHANGHAI', POD: 'MONTEVIDEO',
   MODE: 'fcl', containers: [], calculatedN: ops.length, calculatedLibreHasta: '',
+  // Los dos booleanos que decide el equipo y mira el depósito (Brian 03/09).
+  LIBERADA: true, TERMINAL_PAGADA: true,
   operativas: ops.map(o => ({ ...o, REF: ref })),
   ...extra,
 } as unknown as ParsedShipment)
@@ -60,7 +62,7 @@ export function demoPartnerShipments(): ParsedShipment[] {
         FISCAL: 'CACEC', LIBRE: dia(2), PKGS: 180, KG: 3200, M3: 26,
         DESCRIPCION: 'REPUESTOS AGRÍCOLAS',
       }),
-    ], { TERMINAL: 'TCP' }),
+    ], { TERMINAL: 'TCP', TERMINAL_PAGADA: false } as Partial<ParsedShipment>),
     // Ya en depósito, libre VENCIDO (el rojo de la card)
     carga('D9003', 'DEMO GAMMA S.A.', dia(-12), [
       op({
@@ -106,6 +108,6 @@ export function demoPartnerShipments(): ParsedShipment[] {
         SALIDA: dia(9), ETA_FISC: dia(11), FISCAL: 'TORTONE', PKGS: 210, KG: 5400,
         M3: 38, DESCRIPCION: 'HERRAMIENTAS', WOOD: 'SI',
       }),
-    ], { TERMINAL: 'MONTECON' }),
+    ], { TERMINAL: 'MONTECON', LIBERADA: false } as Partial<ParsedShipment>),
   ]
 }

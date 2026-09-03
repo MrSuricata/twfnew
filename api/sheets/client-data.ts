@@ -76,6 +76,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
     }
 
+    // FCL retirada de la terminal: el contenedor ya está en el depósito
+    // uruguayo. El cliente lo ve como "en depósito" en vez de "en terminal"
+    // (Brian 03/09). Solo la FECHA del retiro; el aviso al cliente lo sigue
+    // dando el equipo a mano por mail (AVISADO en HOY), no la web.
+    const retiradoPorRef = new Map<string, string>()
+    {
+      const refsFcl = propias
+        .filter(s => String(s.mode || '').toLowerCase() !== 'lcl')
+        .map(s => String(s.ref || '').trim().toUpperCase())
+        .filter(Boolean)
+      if (refsFcl.length) {
+        const { data: agenda, error: errAgenda } = await db.from('montecon_agenda')
+          .select('ref, retirado_at').in('ref', refsFcl)
+        // Si falla, nadie aparece retirado: se ve como antes, nunca al revés.
+        if (!errAgenda) {
+          for (const a of (agenda || [])) {
+            const f = String((a as any).retirado_at || '').slice(0, 10)
+            if (f) retiradoPorRef.set(String((a as any).ref || '').trim().toUpperCase(), f)
+          }
+        }
+      }
+    }
+
     const shipments = propias
       .filter(s => {
         const cam = camiones.get(String(s.ref || '').toUpperCase())
@@ -88,7 +111,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           eta_fiscal: (s.eta_fiscal as string) || cam?.arrival_date || '',
         }, hoyISO)
       })
-      .map(s => rowToClientShipment(s, camiones.get(String(s.ref || '').toUpperCase()) || null))
+      .map(s => ({
+        ...rowToClientShipment(s, camiones.get(String(s.ref || '').toUpperCase()) || null),
+        RETIRADO: retiradoPorRef.get(String(s.ref || '').trim().toUpperCase()) || '',
+      }))
 
     return res.status(200).json({
       shipments,

@@ -208,6 +208,8 @@ export function operativasDeHoy(shipments: ParsedShipment[], hoyISO: string, dep
 // ── Card 2: retiros próximos ───────────────────────────────────────────
 
 export interface RetiroProximo extends FilaDeposito {
+  /** ¿Se puede retirar? Liberación de la naviera + terminal paga. */
+  estado: EstadoRetiro
   terminal: string
   eta: string
   /** Turno de retiro en Montecon ('' si no hay). */
@@ -245,6 +247,10 @@ export function retirosProximos(
       out.push({
         ...base,
         aviso,
+        estado: estadoRetiro(
+          !!(cab as unknown as { LIBERADA?: boolean }).LIBERADA,
+          !!(cab as unknown as { TERMINAL_PAGADA?: boolean }).TERMINAL_PAGADA,
+        ),
         terminal: txt(cab.TERMINAL),
         eta: fechaISO(etaVigente(cab.ETA, op.ETA || op.ETA_OP)),
         turno: fechaISO(op.TURNO_RETIRO),
@@ -255,6 +261,33 @@ export function retirosProximos(
     }
   }
   return out.sort((a, b) => a.dias - b.dias || a.ref.localeCompare(b.ref))
+}
+
+/** ¿Se puede ir a buscar el contenedor? Dos condiciones, no una (Brian 03/09):
+ *  la naviera tiene que haber liberado Y la terminal tiene que estar paga. Con
+ *  liberación sin pago el depósito va y no se lo dan. */
+export type EstadoRetiro = 'listo' | 'falta_liberacion' | 'falta_pago' | 'faltan_ambos'
+
+export function estadoRetiro(liberada: boolean, terminalPagada: boolean): EstadoRetiro {
+  if (liberada && terminalPagada) return 'listo'
+  if (!liberada && !terminalPagada) return 'faltan_ambos'
+  return liberada ? 'falta_pago' : 'falta_liberacion'
+}
+
+/** Lo que se lee en la fila. "Listo" es la única frase que habilita a salir. */
+export const ETIQUETA_RETIRO: Record<EstadoRetiro, string> = {
+  listo: 'LISTO PARA RETIRAR',
+  falta_liberacion: 'Falta liberación',
+  falta_pago: 'Falta pago de terminal',
+  faltan_ambos: 'Falta liberación y pago',
+}
+
+/** Por qué no está listo, en una frase que el depósito puede reenviar. */
+export const DETALLE_RETIRO: Record<EstadoRetiro, string> = {
+  listo: 'La naviera liberó la carga y la terminal está paga: se puede retirar.',
+  falta_liberacion: 'La naviera todavía no liberó la carga. Lo estamos gestionando.',
+  falta_pago: 'Falta que paguemos la terminal. Lo estamos gestionando.',
+  faltan_ambos: 'Falta la liberación de la naviera y el pago de terminal. Lo estamos gestionando.',
 }
 
 // ── Card 3: LIBRE por vencer / vencidos ────────────────────────────────
