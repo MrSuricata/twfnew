@@ -7,6 +7,7 @@ import { welcomeClientEmail, welcomePartnerEmail, resolveEmailBrand } from '../_
 import { hashPassword } from '../_lib/password.js'
 import { matchesClientePattern } from '../_lib/csvParser.js'
 import { buildClientDigest } from '../_lib/clientDigest.js'
+import { buildDepotDigest, agruparDepositos } from '../_lib/depotDigest.js'
 import { CLIENT_SHIPMENT_COLS } from '../_lib/clientShipments.js'
 import { SHIPMENT_COLS } from '../_lib/shipmentCols.js'
 import {
@@ -137,6 +138,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return handleClients(req, res, db)
       case 'client-digest':
         return handleClientDigest(req, res, db)
+      case 'depot-digest':
+        return handleDepotDigest(req, res, db)
       case 'client-users':
         return handleClientUsers(req, res, db, payload)
       case 'settings':
@@ -453,6 +456,59 @@ async function handleClientDigest(req: VercelRequest, res: VercelResponse, db: a
   if (e2) throw e2
   const hoyISO = new Date().toISOString().slice(0, 10) // corre 09:00 UY = 12:00 UTC, mismo día
   return res.status(200).json(buildClientDigest(clients, rows || [], hoyISO))
+}
+
+// ── Depot digest (mail diario a los depósitos) ──────────────────────
+// Solo lectura. Por cada depósito con acceso activo: qué contenedores tiene
+// pendientes de retirar de la terminal y qué vacíos pendientes de devolver.
+// El envío lo hace n8n (Brian 03/09: "un mail recordatorio una vez al día …
+// y que te mande un enlace al portal para que vayan, se logueen y carguen lo
+// que les falte"). La lógica vive en _lib/depotDigest.
+
+async function handleDepotDigest(req: VercelRequest, res: VercelResponse, db: any) {
+  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
+
+  // El link del mail sale del host del pedido: así el digest de TWF manda al
+  // portal de TWF y el de Mediterránea al suyo, sin hardcodear dominios.
+  const host = String(req.headers['x-forwarded-host'] || req.headers.host || '')
+  const proto = String(req.headers['x-forwarded-proto'] || 'https')
+  const portalUrl = host ? `${proto}://${host}/partner` : '/partner'
+  const generatedAt = new Date().toISOString()
+
+  const { data: users, error } = await db
+    .from('partner_users')
+    .select('email, name, filter_value, active, role')
+    .eq('role', 'depot')
+    .eq('active', true)
+  if (error) throw error
+  const grupos = agruparDepositos(users || [])
+  if (!grupos.length) return res.status(200).json({ generatedAt, portalUrl, depositos: [] })
+
+  // Las cargas se piden por el MISMO camino que usa el portal, una vez por
+  // depósito: el mail no puede listar algo que el depósito no ve al entrar, y
+  // el saneo (whitelist de columnas, sin montos ni fechas de pago) es
+  // literalmente el mismo código. Se paga con N consultas — es una vez por día.
+  const shipments: any[] = []
+  for (const g of grupos) {
+    const vis = await partnerShipmentsVisibles(db, { role: 'depot', filterValue: g.nombre, email: '', name: g.nombre })
+    if ('status' in vis) continue // acceso desactivado: ese depósito no recibe nada
+    shipments.push(...vis.shipments)
+  }
+
+  // Misma ventana que ve el partner en su portal, para que un aviso ya mandado
+  // (o ya confirmado) se refleje igual en el mail.
+  const desde = new Date(Date.now() - AVISOS_DIAS_PARTNER * 86_400_000).toISOString()
+  const { data: avisosRows, error: errAvisos } = await db
+    .from('partner_avisos')
+    .select(AVISO_COLS)
+    .eq('partner_role', 'depot')
+    .gte('created_at', desde)
+    .limit(2000)
+  if (errAvisos) throw errAvisos
+
+  const hoyISO = montevideoTodayIso()
+  const { depositos } = buildDepotDigest(users || [], shipments, (avisosRows || []).map(mapFilaToAviso), hoyISO)
+  return res.status(200).json({ generatedAt, portalUrl, depositos })
 }
 
 // ── Clients ─────────────────────────────────────────────────────────
