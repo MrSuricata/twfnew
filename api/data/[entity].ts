@@ -1347,6 +1347,9 @@ async function partnerShipmentsVisibles(db: any, payload: any): Promise<
       // igual: la operativa manda y la carga es el respaldo.
       WOOD_CARGA: r.wood ? 'SI' : '',
       OOG: r.oog ? 'SI' : '',
+      // Descripción de la mercadería a nivel carga (shipments.observacion): es
+      // el respaldo de la op cuando DESCRIPCION viene vacía (casi siempre).
+      DESCRIPCION_CARGA: r.observacion || '',
       operativas: ops,
     }
   })
@@ -1360,7 +1363,7 @@ async function partnerShipmentsVisibles(db: any, payload: any): Promise<
   // el SELECT no la trae, pero cualquier campo sensible que alguien agregue
   // mañana adentro de operativas saldría solo. Mismo criterio que el portal de
   // clientes (api/_lib/clientShipments.ts).
-  const opSegura = (op: any, rolEsTransporte: boolean, oogCarga: string, woodCarga: string) => ({
+  const opSegura = (op: any, rolEsTransporte: boolean, oogCarga: string, woodCarga: string, descripcionCarga = '') => ({
     CNTR_OP: op.CNTR_OP || '',
     DEPOSITO: op.DEPOSITO || '',
     // El transporte ajeno NO se muestra: en una operativa compartida
@@ -1390,8 +1393,11 @@ async function partnerShipmentsVisibles(db: any, payload: any): Promise<
     // OOG (sobredimensionada) es dato de la CARGA (shipments.oog): el
     // transporte necesita unidad especial y el depósito, permisos.
     OOG: oogCarga,
-    // Descripción de la mercadería: la necesitan para saber qué cargan.
-    DESCRIPCION: op.DESCRIPCION || '',
+    // Descripción de la mercadería: la necesitan para saber qué cargan. En
+    // casi todas las cargas vive en `observacion` de la carga y la operativa
+    // viene vacía (A8121 "MOTOPARTES" salía "—" en el Plan de carga, 03/09):
+    // la operativa manda y la carga es el respaldo.
+    DESCRIPCION: op.DESCRIPCION || descripcionCarga || '',
   })
   const filtered = allShipments.map((shipment: any) => {
     const operativas: any[] = shipment.operativas || []
@@ -1414,7 +1420,7 @@ async function partnerShipmentsVisibles(db: any, payload: any): Promise<
     // los muestre, llegaban en el JSON crudo). Se quitan los financieros; se conserva
     // CLIENTE + lo operativo (lo necesitan para operar).
     const safe = { ...shipment }
-    delete safe.WOOD_CARGA
+    delete safe.WOOD_CARGA; delete safe.DESCRIPCION_CARGA // ya viajan dentro de cada operativa
     delete safe.C_TERMINAL; delete safe.C_DEV; delete safe.LOCALES
     delete safe.FLETE; delete safe.FORMA_DE_PAGO; delete safe.VTO
     const esTransporte = payload.role === 'transport'
@@ -1425,7 +1431,7 @@ async function partnerShipmentsVisibles(db: any, payload: any): Promise<
       safe.TURNO_RETIRO = ag?.fecha_retiro || ''
       safe.RETIRADO = ag?.retirado_at || ''
     }
-    return { ...safe, operativas: matchingOps.map((op: any) => opSegura(op, esTransporte, shipment.OOG || '', shipment.WOOD_CARGA || '')) }
+    return { ...safe, operativas: matchingOps.map((op: any) => opSegura(op, esTransporte, shipment.OOG || '', shipment.WOOD_CARGA || '', String(shipment.DESCRIPCION_CARGA || ''))) }
   }).filter(Boolean)
 
   return { shipments: filtered, alcance: rawFilter.trim(), nombre }

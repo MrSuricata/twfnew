@@ -14,13 +14,14 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { toast } from 'sonner'
 import {
   Warehouse, Anchor, ArrowUUpLeft, Package, ChatCircleDots,
-  CheckCircle, Clock, XCircle, Truck as TruckIcon, ArrowsLeftRight,
+  CheckCircle, Clock, XCircle, ArrowsLeftRight,
 } from '@phosphor-icons/react'
 import AgendaCalendar from '@/components/agenda/AgendaCalendar'
 import PartnerDashboardShell from '@/components/PartnerDashboardShell'
 import ProximasSalidas from '@/components/ProximasSalidas'
 import AvisoOperativo from '@/components/AvisoOperativo'
 import PanelCard, { PanelFila, FilaTitulo, FilaDatos, Ref, Chip as ChipPanel, Dato, type TonoPanel } from './partner/PanelCard'
+import ChipTransporte from './trucks/ChipTransporte'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
 import { fetchPartnerAvisos, crearPartnerAviso } from '@/lib/dataClient'
 import {
@@ -475,9 +476,8 @@ function FilaOperativaHoy({ o }: { o: OperativaHoy }) {
         </FilaTitulo>
         <FilaDatos>
           {o.motivo !== 'retiro' && (
-            <span className="inline-flex items-center gap-1.5 whitespace-nowrap" title="Transporte que viene a cargar">
-              <TruckIcon size={16} weight="duotone" className="text-muted-foreground" />
-              <b className="text-foreground">{o.transporte || 'transporte a confirmar'}</b>
+            <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+              <ChipTransporte transporte={o.transporte} />
               {o.horario && <span>· {o.horario}</span>}
             </span>
           )}
