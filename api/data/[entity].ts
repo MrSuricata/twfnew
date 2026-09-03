@@ -1295,11 +1295,33 @@ async function partnerShipmentsVisibles(db: any, payload: any): Promise<
     // mode/stock/oog (spec HOY partners 01/09): el modo y el stock de las LCL para
     // el depósito que desconsolida, y la marca OOG para conseguir unidad/permisos.
     // telex: respaldo del TLX de la operativa para el aviso "TLX pendiente".
-    .select('ref,cliente,etd,eta,contenedor,n_cntr,doc_number,linea,buque,terminal,tipo,libre,telex,operativas,archived,deposito,transporte,salida,eta_fiscal,operativa,fiscal,descarga,dev,pkgs,kg,m3,observacion,mode,stock,oog,wood')
+    // monto_terminal / pago_terminal_at NO viajan al partner: solo alimentan el
+    // booleano TERMINAL_PAGADA (el depósito no ve plata).
+    .select('ref,cliente,etd,eta,contenedor,n_cntr,doc_number,linea,buque,terminal,tipo,libre,telex,operativas,archived,deposito,transporte,salida,eta_fiscal,operativa,fiscal,descarga,dev,pkgs,kg,m3,observacion,mode,stock,oog,wood,monto_terminal,pago_terminal_at')
     .neq('source', 'sheet')
     .eq('archived', false)
     .limit(5000)
   if (error) throw error
+  // ¿Se puede retirar? (Brian 03/09) El depósito preguntaba por teléfono si el
+  // contenedor ya estaba liberado y la terminal paga. Son dos datos que el
+  // equipo YA marca: LIBERADO en Checks y el pago de terminal en Pagos. Viajan
+  // como dos booleanos — nunca montos ni fechas de pago.
+  const refsLiberadas = new Set<string>()
+  if (payload?.role === 'depot') {
+    const refs = (rows || []).map((r: any) => String(r.ref || '').trim().toUpperCase()).filter(Boolean)
+    if (refs.length) {
+      const { data: checks, error: errChecks } = await db.from('ref_checks')
+        .select('ref, steps').in('ref', refs)
+      // Si falla, ninguna sale "liberada": es el lado conservador (el depósito
+      // consulta antes de ir), nunca al revés.
+      if (!errChecks) {
+        for (const c of (checks || [])) {
+          if ((c as any)?.steps?.liberado?.done) refsLiberadas.add(String((c as any).ref || '').trim().toUpperCase())
+        }
+      }
+    }
+  }
+
   // Turnos de Montecon (solo depósito): fecha del turno conseguido y si ya se
   // retiró. Viaja únicamente cuando la terminal de la carga es MONTECON.
   const agendaPorRef = new Map<string, { fecha_retiro: string; retirado_at: string }>()
@@ -1350,6 +1372,11 @@ async function partnerShipmentsVisibles(db: any, payload: any): Promise<
       // Descripción de la mercadería a nivel carga (shipments.observacion): es
       // el respaldo de la op cuando DESCRIPCION viene vacía (casi siempre).
       DESCRIPCION_CARGA: r.observacion || '',
+      // ¿Está liberada por la naviera? (check de cierre en ref_checks)
+      LIBERADA: refsLiberadas.has(String(r.ref || '').trim().toUpperCase()),
+      // ¿Está paga la terminal? Estampado en Pagos, o monto 0 (convención de la
+      // planilla vieja: 0 = ya pagado). null/undefined = sin datos = NO pagada.
+      TERMINAL_PAGADA: !!r.pago_terminal_at || Number(r.monto_terminal) === 0,
       operativas: ops,
     }
   })
@@ -3126,15 +3153,15 @@ async function ejecutarAccionAviso(db: any, payload: TokenPayload | null, aviso:
   const hoy = montevideoTodayIso()
 
   if (aviso.tipo === 'retire') {
-    // Si está agendada en Montecon → mismo "marcar retirado" que el botón de
-    // HOY. Si no (TCP u otra terminal), sólo se cierra el aviso; la card de HOY
-    // sigue ofreciendo "Avisar al cliente" como hasta ahora.
-    const { data: ag, error } = await db.from('montecon_agenda').select('ref').eq('ref', ref).maybeSingle()
-    if (error) throw new Error(`No pude leer la agenda de Montecon: ${error.message}`)
-    if (ag) {
-      const r = await marcarMontecon(db, payload, ref, 'retirado', true)
-      if (!r.ok) throw new Error(r.error)
-    }
+    // Mismo "marcar retirado" que el botón de HOY, con agenda o sin ella:
+    // marcarMontecon crea la fila si no existe. Antes solo se estampaba cuando
+    // la carga estaba agendada en Montecon, así que un retiro de TCP cerraba el
+    // aviso y no disparaba nada — el recordatorio de avisarle al cliente no
+    // aparecía nunca (Brian 03/09: "el retiré de TCP también debería, para
+    // Montecon"). El ciclo sigue siendo RETIRADO → el equipo avisa por mail →
+    // AVISADO a mano: nada se le manda solo al cliente.
+    const r = await marcarMontecon(db, payload, ref, 'retirado', true)
+    if (!r.ok) throw new Error(r.error)
     return
   }
 

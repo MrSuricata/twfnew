@@ -8,6 +8,7 @@ import {
   RETIROS_DIAS_ATRAS,
   RETIROS_DIAS_ADELANTE,
   LIBRE_DIAS_AVISO,
+  estadoRetiro, ETIQUETA_RETIRO,
 } from './hoyDeposito'
 import type { OperativaPartner } from './hoyDeposito'
 import type { ParsedShipment } from './shipmentTypes'
@@ -277,5 +278,25 @@ describe('estadoAvisoDe — el último aviso de esa carga/contenedor', () => {
   it('un aviso sin contenedor (cntr vacío) vale para la ref entera', () => {
     const a = estadoAvisoDe([aviso({ tipo: 'devolvi', ref: 'A1', cntr: '', estado: 'pendiente' })], 'devolvi', 'A1', 'MRKU1')
     expect(a?.estado).toBe('pendiente')
+  })
+})
+
+describe('estadoRetiro — dos condiciones, no una (Brian 03/09)', () => {
+  it('listo solo con liberación Y terminal paga', () => {
+    expect(estadoRetiro(true, true)).toBe('listo')
+  })
+  it('liberada pero sin pagar la terminal NO es listo: el depósito va y no se lo dan', () => {
+    expect(estadoRetiro(true, false)).toBe('falta_pago')
+  })
+  it('paga pero sin liberar tampoco', () => {
+    expect(estadoRetiro(false, true)).toBe('falta_liberacion')
+  })
+  it('sin nada, dice que faltan las dos', () => {
+    expect(estadoRetiro(false, false)).toBe('faltan_ambos')
+  })
+  it('cada estado tiene su etiqueta y solo una habilita', () => {
+    expect(ETIQUETA_RETIRO.listo).toBe('LISTO PARA RETIRAR')
+    const otras = ['falta_liberacion', 'falta_pago', 'faltan_ambos'] as const
+    for (const e of otras) expect(ETIQUETA_RETIRO[e]).toMatch(/^Falta/)
   })
 })

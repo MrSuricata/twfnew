@@ -449,6 +449,9 @@ export interface FilaEsperando extends FilaBase {
   lugar: string
   /** true = ruta directa con fiscal: está en el puerto de destino, no en Montevideo. */
   enPuerto: boolean
+  /** Día en que se retiró de la terminal ('' si sigue ahí). Con fecha, la carga
+   *  ya está en el depósito uruguayo, no en el puerto. */
+  retirado: string
   /** ETA a Montevideo (ISO). */
   desde: string
   /** Días desde que llegó (≥ 1: el día de la ETA todavía está "llegando"). */
@@ -465,10 +468,13 @@ export function esperandoSalida(shipments: ParsedShipment[], hoyISO: string): Fi
     const eta = isoDia(s.ETA)
     if (!eta || diffDias(hoyISO, eta) >= 0) continue // sin ETA no se afirma que llegó; el día 0 es "llega hoy"
     const uy = porUruguay(s)
+    // Retirado de la terminal: está en el depósito, aunque no tenga salida.
+    const retirado = isoDia((s as unknown as { RETIRADO?: string }).RETIRADO) || ''
     for (const o of ops(s)) {
       if (isoDia(o.SALIDA)) continue // tiene salida (pasada, de hoy o programada) → card 1 o en camino
       if (fiscalAlcanzada(o, hoyISO)) continue
-      const lugar = txt(o.LUGAR_SALIDA)
+      const lugar = (retirado && (txt(o.DEPOSITO) ? `depósito ${txt(o.DEPOSITO)}` : 'depósito'))
+        || txt(o.LUGAR_SALIDA)
         || (uy
           ? (txt(s.TERMINAL) ? `terminal ${txt(s.TERMINAL)}` : 'terminal')
           : (txt(s.POD) ? `puerto ${txt(s.POD)}` : 'puerto'))
@@ -477,6 +483,7 @@ export function esperandoSalida(shipments: ParsedShipment[], hoyISO: string): Fi
         descripcion: txt(o.DESCRIPCION),
         cntr: txt(o.CNTR_OP),
         lugar,
+        retirado,
         enPuerto: !uy,
         desde: eta,
         dias: -diffDias(hoyISO, eta),
