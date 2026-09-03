@@ -23,9 +23,9 @@ import AvisoOperativo from '@/components/AvisoOperativo'
 import PanelCard, { PanelFila, FilaTitulo, FilaDatos, Ref, Chip as ChipPanel, Dato, type TonoPanel } from './partner/PanelCard'
 import ChipTransporte from './trucks/ChipTransporte'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
-import { fetchPartnerAvisos, crearPartnerAviso } from '@/lib/dataClient'
+import { fetchPartnerAvisos, crearPartnerAviso, cancelarPartnerAviso } from '@/lib/dataClient'
 import {
-  PARTNER_AVISO_LABEL, stockValido,
+  PARTNER_AVISO_LABEL, stockValido, puedeCancelarAviso,
   type PartnerAviso, type NuevoPartnerAviso,
 } from '@/lib/partnerAvisos'
 import {
@@ -88,12 +88,32 @@ function Medidas({ pkgs, kg, m3 }: { pkgs: number; kg: number; m3: number }) {
   return <span className="text-xs text-muted-foreground tabular-nums whitespace-nowrap">{partes.join(' · ')}</span>
 }
 
-/** Estado del aviso ya mandado sobre esa fila: esperando o rechazado con motivo. */
-function EstadoAviso({ aviso }: { aviso: PartnerAviso }) {
+/** Estado del aviso ya mandado sobre esa fila: esperando o rechazado con motivo.
+ *  Mientras está pendiente va al lado un "Deshacer" discreto (Brian 03/09: "que
+ *  el depósito pueda deshacer una acción si se equivoca"). Confirmado ya no:
+ *  esa acción se aplicó sobre la carga y la corrige el equipo. */
+function EstadoAviso({ aviso, onDeshacer, deshaciendo = false }: {
+  aviso: PartnerAviso
+  onDeshacer?: (a: PartnerAviso) => void
+  deshaciendo?: boolean
+}) {
   if (aviso.estado === 'pendiente') {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800" title={`Avisado el ${fmtDateDMY(aviso.createdAt.slice(0, 10))} — el equipo todavía no lo confirmó`}>
-        <Clock size={13} weight="fill" /> Esperando confirmación
+      <span className="inline-flex items-center gap-1.5">
+        <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800" title={`Avisado el ${fmtDateDMY(aviso.createdAt.slice(0, 10))} — el equipo todavía no lo confirmó`}>
+          <Clock size={13} weight="fill" /> Esperando confirmación
+        </span>
+        {onDeshacer && (
+          <button
+            type="button"
+            className={btnDeshacer}
+            disabled={deshaciendo}
+            onClick={() => onDeshacer(aviso)}
+            title="Lo mandaste por error: se da de baja. El equipo ve que hubo un aviso y que lo cancelaste."
+          >
+            {deshaciendo ? 'Deshaciendo…' : 'Deshacer'}
+          </button>
+        )}
       </span>
     )
   }
@@ -136,13 +156,40 @@ function Vacio({ texto }: { texto: string }) {
 const btnPrimario = 'h-8 px-3 rounded-full bg-primary text-primary-foreground text-xs font-bold hover:opacity-90 transition-opacity disabled:opacity-50'
 const btnBorde = 'h-8 px-3 rounded-full border border-primary/40 text-xs font-semibold text-primary hover:bg-primary/10 transition-colors disabled:opacity-50'
 const btnGris = 'h-8 px-2 rounded-full border border-border text-xs text-muted-foreground hover:bg-muted transition-colors'
+/** Deshacer: discreto a propósito — es la salida de emergencia, no una acción del día. */
+const btnDeshacer = 'text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground disabled:opacity-50 disabled:no-underline'
 const inputChico = 'h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring/50'
 
-const claseSeveridad: Record<SeveridadLibre, { fila: string; badge: string; texto: (d: number) => string }> = {
-  vencido: { fila: 'border-red-300 bg-red-50/60', badge: 'bg-red-600 text-white', texto: d => `vencido hace ${-d}d` },
-  hoy: { fila: 'border-orange-300 bg-orange-50/60', badge: 'bg-orange-500 text-white', texto: () => 'vence HOY' },
-  urgente: { fila: 'border-amber-300 bg-amber-50/50', badge: 'bg-amber-400 text-amber-950', texto: d => `vence en ${d}d` },
-  proximo: { fila: 'border-border bg-background/50', badge: 'bg-slate-200 text-slate-800', texto: d => `vence en ${d}d` },
+const claseSeveridad: Record<SeveridadLibre, { fila: string; badge: string }> = {
+  vencido: { fila: 'border-red-300 bg-red-50/60', badge: 'bg-red-600 text-white' },
+  hoy: { fila: 'border-orange-300 bg-orange-50/60', badge: 'bg-orange-500 text-white' },
+  urgente: { fila: 'border-amber-300 bg-amber-50/50', badge: 'bg-amber-400 text-amber-950' },
+  proximo: { fila: 'border-border bg-background/50', badge: 'bg-slate-200 text-slate-800' },
+  // Sin fecha de LIBRE no hay plazo: se pinta en celeste (dato faltante), nunca
+  // con los colores de vencimiento.
+  sin_dato: { fila: 'border-sky-300 bg-sky-50/60', badge: 'bg-sky-600 text-white' },
+}
+
+/** Fondo de las filas que están por un dato que falta, no por un vencimiento. */
+const TINTE_FALTA_DATO = 'border-sky-300 bg-sky-50/60'
+
+/**
+ * El texto del badge de la fila. Sin fecha de LIBRE se dice exactamente eso:
+ * antes se mostraba el 9999 que la lógica usaba para ordenar y la fila decía
+ * "vence en 9999d" (Brian 03/09).
+ */
+function textoLibre(l: LibrePorVencer): string {
+  if (l.dias === null) return 'sin fecha de libre'
+  if (l.dias < 0) return `vencido hace ${-l.dias}d`
+  if (l.dias === 0) return 'vence HOY'
+  return `vence en ${l.dias}d`
+}
+
+/** Qué dato nos falta, en la frase que el depósito puede reenviar. */
+function textoFaltaDato(l: LibrePorVencer): string {
+  if (l.faltaLibre && l.faltaDev) return 'Nos falta cargar la fecha de libre y la terminal de devolución.'
+  if (l.faltaLibre) return 'Nos falta cargar la fecha de libre de este contenedor.'
+  return 'Nos falta asignar la terminal donde se devuelve el vacío.'
 }
 
 // ── Panel ─────────────────────────────────────────────────────────────
@@ -173,6 +220,14 @@ export default function DepotDashboard({ shipments, depotName, userName, onLogou
   const lcls = useMemo(() => lclADesconsolidar(shipments, hoy, depotName, avisos), [shipments, hoy, depotName, avisos])
   const misAvisos = useMemo(() => [...avisos].sort((a, b) => b.createdAt.localeCompare(a.createdAt)), [avisos])
   const libresVencidos = libres.filter(l => l.severidad === 'vencido').length
+  const libresSinDato = libres.filter(l => l.motivo === 'falta_dato').length
+  // Se dice la regla, no "todos los contenedores": acá solo entran los vacíos
+  // con la operativa ya hecha, y por vencimiento o por dato faltante (Brian 03/09).
+  const subtituloVacios = [
+    `solo con la operativa ya hecha · libre a ${LIBRE_DIAS_AVISO} días o menos, o con datos faltantes`,
+    libresVencidos ? `${libresVencidos} con LIBRE vencido` : '',
+    libresSinDato ? `${libresSinDato} esperando un dato nuestro` : '',
+  ].filter(Boolean).join(' · ')
 
   const clave = (ref: string, cntr: string) => `${ref}|${cntr}`
 
@@ -220,6 +275,35 @@ export default function DepotDashboard({ shipments, depotName, userName, onLogou
 
   const ocupado = (tipo: string, ref: string, cntr: string) => enviando.has(`${tipo}|${clave(ref, cntr)}`)
 
+  // Deshacer un aviso mandado por error (Brian 03/09). Solo aparece mientras
+  // está PENDIENTE: si el equipo ya lo confirmó, la acción se aplicó sobre la
+  // carga (p. ej. LIBRE = DEVUELTO) y deshacerla acá dejaría los datos
+  // inconsistentes — eso lo corrige el equipo. El server revalida los dos
+  // candados (propio + pendiente): esto solo evita el viaje al pedo.
+  const [deshaciendo, setDeshaciendo] = useState<string | null>(null)
+  const quienSoy = useMemo(() => ({ rol: 'depot', alcance: depotName }), [depotName])
+  const puedoDeshacer = (a: PartnerAviso | undefined) => !!a && !preview && puedeCancelarAviso(a, quienSoy).puede
+
+  const deshacerAviso = async (a: PartnerAviso) => {
+    if (deshaciendo) return
+    const que = `${PARTNER_AVISO_LABEL[a.tipo].toLowerCase()} · ${a.ref}${a.cntr ? ` · ${a.cntr}` : ''}`
+    if (!window.confirm(`¿Deshacer el aviso "${que}"? El equipo va a ver que lo cancelaste.`)) return
+    setDeshaciendo(a.id)
+    try {
+      const cancelado = await cancelarPartnerAviso(a.id)
+      setAvisos(prev => prev.map(x => (x.id === cancelado.id ? cancelado : x)))
+      toast.success('Aviso deshecho', { description: 'Podés volver a avisar cuando corresponda.' })
+      cargarAvisos()
+    } catch (err) {
+      // El 409 del server ("el equipo ya lo confirmó") viaja con su mensaje:
+      // se muestra tal cual, es la explicación que le sirve al depósito.
+      toast.error('No se pudo deshacer el aviso', { description: (err as Error)?.message || 'Probá de nuevo en un momento.' })
+      cargarAvisos()
+    } finally {
+      setDeshaciendo(null)
+    }
+  }
+
   return (
     <PartnerDashboardShell
       icon={<Warehouse size={24} className="text-primary" weight="duotone" />}
@@ -254,7 +338,7 @@ export default function DepotDashboard({ shipments, depotName, userName, onLogou
                   <PanelFila
                     tinte={r.estado === 'listo' ? 'bg-emerald-50/70' : undefined}
                     accion={r.aviso?.estado === 'pendiente'
-                      ? <EstadoAviso aviso={r.aviso} />
+                      ? <EstadoAviso aviso={r.aviso} onDeshacer={puedoDeshacer(r.aviso) ? deshacerAviso : undefined} deshaciendo={deshaciendo === r.aviso.id} />
                       : (
                         <>
                           {r.aviso && <EstadoAviso aviso={r.aviso} />}
@@ -307,24 +391,25 @@ export default function DepotDashboard({ shipments, depotName, userName, onLogou
         <Seccion
           icono={<ArrowUUpLeft size={22} weight="duotone" />}
           titulo="Vacíos a devolver"
-          subtitulo={`todos los contenedores de tu depósito sin devolver · en verde, los que ya podés llevar${libresVencidos ? ` · ${libresVencidos} con LIBRE vencido` : ''}`}
+          subtitulo={subtituloVacios}
           cantidad={libres.length}
           tono="alerta"
         >
-          {libres.length === 0 ? <Vacio texto="Ningún vacío con el libre por vencer. Todo al día." /> : (
+          {libres.length === 0 ? <Vacio texto="Ningún vacío con el libre por vencer ni con datos faltantes. Todo al día." /> : (
             <ul>
               {libres.map((l, i) => {
                 const sev = claseSeveridad[l.severidad]
+                const faltaDato = l.motivo === 'falta_dato'
                 const k = clave(l.ref, l.cntr)
                 const editando = fechaDevolvi[k] !== undefined
                 return (
                   <li key={`${l.ref}-${l.cntr}-${i}`}>
                     <PanelFila
-                      tinte={sev.fila}
+                      tinte={faltaDato ? TINTE_FALTA_DATO : sev.fila}
                       accion={(
                       <>
                       {l.aviso?.estado === 'pendiente'
-                        ? <EstadoAviso aviso={l.aviso} />
+                        ? <EstadoAviso aviso={l.aviso} onDeshacer={puedoDeshacer(l.aviso) ? deshacerAviso : undefined} deshaciendo={deshaciendo === l.aviso.id} />
                         : editando
                           ? (
                             <>
@@ -380,12 +465,23 @@ export default function DepotDashboard({ shipments, depotName, userName, onLogou
                         <span className="font-mono text-sm whitespace-nowrap">{l.cntr || '—'}{l.tipo && <span className="ml-1 text-muted-foreground">{l.tipo}</span>}</span>
                         <span className="text-sm text-foreground/80 truncate max-w-full sm:max-w-[220px]" title={l.cliente}>{l.cliente || '—'}</span>
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${sev.badge}`}>
-                          {sev.texto(l.dias)}
+                          {textoLibre(l)}
                         </span>
+                        {/* No es un vencimiento: está en la lista porque falta un
+                            dato NUESTRO (libre o terminal de devolución). */}
+                        {faltaDato && (
+                          <ChipPanel title={textoFaltaDato(l)} clase="bg-sky-100 text-sky-900 border-sky-400">
+                            NOS FALTA UN DATO
+                          </ChipPanel>
+                        )}
                       </FilaTitulo>
                       <FilaDatos>
-                        <Dato label="Libre" fuerte>{fmtDateDMY(l.libre)}</Dato>
-                        {l.dev && <Dato label="Devolver en" fuerte>{l.dev}</Dato>}
+                        <Dato label="Libre" fuerte>
+                          {l.libre ? fmtDateDMY(l.libre) : <span className="text-sky-700">sin fecha</span>}
+                        </Dato>
+                        <Dato label="Devolver en" fuerte>
+                          {l.dev || <span className="text-sky-700">sin terminal</span>}
+                        </Dato>
                       </FilaDatos>
                     </PanelFila>
                   </li>
@@ -417,7 +513,7 @@ export default function DepotDashboard({ shipments, depotName, userName, onLogou
                       ? (
                         <>
                           {c.aviso.dato.stock && <span className="text-xs text-muted-foreground">stock Nº <b className="text-foreground">{c.aviso.dato.stock}</b></span>}
-                          <EstadoAviso aviso={c.aviso} />
+                          <EstadoAviso aviso={c.aviso} onDeshacer={puedoDeshacer(c.aviso) ? deshacerAviso : undefined} deshaciendo={deshaciendo === c.aviso.id} />
                         </>
                       )
                       : (
@@ -463,7 +559,7 @@ export default function DepotDashboard({ shipments, depotName, userName, onLogou
           {avisosError && <p className="px-4 py-2 text-xs text-red-700 bg-red-50 border-b border-red-200">{avisosError} · <button type="button" className="underline" onClick={cargarAvisos}>reintentar</button></p>}
           {misAvisos.length === 0 ? <Vacio texto="Todavía no mandaste ningún aviso. Cuando retires, devuelvas o desconsolides, avisá desde las cards de arriba." /> : (
             <ul className="divide-y divide-border">
-              {misAvisos.map(a => <FilaAviso key={a.id} a={a} />)}
+              {misAvisos.map(a => <FilaAviso key={a.id} a={a} onDeshacer={puedoDeshacer(a) ? deshacerAviso : undefined} deshaciendo={deshaciendo === a.id} />)}
             </ul>
           )}
         </Seccion>
@@ -512,12 +608,29 @@ function FilaOperativaHoy({ o }: { o: OperativaHoy }) {
   )
 }
 
-function FilaAviso({ a }: { a: PartnerAviso }) {
+function FilaAviso({ a, onDeshacer, deshaciendo = false }: {
+  a: PartnerAviso
+  onDeshacer?: (a: PartnerAviso) => void
+  deshaciendo?: boolean
+}) {
   const estado = a.estado === 'confirmado'
     ? <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2.5 py-1 text-xs font-bold text-white"><CheckCircle size={13} weight="fill" /> Confirmado{a.resolvedBy ? ` por ${a.resolvedBy}` : ''}</span>
     : a.estado === 'rechazado'
       ? <span className="inline-flex items-center gap-1 rounded-full bg-red-600 px-2.5 py-1 text-xs font-bold text-white"><XCircle size={13} weight="fill" /> No confirmado{a.resolvedBy ? ` por ${a.resolvedBy}` : ''}</span>
-      : <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800"><Clock size={13} weight="fill" /> Esperando confirmación</span>
+      : a.estado === 'cancelado'
+        // Lo deshizo el propio depósito: queda a la vista para que se entienda
+        // por qué el equipo ya no lo tiene que atender.
+        ? <span className="inline-flex items-center gap-1 rounded-full border border-border bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground"><ArrowUUpLeft size={13} weight="fill" /> Deshecho por vos</span>
+        : (
+          <span className="inline-flex items-center gap-1.5">
+            <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800"><Clock size={13} weight="fill" /> Esperando confirmación</span>
+            {onDeshacer && (
+              <button type="button" className={btnDeshacer} disabled={deshaciendo} onClick={() => onDeshacer(a)} title="Lo mandaste por error: se da de baja.">
+                {deshaciendo ? 'Deshaciendo…' : 'Deshacer'}
+              </button>
+            )}
+          </span>
+        )
   const dato = a.tipo === 'desconsolide'
     ? `stock Nº ${a.dato?.stock || '—'}${a.dato?.fecha ? ` · ${fmtDateDMY(a.dato.fecha)}` : ''}`
     : a.dato?.fecha ? fmtDateDMY(a.dato.fecha) : ''

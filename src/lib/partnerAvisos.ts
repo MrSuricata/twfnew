@@ -9,7 +9,11 @@
  */
 
 export type PartnerAvisoTipo = 'retire' | 'devolvi' | 'desconsolide' | 'senasa'
-export type PartnerAvisoEstado = 'pendiente' | 'confirmado' | 'rechazado'
+/** `cancelado` = el propio partner deshizo un aviso que mandó por error
+ *  (Brian 03/09: "que el depósito pueda deshacer una acción si se equivoca").
+ *  NO se borra la fila: el equipo tiene que poder ver que hubo un aviso y que
+ *  se canceló. */
+export type PartnerAvisoEstado = 'pendiente' | 'confirmado' | 'rechazado' | 'cancelado'
 export type PartnerRol = 'depot' | 'transport'
 
 export interface PartnerAvisoDato {
@@ -98,7 +102,7 @@ export function senasaSolicitado(avisos: PartnerAviso[], ref: string, cntr = '')
 }
 
 export function agruparAvisosPorEstado(avisos: PartnerAviso[]): Record<PartnerAvisoEstado, PartnerAviso[]> {
-  const out: Record<PartnerAvisoEstado, PartnerAviso[]> = { pendiente: [], confirmado: [], rechazado: [] }
+  const out: Record<PartnerAvisoEstado, PartnerAviso[]> = { pendiente: [], confirmado: [], rechazado: [], cancelado: [] }
   for (const a of avisos) out[a.estado].push(a)
   for (const k of Object.keys(out) as PartnerAvisoEstado[]) out[k].sort((a, b) => b.createdAt.localeCompare(a.createdAt))
   return out
@@ -107,4 +111,61 @@ export function agruparAvisosPorEstado(avisos: PartnerAviso[]): Record<PartnerAv
 /** Nº de stock válido: entre 3 y 7 dígitos (los depósitos usan 5-6). */
 export function stockValido(v: string | undefined | null): boolean {
   return /^\d{3,7}$/.test(String(v ?? '').trim())
+}
+
+// ── Deshacer un aviso (Brian 03/09) ───────────────────────────────────────
+// "Que el depósito pueda deshacer una acción si se equivoca."
+// Dos candados, y ninguno se puede saltar:
+//   1. SUYO — mismo rol y mismo alcance (PLANIR, GODILCO, TRANSCAL…). El
+//      alcance NO sale del token: el server lo relee de `partner_users` en cada
+//      pedido (revocación efectiva) y recién ahí llama a esta función.
+//   2. PENDIENTE — si el equipo ya lo confirmó, la acción YA se aplicó sobre la
+//      carga (p. ej. `devolvi` dejó LIBRE = DEVUELTO): deshacerla del lado del
+//      partner dejaría los datos inconsistentes. Eso lo corrige el equipo.
+// El orden importa: primero "¿es tuyo?" — a un aviso ajeno ni siquiera se le
+// cuenta en qué estado está.
+
+export type MotivoNoCancelable = 'ajeno' | 'resuelto'
+
+export type ResultadoCancelable =
+  | { puede: true }
+  | { puede: false; motivo: MotivoNoCancelable; mensaje: string }
+
+/** Lo mínimo que hace falta para decidir: sirve tanto para la fila de la DB
+ *  mapeada como para el aviso que ya tiene la pantalla. */
+export type AvisoCancelable = Pick<PartnerAviso, 'partnerRole' | 'partnerFilter' | 'estado'>
+
+/** Quién pide deshacer: rol y alcance VIVOS (releídos de `partner_users`). */
+export interface QuienCancela {
+  rol: string
+  alcance: string
+}
+
+const ALCANCE = (v: string | null | undefined) => String(v ?? '').trim().toUpperCase()
+
+/** Mensaje de por qué no se puede, según en qué terminó el aviso. */
+const NO_CANCELABLE: Record<Exclude<PartnerAvisoEstado, 'pendiente'>, string> = {
+  confirmado: 'El equipo ya confirmó este aviso y la carga quedó actualizada. Si te equivocaste, escribile al equipo: lo corrigen ellos.',
+  rechazado: 'El equipo ya rechazó este aviso, no hace falta deshacerlo. Podés volver a avisar cuando corresponda.',
+  cancelado: 'Este aviso ya lo habías cancelado.',
+}
+
+/**
+ * ¿Este partner puede deshacer este aviso? Función PURA: misma respuesta en el
+ * portal (para mostrar u ocultar el botón) y en la API (que es la que manda).
+ * El espejo de la API vive en `api/_lib/partnerAvisosRules.ts` y un test los
+ * corre a los dos sobre la misma matriz de casos.
+ */
+export function puedeCancelarAviso(aviso: AvisoCancelable, quien: QuienCancela): ResultadoCancelable {
+  const mismoRol = String(aviso.partnerRole || '') === String(quien.rol || '')
+  const mismoAlcance = !!ALCANCE(quien.alcance) && ALCANCE(aviso.partnerFilter) === ALCANCE(quien.alcance)
+  if (!mismoRol || !mismoAlcance) {
+    return { puede: false, motivo: 'ajeno', mensaje: 'Ese aviso no es tuyo.' }
+  }
+  if (aviso.estado !== 'pendiente') {
+    const mensaje = NO_CANCELABLE[aviso.estado as Exclude<PartnerAvisoEstado, 'pendiente'>]
+      || 'Ese aviso ya no está pendiente.'
+    return { puede: false, motivo: 'resuelto', mensaje }
+  }
+  return { puede: true }
 }

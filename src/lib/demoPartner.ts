@@ -53,7 +53,7 @@ export function demoPartnerShipments(): ParsedShipment[] {
         CNTR_OP: 'DEMO1000001', DEPOSITO: 'GODILCO', TRANSPORTE: 'TRANSCAL',
         SALIDA: dia(0), ETA_FISC: dia(2), FISCAL: 'ZP RAFAELA', LIBRE: dia(3),
         PKGS: 420, KG: 8400, M3: 42, DESCRIPCION: 'MOTOPARTES', WOOD: 'SI',
-        NO_APILABLE: 'SI', LUGAR_SALIDA: 'GODILCO',
+        NO_APILABLE: 'SI', LUGAR_SALIDA: 'GODILCO', DEV: 'STL',
       } as Partial<OperativasRecord>),
     ]),
     // Retiro próximo desde TCP hacia GODILCO, libre venciendo
@@ -68,6 +68,7 @@ export function demoPartnerShipments(): ParsedShipment[] {
     carga('D9003', 'DEMO GAMMA S.A.', dia(-12), [
       op({
         CNTR_OP: 'DEMO1000003', DEPOSITO: 'GODILCO', TRANSPORTE: 'TRANSCAL',
+        SALIDA: dia(-3), ETA_FISC: dia(-1),
         FISCAL: 'TERRAMAR', LIBRE: dia(-2), PKGS: 96, KG: 12500, M3: 58,
         DESCRIPCION: 'MAQUINARIA', LUGAR_SALIDA: 'GODILCO', DEV: 'STL',
       }),
@@ -102,6 +103,22 @@ export function demoPartnerShipments(): ParsedShipment[] {
         LUGAR_SALIDA: 'PLANIR',
       }),
     ], { MODE: 'lcl', N: 0, CNTR: '' } as Partial<ParsedShipment>),
+    // Dos contenedores ya trasegados: dos líneas de devolución independientes
+    // (Brian 03/09). Una por vencimiento, la otra porque nos falta un dato.
+    carga('D9008', 'DEMO IOTA S.A.', dia(-9), [
+      op({
+        CNTR_OP: 'DEMO1000008', DEPOSITO: 'GODILCO', TRANSPORTE: 'TRANSCAL',
+        SALIDA: dia(-2), ETA_FISC: dia(0), FISCAL: 'CACEC', LIBRE: dia(1),
+        PKGS: 88, KG: 6100, M3: 31, DESCRIPCION: 'ELECTRODOMÉSTICOS', DEV: 'MPS',
+        LUGAR_SALIDA: 'GODILCO',
+      }),
+      op({
+        CNTR_OP: 'DEMO1000009', DEPOSITO: 'GODILCO', TRANSPORTE: 'TRANSCAL',
+        SALIDA: dia(-2), ETA_FISC: dia(0), FISCAL: 'CACEC', LIBRE: '',
+        PKGS: 92, KG: 6400, M3: 33, DESCRIPCION: 'ELECTRODOMÉSTICOS', DEV: '',
+        LUGAR_SALIDA: 'GODILCO',
+      }),
+    ]),
     // Llega la semana que viene: alimenta "próximos 14 días"
     carga('D9007', 'DEMO ETA S.A.', dia(7), [
       op({

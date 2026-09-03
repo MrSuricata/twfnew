@@ -120,6 +120,10 @@ export function resumenResuelto(a: PartnerAviso): string {
     const motivo = a.motivoRechazo?.trim()
     return `${base}, rechazado por ${quien}${motivo ? `: ${motivo}` : ''}`
   }
+  // Lo deshizo el propio partner (Brian 03/09): nadie del equipo lo tocó, así
+  // que decir "confirmado/rechazado por" sería falso. Queda igual en el rastro
+  // para que se vea que hubo un aviso y que se dio de baja.
+  if (a.estado === 'cancelado') return `${base}, y después lo deshizo`
   return `${base}, confirmado por ${quien}`
 }
 

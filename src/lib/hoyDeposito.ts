@@ -63,10 +63,6 @@ export const RETIROS_DIAS_ADELANTE = 7
 /** LIBRE: se avisa desde 5 días antes (Brian: mismo umbral que HOY admin). */
 export const LIBRE_DIAS_AVISO = 5
 
-/** Un vacío sin LIBRE cargado va al final de la lista, no adelante: no se sabe
- *  cuándo vence, pero devolverlo sigue siendo obligación. */
-export const SIN_LIBRE_DIAS = 9999
-
 // ── Helpers ────────────────────────────────────────────────────────────
 
 const txt = (v: unknown): string => String(v ?? '').trim()
@@ -111,6 +107,35 @@ const pasaPorDeposito = (op: OperativaPartner): boolean => {
 /** "DEVUELTO" vive en LIBRE (ver memoria): el vacío ya volvió a la terminal. */
 const devuelto = (op: OperativaPartner, cab: CargaPartner): boolean =>
   up(op.LIBRE).includes('DEVUELTO') || up(cab.LIBRE_HASTA).includes('DEVUELTO') || !!txt(op.DEV_FECHA)
+
+/**
+ * ¿La operativa YA se hizo? O sea: ¿la mercadería salió del contenedor y hay un
+ * vacío de verdad para devolver?
+ *
+ * Brian 03/09, mirando el portal de GODILCO: "un contenedor solo se puede
+ * devolver si la operativa ya se hizo". Mientras la carga está adentro no hay
+ * nada que llevar a la terminal, y una fila de más le hace perder tiempo al
+ * depósito.
+ *
+ * El campo que lo representa es la fecha en que el contenedor se vacía, y se
+ * miran dos, en este orden:
+ *  - DESCARGA — CARGA A PISO: se desconsolida y la mercadería queda en el
+ *    predio. La SALIDA puede ser semanas después (cuando el cliente la retira),
+ *    y esperarla dejaría el vacío invisible todo ese tiempo.
+ *  - SALIDA — TRASIEGO: el contenedor se vuelca al camión el mismo día en que
+ *    la carga sale del depósito.
+ * El día de la operativa ya cuenta ("hoy estamos haciendo la A8121, a partir de
+ * hoy le tiene que aparecer").
+ *
+ * Lo que NO sirve como señal: RETIRADO, el turno de Montecon o la ETA. Los tres
+ * dicen que el contenedor salió de la terminal, pero llega al depósito LLENO —
+ * ese fue exactamente el error que Brian vio en pantalla. Ante la duda (sin
+ * fecha cargada) la fila no aparece: conservador.
+ */
+const operativaHecha = (op: OperativaPartner, hoyISO: string): boolean => {
+  const fecha = fechaISO(op.DESCARGA) || fechaISO(op.SALIDA)
+  return !!fecha && fecha <= hoyISO
+}
 
 /** Ya lo fueron a buscar a la terminal. Se mira la operativa Y la carga porque
  *  el dato nace en `montecon_agenda`, que es por REF, y la API lo estampa a
@@ -347,19 +372,47 @@ export const DETALLE_DEVOLUCION: Record<EstadoDevolucion, string> = {
   faltan_ambos: 'Falta asignar la terminal de devolución y pagarla. Lo estamos gestionando.',
 }
 
-export type SeveridadLibre = 'vencido' | 'hoy' | 'urgente' | 'proximo'
+/** `sin_dato` no es un plazo: es que no hay fecha de LIBRE cargada. Se pinta
+ *  distinto justamente para que no se lea como un vencimiento. */
+export type SeveridadLibre = 'vencido' | 'hoy' | 'urgente' | 'proximo' | 'sin_dato'
+
+/**
+ * Por qué el vacío está en la lista. Son dos cosas distintas y el depósito tiene
+ * que distinguirlas de un vistazo (Brian 03/09):
+ *  - `vencimiento`: el LIBRE está por vencer o ya venció → hay que devolverlo ya.
+ *  - `falta_dato`: falta la fecha de LIBRE o la terminal de devolución (DEV). No
+ *    es un plazo del depósito: es un dato que tenemos que completar NOSOTROS.
+ */
+export type MotivoVacio = 'vencimiento' | 'falta_dato'
 
 export interface LibrePorVencer extends FilaDeposito {
   /** ¿Se puede devolver ya? (pago + terminal asignada). */
   estado: EstadoDevolucion
+  /** Fecha de LIBRE. '' si no hay fecha cargada (o si dice "CONFIRMAR"). */
   libre: string
-  /** Días hasta el vencimiento: <0 vencido · 0 hoy · 1-2 urgente · 3-5 próximo. */
-  dias: number
+  /**
+   * Días hasta el vencimiento: <0 vencido · 0 hoy · 1-2 urgente · 3-5 próximo.
+   * **null = no hay fecha de LIBRE**, y la UI tiene que decirlo con palabras.
+   * Antes acá iba un 9999 de relleno para ordenar y se veía en pantalla como
+   * "vence en 9999d" (Brian 03/09): de acá no sale ningún número inventado.
+   */
+  dias: number | null
   severidad: SeveridadLibre
+  /** Vencimiento o alerta de dato faltante. */
+  motivo: MotivoVacio
+  /** No hay fecha de LIBRE cargada. */
+  faltaLibre: boolean
+  /** No hay terminal de devolución (DEV) asignada. */
+  faltaDev: boolean
   terminal: string
   /** Dónde se devuelve el vacío (DEV), si está. */
   dev: string
 }
+
+/** Ordena por vencimiento; sin fecha de LIBRE va al final (y no adelante por un
+ *  número de relleno). */
+const porVencimiento = (a: number | null, b: number | null): number =>
+  a === null && b === null ? 0 : a === null ? 1 : b === null ? -1 : a - b
 
 export function severidadLibre(dias: number): SeveridadLibre {
   if (dias < 0) return 'vencido'
@@ -369,19 +422,28 @@ export function severidadLibre(dias: number): SeveridadLibre {
 }
 
 /**
- * Contenedores de mi depósito que todavía no se devolvieron. TODOS los que ya
- * están (o estuvieron) en el predio, venza el LIBRE cuando venza: el vacío hay
- * que devolverlo igual, y verlo desde el día del trasiego evita la corrida del
- * final. Los cortes de color son los de la tira de LIBRE de HOY admin
- * (vencido / hoy / 1-2 d / próximo).
- * "DEVUELTO" en LIBRE o una DEV_FECHA = ya devuelto, no entra. Con un aviso
- * "devolví" confirmado la fila desaparece.
+ * Vacíos que el depósito tiene que devolver, UNA FILA POR CONTENEDOR (una carga
+ * con dos contenedores da dos filas independientes, cada una con su estado y su
+ * botón: son dos devoluciones distintas).
  *
- * Solo contenedores que están (o estuvieron) en el predio: la operativa tiene
- * que pasar por el depósito (TRASIEGO / CARGA A PISO, nunca CONTENEDOR directo)
- * y la fecha de retiro (turno de Montecon o ETA) no puede ser futura — si el
- * contenedor sigue en el buque o en la terminal, "devolví el vacío" es una
- * acción imposible. No se exige RETIRADO (TCP no tiene agenda): conservador.
+ * Dos reglas, las dos de Brian el 03/09 mirando el portal de GODILCO:
+ *
+ * 1. **La operativa tiene que estar hecha** (`operativaHecha`): "un contenedor
+ *    solo se puede devolver si la operativa ya se hizo". Antes alcanzaba con que
+ *    el contenedor hubiera salido de la terminal, y el portal le recomendaba
+ *    devolver contenedores que todavía tenían la mercadería adentro.
+ * 2. **Y además tiene que haber algo que hacer**: o el LIBRE aprieta
+ *    (`LIBRE_DIAS_AVISO` días o menos, vencidos incluidos), o falta un dato
+ *    nuestro — la fecha de LIBRE o la terminal de devolución (DEV). El segundo
+ *    caso no es un vencimiento: es una alerta de dato faltante y sale marcada
+ *    como tal (`motivo: 'falta_dato'`).
+ *    Un vacío ya desconsolidado, con el LIBRE lejos y todos los datos completos,
+ *    NO aparece: no hay nada que decidir hoy.
+ *
+ * Además tiene que ser una operativa que pase por el depósito (TRASIEGO /
+ * CARGA A PISO, nunca CONTENEDOR directo: ese vacío no lo devuelve el depósito),
+ * del depósito que mira y FCL. "DEVUELTO" en LIBRE o una DEV_FECHA = ya
+ * devuelto, no entra; con un aviso "devolví" confirmado la fila desaparece.
  */
 export function libresPorVencer(
   shipments: CargaPartner[],
@@ -391,23 +453,25 @@ export function libresPorVencer(
 ): LibrePorVencer[] {
   const out: LibrePorVencer[] = []
   for (const cab of shipments) {
+    // Una vuelta por operativa = una vuelta por contenedor: dos contenedores de
+    // la misma carga salen como dos filas, cada una con su LIBRE y su DEV.
     for (const op of ops(cab)) {
       if (!esMiDeposito(op, deposito) || !esFcl(op) || !pasaPorDeposito(op)) continue
       if (devuelto(op, cab)) continue
-      const retiro = fechaRetiro(op, cab)
-      if (retiro && retiro > hoyISO) continue
-      // Desde el día en que el contenedor entra al depósito ya hay un vacío
-      // que devolver: antes solo aparecía cuando el LIBRE estaba por vencer
-      // (5 días), y el depósito se enteraba tarde. Brian 03/09: "no solo
-      // cuando se estén por vencer; los que estén pendientes de devolución —
-      // hoy estamos haciendo la A8121, a partir de hoy le tiene que aparecer".
-      // Sin LIBRE cargado también entra: el vacío existe igual.
+      // Regla 1: sin operativa hecha el contenedor sigue lleno, no hay vacío.
+      if (!operativaHecha(op, hoyISO)) continue
       const libre = fechaISO(libreDe(op, cab))
       const dias = libre ? diasEntre(hoyISO, libre) : null
+      const dev = txt(op.DEV)
+      const faltaLibre = dias === null
+      const faltaDev = !dev
+      // Regla 2: o el LIBRE aprieta, o nos falta un dato. Con todo completo y el
+      // vencimiento lejos, el depósito no tiene nada que hacer hoy con ese vacío.
+      const porVencer = dias !== null && dias <= LIBRE_DIAS_AVISO
+      if (!porVencer && !faltaLibre && !faltaDev) continue
       const base = filaBase(op, cab)
       const aviso = estadoAvisoDe(avisos, 'devolvi', base.ref, base.cntr)
       if (aviso?.estado === 'confirmado') continue
-      const dev = txt(op.DEV)
       out.push({
         ...base,
         aviso,
@@ -416,14 +480,23 @@ export function libresPorVencer(
           dev,
         ),
         libre: libre || '',
-        dias: dias ?? SIN_LIBRE_DIAS,
-        severidad: dias === null ? 'proximo' : severidadLibre(dias),
+        dias,
+        severidad: dias === null ? 'sin_dato' : severidadLibre(dias),
+        motivo: porVencer ? 'vencimiento' : 'falta_dato',
+        faltaLibre,
+        faltaDev,
         terminal: txt(cab.TERMINAL),
         dev,
       })
     }
   }
-  return out.sort((a, b) => a.dias - b.dias || a.ref.localeCompare(b.ref))
+  // Primero lo que corre contra el reloj (lo más vencido arriba); después las
+  // alertas de dato faltante, que son deuda nuestra y no del depósito.
+  const rango = (m: MotivoVacio) => (m === 'vencimiento' ? 0 : 1)
+  return out.sort((a, b) =>
+    rango(a.motivo) - rango(b.motivo) ||
+    porVencimiento(a.dias, b.dias) ||
+    a.ref.localeCompare(b.ref))
 }
 
 // ── Card 4: LCL a desconsolidar ────────────────────────────────────────

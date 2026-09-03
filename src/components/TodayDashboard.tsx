@@ -372,6 +372,15 @@ export default function TodayDashboard({
     () => (dbShipments || []).map(s => ({ ref: s.ref, mode: s.mode })),
     [dbShipments],
   )
+  // La ref de un aviso abre el panel de la carga (Brian 03/09: "apretar donde
+  // dice A8050 y que se abra el modal, linkeado"). El overlay resuelve por
+  // dbId, uid o ref FCL: mandamos el dbId cuando lo encontramos — es la única
+  // clave que también resuelve LCL — y la ref cruda como respaldo.
+  const abrirCargaPorRef = useCallback((ref: string) => {
+    const buscada = String(ref || '').trim().toUpperCase()
+    const fila = (dbShipments || []).find(s => String(s.ref || '').trim().toUpperCase() === buscada)
+    onOpenDetail?.(fila?.id || ref)
+  }, [dbShipments, onOpenDetail])
   const cargasTerminalInput = useMemo(
     () => (dbShipments || []).map(s => {
       // Depósito / operativa / fiscal: la columna plana manda y la primera
@@ -615,7 +624,12 @@ export default function TodayDashboard({
       </div>
 
       {/* ── Avisos de partners (depósito/transporte proponen, el equipo confirma) ── */}
-      <AvisosPartnersCard area="fcl" shipmentsModo={shipmentsModo} onResuelto={onAvisoResuelto} />
+      <AvisosPartnersCard
+        area="fcl"
+        shipmentsModo={shipmentsModo}
+        onResuelto={onAvisoResuelto}
+        onAbrirCarga={onOpenDetail ? abrirCargaPorRef : undefined}
+      />
 
       {/* ── Estado de carga inicial (sincronizando, sin datos aún) ── */}
       {initialLoading && (
