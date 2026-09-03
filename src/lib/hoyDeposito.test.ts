@@ -24,7 +24,11 @@ const op = (o: Partial<OperativaPartner>): OperativaPartner => ({
   ...o,
 })
 
-const carga = (ref: string, ops: Partial<OperativaPartner>[], cab: Partial<CargaPartner> = {}): CargaPartner => ({
+/** Los booleanos que decide el equipo (liberación de la naviera, terminal paga,
+ *  devolución paga) viajan al partner pero no están en ParsedShipment. */
+type CabPartner = Partial<CargaPartner> & { LIBERADA?: boolean; TERMINAL_PAGADA?: boolean; DEVOLUCION_PAGADA?: boolean }
+
+const carga = (ref: string, ops: Partial<OperativaPartner>[], cab: CabPartner = {}): CargaPartner => ({
   REF: ref, CLIENTE: 'BICI PERETTI S.A.', ETA: '2026-08-31', TERMINAL: 'MONTECON', LIBRE_HASTA: '',
   ...cab,
   operativas: ops.map(o => op({ REF: ref, ...o })),
@@ -195,85 +199,193 @@ describe('RETIRADO y TURNO_RETIRO — la API los estampa a nivel CARGA', () => {
 })
 
 describe('libresPorVencer — vacíos que hay que devolver', () => {
-  it('entran TODOS los pendientes, ordenados por vencimiento, con la severidad de HOY admin', () => {
-    // Brian 03/09: antes solo entraban los que vencían dentro de 5 días y el
-    // depósito se enteraba tarde. Ahora el vacío aparece desde que está en el
-    // predio, venza cuando venza.
-    const filas = libresPorVencer([
-      carga('V', [{ LIBRE: '2026-08-30' }]),
-      carga('H', [{ LIBRE: HOY }]),
-      carga('U', [{ LIBRE: '2026-09-03' }]),
-      carga('P', [{ LIBRE: '2026-09-06' }]),
-      carga('LEJOS', [{ LIBRE: '2026-09-07' }]),
+  // REGLA (Brian 03/09, mirando el portal de GODILCO): un vacío aparece SOLO si
+  // la operativa ya se hizo —el contenedor está vacío de verdad— y además o el
+  // LIBRE aprieta, o nos falta un dato (fecha de libre / terminal de devolución).
+  // `vacio()` arma el caso normal: trasiego ya hecho y todos los datos cargados.
+  const vacio = (ref: string, o: Partial<OperativaPartner> = {}, cab: CabPartner = {}) =>
+    carga(ref, [{ SALIDA: '2026-08-30', DEV: 'STL', ...o }], { DEVOLUCION_PAGADA: true, ...cab })
+
+  describe('regla 1 — solo si la operativa YA se hizo', () => {
+    it('sin SALIDA ni DESCARGA no hay vacío, por más que el LIBRE esté vencido', () => {
+      expect(libresPorVencer([
+        carga('SIN_OPERATIVA', [{ LIBRE: '2026-08-20', DEV: 'STL' }], { ETA: '2026-08-10' }),
+      ], HOY, 'PLANIR', [])).toEqual([])
+    })
+
+    it('haberlo retirado de la terminal NO alcanza: llega al depósito lleno', () => {
+      // Este era el error en pantalla: el portal recomendaba devolver un
+      // contenedor que todavía tenía la mercadería adentro.
+      expect(libresPorVencer([
+        carga('RETIRADO', [{ LIBRE: '2026-09-02', DEV: 'STL', TURNO_RETIRO: '2026-08-31' }], { RETIRADO: '2026-08-31T14:00:00Z' }),
+      ], HOY, 'PLANIR', [])).toEqual([])
+    })
+
+    it('con la operativa programada para mañana tampoco: todavía no se hizo', () => {
+      expect(libresPorVencer([vacio('MANANA', { SALIDA: '2026-09-02', LIBRE: '2026-09-03' })], HOY, 'PLANIR', [])).toEqual([])
+    })
+
+    it('el trasiego de HOY ya cuenta: el vacío existe desde el día de la operativa', () => {
+      const filas = libresPorVencer([vacio('A8121', { SALIDA: HOY, LIBRE: '2026-09-03' })], HOY, 'PLANIR', [])
+      expect(filas.map(f => f.ref)).toEqual(['A8121'])
+    })
+
+    it('CARGA A PISO: manda la DESCARGA, aunque la SALIDA sea semanas después', () => {
+      // Se desconsolida y la carga queda en el predio: el vacío ya está libre.
+      const filas = libresPorVencer([
+        vacio('PISO', { OPERATIVA: 'CARGA A PISO', DESCARGA: '2026-08-29', SALIDA: '2026-09-25', LIBRE: '2026-09-03' }),
+      ], HOY, 'PLANIR', [])
+      expect(filas.map(f => f.ref)).toEqual(['PISO'])
+    })
+
+    it('CONTENEDOR directo no pasa por el predio: no entra ni con LIBRE vencido', () => {
+      expect(libresPorVencer([
+        vacio('DIR', { LIBRE: '2026-08-20', OPERATIVA: 'CONTENEDOR' }),
+      ], HOY, 'PLANIR', [])).toEqual([])
+    })
+  })
+
+  describe('regla 2 — o el LIBRE aprieta, o falta un dato nuestro', () => {
+    it('con el LIBRE lejos y todos los datos completos NO aparece: no hay nada que hacer hoy', () => {
+      expect(libresPorVencer([vacio('LEJOS', { LIBRE: '2026-09-07' })], HOY, 'PLANIR', [])).toEqual([])
+    })
+
+    it('con el LIBRE por vencer aparece, con la severidad de HOY admin', () => {
+      const filas = libresPorVencer([
+        vacio('V', { LIBRE: '2026-08-30' }),
+        vacio('H', { LIBRE: HOY }),
+        vacio('U', { LIBRE: '2026-09-03' }),
+        vacio('P', { LIBRE: '2026-09-06' }), // justo en el umbral (5 días)
+      ], HOY, 'PLANIR', [])
+      expect(filas.map(f => [f.ref, f.severidad, f.dias, f.motivo])).toEqual([
+        ['V', 'vencido', -2, 'vencimiento'],
+        ['H', 'hoy', 0, 'vencimiento'],
+        ['U', 'urgente', 2, 'vencimiento'],
+        ['P', 'proximo', LIBRE_DIAS_AVISO, 'vencimiento'],
+      ])
+    })
+
+    it('con el LIBRE lejos pero SIN terminal de devolución sí aparece, como dato faltante', () => {
+      // No es un vencimiento: es lo que nos obliga a NOSOTROS a completar el DEV.
+      const filas = libresPorVencer([vacio('SIN_DEV', { LIBRE: '2026-09-20', DEV: '' })], HOY, 'PLANIR', [])
+      expect(filas).toHaveLength(1)
+      expect(filas[0]).toMatchObject({
+        ref: 'SIN_DEV', motivo: 'falta_dato', faltaDev: true, faltaLibre: false,
+        dias: 19, severidad: 'proximo', estado: 'falta_terminal', dev: '',
+      })
+    })
+
+    it('sin fecha de LIBRE aparece como dato faltante, y NUNCA con un plazo inventado', () => {
+      // El "vence en 9999d" que se veía en pantalla era la constante que se usaba
+      // para ordenar: ahora sin fecha es `dias: null` y la UI lo dice con palabras.
+      const filas = libresPorVencer([
+        vacio('SIN', { LIBRE: '' }),
+        vacio('TEXTO', { LIBRE: 'CONFIRMAR' }),
+      ], HOY, 'PLANIR', [])
+      expect(filas.map(f => [f.ref, f.dias, f.severidad, f.motivo, f.libre, f.faltaLibre])).toEqual([
+        ['SIN', null, 'sin_dato', 'falta_dato', '', true],
+        ['TEXTO', null, 'sin_dato', 'falta_dato', '', true],
+      ])
+      expect(filas.every(f => f.dias === null || f.dias < 400)).toBe(true)
+    })
+
+    it('si la operativa no trae LIBRE usa el de la carga', () => {
+      const filas = libresPorVencer([vacio('A', { LIBRE: '' }, { LIBRE_HASTA: '2026-09-02' })], HOY, 'PLANIR', [])
+      expect(filas.map(f => [f.libre, f.motivo])).toEqual([['2026-09-02', 'vencimiento']])
+    })
+
+    it('primero lo que corre contra el reloj; las alertas de dato faltante, al final', () => {
+      const filas = libresPorVencer([
+        vacio('FALTA_DEV', { LIBRE: '2026-09-20', DEV: '' }),
+        vacio('P', { LIBRE: '2026-09-05' }),
+        vacio('V1', { LIBRE: '2026-08-31' }),
+        vacio('V5', { LIBRE: '2026-08-27' }),
+        vacio('H', { LIBRE: HOY }),
+        vacio('SIN_LIBRE', { LIBRE: '' }),
+      ], HOY, 'PLANIR', [])
+      expect(filas.map(f => f.ref)).toEqual(['V5', 'V1', 'H', 'P', 'FALTA_DEV', 'SIN_LIBRE'])
+    })
+  })
+
+  describe('ya devuelto o ya avisado', () => {
+    it('DEVUELTO en LIBRE = ya se devolvió: no entra', () => {
+      expect(libresPorVencer([vacio('D', { LIBRE: 'DEVUELTO' })], HOY, 'PLANIR', [])).toEqual([])
+    })
+
+    it('con fecha de devolución confirmada por la naviera (DEV_FECHA) tampoco entra', () => {
+      expect(libresPorVencer([vacio('D', { LIBRE: '2026-08-20', DEV_FECHA: '2026-08-25' })], HOY, 'PLANIR', [])).toEqual([])
+    })
+
+    it('excluye otro depósito y LCL; con aviso "devolví" confirmado desaparece', () => {
+      expect(libresPorVencer([
+        vacio('G', { LIBRE: HOY, DEPOSITO: 'GODILCO' }),
+        vacio('L', { LIBRE: HOY, MODE: 'lcl' }),
+        vacio('C', { LIBRE: HOY, CNTR_OP: 'X1' }),
+      ], HOY, 'PLANIR', [aviso({ tipo: 'devolvi', ref: 'C', cntr: 'X1', estado: 'confirmado' })])).toEqual([])
+    })
+  })
+})
+
+describe('todo por contenedor — dos contenedores, dos líneas independientes (Brian 03/09)', () => {
+  // "Todos los retiros y devoluciones tienen que manejarse POR CONTENEDOR: si
+  // una operativa tiene dos contenedores, son dos líneas independientes de
+  // retiro y de devolución."
+
+  it('una carga con dos contenedores da dos filas de retiro, cada una con lo suyo', () => {
+    const filas = retirosProximos([
+      carga('A8200', [
+        { CNTR_OP: 'MSKU1', TIPO: '40HC', LIBRE: '2026-09-10' },
+        { CNTR_OP: 'MSKU2', TIPO: '20DV', LIBRE: '2026-09-12', TURNO_RETIRO: '2026-09-04' },
+      ], { ETA: '2026-09-02' }),
     ], HOY, 'PLANIR', [])
-    expect(filas.map(f => [f.ref, f.severidad, f.dias])).toEqual([
-      ['V', 'vencido', -2],
-      ['H', 'hoy', 0],
-      ['U', 'urgente', 2],
-      ['P', 'proximo', 5],
-      ['LEJOS', 'proximo', 6],
+    expect(filas.map(f => [f.ref, f.cntr, f.tipo, f.fecha, f.dias])).toEqual([
+      ['A8200', 'MSKU1', '40HC', '2026-09-02', 1],
+      ['A8200', 'MSKU2', '20DV', '2026-09-04', 3],
     ])
   })
 
-  it('DEVUELTO en LIBRE = ya se devolvió: no entra', () => {
-    expect(libresPorVencer([carga('D', [{ LIBRE: 'DEVUELTO' }])], HOY, 'PLANIR', [])).toEqual([])
+  it('avisar el retiro de un contenedor no saca al otro de la lista', () => {
+    const cargas = [carga('A8201', [{ CNTR_OP: 'C1' }, { CNTR_OP: 'C2' }], { ETA: HOY })]
+    const filas = retirosProximos(cargas, HOY, 'PLANIR', [
+      aviso({ tipo: 'retire', ref: 'A8201', cntr: 'C1', estado: 'confirmado' }),
+    ])
+    expect(filas.map(f => f.cntr)).toEqual(['C2'])
   })
 
-  it('sin LIBRE o con texto sin fecha entra igual, al final: el vacío existe', () => {
+  it('una carga con dos contenedores da dos filas de devolución, con su estado cada una', () => {
     const filas = libresPorVencer([
-      carga('CONFECHA', [{ LIBRE: '2026-09-03' }]),
-      carga('TEXTO', [{ LIBRE: 'CONFIRMAR' }]),
-      carga('SIN', [{ LIBRE: '' }]),
+      carga('A8202', [
+        // Uno ya trasegado y con el libre encima; el otro trasegado también,
+        // con el libre lejos pero sin terminal de devolución.
+        { CNTR_OP: 'C1', SALIDA: '2026-08-30', LIBRE: '2026-09-02', DEV: 'STL' },
+        { CNTR_OP: 'C2', SALIDA: '2026-08-30', LIBRE: '2026-09-20', DEV: '' },
+      ], { DEVOLUCION_PAGADA: true }),
     ], HOY, 'PLANIR', [])
-    expect(filas.map(f => f.ref)).toEqual(['CONFECHA', 'SIN', 'TEXTO'])
-    expect(filas.filter(f => f.ref !== 'CONFECHA').every(f => f.libre === '')).toBe(true)
+    expect(filas.map(f => [f.cntr, f.motivo, f.severidad, f.estado])).toEqual([
+      ['C1', 'vencimiento', 'urgente', 'listo'],
+      ['C2', 'falta_dato', 'proximo', 'falta_terminal'],
+    ])
   })
 
-  it('con fecha de devolución confirmada por la naviera (DEV_FECHA) tampoco entra', () => {
-    expect(libresPorVencer([carga('D', [{ LIBRE: '2026-08-20', DEV_FECHA: '2026-08-25' }])], HOY, 'PLANIR', [])).toEqual([])
+  it('avisar la devolución de un contenedor no saca al otro', () => {
+    const cargas = [carga('A8203', [
+      { CNTR_OP: 'C1', SALIDA: '2026-08-30', LIBRE: '2026-09-02', DEV: 'STL' },
+      { CNTR_OP: 'C2', SALIDA: '2026-08-30', LIBRE: '2026-09-02', DEV: 'STL' },
+    ])]
+    const filas = libresPorVencer(cargas, HOY, 'PLANIR', [
+      aviso({ tipo: 'devolvi', ref: 'A8203', cntr: 'C1', estado: 'confirmado' }),
+    ])
+    expect(filas.map(f => f.cntr)).toEqual(['C2'])
   })
 
-  it('si la operativa no trae LIBRE usa el de la carga', () => {
-    const filas = libresPorVencer([carga('A', [{ LIBRE: '' }], { LIBRE_HASTA: '2026-09-02' })], HOY, 'PLANIR', [])
-    expect(filas.map(f => f.libre)).toEqual(['2026-09-02'])
-  })
-
-  it('excluye otro depósito y LCL; con aviso "devolví" confirmado desaparece', () => {
-    expect(libresPorVencer([
-      carga('G', [{ LIBRE: HOY, DEPOSITO: 'GODILCO' }]),
-      carga('L', [{ LIBRE: HOY, MODE: 'lcl' }]),
-      carga('C', [{ LIBRE: HOY, CNTR_OP: 'X1' }]),
-    ], HOY, 'PLANIR', [aviso({ tipo: 'devolvi', ref: 'C', cntr: 'X1', estado: 'confirmado' })])).toEqual([])
-  })
-
-  it('si el contenedor todavía no llegó al depósito (turno o ETA futura) no pide devolver el vacío', () => {
-    expect(libresPorVencer([
-      carga('TURNO', [{ LIBRE: '2026-09-04', TURNO_RETIRO: '2026-09-03' }]),
-      // La ETA que manda es la de la CARGA (ETA_OP es una copia congelada).
-      carga('ETA', [{ LIBRE: '2026-09-05', ETA_OP: '2026-08-20' }], { ETA: '2026-09-03' }),
-      carga('CAB', [{ LIBRE: '2026-09-05' }], { ETA: '2026-09-02' }),
-    ], HOY, 'PLANIR', [])).toEqual([])
-  })
-
-  it('retirado hoy (turno = hoy) sí entra: ya está en el predio', () => {
-    const filas = libresPorVencer([carga('HOY', [{ LIBRE: '2026-09-04', TURNO_RETIRO: HOY }])], HOY, 'PLANIR', [])
-    expect(filas.map(f => f.ref)).toEqual(['HOY'])
-  })
-
-  it('CONTENEDOR directo no pasa por el predio: no entra ni con LIBRE vencido', () => {
-    expect(libresPorVencer([
-      carga('DIR', [{ LIBRE: '2026-08-20', OPERATIVA: 'CONTENEDOR' }]),
-    ], HOY, 'PLANIR', [])).toEqual([])
-  })
-
-  it('ordena: vencidos primero (el más vencido arriba), después los que vencen antes', () => {
+  it('si solo uno de los dos ya se trasegó, solo ese pide devolución', () => {
     const filas = libresPorVencer([
-      carga('P', [{ LIBRE: '2026-09-05' }]),
-      carga('V1', [{ LIBRE: '2026-08-31' }]),
-      carga('V5', [{ LIBRE: '2026-08-27' }]),
-      carga('H', [{ LIBRE: HOY }]),
+      carga('A8204', [
+        { CNTR_OP: 'HECHO', SALIDA: '2026-08-30', LIBRE: '2026-09-02', DEV: 'STL' },
+        { CNTR_OP: 'PENDIENTE', SALIDA: '2026-09-10', LIBRE: '2026-09-02', DEV: 'STL' },
+      ]),
     ], HOY, 'PLANIR', [])
-    expect(filas.map(f => f.ref)).toEqual(['V5', 'V1', 'H', 'P'])
+    expect(filas.map(f => f.cntr)).toEqual(['HECHO'])
   })
 })
 
