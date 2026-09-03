@@ -1,0 +1,35 @@
+---
+interface Props {
+  id?: string;
+  as?: string;
+  spacing?: 'sm' | 'md' | 'lg';
+  background?: 'default' | 'muted' | 'accent' | 'dark';
+  class?: string;
+  ariaLabel?: string;
+}
+const {
+  id,
+  as: Tag = 'section',
+  spacing = 'md',
+  background = 'default',
+  class: className = '',
+  ariaLabel,
+} = Astro.props;
+
+const spacings = {
+  sm: 'py-10 sm:py-12',
+  md: 'py-16 sm:py-20',
+  lg: 'py-20 sm:py-28',
+};
+
+const backgrounds = {
+  default: '',
+  muted: 'bg-black/[0.03]',
+  accent: 'bg-[var(--color-accent)]/20',
+  dark: 'bg-[var(--color-neutral-text)] text-[var(--color-neutral-bg)]',
+};
+---
+
+<Tag id={id} class={`${spacings[spacing]} ${backgrounds[background]} ${className}`} aria-label={ariaLabel}>
+  <slot />
+</Tag>

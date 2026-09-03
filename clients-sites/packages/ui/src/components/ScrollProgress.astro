@@ -1,0 +1,80 @@
+---
+interface Props {
+  color?: string;
+  height?: number;
+  position?: 'top' | 'bottom';
+  class?: string;
+}
+const { color = 'var(--color-primary)', height = 3, position = 'top', class: className = '' } = Astro.props;
+---
+
+<div
+  class={`scroll-progress ${className}`}
+  data-position={position}
+  style={`--sp-color:${color};--sp-h:${height}px;`}
+  aria-hidden="true"
+>
+  <span class="scroll-progress__bar"></span>
+</div>
+
+<style>
+  .scroll-progress {
+    position: fixed;
+    left: 0;
+    right: 0;
+    height: var(--sp-h, 3px);
+    z-index: 1100;
+    pointer-events: none;
+    background: transparent;
+  }
+  .scroll-progress[data-position='top'] {
+    top: 0;
+  }
+  .scroll-progress[data-position='bottom'] {
+    bottom: 0;
+  }
+  .scroll-progress__bar {
+    display: block;
+    height: 100%;
+    width: 100%;
+    transform-origin: left center;
+    transform: scaleX(var(--sp-progress, 0));
+    background: var(--sp-color);
+    transition: transform 80ms linear;
+  }
+  /* Browsers con scroll-driven animations (Chromium 115+) */
+  @supports (animation-timeline: scroll()) {
+    .scroll-progress__bar {
+      transition: none;
+      animation: sp-grow linear forwards;
+      animation-timeline: scroll(root);
+    }
+    @keyframes sp-grow {
+      from { transform: scaleX(0); }
+      to { transform: scaleX(1); }
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .scroll-progress__bar { animation: none; transition: none; transform: scaleX(0); }
+  }
+</style>
+
+<script is:inline>
+  (function () {
+    if (typeof window === 'undefined') return;
+    if (CSS.supports && CSS.supports('animation-timeline', 'scroll()')) return;
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const el = document.querySelector('.scroll-progress');
+    if (!el) return;
+    const update = () => {
+      const h = document.documentElement;
+      const scrollTop = h.scrollTop || document.body.scrollTop;
+      const max = h.scrollHeight - h.clientHeight;
+      const p = max > 0 ? scrollTop / max : 0;
+      el.style.setProperty('--sp-progress', String(p));
+    };
+    update();
+    window.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+  })();
+</script>

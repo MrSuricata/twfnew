@@ -1,0 +1,51 @@
+---
+interface Alternate {
+  lang: string;
+  href: string;
+}
+interface Props {
+  title: string;
+  description: string;
+  canonical: string;
+  ogImage?: string;
+  ogType?: 'website' | 'article';
+  siteName: string;
+  locale?: string;
+  alternates?: Alternate[];
+  themeColor?: string;
+}
+const {
+  title,
+  description,
+  canonical,
+  ogImage,
+  ogType = 'website',
+  siteName,
+  locale = 'es_UY',
+  alternates = [],
+  themeColor,
+} = Astro.props;
+---
+
+<title>{title}</title>
+<meta name="description" content={description} />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<link rel="canonical" href={canonical} />
+{themeColor && <meta name="theme-color" content={themeColor} />}
+
+<meta property="og:type" content={ogType} />
+<meta property="og:site_name" content={siteName} />
+<meta property="og:title" content={title} />
+<meta property="og:description" content={description} />
+<meta property="og:url" content={canonical} />
+<meta property="og:locale" content={locale} />
+{ogImage && <meta property="og:image" content={ogImage} />}
+
+<meta name="twitter:card" content={ogImage ? 'summary_large_image' : 'summary'} />
+<meta name="twitter:title" content={title} />
+<meta name="twitter:description" content={description} />
+{ogImage && <meta name="twitter:image" content={ogImage} />}
+
+{alternates.map((a) => (
+  <link rel="alternate" hreflang={a.lang} href={a.href} />
+))}

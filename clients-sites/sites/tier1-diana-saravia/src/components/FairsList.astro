@@ -1,0 +1,45 @@
+---
+interface Fair {
+  city: string;
+  country?: string;
+  fair: string;
+  date: string;
+  iconUrl: string;
+  iconAlt?: string;
+  note?: string;
+}
+interface Props {
+  fairs: Fair[];
+  class?: string;
+}
+const { fairs, class: className = '' } = Astro.props;
+---
+
+<ol class={`relative border-l border-[var(--color-secondary)]/30 ml-3 ${className}`} aria-label="Cronología de ferias internacionales">
+  {fairs.map((fair) => (
+    <li class="mb-10 ml-8 last:mb-0">
+      <span
+        class="absolute -left-[1.35rem] flex items-center justify-center w-10 h-10 rounded-full bg-[var(--color-neutral-bg)] ring-1 ring-[var(--color-secondary)]/30 shadow-sm"
+        aria-hidden="true"
+      >
+        <img
+          src={fair.iconUrl}
+          alt={fair.iconAlt ?? ''}
+          class="w-6 h-6"
+          loading="lazy"
+          decoding="async"
+        />
+      </span>
+      <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <h3 class="font-display text-xl sm:text-2xl">
+          {fair.fair}
+          <span class="opacity-60"> · {fair.city}{fair.country ? `, ${fair.country}` : ''}</span>
+        </h3>
+        <time class="text-sm uppercase tracking-widest text-[var(--color-secondary)] tabular-nums">
+          {fair.date}
+        </time>
+      </div>
+      {fair.note && <p class="mt-2 text-sm opacity-75 max-w-xl">{fair.note}</p>}
+    </li>
+  ))}
+</ol>

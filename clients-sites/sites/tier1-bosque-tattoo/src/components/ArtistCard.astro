@@ -1,0 +1,55 @@
+---
+interface Props {
+  name: string;
+  role: string;
+  bio: string;
+  instagram?: string;
+  imageUrl: string;
+  imageAlt?: string;
+  class?: string;
+}
+const {
+  name,
+  role,
+  bio,
+  instagram,
+  imageUrl,
+  imageAlt,
+  class: className = '',
+} = Astro.props;
+---
+
+<article
+  class={`group relative flex flex-col bg-[#11110e] text-[var(--color-neutral-bg)] rounded-2xl overflow-hidden border border-white/5 ${className}`}
+>
+  <div class="aspect-[4/5] overflow-hidden">
+    <img
+      src={imageUrl}
+      alt={imageAlt ?? `Retrato de ${name}, tatuador/a en BOSQUE`}
+      class="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.04]"
+      loading="lazy"
+      decoding="async"
+    />
+  </div>
+  <div class="p-6 flex flex-col gap-2">
+    <p class="text-xs uppercase tracking-widest text-[var(--color-accent)]">{role}</p>
+    <h3 class="font-display text-3xl leading-none">{name}</h3>
+    <p class="text-sm opacity-75 leading-relaxed mt-1">{bio}</p>
+    {instagram && (
+      <a
+        href={instagram}
+        target="_blank"
+        rel="noopener noreferrer"
+        class="inline-flex items-center gap-2 text-sm mt-3 text-[var(--color-accent)] hover:opacity-80 transition-opacity self-start"
+        aria-label={`Instagram de ${name}`}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect>
+          <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path>
+          <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line>
+        </svg>
+        Ver Instagram
+      </a>
+    )}
+  </div>
+</article>

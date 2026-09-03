@@ -1,0 +1,98 @@
+---
+interface SocialLink {
+  href: string;
+  label: string;
+  icon?: 'instagram' | 'facebook' | 'twitter' | 'tiktok' | 'youtube';
+}
+interface FooterColumn {
+  title: string;
+  links: { href: string; label: string }[];
+}
+interface Props {
+  brand: string;
+  tagline?: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  columns?: FooterColumn[];
+  social?: SocialLink[];
+  legal?: { href: string; label: string }[];
+  class?: string;
+}
+const {
+  brand,
+  tagline,
+  address,
+  phone,
+  email,
+  columns = [],
+  social = [],
+  legal = [],
+  class: className = '',
+} = Astro.props;
+const year = new Date().getFullYear();
+---
+
+<footer class={`bg-[var(--color-neutral-text)] text-[var(--color-neutral-bg)] ${className}`}>
+  <div class="mx-auto max-w-7xl px-5 sm:px-6 lg:px-8 py-14 sm:py-20 grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
+    <div class="space-y-3">
+      <p class="font-display text-2xl">{brand}</p>
+      {tagline && <p class="opacity-70 max-w-sm">{tagline}</p>}
+      {address && <p class="opacity-70 text-sm">{address}</p>}
+      {phone && (
+        <p class="text-sm">
+          <a href={`tel:${phone}`} class="hover:opacity-80">{phone}</a>
+        </p>
+      )}
+      {email && (
+        <p class="text-sm">
+          <a href={`mailto:${email}`} class="hover:opacity-80">{email}</a>
+        </p>
+      )}
+    </div>
+    {columns.map((col) => (
+      <div>
+        <p class="text-sm uppercase tracking-widest opacity-50 mb-3">{col.title}</p>
+        <ul class="space-y-2">
+          {col.links.map((l) => (
+            <li>
+              <a href={l.href} class="text-sm hover:opacity-80">{l.label}</a>
+            </li>
+          ))}
+        </ul>
+      </div>
+    ))}
+    {social.length > 0 && (
+      <div>
+        <p class="text-sm uppercase tracking-widest opacity-50 mb-3">Seguinos</p>
+        <ul class="flex gap-3 flex-wrap">
+          {social.map((s) => (
+            <li>
+              <a
+                href={s.href}
+                aria-label={s.label}
+                target="_blank"
+                rel="noopener noreferrer"
+                class="inline-flex w-10 h-10 items-center justify-center rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+              >
+                <span class="text-sm">{s.label.slice(0, 2)}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </div>
+    )}
+  </div>
+  <div class="border-t border-white/10">
+    <div class="mx-auto max-w-7xl px-5 sm:px-6 lg:px-8 py-5 flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between text-sm opacity-70">
+      <p>© {year} {brand}. Todos los derechos reservados.</p>
+      {legal.length > 0 && (
+        <ul class="flex flex-wrap gap-x-5 gap-y-2">
+          {legal.map((l) => (
+            <li><a href={l.href} class="hover:opacity-100">{l.label}</a></li>
+          ))}
+        </ul>
+      )}
+    </div>
+  </div>
+</footer>

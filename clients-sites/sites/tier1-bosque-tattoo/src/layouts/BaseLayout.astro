@@ -1,0 +1,63 @@
+---
+import '@/styles/global.css';
+import { SeoHead, CookieBanner } from '@twf/ui';
+import { resolveAnalyticsConfig, needsCookieConsent } from '@twf/lib/analytics';
+
+interface Props {
+  title: string;
+  description: string;
+  ogImage?: string;
+  pathname?: string;
+}
+const { title, description, ogImage, pathname = '/' } = Astro.props;
+const SITE_URL = import.meta.env.PUBLIC_SITE_URL || 'https://bosquetattoo.uy';
+const canonical = new URL(pathname, SITE_URL).toString();
+const analytics = resolveAnalyticsConfig(import.meta.env as unknown as Record<string, string | undefined>);
+const showCookieBanner = needsCookieConsent(analytics);
+---
+
+<!doctype html>
+<html lang="es-UY">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <SeoHead
+      title={title}
+      description={description}
+      canonical={canonical}
+      siteName="BOSQUE Tattoo Estudio · Ciudad Vieja, Montevideo"
+      ogImage={ogImage}
+      themeColor="#0e0e0e"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap" />
+    {analytics.provider === 'plausible' && analytics.plausibleDomain && (
+      <script
+        is:inline
+        defer
+        data-domain={analytics.plausibleDomain}
+        src="https://plausible.io/js/script.js"
+      />
+    )}
+  </head>
+  <body class="font-body antialiased">
+    <a class="skip-link" href="#main">Saltar al contenido principal</a>
+    <slot />
+    {showCookieBanner && <CookieBanner policyHref="/legal/cookies" />}
+    {analytics.provider === 'ga4' && analytics.ga4Id && (
+      <>
+        <script is:inline async src={`https://www.googletagmanager.com/gtag/js?id=${analytics.ga4Id}`} />
+        <script is:inline define:vars={{ ga4Id: analytics.ga4Id }}>
+          window.dataLayer = window.dataLayer || [];
+          function gtag(){dataLayer.push(arguments);}
+          // Esperar consent
+          document.addEventListener('cookies:accepted', () => {
+            gtag('js', new Date());
+            gtag('config', ga4Id);
+          });
+        </script>
+      </>
+    )}
+  </body>
+</html>

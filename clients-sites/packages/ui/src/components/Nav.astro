@@ -1,0 +1,125 @@
+---
+interface NavLink {
+  href: string;
+  label: string;
+}
+interface Props {
+  brand: string;
+  brandHref?: string;
+  links: NavLink[];
+  cta?: { href: string; label: string };
+  sticky?: boolean;
+  variant?: 'light' | 'dark' | 'transparent';
+  class?: string;
+}
+const {
+  brand,
+  brandHref = '/',
+  links,
+  cta,
+  sticky = true,
+  variant = 'light',
+  class: className = '',
+} = Astro.props;
+
+const variantClass =
+  variant === 'dark'
+    ? 'bg-[var(--color-neutral-text)] text-[var(--color-neutral-bg)]'
+    : variant === 'transparent'
+    ? 'bg-transparent text-white'
+    : 'bg-[var(--color-neutral-bg)]/95 backdrop-blur supports-[backdrop-filter]:bg-[var(--color-neutral-bg)]/80 text-[var(--color-neutral-text)] border-b border-black/5';
+---
+
+<header
+  class={`${sticky ? 'sticky top-0' : ''} z-[1200] ${variantClass} ${className}`}
+  data-nav
+>
+  <div class="mx-auto max-w-7xl px-5 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-6">
+    <a href={brandHref} class="font-display text-xl tracking-tight">
+      {brand}
+    </a>
+    <nav aria-label="Principal" class="hidden md:flex items-center gap-7">
+      {links.map((l) => (
+        <a
+          href={l.href}
+          class="text-sm hover:opacity-70 transition-opacity duration-150"
+        >
+          {l.label}
+        </a>
+      ))}
+      {cta && (
+        <a
+          href={cta.href}
+          class="text-sm font-medium rounded-md bg-[var(--color-primary)] text-[var(--color-primary-contrast,white)] px-4 py-2 hover:opacity-90 transition-opacity"
+        >
+          {cta.label}
+        </a>
+      )}
+    </nav>
+    <button
+      type="button"
+      class="md:hidden inline-flex items-center justify-center w-10 h-10 rounded-md"
+      aria-controls="mobile-menu"
+      aria-expanded="false"
+      data-mobile-toggle
+      aria-label="Abrir menú"
+    >
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="3" y1="6" x2="21" y2="6"></line>
+        <line x1="3" y1="12" x2="21" y2="12"></line>
+        <line x1="3" y1="18" x2="21" y2="18"></line>
+      </svg>
+    </button>
+  </div>
+  <div
+    id="mobile-menu"
+    class="md:hidden hidden border-t border-black/5"
+    data-mobile-panel
+  >
+    <ul class="px-5 py-3 flex flex-col gap-1">
+      {links.map((l) => (
+        <li>
+          <a href={l.href} class="block py-3 text-base">{l.label}</a>
+        </li>
+      ))}
+      {cta && (
+        <li>
+          <a
+            href={cta.href}
+            class="block py-3 text-base font-medium text-[var(--color-primary)]"
+          >
+            {cta.label} →
+          </a>
+        </li>
+      )}
+    </ul>
+  </div>
+</header>
+
+<script is:inline>
+  (function () {
+    const init = () => {
+      document.querySelectorAll('[data-nav]').forEach((nav) => {
+        const toggle = nav.querySelector('[data-mobile-toggle]');
+        const panel = nav.querySelector('[data-mobile-panel]');
+        if (!toggle || !panel || toggle.dataset.ready) return;
+        toggle.dataset.ready = 'true';
+        toggle.addEventListener('click', () => {
+          const isOpen = panel.classList.contains('hidden') === false;
+          if (isOpen) {
+            panel.classList.add('hidden');
+            toggle.setAttribute('aria-expanded', 'false');
+            toggle.setAttribute('aria-label', 'Abrir menú');
+          } else {
+            panel.classList.remove('hidden');
+            toggle.setAttribute('aria-expanded', 'true');
+            toggle.setAttribute('aria-label', 'Cerrar menú');
+          }
+        });
+      });
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+    else init();
+    document.addEventListener('astro:page-load', init);
+  })();
+</script>

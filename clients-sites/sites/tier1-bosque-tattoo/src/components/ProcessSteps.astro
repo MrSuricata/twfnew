@@ -1,0 +1,30 @@
+---
+interface Step {
+  n: number;
+  title: string;
+  description: string;
+}
+interface Props {
+  steps: Step[];
+  class?: string;
+}
+const { steps, class: className = '' } = Astro.props;
+---
+
+<ol class={`grid gap-6 sm:grid-cols-2 lg:grid-cols-4 ${className}`}>
+  {steps.map((step) => (
+    <li class="relative flex flex-col gap-3 p-6 rounded-2xl border border-white/10 bg-[#11110e] text-[var(--color-neutral-bg)]">
+      <div class="flex items-center gap-3">
+        <span
+          class="font-display text-5xl leading-none text-[var(--color-accent)]"
+          aria-hidden="true"
+        >
+          {String(step.n).padStart(2, '0')}
+        </span>
+        <span class="h-px flex-1 bg-white/10"></span>
+      </div>
+      <h3 class="font-display text-2xl leading-none">{step.title}</h3>
+      <p class="text-sm opacity-75 leading-relaxed">{step.description}</p>
+    </li>
+  ))}
+</ol>

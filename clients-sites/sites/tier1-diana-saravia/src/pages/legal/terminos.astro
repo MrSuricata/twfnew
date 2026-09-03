@@ -1,0 +1,24 @@
+---
+export const prerender = true;
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import { Container, Section, Footer } from '@twf/ui';
+---
+
+<BaseLayout title="Términos y condiciones · Diana Saravia" description="Condiciones de uso del sitio." pathname="/legal/terminos">
+  <Section spacing="lg">
+    <Container size="md">
+      <h1 class="font-display text-4xl mb-4">Términos y condiciones</h1>
+      <p class="opacity-70 mb-8">Última actualización: 2026.</p>
+      <article class="prose max-w-none space-y-4">
+        <p>El acceso y uso de este sitio implica la aceptación de estos términos. Si no estás de acuerdo, te pedimos que no continúes navegando.</p>
+        <h2 class="font-display text-2xl pt-4">Contenido</h2>
+        <p>Todos los contenidos del sitio (textos, fotografías de obras y de la galería, logos) son propiedad de Diana Saravia Contemporary Art o de los artistas representados, y se publican con autorización. Reproducir las obras sin permiso escrito está prohibido.</p>
+        <h2 class="font-display text-2xl pt-4">Visitas y obras</h2>
+        <p>Las visitas se coordinan con cita previa. La disponibilidad y precio de las obras puede variar; la información publicada es orientativa y debe confirmarse con la galería antes de cualquier compra.</p>
+        <h2 class="font-display text-2xl pt-4">Responsabilidad</h2>
+        <p>El sitio se ofrece "tal cual está". Hacemos lo posible por mantener la información actualizada pero no garantizamos disponibilidad continua.</p>
+      </article>
+    </Container>
+  </Section>
+  <Footer brand="Diana Saravia · Contemporary Art" />
+</BaseLayout>

@@ -1,0 +1,40 @@
+---
+interface Props {
+  name: string;
+  imageUrl: string;
+  imageAlt?: string;
+  representedSince?: string;
+  discipline?: string;
+  class?: string;
+}
+const {
+  name,
+  imageUrl,
+  imageAlt,
+  representedSince,
+  discipline,
+  class: className = '',
+} = Astro.props;
+const alt = imageAlt ?? `Obra representativa de ${name}`;
+---
+
+<article class={`group flex flex-col bg-white overflow-hidden ${className}`}>
+  <div class="relative aspect-[4/5] overflow-hidden bg-[var(--color-accent)]/10">
+    <img
+      src={imageUrl}
+      alt={alt}
+      class="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.03]"
+      loading="lazy"
+      decoding="async"
+    />
+  </div>
+  <div class="pt-4 pb-2">
+    <h3 class="font-display text-xl sm:text-2xl leading-snug">{name}</h3>
+    <div class="mt-1 flex items-center justify-between text-sm opacity-70">
+      {discipline && <span>{discipline}</span>}
+      {representedSince && (
+        <span class="tabular-nums">Representad@ desde {representedSince}</span>
+      )}
+    </div>
+  </div>
+</article>

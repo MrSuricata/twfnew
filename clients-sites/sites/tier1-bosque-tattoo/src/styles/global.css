@@ -1,0 +1,88 @@
+@import 'tailwindcss';
+
+@theme {
+  /* Paleta BOSQUE Tattoo — negro tinta + verde musgo + ocre, sobre papel crudo */
+  --color-primary: #0e0e0e;
+  --color-primary-contrast: #f2efe9;
+  --color-secondary: #7a8c5f;
+  --color-secondary-contrast: #f2efe9;
+  --color-accent: #c9a66b;
+  --color-neutral-bg: #f2efe9;
+  --color-neutral-text: #0e0e0e;
+
+  --font-display: 'Bebas Neue', 'Impact', 'Arial Narrow', sans-serif;
+  --font-body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  --breakpoint-xs: 360px;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+    scroll-behavior: smooth;
+    background: var(--color-neutral-bg);
+    color: var(--color-neutral-text);
+  }
+  body {
+    font-family: var(--font-body);
+    line-height: 1.6;
+  }
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    letter-spacing: 0.01em;
+    line-height: 1.05;
+  }
+  ::selection {
+    background: var(--color-accent);
+    color: var(--color-primary);
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Skip link */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 9999;
+  background: var(--color-neutral-text);
+  color: var(--color-neutral-bg);
+  padding: 0.75rem 1rem;
+  border-radius: 0 0 8px 0;
+}
+.skip-link:focus {
+  left: 0;
+}
+
+/* Textura sutil de papel para fondos oscuros */
+.ink-noise {
+  position: relative;
+  isolation: isolate;
+}
+.ink-noise::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  opacity: 0.08;
+  background-image:
+    radial-gradient(circle at 10% 20%, rgba(255,255,255,0.6) 0, transparent 0.1%),
+    radial-gradient(circle at 80% 50%, rgba(255,255,255,0.6) 0, transparent 0.1%),
+    radial-gradient(circle at 30% 80%, rgba(255,255,255,0.6) 0, transparent 0.1%);
+  background-size: 3px 3px, 5px 5px, 7px 7px;
+}

@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 500" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="bg2" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1b1d18"/>
+      <stop offset="100%" stop-color="#0a0a0a"/>
+    </linearGradient>
+  </defs>
+  <rect width="400" height="500" fill="url(#bg2)"/>
+  <g fill="#26261f">
+    <circle cx="200" cy="180" r="80"/>
+    <path d="M70 500 Q 70 360 200 320 Q 330 360 330 500 Z"/>
+  </g>
+  <!-- pelo corto -->
+  <path d="M130 150 Q 140 100 200 100 Q 260 100 270 150 L 270 170 Q 235 150 200 152 Q 165 154 130 170 Z" fill="#0d0d09"/>
+  <!-- tatuaje en brazo (ramita) -->
+  <g fill="none" stroke="#f2efe9" stroke-width="0.8" opacity="0.65">
+    <path d="M120 360 L 120 460"/>
+    <path d="M120 380 q -8 -6 -16 -10"/>
+    <path d="M120 400 q 8 -6 16 -10"/>
+    <path d="M120 420 q -8 -6 -16 -10"/>
+  </g>
+  <g fill="none" stroke="#7a8c5f" stroke-width="0.8" opacity="0.5">
+    <path d="M30 440 Q 200 470 370 440"/>
+  </g>
+  <text x="50%" y="92%" text-anchor="middle" font-family="Bebas Neue, Impact, sans-serif" font-size="24" fill="#f2efe9" opacity="0.5" letter-spacing="0.2em">ARTIST · 02</text>
+</svg>

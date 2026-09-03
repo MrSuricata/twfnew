@@ -1,0 +1,37 @@
+---
+export const prerender = true;
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import { Container, Section, Footer } from '@twf/ui';
+---
+
+<BaseLayout
+  title="Términos y condiciones · BOSQUE Tattoo"
+  description="Condiciones de uso del sitio y de las sesiones del estudio."
+  pathname="/legal/terminos"
+>
+  <Section spacing="lg">
+    <Container size="md">
+      <h1 class="font-display text-5xl mb-4">Términos y condiciones</h1>
+      <p class="opacity-70 mb-8">Última actualización: 2026.</p>
+      <article class="prose max-w-none space-y-4">
+        <p>El acceso y uso de este sitio implica la aceptación de estos términos. Si no estás de acuerdo, te pedimos que no continúes navegando ni completes el formulario de contacto.</p>
+
+        <h2 class="font-display text-3xl pt-4">Sesiones y agenda</h2>
+        <p>La reserva queda confirmada cuando recibís nuestra confirmación por WhatsApp o email <b>y</b> abonaste la seña acordada. La seña no es reembolsable; sí puede reprogramarse una vez avisando con al menos 48 h de anticipación. {'{{PENDIENTE_POLITICA_SEÑA}}'}</p>
+
+        <h2 class="font-display text-3xl pt-4">Edad y salud</h2>
+        <p>Tatuamos a personas mayores de 18 años con documento de identidad vigente. Antes de la sesión firmás una declaración con antecedentes relevantes (alergias, embarazo, medicación, enfermedades crónicas). Nos reservamos el derecho de suspender la sesión por razones de salud.</p>
+
+        <h2 class="font-display text-3xl pt-4">Retoque</h2>
+        <p>El retoque está incluido dentro de los 60 días posteriores a la sesión si la cicatrización lo requiere y se siguieron las recomendaciones de cuidado. Después de ese plazo, tiene un costo simbólico que comunicamos antes. {'{{PENDIENTE_POLITICA_RETOQUE}}'}</p>
+
+        <h2 class="font-display text-3xl pt-4">Propiedad intelectual</h2>
+        <p>Los diseños son creación del/de la tatuador/a que los firma. La sesión te da derecho a llevarlos en tu piel; los archivos digitales del diseño no se comercializan ni se ceden a terceros.</p>
+
+        <h2 class="font-display text-3xl pt-4">Responsabilidad</h2>
+        <p>El sitio se ofrece "tal cual está". Hacemos lo posible por mantener la información actualizada, pero no garantizamos disponibilidad continua del sitio ni del calendario del estudio.</p>
+      </article>
+    </Container>
+  </Section>
+  <Footer brand="BOSQUE Tattoo" />
+</BaseLayout>

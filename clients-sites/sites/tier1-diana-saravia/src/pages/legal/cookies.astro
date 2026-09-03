@@ -1,0 +1,25 @@
+---
+export const prerender = true;
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import { Container, Section, Footer } from '@twf/ui';
+---
+
+<BaseLayout title="Política de cookies · Diana Saravia" description="Cómo usamos cookies." pathname="/legal/cookies">
+  <Section spacing="lg">
+    <Container size="md">
+      <h1 class="font-display text-4xl mb-4">Política de cookies</h1>
+      <p class="opacity-70 mb-8">Última actualización: 2026.</p>
+      <article class="prose max-w-none space-y-4">
+        <p>Usamos cookies estrictamente necesarias para el funcionamiento del sitio y, si nos das tu consentimiento, cookies analíticas que nos permiten medir el uso del sitio de forma agregada y anónima.</p>
+        <h2 class="font-display text-2xl pt-4">Tipos de cookies</h2>
+        <ul class="list-disc pl-6">
+          <li><b>Necesarias:</b> habilitan la navegación básica.</li>
+          <li><b>Analíticas:</b> Google Analytics / Plausible para entender qué páginas funcionan mejor.</li>
+        </ul>
+        <h2 class="font-display text-2xl pt-4">Cómo cambiar tu elección</h2>
+        <p>Podés borrar las cookies desde la configuración de tu navegador en cualquier momento.</p>
+      </article>
+    </Container>
+  </Section>
+  <Footer brand="Diana Saravia · Contemporary Art" />
+</BaseLayout>

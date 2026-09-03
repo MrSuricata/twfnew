@@ -1,0 +1,35 @@
+---
+interface Props {
+  query: string;
+  title?: string;
+  height?: number;
+  class?: string;
+  zoom?: number;
+}
+const { query, title = 'Ubicación', height = 380, class: className = '', zoom = 16 } = Astro.props;
+const src = `https://www.google.com/maps?q=${encodeURIComponent(query)}&z=${zoom}&output=embed`;
+const directionsHref = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(query)}`;
+---
+
+<div class={`relative overflow-hidden rounded-2xl border border-black/10 shadow-sm ${className}`}>
+  <iframe
+    title={title}
+    src={src}
+    loading="lazy"
+    referrerpolicy="no-referrer-when-downgrade"
+    style={`width:100%;height:${height}px;border:0;display:block;`}
+  ></iframe>
+  <noscript>
+    <p class="p-4 text-sm">
+      Ver en <a href={directionsHref} target="_blank" rel="noopener">Google Maps</a>.
+    </p>
+  </noscript>
+  <a
+    href={directionsHref}
+    target="_blank"
+    rel="noopener noreferrer"
+    class="absolute bottom-4 right-4 inline-flex items-center gap-2 rounded-full bg-white text-sm px-4 py-2 shadow-md hover:shadow-lg transition-shadow"
+  >
+    Cómo llegar →
+  </a>
+</div>

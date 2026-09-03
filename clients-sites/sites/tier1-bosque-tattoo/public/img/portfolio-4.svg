@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">
+  <rect width="600" height="600" fill="#0d0d0a"/>
+  <!-- lettering -->
+  <text x="50%" y="55%" text-anchor="middle" font-family="Bebas Neue, Impact, sans-serif" font-size="180" fill="#f2efe9" letter-spacing="0.04em">SIEMPRE</text>
+  <text x="50%" y="72%" text-anchor="middle" font-family="Inter, sans-serif" font-size="32" font-style="italic" fill="#c9a66b" letter-spacing="0.15em">— y para siempre —</text>
+  <g fill="none" stroke="#7a8c5f" stroke-width="1.2" opacity="0.7">
+    <path d="M120 200 Q 300 170 480 200"/>
+    <path d="M120 410 Q 300 440 480 410"/>
+  </g>
+  <text x="50%" y="93%" text-anchor="middle" fill="#c9a66b" font-family="Inter, sans-serif" font-size="14" letter-spacing="0.3em" opacity="0.7">LETTERING</text>
+</svg>

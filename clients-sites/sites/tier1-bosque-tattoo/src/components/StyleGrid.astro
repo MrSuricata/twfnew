@@ -1,0 +1,65 @@
+---
+interface StyleItem {
+  name: string;
+  description: string;
+  /** uno de: 'fineline' | 'blackwork' | 'ilustrativo' | 'lettering' */
+  variant: 'fineline' | 'blackwork' | 'ilustrativo' | 'lettering';
+}
+interface Props {
+  items: StyleItem[];
+  class?: string;
+}
+const { items, class: className = '' } = Astro.props;
+---
+
+<div class={`grid sm:grid-cols-2 lg:grid-cols-4 gap-4 ${className}`}>
+  {items.map((s) => (
+    <article class="group relative flex flex-col gap-4 bg-[#11110e] text-[var(--color-neutral-bg)] rounded-2xl p-6 border border-white/5 overflow-hidden">
+      <div class="aspect-square w-full grid place-items-center rounded-xl bg-black/40 border border-white/5 overflow-hidden">
+        {s.variant === 'fineline' && (
+          <svg viewBox="0 0 120 120" class="w-full h-full" aria-hidden="true">
+            <g fill="none" stroke="#f2efe9" stroke-width="1" stroke-linecap="round">
+              <path d="M60 18 L60 102"/>
+              <path d="M60 36 Q 38 32 24 18"/>
+              <path d="M60 36 Q 82 32 96 18"/>
+              <path d="M60 58 Q 30 56 14 38"/>
+              <path d="M60 58 Q 90 56 106 38"/>
+              <path d="M60 80 Q 36 80 20 64"/>
+              <path d="M60 80 Q 84 80 100 64"/>
+            </g>
+          </svg>
+        )}
+        {s.variant === 'blackwork' && (
+          <svg viewBox="0 0 120 120" class="w-full h-full" aria-hidden="true">
+            <g transform="translate(60 60)" fill="none" stroke="#f2efe9" stroke-width="1.4">
+              <circle r="42"/>
+              <circle r="28"/>
+              <polygon points="0,-42 36,-21 36,21 0,42 -36,21 -36,-21"/>
+              <circle r="4" fill="#c9a66b" stroke="#c9a66b"/>
+            </g>
+          </svg>
+        )}
+        {s.variant === 'ilustrativo' && (
+          <svg viewBox="0 0 120 120" class="w-full h-full" aria-hidden="true">
+            <g fill="none" stroke="#f2efe9" stroke-width="1.4" stroke-linecap="round">
+              <circle cx="78" cy="38" r="16" stroke="#c9a66b"/>
+              <circle cx="84" cy="34" r="12" fill="#11110e" stroke="none"/>
+              <path d="M10 78 Q 30 64 50 78 T 90 78 T 120 78"/>
+              <path d="M10 92 Q 30 78 50 92 T 90 92 T 120 92" stroke-opacity="0.7"/>
+            </g>
+          </svg>
+        )}
+        {s.variant === 'lettering' && (
+          <svg viewBox="0 0 120 120" class="w-full h-full" aria-hidden="true">
+            <text x="60" y="74" text-anchor="middle" font-family="Bebas Neue, Impact, sans-serif" font-size="48" fill="#f2efe9">ink</text>
+            <path d="M30 88 Q 60 96 90 88" fill="none" stroke="#c9a66b" stroke-width="1"/>
+          </svg>
+        )}
+      </div>
+      <div>
+        <h3 class="font-display text-2xl leading-none mb-2">{s.name}</h3>
+        <p class="text-sm opacity-75 leading-relaxed">{s.description}</p>
+      </div>
+    </article>
+  ))}
+</div>

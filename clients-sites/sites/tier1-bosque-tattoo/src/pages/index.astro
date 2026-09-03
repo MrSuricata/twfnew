@@ -1,0 +1,395 @@
+---
+export const prerender = true;
+
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import {
+  Nav,
+  Footer,
+  Hero,
+  Section,
+  Container,
+  Button,
+  MapEmbed,
+  WhatsAppFloat,
+  JsonLd,
+  Reveal,
+  ScrollProgress,
+  Marquee,
+  Tilt,
+  Parallax,
+  Magnetic,
+  ContactForm,
+  Gallery,
+  Accordion,
+} from '@twf/ui';
+import { tattooParlor } from '@twf/lib/schema';
+import { buildWhatsAppLink } from '@twf/lib/whatsapp';
+import ArtistCard from '@/components/ArtistCard.astro';
+import StyleGrid from '@/components/StyleGrid.astro';
+import ProcessSteps from '@/components/ProcessSteps.astro';
+
+const WHATSAPP = import.meta.env.PUBLIC_WHATSAPP_NUMBER || '59899999999';
+const WHATSAPP_MSG =
+  import.meta.env.PUBLIC_WHATSAPP_DEFAULT_MSG ||
+  'Hola! Tengo una referencia para tatuarme. Adjunto foto y consulto.';
+const SITE_URL = import.meta.env.PUBLIC_SITE_URL || 'https://bosquetattoo.uy';
+const waLink = buildWhatsAppLink({ number: WHATSAPP, message: WHATSAPP_MSG });
+
+const artists = [
+  {
+    name: 'Mar Vázquez',
+    role: 'Fineline · Botánico',
+    bio: 'Trabaja con líneas finísimas, motivos vegetales y composiciones íntimas. {{PENDIENTE_ARTISTAS_REALES}}',
+    instagram: 'https://www.instagram.com/bosque.tattooestudio/',
+    imageUrl: '/img/artist-1.svg',
+  },
+  {
+    name: 'Iván Pérez',
+    role: 'Blackwork · Geometría',
+    bio: 'Diseños sólidos, mandalas y proyectos a gran escala (manga, sleeve). {{PENDIENTE_ARTISTAS_REALES}}',
+    instagram: 'https://www.instagram.com/bosque.tattooestudio/',
+    imageUrl: '/img/artist-2.svg',
+  },
+  {
+    name: 'Luca Romano',
+    role: 'Ilustrativo · Lettering',
+    bio: 'Ilustración a medida con guiños al tatuaje tradicional, y lettering de autor. {{PENDIENTE_ARTISTAS_REALES}}',
+    instagram: 'https://www.instagram.com/bosque.tattooestudio/',
+    imageUrl: '/img/artist-3.svg',
+  },
+];
+
+const styles = [
+  {
+    name: 'Fineline',
+    description: 'Líneas finas, detalles delicados, composiciones íntimas y proyectos pequeños.',
+    variant: 'fineline' as const,
+  },
+  {
+    name: 'Blackwork',
+    description: 'Negro sólido, geometría, manchas grandes, mandalas y proyectos a escala.',
+    variant: 'blackwork' as const,
+  },
+  {
+    name: 'Ilustrativo',
+    description: 'Ilustración a medida con referencias tradicionales y propias del estudio.',
+    variant: 'ilustrativo' as const,
+  },
+  {
+    name: 'Lettering',
+    description: 'Tipografía dibujada a mano, frases, fechas y dedicatorias.',
+    variant: 'lettering' as const,
+  },
+];
+
+const processSteps = [
+  {
+    n: 1,
+    title: 'Mandás referencia',
+    description:
+      'Por WhatsApp nos mandás foto/idea, zona del cuerpo y tamaño aproximado. Te respondemos con tatuador/a sugerido/a y rango de precio.',
+  },
+  {
+    n: 2,
+    title: 'Diseñamos juntos',
+    description:
+      'Trabajamos el diseño a medida. Vos lo mirás, ajustamos juntos. Recién agendamos la sesión cuando estás 100% conforme.',
+  },
+  {
+    n: 3,
+    title: 'Sesión privada',
+    description:
+      'Estudio cerrado, sin público, agujas descartables y productos hipoalergénicos. Tu sesión, tu privacidad.',
+  },
+  {
+    n: 4,
+    title: 'Cuidado post',
+    description:
+      'Te llevás guía de cuidados por escrito. Retoque incluido dentro de 60 días si la cicatrización lo requiere. {{PENDIENTE_POLITICA_RETOQUE}}',
+  },
+];
+
+const galleryImages = [
+  { src: '/img/portfolio-1.svg', alt: 'Tatuaje fineline botánico: rama con hojas en tinta negra' },
+  { src: '/img/portfolio-2.svg', alt: 'Tatuaje blackwork geométrico tipo mandala con detalle ocre' },
+  { src: '/img/portfolio-3.svg', alt: 'Tatuaje ilustrativo: ola estilo japonés con luna' },
+  { src: '/img/portfolio-4.svg', alt: 'Tatuaje de lettering en tinta negra: la palabra Siempre' },
+  { src: '/img/portfolio-5.svg', alt: 'Tatuaje fineline de un ave posada sobre una ramita' },
+  { src: '/img/portfolio-6.svg', alt: 'Tatuaje blackwork de una serpiente con follaje verde musgo' },
+];
+
+const faqs = [
+  {
+    question: '¿Cuánto cuesta una sesión?',
+    answer:
+      'Trabajamos con un mínimo orientativo por sesión (consultanos por WhatsApp con tu referencia). El precio final depende del tamaño, la zona del cuerpo, el detalle y el tatuador/a. Antes de agendar te pasamos un rango cerrado por escrito. {{PENDIENTE_PRECIO_MINIMO}}',
+  },
+  {
+    question: '¿Hacen retoque gratis?',
+    answer:
+      'Sí. El retoque está incluido dentro de los 60 días posteriores a la sesión si la cicatrización lo requiere y seguiste la guía de cuidados. Pasados los 60 días tiene un costo simbólico. {{PENDIENTE_POLITICA_RETOQUE}}',
+  },
+  {
+    question: '¿Cuáles son los cuidados post-tattoo?',
+    answer:
+      'En las primeras 48 h: mantener limpio con agua y jabón neutro, secar dando toques, no rascar, no exponer al sol. Durante 3-4 semanas: hidratar 2-3 veces al día con la pomada que te entregamos, evitar pileta, mar y gimnasio. Si tenés dudas, escribinos.',
+  },
+  {
+    question: '¿Cómo agendo?',
+    answer:
+      'Por WhatsApp. Mandanos foto de referencia, zona del cuerpo y tamaño aproximado. Te devolvemos con artista sugerido/a, rango de precio y propuesta de fecha. La sesión se confirma con una seña.',
+  },
+  {
+    question: '¿Hacen piercing?',
+    answer:
+      'Trabajamos con joyería de implant grade y consultas con turno previo. {{PENDIENTE_CONFIRMAR_PIERCING}} — confirmá disponibilidad de horarios por WhatsApp antes de venir.',
+  },
+];
+
+const schema = tattooParlor({
+  name: 'BOSQUE Tattoo Estudio',
+  url: SITE_URL,
+  description:
+    'Estudio privado de tatuajes en Ciudad Vieja, Montevideo. Fineline, blackwork, ilustrativo y proyectos a medida. Atendemos con cita previa.',
+  telephone: '+59899999999',
+  image: `${SITE_URL}/img/hero.svg`,
+  address: {
+    streetAddress: '{{PENDIENTE_DIRECCION_EXACTA}}',
+    addressLocality: 'Montevideo',
+    addressRegion: 'Ciudad Vieja',
+    addressCountry: 'UY',
+  },
+  priceRange: '$$',
+  openingHours: [
+    { dayOfWeek: ['Tuesday', 'Wednesday', 'Thursday', 'Friday'], opens: '13:00', closes: '20:00' },
+    { dayOfWeek: 'Saturday', opens: '12:00', closes: '18:00' },
+  ],
+  sameAs: ['https://www.instagram.com/bosque.tattooestudio/'],
+});
+
+const navLinks = [
+  { href: '#artistas', label: 'Artistas' },
+  { href: '#estilos', label: 'Estilos' },
+  { href: '#proceso', label: 'Proceso' },
+  { href: '#galeria', label: 'Galería' },
+  { href: '#faq', label: 'FAQ' },
+  { href: '#agendar', label: 'Agendar' },
+];
+---
+
+<BaseLayout
+  title="BOSQUE Tattoo Estudio · Tatuajes en Ciudad Vieja, Montevideo"
+  description="Estudio privado de tatuajes en Ciudad Vieja. Fineline, blackwork, ilustrativo y proyectos a medida. Trabajamos con cita previa: mandanos tu referencia por WhatsApp."
+>
+  <ScrollProgress />
+  <Nav
+    brand="BOSQUE"
+    links={navLinks}
+    variant="dark"
+    cta={{ href: waLink, label: 'Agendar' }}
+  />
+
+  <main id="main" class="bg-[#0a0a0a] text-[var(--color-neutral-bg)]">
+    <!-- HERO -->
+    <Parallax intensity={0.35}>
+      <Hero
+        eyebrow="Ciudad Vieja · Montevideo"
+        title="BOSQUE. Estudio privado de tatuajes en Ciudad Vieja."
+        subtitle="Trabajamos con cita previa. Tu sesión, tu privacidad."
+        variant="image-bg"
+        imageUrl="/img/hero.svg"
+        imageAlt="Composición oscura con la marca BOSQUE y un árbol fineline al costado"
+        class="min-h-[80vh]"
+      >
+        <Magnetic strength={0.18}>
+          <Button as="a" href={waLink} variant="primary" size="lg">Mandar referencia por WhatsApp</Button>
+        </Magnetic>
+        <Button as="a" href="#galeria" variant="outline" size="lg">Ver portfolio</Button>
+      </Hero>
+    </Parallax>
+
+    <!-- MARQUEE -->
+    <Marquee
+      items={['Fineline', 'Blackwork', 'Ilustrativo', 'Lettering', 'Private studio', 'Cita previa', 'Ciudad Vieja · MVD']}
+      speed={42}
+      variant="inverted"
+    />
+
+    <!-- ARTISTAS -->
+    <Section id="artistas" spacing="lg" class="bg-[#0a0a0a]">
+      <Container>
+        <Reveal effect="fade-up">
+          <p class="text-sm uppercase tracking-widest text-[var(--color-accent)] mb-3">Artistas</p>
+          <h2 class="font-display text-4xl sm:text-5xl lg:text-6xl mb-4 max-w-3xl">
+            Tres miradas sobre la misma tinta.
+          </h2>
+          <p class="max-w-2xl text-lg opacity-75 mb-12">
+            Cada artista de BOSQUE trabaja un estilo propio. Elegí por afinidad o mandanos tu referencia
+            y nosotros te sugerimos quién la puede hacer mejor.
+          </p>
+        </Reveal>
+
+        <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {artists.map((a) => (
+            <Reveal effect="fade-up">
+              <Tilt intensity={5} glare={false}>
+                <ArtistCard
+                  name={a.name}
+                  role={a.role}
+                  bio={a.bio}
+                  instagram={a.instagram}
+                  imageUrl={a.imageUrl}
+                />
+              </Tilt>
+            </Reveal>
+          ))}
+        </div>
+      </Container>
+    </Section>
+
+    <!-- ESTILOS -->
+    <Section id="estilos" spacing="lg" class="bg-[#0d0d0a]">
+      <Container>
+        <Reveal effect="fade-up">
+          <p class="text-sm uppercase tracking-widest text-[var(--color-accent)] mb-3">Estilos</p>
+          <h2 class="font-display text-4xl sm:text-5xl lg:text-6xl mb-4 max-w-3xl">
+            Fineline, blackwork, ilustrativo y proyectos a medida.
+          </h2>
+          <p class="max-w-2xl text-lg opacity-75 mb-12">
+            Atendemos también guest spots y proyectos grandes (manga, sleeve).
+          </p>
+        </Reveal>
+        <Reveal effect="fade-up" stagger>
+          <StyleGrid items={styles} />
+        </Reveal>
+      </Container>
+    </Section>
+
+    <!-- PROCESO -->
+    <Section id="proceso" spacing="lg" class="bg-[#0a0a0a]">
+      <Container>
+        <Reveal effect="fade-up">
+          <p class="text-sm uppercase tracking-widest text-[var(--color-accent)] mb-3">Cómo trabajamos</p>
+          <h2 class="font-display text-4xl sm:text-5xl lg:text-6xl mb-4 max-w-3xl">
+            Mandanos tu referencia por WhatsApp y armamos juntos el diseño.
+          </h2>
+          <p class="max-w-2xl text-lg opacity-75 mb-12">
+            Materiales esterilizados, agujas descartables, productos hipoalergénicos. Sesión en privado.
+          </p>
+        </Reveal>
+        <Reveal effect="fade-up" stagger>
+          <ProcessSteps steps={processSteps} />
+        </Reveal>
+      </Container>
+    </Section>
+
+    <!-- GALERIA -->
+    <Section id="galeria" spacing="lg" class="bg-[#0d0d0a]">
+      <Container>
+        <Reveal effect="fade-up">
+          <p class="text-sm uppercase tracking-widest text-[var(--color-accent)] mb-3">Portfolio</p>
+          <h2 class="font-display text-4xl sm:text-5xl lg:text-6xl mb-4 max-w-3xl">
+            Lo último que salió del estudio.
+          </h2>
+          <p class="max-w-2xl text-lg opacity-75 mb-12">
+            Algunos trabajos del equipo. {'{{PENDIENTE_FOTOS_PORTFOLIO}}'} con fotos reales y créditos.
+          </p>
+        </Reveal>
+        <Reveal effect="blur">
+          <Gallery images={galleryImages} columns={3} aspect="square" />
+        </Reveal>
+      </Container>
+    </Section>
+
+    <!-- FAQ -->
+    <Section id="faq" spacing="lg" class="bg-[#0a0a0a]">
+      <Container size="md">
+        <Reveal effect="fade-up">
+          <p class="text-sm uppercase tracking-widest text-[var(--color-accent)] mb-3">FAQ</p>
+          <h2 class="font-display text-4xl sm:text-5xl lg:text-6xl mb-10">
+            Antes de la primera aguja.
+          </h2>
+        </Reveal>
+        <Reveal effect="fade-up">
+          <div class="bg-[#11110e] rounded-2xl p-6 sm:p-10 border border-white/5">
+            <Accordion items={faqs} class="divide-white/10" />
+          </div>
+        </Reveal>
+      </Container>
+    </Section>
+
+    <!-- AGENDAR / CONTACTO -->
+    <Section id="agendar" spacing="lg" class="bg-[#0d0d0a]">
+      <Container>
+        <div class="grid lg:grid-cols-2 gap-12">
+          <Reveal effect="fade-right">
+            <p class="text-sm uppercase tracking-widest text-[var(--color-accent)] mb-3">Agendar</p>
+            <h2 class="font-display text-4xl sm:text-5xl lg:text-6xl mb-4">
+              Mandanos tu referencia.
+            </h2>
+            <p class="opacity-80 mb-8 text-lg max-w-md">
+              Por WhatsApp es lo más rápido: adjuntás foto, zona del cuerpo y tamaño aproximado.
+              Si preferís email, dejá tu consulta en el formulario.
+            </p>
+            <div class="flex flex-wrap gap-3 mb-10">
+              <Magnetic strength={0.18}>
+                <Button as="a" href={waLink} variant="primary" size="lg">Escribir por WhatsApp</Button>
+              </Magnetic>
+              <Button as="a" href="https://www.instagram.com/bosque.tattooestudio/" variant="outline" size="lg" target="_blank" rel="noopener noreferrer">@bosque.tattooestudio</Button>
+            </div>
+
+            <div class="rounded-2xl border border-white/10 bg-[#11110e] p-6">
+              <p class="text-sm uppercase tracking-widest text-[var(--color-accent)] mb-3">Estudio</p>
+              <p class="font-display text-2xl mb-1">Ciudad Vieja, Montevideo</p>
+              <p class="opacity-75 text-sm mb-4">{`Dirección exacta: {{PENDIENTE_DIRECCION_EXACTA}}`}</p>
+              <dl class="space-y-2 text-sm">
+                <div class="flex justify-between border-b border-white/10 pb-2">
+                  <dt class="opacity-70">Martes a viernes</dt>
+                  <dd>13:00 – 20:00</dd>
+                </div>
+                <div class="flex justify-between border-b border-white/10 pb-2">
+                  <dt class="opacity-70">Sábados</dt>
+                  <dd>12:00 – 18:00</dd>
+                </div>
+                <div class="flex justify-between">
+                  <dt class="opacity-70">Domingos y lunes</dt>
+                  <dd>Cerrado</dd>
+                </div>
+              </dl>
+            </div>
+          </Reveal>
+
+          <Reveal effect="fade-left">
+            <div class="bg-[#11110e] rounded-2xl p-6 sm:p-10 border border-white/5">
+              <h3 class="font-display text-3xl mb-2">Formulario</h3>
+              <p class="opacity-75 mb-6 text-sm">
+                Contanos qué te imaginás y te respondemos al mail.
+              </p>
+              <ContactForm withPhone withSubject submitLabel="Enviar consulta" />
+            </div>
+          </Reveal>
+        </div>
+
+        <Reveal effect="fade-up" class="mt-12">
+          <MapEmbed query="Ciudad Vieja, Montevideo, Uruguay" height={360} />
+        </Reveal>
+      </Container>
+    </Section>
+  </main>
+
+  <Footer
+    brand="BOSQUE Tattoo"
+    tagline="Estudio privado de tatuajes en Ciudad Vieja, Montevideo."
+    address={'Ciudad Vieja, Montevideo · {{PENDIENTE_DIRECCION_EXACTA}}'}
+    email="hola@bosquetattoo.uy"
+    social={[{ href: 'https://www.instagram.com/bosque.tattooestudio/', label: 'Instagram' }]}
+    legal={[
+      { href: '/legal/privacidad', label: 'Privacidad' },
+      { href: '/legal/terminos', label: 'Términos' },
+      { href: '/legal/cookies', label: 'Cookies' },
+    ]}
+  />
+
+  <WhatsAppFloat number={WHATSAPP} message={WHATSAPP_MSG} />
+  <JsonLd data={schema} />
+</BaseLayout>

@@ -1,0 +1,92 @@
+---
+interface Props {
+  items: string[];
+  speed?: number;
+  direction?: 'left' | 'right';
+  separator?: string;
+  pauseOnHover?: boolean;
+  variant?: 'solid' | 'outline' | 'inverted';
+  class?: string;
+}
+const {
+  items,
+  speed = 35,
+  direction = 'left',
+  separator = '•',
+  pauseOnHover = true,
+  variant = 'solid',
+  class: className = '',
+} = Astro.props;
+
+const variantClass =
+  variant === 'outline'
+    ? 'bg-transparent text-[var(--color-neutral-text)] border-y border-[var(--color-neutral-text)]/15'
+    : variant === 'inverted'
+    ? 'bg-[var(--color-neutral-text)] text-[var(--color-neutral-bg)]'
+    : 'bg-[var(--color-primary)] text-[var(--color-primary-contrast,white)]';
+---
+
+<div
+  class={`marquee ${variantClass} ${pauseOnHover ? 'marquee--hover-pause' : ''} ${className}`}
+  data-direction={direction}
+  style={`--marquee-speed:${speed}s;`}
+  aria-hidden="true"
+>
+  <div class="marquee__track">
+    {[0, 1].map((groupIdx) => (
+      <ul class="marquee__group" data-group={groupIdx}>
+        {items.map((item, i) => (
+          <li class="marquee__item">
+            <span>{item}</span>
+            <span class="marquee__sep" aria-hidden="true">{separator}</span>
+          </li>
+        ))}
+      </ul>
+    ))}
+  </div>
+</div>
+
+<style>
+  .marquee {
+    overflow: hidden;
+    width: 100%;
+    padding: 0.75rem 0;
+    font-family: var(--font-display, inherit);
+    font-size: clamp(1.1rem, 2.2vw, 1.6rem);
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+  .marquee__track {
+    display: flex;
+    gap: 2rem;
+    width: max-content;
+    animation: marquee-scroll var(--marquee-speed, 35s) linear infinite;
+  }
+  .marquee[data-direction='right'] .marquee__track {
+    animation-direction: reverse;
+  }
+  .marquee__group {
+    display: flex;
+    gap: 2rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    flex-shrink: 0;
+  }
+  .marquee__item {
+    display: inline-flex;
+    align-items: center;
+    gap: 2rem;
+    white-space: nowrap;
+  }
+  .marquee--hover-pause:hover .marquee__track {
+    animation-play-state: paused;
+  }
+  @keyframes marquee-scroll {
+    from { transform: translateX(0); }
+    to { transform: translateX(-50%); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .marquee__track { animation: none; }
+  }
+</style>

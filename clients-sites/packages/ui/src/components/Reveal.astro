@@ -1,0 +1,153 @@
+---
+/**
+ * Wrapper que anima su contenido al entrar en viewport.
+ * Estrategia dual:
+ *  - Browsers modernos (Chrome 115+, Edge, Safari TP): animation-timeline: view().
+ *  - Resto: IntersectionObserver añade .is-visible.
+ * Respeta prefers-reduced-motion (no anima).
+ *
+ * Uso:
+ *   <Reveal as="section" effect="fade-up" delay={120}>
+ *     <h2>Algo</h2>
+ *   </Reveal>
+ */
+interface Props {
+  as?: string;
+  effect?: 'fade' | 'fade-up' | 'fade-down' | 'fade-left' | 'fade-right' | 'scale' | 'blur';
+  delay?: number;
+  duration?: number;
+  threshold?: number;
+  once?: boolean;
+  stagger?: boolean;
+  class?: string;
+}
+const {
+  as: Tag = 'div',
+  effect = 'fade-up',
+  delay = 0,
+  duration = 700,
+  threshold = 0.15,
+  once = true,
+  stagger = false,
+  class: className = '',
+} = Astro.props;
+const style = `--reveal-delay:${delay}ms;--reveal-duration:${duration}ms;`;
+---
+
+<Tag
+  class={`reveal reveal--${effect} ${stagger ? 'reveal--stagger' : ''} ${className}`}
+  data-reveal
+  data-reveal-threshold={threshold}
+  data-reveal-once={once ? 'true' : 'false'}
+  style={style}
+>
+  <slot />
+</Tag>
+
+<style is:global>
+  .reveal {
+    --reveal-delay: 0ms;
+    --reveal-duration: 700ms;
+    opacity: 0;
+    transition-property: opacity, transform, filter;
+    transition-duration: var(--reveal-duration);
+    transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+    transition-delay: var(--reveal-delay);
+    will-change: opacity, transform, filter;
+  }
+  .reveal--fade {
+    opacity: 0;
+  }
+  .reveal--fade-up {
+    transform: translateY(28px);
+  }
+  .reveal--fade-down {
+    transform: translateY(-28px);
+  }
+  .reveal--fade-left {
+    transform: translateX(-32px);
+  }
+  .reveal--fade-right {
+    transform: translateX(32px);
+  }
+  .reveal--scale {
+    transform: scale(0.92);
+  }
+  .reveal--blur {
+    filter: blur(14px);
+    transform: scale(1.02);
+  }
+  .reveal.is-visible {
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+  .reveal--stagger > * {
+    opacity: 0;
+    transform: translateY(20px);
+    transition: opacity 600ms cubic-bezier(0.22, 1, 0.36, 1), transform 600ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .reveal--stagger.is-visible > * {
+    opacity: 1;
+    transform: none;
+  }
+  .reveal--stagger.is-visible > *:nth-child(1) { transition-delay: 0ms; }
+  .reveal--stagger.is-visible > *:nth-child(2) { transition-delay: 80ms; }
+  .reveal--stagger.is-visible > *:nth-child(3) { transition-delay: 160ms; }
+  .reveal--stagger.is-visible > *:nth-child(4) { transition-delay: 240ms; }
+  .reveal--stagger.is-visible > *:nth-child(5) { transition-delay: 320ms; }
+  .reveal--stagger.is-visible > *:nth-child(6) { transition-delay: 400ms; }
+  .reveal--stagger.is-visible > *:nth-child(n + 7) { transition-delay: 480ms; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .reveal,
+    .reveal--stagger > * {
+      opacity: 1 !important;
+      transform: none !important;
+      filter: none !important;
+      transition: none !important;
+    }
+  }
+</style>
+
+<script is:inline>
+  (function () {
+    if (typeof window === 'undefined') return;
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      document.querySelectorAll('[data-reveal]').forEach((el) => el.classList.add('is-visible'));
+      return;
+    }
+    if (!('IntersectionObserver' in window)) {
+      document.querySelectorAll('[data-reveal]').forEach((el) => el.classList.add('is-visible'));
+      return;
+    }
+    const init = () => {
+      const targets = document.querySelectorAll('[data-reveal]:not([data-reveal-ready])');
+      targets.forEach((el) => {
+        el.setAttribute('data-reveal-ready', 'true');
+        const once = el.getAttribute('data-reveal-once') !== 'false';
+        const threshold = parseFloat(el.getAttribute('data-reveal-threshold') || '0.15');
+        const io = new IntersectionObserver(
+          (entries) => {
+            entries.forEach((entry) => {
+              if (entry.isIntersecting) {
+                entry.target.classList.add('is-visible');
+                if (once) io.unobserve(entry.target);
+              } else if (!once) {
+                entry.target.classList.remove('is-visible');
+              }
+            });
+          },
+          { threshold, rootMargin: '0px 0px -40px 0px' },
+        );
+        io.observe(el);
+      });
+    };
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', init);
+    } else {
+      init();
+    }
+    document.addEventListener('astro:page-load', init);
+  })();
+</script>

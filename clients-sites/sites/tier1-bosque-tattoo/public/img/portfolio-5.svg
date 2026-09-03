@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">
+  <rect width="600" height="600" fill="#0f0f0c"/>
+  <!-- ave fineline -->
+  <g fill="none" stroke="#f2efe9" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M180 320 q 30 -40 80 -50 q 50 -10 90 10 q 30 14 50 50 q 10 18 -2 36 q -16 18 -50 12 q -50 -8 -90 -10 q -50 -2 -78 -48 z"/>
+    <!-- ala -->
+    <path d="M260 290 q 30 -60 90 -70 q 20 -2 30 16 q 8 16 -8 26 q -30 12 -60 18 q -30 6 -52 10"/>
+    <!-- patitas -->
+    <path d="M280 380 l 0 40 m -10 -2 l 20 0"/>
+    <path d="M340 380 l 0 40 m -10 -2 l 20 0"/>
+    <!-- pico -->
+    <path d="M414 326 l 28 -4 l -28 12 z" fill="#c9a66b" stroke="#c9a66b"/>
+    <!-- ojo -->
+    <circle cx="395" cy="320" r="2.5" fill="#f2efe9"/>
+    <!-- detalle plumas -->
+    <path d="M220 350 q 10 -8 22 0 m -16 6 q 10 -8 22 0 m -18 10 q 10 -8 22 0" stroke-opacity="0.6"/>
+    <!-- ramita -->
+    <path d="M120 460 q 60 -40 160 -30" stroke="#7a8c5f" stroke-opacity="0.8"/>
+    <path d="M150 444 l -8 -16 m 30 4 l -6 -18 m 30 4 l -4 -18" stroke="#7a8c5f" stroke-opacity="0.6"/>
+  </g>
+  <text x="50%" y="94%" text-anchor="middle" fill="#c9a66b" font-family="Inter, sans-serif" font-size="14" letter-spacing="0.3em" opacity="0.7">FINELINE · AVE</text>
+</svg>

@@ -1,0 +1,68 @@
+@import 'tailwindcss';
+
+@theme {
+  /* Paleta Caro Morales — rosa empolvado + marrón cálido */
+  --color-primary: #c58a9e;
+  --color-primary-contrast: #ffffff;
+  --color-secondary: #3d2b2f;
+  --color-secondary-contrast: #faf6f2;
+  --color-accent: #e9d8c4;
+  --color-neutral-bg: #faf6f2;
+  --color-neutral-text: #1f1416;
+
+  --font-display: 'Cormorant Garamond', 'Times New Roman', serif;
+  --font-body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  --breakpoint-xs: 360px;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+    scroll-behavior: smooth;
+    background: var(--color-neutral-bg);
+    color: var(--color-neutral-text);
+  }
+  body {
+    font-family: var(--font-body);
+    line-height: 1.6;
+  }
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
+  }
+  ::selection {
+    background: var(--color-primary);
+    color: var(--color-primary-contrast);
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Skip link */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 9999;
+  background: var(--color-neutral-text);
+  color: var(--color-neutral-bg);
+  padding: 0.75rem 1rem;
+  border-radius: 0 0 8px 0;
+}
+.skip-link:focus {
+  left: 0;
+}

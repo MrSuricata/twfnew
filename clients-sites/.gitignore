@@ -1,0 +1,19 @@
+# Re-incluir el directorio packages/ (el .gitignore raíz lo excluye globalmente)
+!packages/
+!packages/**
+
+node_modules/
+.astro/
+dist/
+.env
+.env.local
+.env.*.local
+.DS_Store
+*.log
+.vercel
+.cloudflare
+.wrangler
+.turbo
+coverage/
+playwright-report/
+test-results/

@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600">
+  <rect width="600" height="600" fill="#0a0a0a"/>
+  <!-- mandala/geom blackwork -->
+  <g transform="translate(300 300)" fill="none" stroke="#f2efe9" stroke-width="1.6">
+    <circle r="180" stroke-opacity="0.9"/>
+    <circle r="140"/>
+    <circle r="90" stroke-opacity="0.7"/>
+    <circle r="40"/>
+    <g fill="#f2efe9">
+      <circle r="6"/>
+    </g>
+    <g>
+      <polygon points="0,-180 156,-90 156,90 0,180 -156,90 -156,-90" stroke="#c9a66b" stroke-opacity="0.8"/>
+      <polygon points="0,-140 121,-70 121,70 0,140 -121,70 -121,-70" stroke-opacity="0.6"/>
+    </g>
+    <!-- rayos -->
+    <g stroke-width="1">
+      <line x1="0" y1="-200" x2="0" y2="-160"/>
+      <line x1="0" y1="200" x2="0" y2="160"/>
+      <line x1="-200" y1="0" x2="-160" y2="0"/>
+      <line x1="200" y1="0" x2="160" y2="0"/>
+      <line x1="-141" y1="-141" x2="-113" y2="-113"/>
+      <line x1="141" y1="-141" x2="113" y2="-113"/>
+      <line x1="-141" y1="141" x2="-113" y2="113"/>
+      <line x1="141" y1="141" x2="113" y2="113"/>
+    </g>
+  </g>
+  <text x="50%" y="94%" text-anchor="middle" fill="#c9a66b" font-family="Inter, sans-serif" font-size="14" letter-spacing="0.3em" opacity="0.7">BLACKWORK · GEOMETRÍA</text>
+</svg>
