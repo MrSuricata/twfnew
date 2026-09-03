@@ -114,13 +114,15 @@ describe('cargasMontecon — ciclo retirado → avisado (Brian 26/08)', () => {
   const retirada = (ref: string, retiradoAt: string, extra: Partial<AgendaRow> = {}): AgendaRow =>
     ({ ref, eta_agendada: '2026-08-20', retirado_at: retiradoAt, ...extra })
 
-  it('retirada queda con estado retirado, al FONDO, con el día del retiro', () => {
+  it('retirada queda con estado retirado, PRIMERA, con el día del retiro', () => {
+    // Brian 03/09: al fondo había que scrollear la card entera para encontrar
+    // el botón de avisar al cliente. Encabeza porque es la acción pendiente.
     const l = cargasMontecon([
       carga({ ref: 'RET', eta: '2026-08-20' }),
       carga({ ref: 'NUEVA', eta: '2026-08-24' }),
     ], [retirada('RET', '2026-08-21T14:00:00.000Z')], HOY)
-    expect(l.map(c => c.ref + ':' + c.estado)).toEqual(['NUEVA:sin_agendar', 'RET:retirado'])
-    expect(l[1].retiradoEl).toBe('2026-08-21')
+    expect(l.map(c => c.ref + ':' + c.estado)).toEqual(['RET:retirado', 'NUEVA:sin_agendar'])
+    expect(l[0].retiradoEl).toBe('2026-08-21')
   })
 
   it('retirada ignora la ventana de ETA — el recordatorio no depende del buque', () => {
@@ -185,7 +187,7 @@ describe('cargasMontecon — TCP sin turnos (Brian 26/08)', () => {
     expect(avisada).toEqual([])
   })
 
-  it('orden = llegada del buque, Montecon y TCP mezcladas; retiradas al fondo (Brian 02/09)', () => {
+  it('orden = retiradas primero (Brian 03/09), después por llegada del buque, Montecon y TCP mezcladas', () => {
     const l = cargasMontecon([
       carga({ ref: 'MOVIDA', eta: '2026-08-26' }),
       tcp({ ref: 'RETIRAR', eta: '2026-08-21' }),
@@ -199,7 +201,7 @@ describe('cargasMontecon — TCP sin turnos (Brian 26/08)', () => {
       { ref: 'RETIRADA', eta_agendada: '', retirado_at: '2026-08-21T14:00:00.000Z' },
     ], HOY)
     expect(l.map(c => c.ref + ':' + c.estado)).toEqual([
-      'RETIRAR:retirar', 'OK:agendada', 'VIENE:por_llegar', 'NUEVA:sin_agendar', 'MOVIDA:reagendar', 'RETIRADA:retirado',
+      'RETIRADA:retirado', 'RETIRAR:retirar', 'OK:agendada', 'VIENE:por_llegar', 'NUEVA:sin_agendar', 'MOVIDA:reagendar',
     ])
   })
 })
@@ -343,5 +345,26 @@ describe('a qué depósito va el contenedor — Brian 03/09', () => {
     expect(esDirecto(' contenedor directo ')).toBe(true)
     expect(esDirecto('TRASIEGO')).toBe(false)
     expect(esDirecto(null)).toBe(false)
+  })
+})
+
+describe('orden de la card: las retiradas van primero (Brian 03/09)', () => {
+  const hoy = '2026-09-10'
+  const carga = (ref: string, eta: string) => ({
+    ref, cliente: 'DEMO', terminal: 'TCP', contenedor: ref, eta,
+    mode: 'fcl', archived: false, operativa: 'TRASIEGO',
+  })
+  it('la retirada encabeza aunque su ETA sea la más vieja', () => {
+    const out = cargasMontecon(
+      [carga('A1', '2026-09-11'), carga('A2', '2026-09-12'), carga('VIEJA', '2026-09-01')],
+      [{ ref: 'VIEJA', eta_agendada: '', retirado_at: '2026-09-09T10:00:00Z' }],
+      hoy,
+    )
+    expect(out[0].ref).toBe('VIEJA')
+    expect(out[0].estado).toBe('retirado')
+  })
+  it('dentro de cada grupo sigue mandando la llegada', () => {
+    const out = cargasMontecon([carga('B', '2026-09-12'), carga('A', '2026-09-11')], [], hoy)
+    expect(out.map(c => c.ref)).toEqual(['A', 'B'])
   })
 })

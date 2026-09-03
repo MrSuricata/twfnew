@@ -24,6 +24,22 @@ const VISTAS: { id: Vista; label: string }[] = [
   { id: 'cliente', label: 'Cliente' },
 ]
 
+const haceDias = (n: number): number => Date.now() - n * 86400000
+
+/** Subidas de ejemplo, para ver la card "Novedades de tus cargas". */
+const foto = (ref: string, tipo: 'origen' | 'uruguay', dias: number, i: number) => ({
+  id: `f-${ref}-${i}`, shipmentRef: ref, photoType: tipo, createdAt: haceDias(dias),
+  fileName: `foto-${i}.jpg`, fileType: 'image/jpeg', createdBy: 'demo',
+}) as never
+const fotosDemo = [
+  foto('D9001', 'uruguay', 0, 1), foto('D9001', 'uruguay', 0, 2),
+  foto('D9005', 'origen', 2, 3), foto('D9005', 'origen', 2, 4), foto('D9005', 'origen', 3, 5),
+]
+const informesDemo = [{
+  id: 'i-1', shipmentRef: 'D9004', title: 'Informe operativo', content: '',
+  fileName: 'informe.pdf', fileType: 'application/pdf', createdAt: haceDias(1), createdBy: 'demo',
+} as never]
+
 export default function UiPreview() {
   const [vista, setVista] = useState<Vista>('deposito')
   const shipments = demoPartnerShipments()
@@ -64,6 +80,8 @@ export default function UiPreview() {
           clientName="DEMO ALPHA S.A."
           clients={[{ id: 'demo', name: 'DEMO ALPHA S.A.', email: 'demo@cliente.com', company: '', createdAt: 0, clientePattern: 'DEMO' } as never]}
           shipments={shipments}
+          fotos={fotosDemo}
+          informes={informesDemo}
           onLogout={salir}
           preview
         />

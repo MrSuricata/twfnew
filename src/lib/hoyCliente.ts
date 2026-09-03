@@ -493,6 +493,134 @@ export function esperandoSalida(shipments: ParsedShipment[], hoyISO: string): Fi
   return out.sort((a, b) => b.dias - a.dias || a.ref.localeCompare(b.ref))
 }
 
+// ── Card: novedades (fotos e informes) ───────────────────────────────────
+
+/** Dónde se sacaron las fotos. `origen` = en la fábrica / puerto de salida ·
+ *  `uruguay` = en el depósito de Montevideo (es el `photo_type` que ya guarda
+ *  la app). */
+export type LugarFoto = 'origen' | 'uruguay'
+
+export interface NovedadCliente extends FilaBase {
+  clase: 'fotos' | 'informe'
+  /** "en origen", "en Montevideo", "en depósito GODILCO". */
+  lugar: string
+  /** Cuántas fotos nuevas (1 para un informe). */
+  cantidad: number
+  /** Día de la subida (ISO). */
+  fecha: string
+  /** Días desde la subida: 0 = hoy. */
+  dias: number
+  /** La carga está cargando el camión hoy: las fotos son de eso, en vivo. */
+  cargandoAhora: boolean
+}
+
+/** Cuánto tiempo una subida sigue siendo "nueva" para el cliente. */
+export const NOVEDADES_DIAS = 7
+
+interface SubidaFoto { shipmentRef?: string | null; photoType?: string | null; createdAt?: number | null }
+interface SubidaInforme { shipmentRef?: string | null; title?: string | null; createdAt?: number | null }
+
+const diaDeTimestamp = (ms: unknown): string => {
+  const n = Number(ms)
+  if (!Number.isFinite(n) || n <= 0) return ''
+  const d = new Date(n)
+  const p = (x: number) => String(x).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
+}
+
+/** Dónde decir que se sacaron: las de Uruguay nombran el depósito si se sabe. */
+function lugarDeFotos(s: ParsedShipment, tipo: string): string {
+  if (tipo === 'origen') {
+    const pol = txt(s.POL)
+    return pol ? `en origen (${pol})` : 'en origen'
+  }
+  const dep = ops(s).map(o => txt(o.DEPOSITO)).find(Boolean)
+  return dep ? `en depósito ${dep}` : 'en Montevideo'
+}
+
+/** ¿Hoy está cargando el camión? Es lo que vuelve la subida un "en vivo"
+ *  (Brian 03/09: "hoy la A8121 de Chiapero está cargando; que se vayan
+ *  subiendo las fotos de la operativa"). */
+function cargaHoy(s: ParsedShipment, hoyISO: string): boolean {
+  return ops(s).some(o => isoDia(o.SALIDA) === hoyISO)
+}
+
+/**
+ * Fotos e informes subidos en los últimos `dias`, agrupados por carga y lugar:
+ * lo que el cliente quiere ver apenas entra. Una carga puede traer dos filas
+ * (fotos en origen y fotos en Montevideo) porque son dos momentos distintos.
+ */
+export function novedadesCliente(
+  shipments: ParsedShipment[],
+  fotos: SubidaFoto[],
+  informes: SubidaInforme[],
+  hoyISO: string,
+  dias = NOVEDADES_DIAS,
+): NovedadCliente[] {
+  const porRef = new Map<string, ParsedShipment>()
+  for (const s of shipments || []) {
+    const r = txt(s.REF).toUpperCase()
+    if (r) porRef.set(r, s)
+  }
+  const dentroDeVentana = (fecha: string): number | null => {
+    if (!fecha) return null
+    const d = diffDias(fecha, hoyISO)   // días desde la subida (hoy = 0)
+    return Number.isFinite(d) && d >= 0 && d <= dias ? d : null
+  }
+
+  const out: NovedadCliente[] = []
+
+  // Fotos: una fila por (carga, lugar), con la subida más reciente.
+  const grupos = new Map<string, { s: ParsedShipment; tipo: string; n: number; fecha: string }>()
+  for (const f of fotos || []) {
+    const ref = txt(f.shipmentRef).toUpperCase()
+    const s = porRef.get(ref)
+    if (!s) continue                                  // carga de otro cliente o archivada
+    const fecha = diaDeTimestamp(f.createdAt)
+    if (dentroDeVentana(fecha) === null) continue
+    const tipo = txt(f.photoType) || 'origen'
+    const clave = `${ref}|${tipo}`
+    const g = grupos.get(clave)
+    if (g) { g.n += 1; if (fecha > g.fecha) g.fecha = fecha }
+    else grupos.set(clave, { s, tipo, n: 1, fecha })
+  }
+  for (const g of grupos.values()) {
+    out.push({
+      ...base(g.s),
+      clase: 'fotos',
+      lugar: lugarDeFotos(g.s, g.tipo),
+      cantidad: g.n,
+      fecha: g.fecha,
+      dias: dentroDeVentana(g.fecha) ?? 0,
+      cargandoAhora: g.tipo !== 'origen' && cargaHoy(g.s, hoyISO),
+    })
+  }
+
+  // Informes: uno por documento, que es un hecho puntual.
+  for (const i of informes || []) {
+    const s = porRef.get(txt(i.shipmentRef).toUpperCase())
+    if (!s) continue
+    const fecha = diaDeTimestamp(i.createdAt)
+    const d = dentroDeVentana(fecha)
+    if (d === null) continue
+    out.push({
+      ...base(s),
+      clase: 'informe',
+      lugar: txt(i.title) || 'Informe operativo',
+      cantidad: 1,
+      fecha,
+      dias: d,
+      cargandoAhora: false,
+    })
+  }
+
+  // Lo más nuevo primero; a igual día, primero lo que está pasando ahora.
+  return out.sort((a, b) =>
+    a.dias - b.dias
+    || Number(b.cargandoAhora) - Number(a.cargandoAhora)
+    || a.ref.localeCompare(b.ref))
+}
+
 // ── Card 3: Llegan a Montevideo (solo ruta UY) ───────────────────────────
 
 export interface FilaLlegadaMvd extends FilaBase {

@@ -15,11 +15,11 @@
  */
 import { useMemo, type ReactNode, type CSSProperties } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
-import { Anchor, Boat, CheckCircle, EnvelopeSimple, Timer, Warehouse, Warning } from '@phosphor-icons/react'
+import { Anchor, Boat, Camera, CheckCircle, EnvelopeSimple, Timer, Warehouse, Warning } from '@phosphor-icons/react'
 import type { ParsedShipment, ShipmentAlert } from '@/lib/shipmentTypes'
 import {
   hoyCliente, alertasCliente, textoDias, RUTA_CHIP, TIPO_LABEL,
-  type RefsCliente, type EstadoLlegadaDestino, type Ruta, type Tipo,
+  type RefsCliente, type EstadoLlegadaDestino, type Ruta, type Tipo, novedadesCliente,
 } from '@/lib/hoyCliente'
 import { fmtDateDMY } from '@/lib/format'
 import { useBrand } from '@/lib/brand'
@@ -36,6 +36,9 @@ interface HoyClienteProps {
   mostrarRuta?: boolean
   /** Ídem tipo (FCL / LCL). */
   mostrarTipo?: boolean
+  /** Fotos subidas (origen / Uruguay) e informes operativos del cliente. */
+  fotos?: { shipmentRef?: string | null; photoType?: string | null; createdAt?: number | null }[]
+  informes?: { shipmentRef?: string | null; title?: string | null; createdAt?: number | null }[]
   /** Abre la carga en la lista (pestaña Mis cargas, fila desplegada). */
   onVerCarga: (ref: string) => void
   onVerAlertas: () => void
@@ -141,11 +144,17 @@ const Derecha = ({ label, valor, detalle }: { label: string; valor: string; deta
   </span>
 )
 
-export default function HoyCliente({ shipments, alerts, hoyISO, mostrarRuta, mostrarTipo, onVerCarga, onVerAlertas }: HoyClienteProps) {
+export default function HoyCliente({ shipments, alerts, hoyISO, mostrarRuta, mostrarTipo, fotos = [], informes = [], onVerCarga, onVerAlertas }: HoyClienteProps) {
   const brand = useBrand()
   const med = brand.id === 'med'
   const hoy = useMemo(() => hoyCliente(shipments, hoyISO), [shipments, hoyISO])
   const atencion = useMemo(() => alertasCliente(alerts, shipments), [alerts, shipments])
+  // Fotos e informes subidos esta semana: es lo que el cliente pregunta por
+  // teléfono ("¿ya cargaron?", "¿hay fotos?") — Brian 03/09.
+  const novedades = useMemo(
+    () => novedadesCliente(shipments, fotos, informes, hoyISO),
+    [shipments, fotos, informes, hoyISO],
+  )
   const nada = hoy.destino.length === 0 && hoy.esperando.length === 0 && hoy.montevideo.length === 0 && hoy.embarques.length === 0
   const mailSalida = (refPrincipal: string) =>
     `mailto:${brand.contact.email}?subject=${encodeURIComponent(`Salida ${refPrincipal}`)}&body=${encodeURIComponent(`Hola, quiero coordinar la salida de la carga ${refPrincipal}. La necesito para el día: `)}`
@@ -176,6 +185,38 @@ export default function HoyCliente({ shipments, alerts, hoyISO, mostrarRuta, mos
               {f.fecha
                 ? <Derecha label={f.estado === 'llega' ? 'Llega a destino' : 'Llega'} valor={fmtDateDMY(f.fecha)} detalle={textoDias(f.dias)} />
                 : <Derecha label="Llegada" valor="A confirmar" />}
+            </Fila>
+          ))}
+        </CardHoy>
+      )}
+
+      {novedades.length > 0 && (
+        <CardHoy
+          med={med} tono="info" icon={<Camera size={18} weight="fill" />}
+          titulo="Novedades de tus cargas"
+          subtitulo="Fotos e informes que subimos esta semana. Tocá la carga para verlos."
+          count={novedades.length}
+          onVerMas={() => onVerCarga(novedades[MAX_FILAS].ref)}
+        >
+          {novedades.slice(0, MAX_FILAS).map(n => (
+            <Fila key={`${n.ref}|${n.clase}|${n.lugar}`} med={med} onClick={() => onVerCarga(n.ref)}>
+              <Refs med={med} refs={n.refs} />
+              <Marcas ruta={n.ruta} tipo={n.tipo} {...marcasMixtas} />
+              <span className="text-sm">
+                {n.clase === 'fotos'
+                  ? `${n.cantidad} foto${n.cantidad === 1 ? '' : 's'} ${n.lugar}`
+                  : n.lugar}
+              </span>
+              {n.cargandoAhora && (
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-600 text-white">
+                  CARGANDO AHORA
+                </span>
+              )}
+              <Derecha
+                label={n.clase === 'fotos' ? 'Fotos' : 'Informe'}
+                valor={fmtDateDMY(n.fecha)}
+                detalle={n.dias === 0 ? 'hoy' : n.dias === 1 ? 'ayer' : `hace ${n.dias}d`}
+              />
             </Fila>
           ))}
         </CardHoy>
