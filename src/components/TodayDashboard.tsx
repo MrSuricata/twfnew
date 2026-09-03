@@ -63,6 +63,7 @@ import { saludoPersonal } from '@/lib/saludo'
 import { fmtDateDMY } from '@/lib/format'
 import AvisosPartnersCard from './AvisosPartnersCard'
 import { cargasMontecon, cargasSinTerminal, MONTECON_DIAS_ADELANTE, type AgendaRow, type CargaMontecon, type CargaSinTerminal } from '@/lib/monteconAgenda'
+import { colorDeposito } from '@/lib/depositoColor'
 import { fetchMonteconAgenda, agendarMontecon, desagendarMontecon, marcarMontecon } from '@/lib/dataClient'
 import { fmtDMY } from '@/lib/salidaCheck'
 import { isSinTelex } from '@/lib/telexCheck'
@@ -372,11 +373,21 @@ export default function TodayDashboard({
     [dbShipments],
   )
   const cargasTerminalInput = useMemo(
-    () => (dbShipments || []).map(s => ({
-      dbId: s.id, ref: s.ref, cliente: s.cliente, terminal: s.terminal, pais: s.dest_country,
-      contenedor: s.contenedor, eta: s.eta, mode: s.mode, archived: s.archived,
-      salida: s.salida || (Array.isArray(s.operativas) ? (s.operativas.find(o => o.SALIDA)?.SALIDA || '') : ''),
-    })),
+    () => (dbShipments || []).map(s => {
+      // Depósito / operativa / fiscal: la columna plana manda y la primera
+      // operativa que los tenga es el respaldo (mismo criterio que SALIDA).
+      const ops = Array.isArray(s.operativas) ? s.operativas : []
+      const dePrimera = (k: 'DEPOSITO' | 'OPERATIVA' | 'FISCAL') =>
+        String((ops as unknown as Record<string, unknown>[]).find(o => o[k])?.[k] || '')
+      return {
+        dbId: s.id, ref: s.ref, cliente: s.cliente, terminal: s.terminal, pais: s.dest_country,
+        contenedor: s.contenedor, eta: s.eta, mode: s.mode, archived: s.archived,
+        salida: s.salida || (ops.find(o => o.SALIDA)?.SALIDA || ''),
+        deposito: s.deposito || dePrimera('DEPOSITO'),
+        operativa: s.operativa || dePrimera('OPERATIVA'),
+        fiscal: s.fiscal || dePrimera('FISCAL'),
+      }
+    }),
     [dbShipments],
   )
   const montecon = useMemo(
@@ -803,6 +814,35 @@ export default function TodayDashboard({
                     </span>
                     <span className="text-xs text-muted-foreground truncate max-w-[160px]" title={c.cliente}>{c.cliente || '—'}</span>
                     {c.cntr && <span className="font-mono text-[11px] text-muted-foreground">{c.cntr}</span>}
+                    {/* A dónde va el contenedor: el depósito es a quien hay que
+                        avisarle el día del retiro (Brian 03/09). En los
+                        CONTENEDOR directos no hay depósito: va al fiscal. */}
+                    {c.directo
+                      ? (
+                        <span
+                          title="Contenedor directo: de la terminal al destino fiscal, sin pasar por depósito"
+                          className="text-[10px] font-bold px-1.5 py-0.5 rounded border bg-slate-100 text-slate-700 border-slate-300 whitespace-nowrap"
+                        >
+                          DIRECTO{c.fiscal ? ` · ${c.fiscal}` : ''}
+                        </span>
+                      )
+                      : c.deposito
+                        ? (
+                          <span
+                            title={`Lo retira y lo recibe ${c.deposito}`}
+                            className={`text-[10px] font-bold px-1.5 py-0.5 rounded border whitespace-nowrap ${colorDeposito(c.deposito)}`}
+                          >
+                            {c.deposito}
+                          </span>
+                        )
+                        : (
+                          <span
+                            title="Falta cargar el depósito: sin eso no sabés a quién avisarle el retiro"
+                            className="text-[10px] font-bold px-1.5 py-0.5 rounded border border-dashed bg-transparent text-muted-foreground whitespace-nowrap"
+                          >
+                            depósito sin definir
+                          </span>
+                        )}
                     {c.eta && (
                       <span className="text-xs whitespace-nowrap">
                         ETA <b>{fmtDateDMY(c.eta)}</b>
