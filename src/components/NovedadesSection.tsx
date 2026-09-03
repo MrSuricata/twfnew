@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogTitle } from '@/components/ui/dialog'
 import { ArrowRight, ArrowLeft, Newspaper, ArrowSquareOut } from '@phosphor-icons/react'
 import { useBrand } from '@/lib/brand'
 import {
-  type Noticia, rowToNoticia, noticiasVigentes, alertasVigentes, ordenSlides,
+  type Noticia, rowToNoticia, noticiasVigentes, alertasVigentes, ordenSlides, NOTICIAS_REFRESCO_MS,
   alertaYaVista, marcarAlertaVista, categoriaMeta, tituloPlano, linkNoticia,
 } from '@/lib/noticias'
 import NovedadesCarrusel, { conNegrita } from '@/components/NovedadesCarrusel'
@@ -21,12 +21,27 @@ export function useNoticias(): { noticias: Noticia[]; cargado: boolean } {
   const [cargado, setCargado] = useState(false)
   useEffect(() => {
     let vivo = true
-    fetch('/api/noticias')
-      .then(r => (r.ok ? r.json() : { noticias: [] }))
-      .then(d => { if (vivo) setNoticias((d.noticias || []).map(rowToNoticia)) })
-      .catch(() => { /* sección vacía y listo */ })
-      .finally(() => { if (vivo) setCargado(true) })
-    return () => { vivo = false }
+    const traer = () => {
+      fetch('/api/noticias')
+        .then(r => (r.ok ? r.json() : null))
+        // Si el pedido falla se conserva lo que ya había: mejor un Diario de
+        // hace 5 minutos que un panel que parpadea vacío.
+        .then(d => { if (vivo && d) setNoticias((d.noticias || []).map(rowToNoticia)) })
+        .catch(() => { /* se mantiene lo anterior */ })
+        .finally(() => { if (vivo) setCargado(true) })
+    }
+    traer()
+    // Los portales quedan abiertos horas en el depósito o en el transporte:
+    // se vuelve a pedir el Diario cada tanto y al volver a la pestaña, así lo
+    // que se publica aparece sin recargar (Brian 03/09: "dejalo conectado").
+    const timer = window.setInterval(traer, NOTICIAS_REFRESCO_MS)
+    const alVolver = () => { if (document.visibilityState === 'visible') traer() }
+    document.addEventListener('visibilitychange', alVolver)
+    return () => {
+      vivo = false
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', alVolver)
+    }
   }, [])
   return { noticias, cargado }
 }

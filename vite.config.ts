@@ -77,6 +77,12 @@ export default defineConfig({
   server: {
     host: '127.0.0.1',
     port: 5173,
+    // Solo en `vite dev`: el Diario se lee de producción para poder ver el banner
+    // de los portales (/ui) con las tarjetas reales. Es un GET público y cacheado;
+    // ningún otro /api se proxea, así que el dev local no toca datos.
+    proxy: {
+      '/api/noticias': { target: 'https://transitworldforwarding.vercel.app', changeOrigin: true },
+    },
   },
   resolve: {
     alias: {

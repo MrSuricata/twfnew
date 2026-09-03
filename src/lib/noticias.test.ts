@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   esVigente, noticiasVigentes, alertasVigentes, claveAlertas, rowToNoticia, categoriaMeta,
   estiloSlide, tituloPartes, tituloPlano, linkNoticia, ordenSlides, recencia, type Noticia,
+  avisosRotativos, indiceSiguiente, indiceValido,
 } from './noticias'
 
 const HOY = '2026-08-28'
@@ -118,5 +119,35 @@ describe('carrusel de portada', () => {
     expect(linkNoticia(noticia({ linkUrl: '' }))).toEqual({ href: '/novedades', externo: false })
     // eslint-disable-next-line no-script-url
     expect(linkNoticia(noticia({ linkUrl: 'javascript:alert(1)' })).href).toBe('/novedades')
+  })
+})
+
+describe('aviso operativo rotativo — las mismas tarjetas que el Diario', () => {
+  const lista = [
+    noticia({ id: 'vieja', publicadaAt: '2026-08-20T09:00:00Z' }),
+    noticia({ id: 'alerta', alerta: true, publicadaAt: '2026-08-22T09:00:00Z' }),
+    noticia({ id: 'nueva', publicadaAt: '2026-08-27T09:00:00Z' }),
+    noticia({ id: 'vencida', publicadaAt: '2026-08-27T12:00:00Z', vigenteHasta: '2026-08-27' }),
+    noticia({ id: 'apagada', activo: false }),
+  ]
+  it('rota por las vigentes, alertas primero y después de más nueva a más vieja', () => {
+    expect(avisosRotativos(lista, HOY).map(n => n.id)).toEqual(['alerta', 'nueva', 'vieja'])
+  })
+  it('coincide con el orden del carrusel del Diario', () => {
+    expect(avisosRotativos(lista, HOY)).toEqual(ordenSlides(noticiasVigentes(lista, HOY)))
+  })
+  it('sin vigentes no rota nada', () => {
+    expect(avisosRotativos([noticia({ activo: false })], HOY)).toEqual([])
+  })
+  it('avanza y vuelve al principio', () => {
+    expect(indiceSiguiente(0, 3)).toBe(1)
+    expect(indiceSiguiente(2, 3)).toBe(0)
+    expect(indiceSiguiente(0, 1)).toBe(0)
+    expect(indiceSiguiente(5, 0)).toBe(0)
+  })
+  it('si la lista se achica, el índice se acomoda en vez de quedar afuera', () => {
+    expect(indiceValido(4, 3)).toBe(2)
+    expect(indiceValido(1, 3)).toBe(1)
+    expect(indiceValido(2, 0)).toBe(0)
   })
 })

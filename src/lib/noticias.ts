@@ -155,3 +155,37 @@ export function rowToNoticia(r: Record<string, unknown>): Noticia {
     linkUrl: s(r.link_url ?? r.linkUrl),
   }
 }
+
+// ── Aviso operativo rotativo (portales de depósito, transporte y cliente) ──
+
+/** Cada cuánto pasa al siguiente aviso. Ocho segundos alcanzan para leer
+ *  título y bajada sin que el panel parezca quieto. */
+export const AVISO_ROTACION_MS = 8000
+
+/** Cada cuánto el portal vuelve a pedir el Diario. Igual al caché del server
+ *  (s-maxage=300): pedir más seguido no trae nada nuevo. */
+export const NOTICIAS_REFRESCO_MS = 5 * 60 * 1000
+
+/** Lo que va pasando en el banner de los portales: las MISMAS tarjetas y en el
+ *  MISMO orden que el carrusel del Diario (avisos primero, después el resto,
+ *  todo de más nuevo a más viejo). Brian 03/09: "para todos aparece lo de los
+ *  3 tifones; que vayan pasando las noticias cada ciertos segundos, conectado
+ *  con el diario, los banners y las tarjetas". Antes el banner mostraba solo la
+ *  primera alerta, fija. */
+export function avisosRotativos<T extends Noticia>(list: T[], hoyISO: string, max = 6): T[] {
+  return ordenSlides(noticiasVigentes(list, hoyISO), max)
+}
+
+/** Índice del siguiente aviso; vuelve al primero al terminar. Con una sola
+ *  tarjeta (o ninguna) se queda en 0. */
+export function indiceSiguiente(actual: number, total: number): number {
+  if (total <= 1) return 0
+  return (actual + 1) % total
+}
+
+/** Si la lista cambió (una nota nueva, una vencida) el índice guardado puede
+ *  apuntar afuera: se acomoda al rango en vez de dejar el banner en blanco. */
+export function indiceValido(actual: number, total: number): number {
+  if (total <= 0) return 0
+  return Math.min(Math.max(0, actual), total - 1)
+}
