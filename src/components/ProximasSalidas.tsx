@@ -14,6 +14,7 @@ import { salidasProgramadas, totalCargas, SALIDAS_DIAS_ADELANTE, type SalidaProg
 import { formatKg, formatM3 } from '@/lib/truckUtils'
 import { fmtNum } from '@/lib/format'
 import { colorDeposito } from '@/lib/depositoColor'
+import { colorTransporte } from '@/lib/transporteColor'
 
 // Colores de depósito: los mismos del mail (lib/depositoColor, compartido
 // con las sugerencias de camión y HOY LCL).
@@ -43,7 +44,7 @@ function Celda({ c, esDeposito }: { c: SalidaProgramada; esDeposito: boolean }) 
   const primera = esDeposito ? c.transporte : c.deposito
   return (
     <span className={`inline-block rounded border px-1.5 py-0.5 text-[10px] font-bold whitespace-nowrap ${
-      esDeposito ? 'bg-slate-100 text-slate-700 border-slate-300' : colorDeposito(primera)
+      esDeposito ? colorTransporte(primera) : colorDeposito(primera)
     }`}>
       {primera || '—'}
     </span>
@@ -83,7 +84,7 @@ export default function ProximasSalidas({ shipments, rol }: Props) {
                 <th className="text-left px-3 py-2">Cliente</th>
                 <th className="text-left px-3 py-2">Contenedor</th>
                 <th className="text-left px-3 py-2">Op</th>
-                <th className="text-left px-3 py-2">Mercadería</th>
+                <th className="text-left px-3 py-2 leading-tight">Descripción<br />mercadería</th>
                 <th className="text-right px-3 py-2">Bultos</th>
                 <th className="text-right px-3 py-2">Kg</th>
                 <th className="text-right px-3 py-2">m³</th>
