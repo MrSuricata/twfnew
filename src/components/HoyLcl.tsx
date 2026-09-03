@@ -26,6 +26,7 @@ import {
   refsPorCamion, lclActivas, blDe, llegadasProximas, aguardanStock, listasParaCamion,
   camionesLcl, datosFaltantes, patchFaltanteLcl, CAMPO_FALTANTE_LABEL, DIAS_CAMION_RECIENTE,
   type LclRow, type ListaItem, type FaltantesPorCarga, type CampoFaltanteLcl,
+  filtrarPorCampoFaltante,
 } from '@/lib/hoyLcl'
 import { FISCALES_BASE } from '@/lib/lclAlta'
 import type { DatoClave } from '@/lib/datosClave'
@@ -82,6 +83,15 @@ export default function HoyLcl({
   const listas = useMemo(() => listasParaCamion(activas, hoyISO, porCamion.enCamion), [activas, hoyISO, porCamion])
   const camiones = useMemo(() => camionesLcl(trucks, truckLoads, new Date()), [trucks, truckLoads])
   const faltantes = useMemo(() => datosFaltantes(activas, hoyISO, DIAS_VENTANA), [activas, hoyISO])
+  // Qué dato faltante se está mirando ('fiscal', 'kg'…). null = todos.
+  const [soloFalta, setSoloFalta] = useState<string | null>(null)
+  const faltantesVisibles = useMemo(
+    () => filtrarPorCampoFaltante(faltantes.porCarga, soloFalta),
+    [faltantes.porCarga, soloFalta],
+  )
+  // El fiscal es el que más duele: sin él la carga no entra a ninguna
+  // sugerencia de camión (Brian 03/09). Se avisa aparte, con el motivo.
+  const sinFiscal = faltantes.porCampo.find(g => g.campo === 'fiscal')?.rows.length ?? 0
   // Fiscales ya usados → datalist del input inline (misma semilla que el alta).
   const knownFiscales = useMemo(
     () => Array.from(new Set([...FISCALES_BASE, ...dbShipments.map(s => String(s.fiscal || '').trim().toUpperCase()).filter(Boolean)])).sort(),
@@ -318,12 +328,38 @@ export default function HoyLcl({
         title="Datos faltantes"
         subtitle="Bultos, kilos, m³, fiscal, madera, llegada a Montevideo y depósito de desconsolidación: tocá la carga y completalo acá mismo. Primero las que ya llegaron o llegan esta semana. IMO y entrega en planta se marcan con la tilde."
         count={faltantes.total}
-        badges={faltantes.porCampo.map(g => ({ text: `${g.rows.length} ${g.label.toLowerCase()}`, tone: 'warn' as const }))}
+        badges={faltantes.porCampo.map(g => ({
+          text: `${g.rows.length} ${g.label.toLowerCase()}`,
+          tone: 'warn' as const,
+          activo: soloFalta === g.campo,
+          onClick: () => setSoloFalta(prev => (prev === g.campo ? null : g.campo)),
+        }))}
         empty="Todas las LCL activas tienen bultos, kilos, m³, fiscal, madera confirmada, llegada a Montevideo y depósito."
       >
         <div className="space-y-1">
-          {faltantes.porCarga.map((fc, i) => {
-            const primeraNoUrgente = !fc.urgente && (i === 0 || faltantes.porCarga[i - 1].urgente)
+          {sinFiscal > 0 && (
+            <div className={med
+              ? 'mb-2 rounded-md border border-med-aviso-borde bg-med-aviso-tinte px-3 py-2 text-xs text-med-aviso-texto'
+              : 'mb-2 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800'}>
+              <b>Por favor completá los fiscales.</b>{' '}
+              {sinFiscal === 1 ? 'Hay 1 carga sin destino fiscal' : `Hay ${sinFiscal} cargas sin destino fiscal`}: sin ese dato no entran a las sugerencias de camión ni a la previsión por destino.{' '}
+              <button
+                type="button"
+                onClick={() => setSoloFalta(prev => (prev === 'fiscal' ? null : 'fiscal'))}
+                className="font-semibold underline underline-offset-2"
+              >
+                {soloFalta === 'fiscal' ? 'Ver todas las faltantes' : 'Ver solo esas'}
+              </button>
+            </div>
+          )}
+          {soloFalta && (
+            <div className="mb-1 text-[11px] text-muted-foreground">
+              Mostrando {faltantesVisibles.length} de {faltantes.porCarga.length} ·{' '}
+              <button type="button" onClick={() => setSoloFalta(null)} className="underline underline-offset-2">quitar filtro</button>
+            </div>
+          )}
+          {faltantesVisibles.map((fc, i) => {
+            const primeraNoUrgente = !fc.urgente && (i === 0 || faltantesVisibles[i - 1].urgente)
             return (
               <div key={fc.row.id}>
                 {primeraNoUrgente && faltantes.urgentes > 0 && (
@@ -366,7 +402,7 @@ function CardLcl({ icon, tone, title, subtitle, count, badges = [], empty, actio
   title: string
   subtitle: string
   count: number
-  badges?: { text: string; tone: 'warn' | 'destructive' }[]
+  badges?: { text: string; tone: 'warn' | 'destructive'; onClick?: () => void; activo?: boolean }[]
   empty: string
   action?: { label: string; onClick: () => void }
   children: ReactNode
@@ -384,16 +420,28 @@ function CardLcl({ icon, tone, title, subtitle, count, badges = [], empty, actio
           <h2 className={med ? 'titulo-med text-[17px] text-med-violeta' : 'text-sm font-semibold uppercase tracking-wide'}>
             {title}
           </h2>
-          {badges.map(b => (
-            <span
-              key={b.text}
-              className={b.tone === 'destructive'
-                ? (med ? 'inline-flex items-center text-xs font-bold text-med-error bg-med-error/10 border border-med-error/30 rounded-full px-2 py-0.5' : 'inline-flex items-center text-xs font-bold text-red-700 bg-red-500/10 border border-red-500/30 rounded-full px-2 py-0.5')
-                : (med ? 'inline-flex items-center text-xs font-bold text-med-aviso-texto bg-med-aviso/10 border border-med-aviso/30 rounded-full px-2 py-0.5' : 'inline-flex items-center text-xs font-bold text-amber-700 bg-amber-500/10 border border-amber-500/30 rounded-full px-2 py-0.5')}
-            >
-              {b.text}
-            </span>
-          ))}
+          {badges.map(b => {
+            const clase = b.tone === 'destructive'
+              ? (med ? 'text-med-error bg-med-error/10 border-med-error/30' : 'text-red-700 bg-red-500/10 border-red-500/30')
+              : (med ? 'text-med-aviso-texto bg-med-aviso/10 border-med-aviso/30' : 'text-amber-700 bg-amber-500/10 border-amber-500/30')
+            const base = `inline-flex items-center text-xs font-bold border rounded-full px-2 py-0.5 ${clase}`
+            // Con onClick el contador filtra la lista: "147 sin destino fiscal"
+            // deja de ser un número y pasa a ser la forma de ir a completarlos.
+            return b.onClick
+              ? (
+                <button
+                  key={b.text}
+                  type="button"
+                  onClick={b.onClick}
+                  aria-pressed={!!b.activo}
+                  title={b.activo ? 'Quitar el filtro' : `Ver solo las de "${b.text}"`}
+                  className={`${base} transition-shadow hover:opacity-80 ${b.activo ? 'ring-2 ring-offset-1 ring-current' : ''}`}
+                >
+                  {b.text}{b.activo ? ' ✕' : ''}
+                </button>
+              )
+              : <span key={b.text} className={base}>{b.text}</span>
+          })}
           <div className="ml-auto flex items-center gap-2">
             {action && (
               <Button variant="outline" size="sm" className="h-7 text-xs" onClick={action.onClick}>

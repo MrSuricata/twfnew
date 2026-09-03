@@ -4,6 +4,7 @@ import {
   listasParaCamion, camionesLcl, datosFaltantes, patchFaltanteLcl, sumarDiasISO,
   CAMPOS_FALTANTES_LCL,
   type LclRow,
+  filtrarPorCampoFaltante,
 } from './hoyLcl'
 import { reclamables } from './datosClave'
 import type { Truck, TruckLoad } from './truckTypes'
@@ -385,5 +386,28 @@ describe('patchFaltanteLcl — de lo tipeado al PATCH', () => {
   })
   it('vacío rebota', () => {
     expect(patchFaltanteLcl('fiscal', '   ').ok).toBe(false)
+  })
+})
+
+describe('filtrarPorCampoFaltante — quedarse con un solo tipo de falta', () => {
+  const fc = (ref: string, keys: string[]) => ({
+    row: { id: ref, ref, mode: 'lcl', archived: false },
+    faltan: keys.map(key => ({ key, label: key, control: 'texto', obligatorioAlta: false, reclamable: true })),
+    urgente: false, diasAEta: null, depositoSugerido: null,
+  }) as unknown as Parameters<typeof filtrarPorCampoFaltante>[0][number]
+
+  const lista = [fc('E1', ['fiscal']), fc('E2', ['kg', 'm3']), fc('E3', ['fiscal', 'kg'])]
+
+  it('sin filtro devuelve todo', () => {
+    expect(filtrarPorCampoFaltante(lista, null)).toHaveLength(3)
+  })
+  it('con fiscal deja solo las que no tienen fiscal', () => {
+    expect(filtrarPorCampoFaltante(lista, 'fiscal').map(x => x.row.ref)).toEqual(['E1', 'E3'])
+  })
+  it('una carga con varias faltas aparece en cada filtro', () => {
+    expect(filtrarPorCampoFaltante(lista, 'kg').map(x => x.row.ref)).toEqual(['E2', 'E3'])
+  })
+  it('un campo que nadie debe devuelve vacío, no la lista entera', () => {
+    expect(filtrarPorCampoFaltante(lista, 'wood')).toEqual([])
   })
 })
