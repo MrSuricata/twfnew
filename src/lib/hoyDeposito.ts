@@ -22,8 +22,8 @@ import { ultimoAviso, type PartnerAviso, type PartnerAvisoTipo } from './partner
  * La operativa tal como viaja al partner. Los campos de abajo los suma la API
  * (W1 del plan) y pueden NO venir todavía: se tratan como vacíos, nunca se
  * inventan. `MODE`/`STOCK`/`ETA` son de la carga (repetidos en cada operativa);
- * `TURNO_RETIRO`/`RETIRADO` salen de `montecon_agenda` cuando la terminal es
- * MONTECON.
+ * `TURNO_RETIRO`/`RETIRADO` salen de `montecon_agenda`: el turno solo si la
+ * terminal es MONTECON (TCP no agenda), el RETIRADO en cualquier terminal.
  */
 export interface OperativaPartner extends OperativasRecord {
   /** Sobredimensionada (SI/NO). */
@@ -35,6 +35,20 @@ export interface OperativaPartner extends OperativasRecord {
   /** ETA de la carga (ISO). */
   ETA?: string
   /** Fecha del turno de retiro conseguido en Montecon (ISO). */
+  TURNO_RETIRO?: string
+  /** Fecha en que se marcó retirado (ISO o timestamp). Vacío = sigue en la terminal. */
+  RETIRADO?: string
+}
+
+/**
+ * La CARGA tal como viaja al partner. `partnerShipmentsVisibles` estampa
+ * `TURNO_RETIRO`/`RETIRADO` acá arriba —salen de `montecon_agenda`, que se
+ * lleva por REF, no por contenedor— y recién ahora los baja también a cada
+ * operativa. Por eso se leen los dos lados: la operativa manda y la carga es el
+ * respaldo (mismo patrón que WOOD y DESCRIPCION).
+ */
+export interface CargaPartner extends ParsedShipment {
+  /** Turno de retiro conseguido en Montecon (ISO). */
   TURNO_RETIRO?: string
   /** Fecha en que se marcó retirado (ISO o timestamp). Vacío = sigue en la terminal. */
   RETIRADO?: string
@@ -95,20 +109,30 @@ const pasaPorDeposito = (op: OperativaPartner): boolean => {
 }
 
 /** "DEVUELTO" vive en LIBRE (ver memoria): el vacío ya volvió a la terminal. */
-const devuelto = (op: OperativaPartner, cab: ParsedShipment): boolean =>
+const devuelto = (op: OperativaPartner, cab: CargaPartner): boolean =>
   up(op.LIBRE).includes('DEVUELTO') || up(cab.LIBRE_HASTA).includes('DEVUELTO') || !!txt(op.DEV_FECHA)
 
-const yaRetirado = (op: OperativaPartner): boolean => !!txt(op.RETIRADO)
+/** Ya lo fueron a buscar a la terminal. Se mira la operativa Y la carga porque
+ *  el dato nace en `montecon_agenda`, que es por REF, y la API lo estampa a
+ *  nivel carga: leyendo solo la operativa llegaba siempre vacío y lo que el
+ *  equipo marcaba RETIRADO desde admin le seguía apareciendo pendiente al
+ *  depósito (Brian 03/09). */
+const yaRetirado = (op: OperativaPartner, cab: CargaPartner): boolean =>
+  !!txt(op.RETIRADO) || !!txt(cab.RETIRADO)
+
+/** El turno conseguido en Montecon, con el mismo respaldo a nivel carga. */
+const turnoDe = (op: OperativaPartner, cab: CargaPartner): string =>
+  fechaISO(op.TURNO_RETIRO) || fechaISO(cab.TURNO_RETIRO)
 
 /** Fecha en que el contenedor sale de la terminal: el turno de Montecon si lo
  *  hay, si no la ETA del buque. La ETA de la CARGA manda: la copia por contenedor
  *  (ETA_OP) queda congelada al hornear y no se actualiza cuando el buque se corre
  *  (caso A8163, 02/09: ETA_OP 02/09 con la carga en 11/10). Misma regla que HOY
  *  admin (etaVigente). */
-const fechaRetiro = (op: OperativaPartner, cab: ParsedShipment): string =>
-  fechaISO(op.TURNO_RETIRO) || fechaISO(etaVigente(cab.ETA, op.ETA || op.ETA_OP))
+const fechaRetiro = (op: OperativaPartner, cab: CargaPartner): string =>
+  turnoDe(op, cab) || fechaISO(etaVigente(cab.ETA, op.ETA || op.ETA_OP))
 
-const libreDe = (op: OperativaPartner, cab: ParsedShipment): string =>
+const libreDe = (op: OperativaPartner, cab: CargaPartner): string =>
   txt(op.LIBRE) || txt(cab.LIBRE_HASTA) || txt(cab.calculatedLibreHasta)
 
 /**
@@ -140,7 +164,7 @@ export interface FilaDeposito {
   aviso?: PartnerAviso
 }
 
-const filaBase = (op: OperativaPartner, cab: ParsedShipment): FilaDeposito => ({
+const filaBase = (op: OperativaPartner, cab: CargaPartner): FilaDeposito => ({
   ref: txt(op.REF) || txt(cab.REF),
   cliente: txt(op.CLIENTE_OP) || txt(cab.CLIENTE),
   cntr: txt(op.CNTR_OP),
@@ -152,7 +176,7 @@ const filaBase = (op: OperativaPartner, cab: ParsedShipment): FilaDeposito => ({
   m3: num(op.M3),
 })
 
-const ops = (s: ParsedShipment): OperativaPartner[] => (s.operativas || []) as OperativaPartner[]
+const ops = (s: CargaPartner): OperativaPartner[] => (s.operativas || []) as OperativaPartner[]
 
 // ── Card 1: operativas de hoy ──────────────────────────────────────────
 
@@ -178,14 +202,14 @@ export interface OperativaHoy extends FilaDeposito {
  * = hoy en un trasiego / carga a piso sin turno). Un CONTENEDOR directo no
  * pasa por el depósito, así que su ETA no es un retiro mío.
  */
-export function operativasDeHoy(shipments: ParsedShipment[], hoyISO: string, deposito: string): OperativaHoy[] {
+export function operativasDeHoy(shipments: CargaPartner[], hoyISO: string, deposito: string): OperativaHoy[] {
   const out: OperativaHoy[] = []
   for (const cab of shipments) {
     for (const op of ops(cab)) {
       if (!esMiDeposito(op, deposito)) continue
       const salida = fechaISO(op.SALIDA)
       const cargaHoy = salida === hoyISO
-      const retiro = esFcl(op) && pasaPorDeposito(op) && !yaRetirado(op) && !devuelto(op, cab) ? fechaRetiro(op, cab) : ''
+      const retiro = esFcl(op) && pasaPorDeposito(op) && !yaRetirado(op, cab) && !devuelto(op, cab) ? fechaRetiro(op, cab) : ''
       const retiraHoy = retiro === hoyISO
       if (!cargaHoy && !retiraHoy) continue
       out.push({
@@ -232,7 +256,7 @@ export interface RetiroProximo extends FilaDeposito {
  * confirmado la fila desaparece; pendiente o rechazado, se muestra el estado.
  */
 export function retirosProximos(
-  shipments: ParsedShipment[],
+  shipments: CargaPartner[],
   hoyISO: string,
   deposito: string,
   avisos: PartnerAviso[],
@@ -241,7 +265,7 @@ export function retirosProximos(
   for (const cab of shipments) {
     for (const op of ops(cab)) {
       if (!esMiDeposito(op, deposito) || !esFcl(op) || !pasaPorDeposito(op)) continue
-      if (yaRetirado(op) || devuelto(op, cab)) continue
+      if (yaRetirado(op, cab) || devuelto(op, cab)) continue
       const fecha = fechaRetiro(op, cab)
       const dias = diasEntre(hoyISO, fecha)
       if (dias === null || dias < -RETIROS_DIAS_ATRAS || dias > RETIROS_DIAS_ADELANTE) continue
@@ -257,7 +281,7 @@ export function retirosProximos(
         ),
         terminal: txt(cab.TERMINAL),
         eta: fechaISO(etaVigente(cab.ETA, op.ETA || op.ETA_OP)),
-        turno: fechaISO(op.TURNO_RETIRO),
+        turno: turnoDe(op, cab),
         libre: libreDe(op, cab),
         fecha,
         dias,
@@ -360,7 +384,7 @@ export function severidadLibre(dias: number): SeveridadLibre {
  * acción imposible. No se exige RETIRADO (TCP no tiene agenda): conservador.
  */
 export function libresPorVencer(
-  shipments: ParsedShipment[],
+  shipments: CargaPartner[],
   hoyISO: string,
   deposito: string,
   avisos: PartnerAviso[],
@@ -417,7 +441,7 @@ export interface LclSinStock extends FilaDeposito {
  * equipo ya cargó el stock).
  */
 export function lclADesconsolidar(
-  shipments: ParsedShipment[],
+  shipments: CargaPartner[],
   hoyISO: string,
   deposito: string,
   avisos: PartnerAviso[],

@@ -12,7 +12,7 @@ import {
   estadoDevolucion, ETIQUETA_DEVOLUCION,
 } from './hoyDeposito'
 import type { OperativaPartner } from './hoyDeposito'
-import type { ParsedShipment } from './shipmentTypes'
+import type { CargaPartner } from './hoyDeposito'
 import type { PartnerAviso } from './partnerAvisos'
 
 const HOY = '2026-09-01' // martes
@@ -24,11 +24,11 @@ const op = (o: Partial<OperativaPartner>): OperativaPartner => ({
   ...o,
 })
 
-const carga = (ref: string, ops: Partial<OperativaPartner>[], cab: Partial<ParsedShipment> = {}): ParsedShipment => ({
+const carga = (ref: string, ops: Partial<OperativaPartner>[], cab: Partial<CargaPartner> = {}): CargaPartner => ({
   REF: ref, CLIENTE: 'BICI PERETTI S.A.', ETA: '2026-08-31', TERMINAL: 'MONTECON', LIBRE_HASTA: '',
   ...cab,
   operativas: ops.map(o => op({ REF: ref, ...o })),
-} as unknown as ParsedShipment)
+} as unknown as CargaPartner)
 
 const aviso = (a: Partial<PartnerAviso>): PartnerAviso => ({
   id: 'x', tipo: 'retire', ref: 'A1', cntr: '', partnerRole: 'depot', partnerFilter: 'PLANIR',
@@ -155,6 +155,42 @@ describe('retirosProximos — contenedores que retiro de la terminal', () => {
       carga('C', [{ TURNO_RETIRO: '2026-08-31' }], { ETA: '2026-09-06' }),
     ], HOY, 'PLANIR', [])
     expect(filas.map(f => f.ref)).toEqual(['C', 'A', 'B'])
+  })
+})
+
+describe('RETIRADO y TURNO_RETIRO — la API los estampa a nivel CARGA', () => {
+  // Nacen en `montecon_agenda`, que se lleva por REF: `partnerShipmentsVisibles`
+  // los pone arriba, en la carga. Si el HOY del depósito los leyera solo en la
+  // operativa, el dato le llegaría siempre vacío.
+
+  it('el equipo marcó RETIRADO desde admin: la carga sale de los retiros del depósito', () => {
+    const filas = retirosProximos([
+      carga('A8121', [{ OPERATIVA: 'TRASIEGO' }], { ETA: HOY, RETIRADO: '2026-08-31T14:00:00Z' }),
+    ], HOY, 'PLANIR', [])
+    expect(filas).toEqual([])
+  })
+
+  it('marcado a nivel operativa saca la fila igual (el camino de antes sigue valiendo)', () => {
+    const filas = retirosProximos([
+      carga('A8122', [{ OPERATIVA: 'TRASIEGO', RETIRADO: '2026-08-31' }], { ETA: HOY }),
+    ], HOY, 'PLANIR', [])
+    expect(filas).toEqual([])
+  })
+
+  it('marcado a nivel carga tampoco figura como retiro del día en las operativas de hoy', () => {
+    expect(operativasDeHoy([
+      carga('A8123', [{ OPERATIVA: 'TRASIEGO' }], { ETA: HOY, RETIRADO: '2026-08-31T14:00:00Z' }),
+    ], HOY, 'PLANIR')).toEqual([])
+  })
+
+  it('el turno de Montecon a nivel carga manda sobre la ETA para la fecha de retiro', () => {
+    // Con la ETA sola (15/08) la fila quedaba fuera de la ventana hoy-2…hoy+7:
+    // el turno del 03/09 es el que la trae al HOY del depósito.
+    const filas = retirosProximos([
+      carga('A8124', [{ OPERATIVA: 'TRASIEGO' }], { ETA: '2026-08-15', TURNO_RETIRO: '2026-09-03' }),
+    ], HOY, 'PLANIR', [])
+    expect(filas).toHaveLength(1)
+    expect(filas[0]).toMatchObject({ ref: 'A8124', turno: '2026-09-03', fecha: '2026-09-03', dias: 2 })
   })
 })
 
