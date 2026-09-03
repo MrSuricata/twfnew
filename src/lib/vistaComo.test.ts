@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import type { ParsedShipment, OperativasRecord } from './shipmentTypes'
 import {
   cargasDePartner, depositosEnCargas, transportesEnCargas, contarPorOpcion,
-  transportesDeOperativa, ROL_VISTA_LABEL,
+  transportesDeOperativa, ROL_VISTA_LABEL, clienteDeVista,
 } from './vistaComo'
 
 const op = (o: Partial<OperativasRecord> = {}): OperativasRecord => ({
@@ -78,5 +78,31 @@ describe('opciones del selector', () => {
   })
   it('las etiquetas están en español', () => {
     expect(ROL_VISTA_LABEL).toEqual({ depot: 'Depósito', transport: 'Transporte', client: 'Cliente' })
+  })
+})
+
+describe('clienteDeVista — "Ver como cliente" con clientes sin email', () => {
+  const catalogo = [
+    { id: 'cl-chiapero', name: 'CHIAPERO Y ASOC. S.R.L.', email: '' },
+    { id: 'cl-vmg', name: 'VMG S.A.', email: '' },
+    { id: 'cl-peretti', name: 'BICI PERETTI S.A.', email: 'compras@peretti.com.ar' },
+  ]
+  it('encuentra por nombre al cliente sin email (346 de 349 lo están)', () => {
+    expect(clienteDeVista(catalogo, 'CHIAPERO Y ASOC. S.R.L.')?.id).toBe('cl-chiapero')
+    expect(clienteDeVista(catalogo, 'VMG S.A.')?.id).toBe('cl-vmg')
+  })
+  it('el nombre matchea aunque cambien puntos y mayúsculas', () => {
+    expect(clienteDeVista(catalogo, 'vmg sa')?.id).toBe('cl-vmg')
+  })
+  it('sigue encontrando por email cuando lo hay', () => {
+    expect(clienteDeVista(catalogo, 'compras@peretti.com.ar')?.id).toBe('cl-peretti')
+  })
+  it('el email manda sobre el nombre', () => {
+    const raros = [{ id: 'a', name: 'compras@peretti.com.ar', email: '' }, ...catalogo]
+    expect(clienteDeVista(raros, 'compras@peretti.com.ar')?.id).toBe('cl-peretti')
+  })
+  it('sin valor o sin coincidencia no devuelve nada', () => {
+    expect(clienteDeVista(catalogo, '')).toBeUndefined()
+    expect(clienteDeVista(catalogo, 'NO EXISTE SRL')).toBeUndefined()
   })
 })

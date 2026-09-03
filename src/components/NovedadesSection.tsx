@@ -4,7 +4,7 @@ import { ArrowRight, ArrowLeft, Newspaper, ArrowSquareOut } from '@phosphor-icon
 import { useBrand } from '@/lib/brand'
 import {
   type Noticia, rowToNoticia, noticiasVigentes, alertasVigentes, ordenSlides, NOTICIAS_REFRESCO_MS,
-  alertaYaVista, marcarAlertaVista, categoriaMeta, tituloPlano, linkNoticia,
+  alertaYaVista, marcarAlertaVista, categoriaMeta, tituloPlano, linkNoticia, anclaNoticia,
 } from '@/lib/noticias'
 import NovedadesCarrusel, { conNegrita } from '@/components/NovedadesCarrusel'
 
@@ -257,6 +257,19 @@ export function NovedadesPage() {
   }, [vigentes])
   const visibles = filtro === 'todas' ? vigentes : vigentes.filter(n => n.categoria === filtro)
 
+  // Llegando desde el banner de un portal (/novedades#nota-<id>): esa nota se
+  // abre y se trae a la vista. Se espera a que haya notas cargadas.
+  useEffect(() => {
+    const id = decodeURIComponent(window.location.hash.replace(/^#/, ''))
+    if (!id.startsWith('nota-') || vigentes.length === 0) return
+    const nota = vigentes.find(n => anclaNoticia(n.id) === id)
+    if (!nota) return
+    setAbierta(nota.id)
+    // Tras pintar la nota abierta, recién ahí se centra.
+    const t = window.setTimeout(() => document.getElementById(id)?.scrollIntoView({ block: 'start' }), 60)
+    return () => window.clearTimeout(t)
+  }, [vigentes])
+
   // Tarjeta de categoría a la izquierda de cada aviso (handoff D3).
   const tarjetaCat = (c: string): string => {
     if (c === 'paros') return '#49286b'
@@ -319,7 +332,7 @@ export function NovedadesPage() {
             </div>
           )}
           {visibles.map(n => (
-            <article key={n.id} className="rounded-[20px] border-2 border-[#eef0f8] bg-white overflow-hidden">
+            <article key={n.id} id={anclaNoticia(n.id)} className="scroll-mt-24 rounded-[20px] border-2 border-[#eef0f8] bg-white overflow-hidden">
               <button type="button" onClick={() => setAbierta(prev => (prev === n.id ? null : n.id))} className="w-full text-left flex items-stretch">
                 <div className="w-[110px] lg:w-[150px] shrink-0 relative overflow-hidden hidden sm:flex items-center justify-center" style={{ background: tarjetaCat(n.categoria) }}>
                   {n.imagenUrl

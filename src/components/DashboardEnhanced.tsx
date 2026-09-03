@@ -59,7 +59,8 @@ import VistaComoBarra from './VistaComoBarra'
 import DepotDashboard from './DepotDashboard'
 import TransportDashboard from './TransportDashboard'
 import ClientPortal from './ClientPortal'
-import { cargasDePartner, type VistaComo } from '@/lib/vistaComo'
+import { cargasDePartner, type VistaComo, clienteDeVista,
+} from '@/lib/vistaComo'
 import TrucksManagement from './trucks/TrucksManagement'
 import DistribucionTransportes from './DistribucionTransportes'
 import BrandLogo from './BrandLogo'
@@ -375,6 +376,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
             clientEmail={vistaComo.valor.includes('@') ? vistaComo.valor : ''}
             clientName={vistaComo.nombre}
             clients={clients}
+            clienteResuelto={clienteDeVista(clients, vistaComo.valor)}
             reports={reports}
             shipments={cargasRol}
             onLogout={salir}

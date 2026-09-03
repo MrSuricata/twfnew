@@ -57,6 +57,16 @@ export function tituloPartes(titulo: string): [string, string] {
 /** Título sin la barra, para listas y textos corridos. */
 export const tituloPlano = (titulo: string) => titulo.replace(/\|/g, ' ').replace(/\s+/g, ' ').trim()
 
+/** Ancla de una nota dentro del Diario. Sirve de id en la página y de hash en
+ *  el link, así el botón del banner abre justo esa nota. */
+export const anclaNoticia = (id: string): string => `nota-${String(id || '').trim()}`
+
+/** A dónde manda el botón del banner de los portales: SIEMPRE al Diario, con la
+ *  nota abierta. Brian (03/09): "si lo mandamos a la noticia directamente no la
+ *  puede leer; al Diario ve otras cosas y cómo lo tenemos armado". La fuente
+ *  externa queda como enlace secundario (linkNoticia). */
+export const linkDiario = (n: Pick<Noticia, 'id'>): string => `/novedades#${anclaNoticia(n.id)}`
+
 /** Solo se navega a links http(s) — cualquier otra cosa cae en /novedades. */
 export function linkNoticia(n: Pick<Noticia, 'linkUrl'>): { href: string; externo: boolean } {
   const url = (n.linkUrl || '').trim()
