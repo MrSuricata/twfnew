@@ -368,6 +368,18 @@ export interface DatosFaltantes {
   urgentes: number
 }
 
+/** Las cargas a las que les falta ESTE dato. Con 147 LCL sin fiscal, la lista
+ *  entera no sirve: hay que poder quedarse con un solo tipo de falta (Brian
+ *  03/09: "ponerlas como alerta en datos a completar, o una marquita de por
+ *  favor completar fiscales"). `null` = sin filtro, la lista completa. */
+export function filtrarPorCampoFaltante(
+  porCarga: FaltantesPorCarga[],
+  campo: string | null,
+): FaltantesPorCarga[] {
+  if (!campo) return porCarga
+  return porCarga.filter(fc => fc.faltan.some(d => d.key === campo))
+}
+
 export function faltantesDe(row: LclRow): DatoClave[] {
   return datosQueFaltan('lcl', row as unknown as Record<string, unknown>)
 }
