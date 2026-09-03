@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   cargasMontecon, cargasSinTerminal, estadoAgenda, MONTECON_DIAS_ADELANTE, MONTECON_DIAS_ATRAS,
   RETIRADO_DIAS_RECORDATORIO,
+  esDirecto,
   type CargaMonteconInput, type AgendaRow,
 } from './monteconAgenda'
 
@@ -312,5 +313,35 @@ describe('cargasSinTerminal ↔ cargasMontecon — ida y vuelta (la promesa del 
 
   it('una carga sin terminal que ya salió tampoco se reclama', () => {
     expect(cargasSinTerminal([carga({ terminal: '', pais: 'UY', eta: dia(-2), salida: dia(-1) })], HOY)).toEqual([])
+  })
+})
+
+describe('a qué depósito va el contenedor — Brian 03/09', () => {
+  const base = {
+    ref: 'A9001', cliente: 'DEMO', terminal: 'TCP', contenedor: 'X1',
+    eta: '2026-09-05', mode: 'fcl', archived: false,
+  }
+  const hoy = '2026-09-03'
+  it('un TRASIEGO muestra el depósito que lo recibe, en mayúsculas', () => {
+    const [c] = cargasMontecon([{ ...base, operativa: 'TRASIEGO', deposito: 'godilco' }], [], hoy)
+    expect(c.deposito).toBe('GODILCO')
+    expect(c.directo).toBe(false)
+  })
+  it('un CONTENEDOR directo no tiene depósito: va al fiscal', () => {
+    const [c] = cargasMontecon([{ ...base, operativa: 'CONTENEDOR', deposito: 'GODILCO', fiscal: 'rafaela' }], [], hoy)
+    expect(c.directo).toBe(true)
+    expect(c.deposito).toBe('')
+    expect(c.fiscal).toBe('RAFAELA')
+  })
+  it('sin depósito cargado queda vacío, para que la fila lo reclame', () => {
+    const [c] = cargasMontecon([{ ...base, operativa: 'TRASIEGO' }], [], hoy)
+    expect(c.deposito).toBe('')
+    expect(c.directo).toBe(false)
+  })
+  it('esDirecto reconoce la operativa aunque venga con texto alrededor', () => {
+    expect(esDirecto('CONTENEDOR')).toBe(true)
+    expect(esDirecto(' contenedor directo ')).toBe(true)
+    expect(esDirecto('TRASIEGO')).toBe(false)
+    expect(esDirecto(null)).toBe(false)
   })
 })

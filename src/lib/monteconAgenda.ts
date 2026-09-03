@@ -70,6 +70,12 @@ export interface CargaMontecon {
   fechaRetiro: string
   /** Día del retiro (YYYY-MM-DD, solo estado 'retirado'). */
   retiradoEl: string
+  /** Depósito que lo recibe ('' si no está cargado). Vacío en los directos. */
+  deposito: string
+  /** true = CONTENEDOR directo: de la terminal al fiscal, sin depósito UY. */
+  directo: boolean
+  /** Destino fiscal ('' si no está cargado). Se muestra en los directos. */
+  fiscal: string
 }
 
 /** Ventana: ya llegadas hace poco (el retiro es DESPUÉS del arribo) + las que
@@ -117,6 +123,21 @@ export interface CargaMonteconInput {
   /** SALIDA del contenedor (YYYY-MM-DD, la primera operativa o la columna).
    *  Si ya pasó, el contenedor salió de la terminal: no hay retiro pendiente. */
   salida?: string | null
+  /** Depósito uruguayo al que va el contenedor (GODILCO, PLANIR…). Brian
+   *  (03/09): "me gustaría que me dijera qué depósito lo tiene que retirar".
+   *  Es a quién hay que avisarle el día del retiro. */
+  deposito?: string | null
+  /** OPERATIVA del contenedor: CONTENEDOR = va directo de la terminal al
+   *  destino fiscal, sin pasar por depósito uruguayo. */
+  operativa?: string | null
+  /** Destino fiscal, para decir a dónde va cuando es directo. */
+  fiscal?: string | null
+}
+
+/** CONTENEDOR (directo) = de la terminal al destino fiscal, sin depósito
+ *  uruguayo. En esos no hay depósito al que avisarle: hay transporte. */
+export function esDirecto(operativa: unknown): boolean {
+  return String(operativa ?? '').trim().toUpperCase().includes('CONTENEDOR')
 }
 
 /** FCL viva: no archivada y modalidad fcl (LCL/aéreo no retiran contenedor). */
@@ -177,6 +198,9 @@ export function cargasMontecon(
         etaAgendada: txt(a.eta_agendada),
         fechaRetiro: txt(a.fecha_retiro),
         retiradoEl,
+        deposito: esDirecto(c.operativa) ? '' : txt(c.deposito).toUpperCase(),
+        directo: esDirecto(c.operativa),
+        fiscal: txt(c.fiscal).toUpperCase(),
       })
       continue
     }
@@ -212,6 +236,9 @@ export function cargasMontecon(
       etaAgendada: txt(a?.eta_agendada),
       fechaRetiro: txt(a?.fecha_retiro),
       retiradoEl: '',
+      deposito: esDirecto(c.operativa) ? '' : txt(c.deposito).toUpperCase(),
+      directo: esDirecto(c.operativa),
+      fiscal: txt(c.fiscal).toUpperCase(),
     })
   }
 
