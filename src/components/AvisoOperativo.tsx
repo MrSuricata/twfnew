@@ -19,7 +19,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNoticias } from '@/components/NovedadesSection'
 import {
   avisosRotativos, indiceSiguiente, indiceValido, tituloPlano, categoriaMeta,
-  estiloSlide, linkNoticia, AVISO_ROTACION_MS, type EstiloSlide,
+  estiloSlide, linkNoticia, linkDiario, AVISO_ROTACION_MS, type EstiloSlide,
 } from '@/lib/noticias'
 import { getBrand } from '@/lib/brand'
 
@@ -55,7 +55,10 @@ export default function AvisoOperativo({ className = '' }: { className?: string 
   const aviso = avisos[i]
   if (!aviso) return null
 
-  const link = linkNoticia(aviso)
+  // El botón grande manda al DIARIO, no a la fuente: en el diario la nota se
+  // lee entera y además se ven las otras (Brian 03/09: "si lo mandamos a la
+  // noticia directamente no la puede leer"). La fuente queda de refuerzo.
+  const fuente = linkNoticia(aviso)
   const kicker = aviso.kicker || categoriaMeta(aviso.categoria).label
 
   return (
@@ -91,13 +94,25 @@ export default function AvisoOperativo({ className = '' }: { className?: string 
       </div>
       <div className="mt-4 flex items-center gap-4 flex-wrap">
         <a
-          href={link.href}
+          href={linkDiario(aviso)}
           target="_blank"
           rel="noopener noreferrer"
+          title="Abrir el Diario Logístico en esta nota"
           className="inline-flex items-center rounded-full bg-[#ceffff] px-5 py-2 text-sm font-semibold text-[#352e6a]"
         >
-          {link.externo ? 'Ir a la noticia →' : 'Ver aviso completo →'}
+          Leer en el Diario Logístico →
         </a>
+        {fuente.externo && (
+          <a
+            href={fuente.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Abrir la nota original en el sitio de origen"
+            className="text-xs text-white/70 underline underline-offset-2 hover:text-white"
+          >
+            fuente
+          </a>
+        )}
         {avisos.length > 1 && (
           <div className="flex items-center gap-2" role="tablist" aria-label="Avisos">
             {avisos.map((a, k) => (

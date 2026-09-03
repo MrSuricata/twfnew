@@ -14,6 +14,7 @@
  * Puro y testeable: entra la lista de cargas del admin, sale la del rol.
  */
 import type { ParsedShipment, OperativasRecord } from './shipmentTypes'
+import { normalizeClienteKey } from './clientCatalog'
 
 export type RolVista = 'depot' | 'transport' | 'client'
 
@@ -71,6 +72,26 @@ export function cargasDePartner(
     out.push({ ...s, operativas: suyas })
   }
   return out
+}
+
+/** El cliente del catálogo que corresponde a lo elegido en "Ver como".
+ *
+ *  El menú manda `email || name`, y **346 de 349 clientes no tienen email**
+ *  (03/09/2026): buscar solo por email dejaba la vista previa vacía para casi
+ *  todo el catálogo — Brian entró como Chiapero y como VMG y no vio ninguna
+ *  carga. Se busca por email exacto y, si no hay, por nombre normalizado.
+ */
+export function clienteDeVista<T extends { name?: string | null; email?: string | null }>(
+  clients: T[],
+  valor: string,
+): T | undefined {
+  const v = String(valor || '').trim()
+  if (!v) return undefined
+  const porEmail = (clients || []).find(c => String(c.email || '').trim().toLowerCase() === v.toLowerCase())
+  if (porEmail) return porEmail
+  const clave = normalizeClienteKey(v)
+  if (!clave) return undefined
+  return (clients || []).find(c => normalizeClienteKey(String(c.name || '')) === clave)
 }
 
 /** Opciones del selector: los depósitos que aparecen en las cargas vivas. */

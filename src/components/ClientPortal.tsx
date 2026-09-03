@@ -70,9 +70,12 @@ interface ClientPortalProps {
   /** Vista previa desde el admin ("Ver como"): las cargas llegan por props
    *  (el endpoint del cliente rechaza el token del admin). */
   preview?: boolean
+  /** Cliente del catálogo ya resuelto. Lo usa la vista previa: casi ningún
+   *  cliente tiene email, así que buscarlo por email no alcanza. */
+  clienteResuelto?: ClientAccount
 }
 
-export default function ClientPortal({ onLogout, clientEmail, clientName = '', shipments = [], clients = [], reports = [], preview = false }: ClientPortalProps) {
+export default function ClientPortal({ onLogout, clientEmail, clientName = '', shipments = [], clients = [], reports = [], preview = false, clienteResuelto }: ClientPortalProps) {
   const [activeTab, setActiveTab] = useState('active')
   const [selectedShipment, setSelectedShipment] = useState<ParsedShipment | null>(null)
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false)
@@ -168,7 +171,9 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
 
   // Por email SOLO si hay email (email vacío matcheaba al primer cliente sin
   // email del catálogo — "Bienvenido CENA HNOS"); sin match, manda el token.
-  const currentClient = findClientByEmail(clients, clientEmail)
+  // En la vista previa del admin el cliente viene resuelto: casi ningún cliente
+  // del catálogo tiene email, así que buscarlo por email dejaba el portal vacío.
+  const currentClient = clienteResuelto || findClientByEmail(clients, clientEmail)
   const brand = useBrand()
   const med = brand.id === 'med'
   // Hoy en ISO LOCAL (lib/format): toISOString() es UTC y después de las

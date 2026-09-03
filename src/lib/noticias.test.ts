@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   esVigente, noticiasVigentes, alertasVigentes, claveAlertas, rowToNoticia, categoriaMeta,
   estiloSlide, tituloPartes, tituloPlano, linkNoticia, ordenSlides, recencia, type Noticia,
-  avisosRotativos, indiceSiguiente, indiceValido,
+  avisosRotativos, indiceSiguiente, indiceValido, linkDiario, anclaNoticia,
 } from './noticias'
 
 const HOY = '2026-08-28'
@@ -149,5 +149,20 @@ describe('aviso operativo rotativo — las mismas tarjetas que el Diario', () =>
     expect(indiceValido(4, 3)).toBe(2)
     expect(indiceValido(1, 3)).toBe(1)
     expect(indiceValido(2, 0)).toBe(0)
+  })
+})
+
+describe('el banner manda al Diario, no a la fuente (Brian 03/09)', () => {
+  it('siempre va al Diario con la nota abierta, aunque la nota tenga fuente externa', () => {
+    expect(linkDiario(noticia({ id: 'abc', linkUrl: 'https://diario.com/nota' }))).toBe('/novedades#nota-abc')
+    expect(linkDiario(noticia({ id: 'abc', linkUrl: '' }))).toBe('/novedades#nota-abc')
+  })
+  it('el ancla del link es la misma que la del artículo en la página', () => {
+    const n = noticia({ id: 'x1' })
+    expect(linkDiario(n)).toBe(`/novedades#${anclaNoticia(n.id)}`)
+  })
+  it('la fuente externa sigue disponible aparte', () => {
+    expect(linkNoticia(noticia({ linkUrl: 'https://diario.com/nota' }))).toEqual({ href: 'https://diario.com/nota', externo: true })
+    expect(linkNoticia(noticia({ linkUrl: '' })).externo).toBe(false)
   })
 })
