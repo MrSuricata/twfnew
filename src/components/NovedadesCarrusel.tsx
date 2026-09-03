@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import {
-  type Noticia, categoriaMeta, estiloSlide, tituloPartes, linkNoticia,
+  type Noticia, type BloqueAjustado, type BloqueTexto, categoriaMeta, estiloSlide,
+  tituloPartes, linkNoticia, ajustarColumna, filasKicker, ANCHO_CARACTER,
 } from '@/lib/noticias'
 
 // ── Carrusel de novedades de la portada ──────────────────────────────────
@@ -35,29 +36,105 @@ export function conNegrita(texto: string, strongStyle?: CSSProperties): ReactNod
   return partes.map((p, ix) => (ix % 2 === 1 ? <strong key={ix} style={strongStyle}>{p}</strong> : p))
 }
 
-// ── Piezas compartidas de los slides ─────────────────────────────────────
+// ── Medidas fijas de la maqueta (px de diseño) ────────────────────
+// Los hijos que NO llevan texto variable tienen alto conocido, y se lo damos
+// explícito (interlineado y alto del logo) para que sea exacto y no dependa del
+// "normal" de cada navegador. Así ajustarColumna sabe cuánto alto le queda al
+// texto y lo que reserva es exactamente lo que después se dibuja.
+
+const KICKER_FS = 28
+const KICKER_LH = 1.5
+const KICKER_PAD = 32                    // 16px arriba + 16px abajo de la pill
+const ASIDE_FS = 26
+const ALTO_LINEA = 8
+const ALTO_BOTON = 93                    // 30px × 1.5 de interlineado + 24px × 2 de padding
+const ANCHO_LOGO = 290
+const ALTO_LOGO = 101                    // el PNG es 358×125
+/** Colchón que se le resta al alto de cada columna. El redondeo a subpíxeles del
+ *  navegador puede comerse un pelo de renglón; con esto nunca llega al borde. */
+const COLCHON = 12
+
+const altoKicker = (filas: number) => filas * KICKER_FS * KICKER_LH + KICKER_PAD
+
+/** Escalones de tamaño de fuente: si el texto no entra, primero se achica un
+ *  punto y recién después se recorta (aprovechar el lugar antes de cortar). */
+const escalones = (base: number): number[] => [base, Math.round(base * 0.9), Math.round(base * 0.82)]
+
+/** El título va en dos renglones cuando trae "|": para medirlo, ese corte es un
+ *  salto de línea de verdad. */
+const tituloMedible = (titulo: string) => tituloPartes(titulo).filter(Boolean).join('\n')
+
+// ── Piezas compartidas de los slides ─────────────────────────────
 
 const slideBase: CSSProperties = {
   position: 'relative', flex: 'none', width: W, height: H,
   overflow: 'hidden', display: 'flex', fontFamily: MONTSERRAT,
 }
 
-function KickerRow({ n, asideColor, asideOpacity, sinAside }: {
-  n: Noticia; asideColor: string; asideOpacity?: number; sinAside?: boolean
+/** Columna del slide: alto fijo y nada se le escapa por abajo. */
+const columna = (extra: CSSProperties): CSSProperties => ({
+  position: 'relative', boxSizing: 'border-box', display: 'flex', flexDirection: 'column',
+  minHeight: 0, overflow: 'hidden', ...extra,
+})
+
+/** Texto recortado a una cantidad exacta de renglones. line-clamp corta SIEMPRE
+ *  en un borde de renglón y termina en puntos suspensivos — nunca a mitad de
+ *  palabra contra el borde de la tarjeta (Brian 03/09: "no puede pasarnos más").
+ *
+ *  Dos cuidados que aprendimos probando con una nota el doble de larga:
+ *  · El padding del bloque NO puede ir en el mismo div que el recorte: el
+ *    renglón que sobra se sigue dibujando y asoma dentro de ese padding. Por eso
+ *    la tarjeta blanca y la pill celeste van en un envoltorio aparte (`caja`) y
+ *    el recorte queda pegado al texto.
+ *  · `holgura` es SOLO arriba: con interlineado apretado (títulos, lineHeight
+ *    menor a 1) el recorte le comería la tilde a las mayúsculas del primer
+ *    renglón. Abajo no se puede agrandar por lo mismo que el punto anterior. */
+function Recortado({ a, holgura = 0, caja, style, children }: {
+  a: BloqueAjustado | undefined; holgura?: number; caja?: CSSProperties
+  style?: CSSProperties; children: ReactNode
 }) {
-  const aside = n.kickerExtra || fmtFecha(n.publicadaAt)
+  if (!a || a.maxLineas < 1) return null
+  const texto = (
+    <div style={{
+      ...style,
+      boxSizing: 'border-box',
+      fontSize: a.fontSize, lineHeight: a.lineHeight,
+      display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: a.maxLineas,
+      overflow: 'hidden',
+      ...(holgura ? { paddingTop: holgura, marginTop: -holgura } : {}),
+    }}>{children}</div>
+  )
+  return caja ? <div style={{ boxSizing: 'border-box', ...caja }}>{texto}</div> : texto
+}
+
+const alLadoDelKicker = (n: Noticia) => n.kickerExtra || fmtFecha(n.publicadaAt)
+const textoKicker = (n: Noticia) => n.kicker || categoriaMeta(n.categoria).label
+
+function KickerRow({ n, asideColor, asideOpacity, sinAside, filas }: {
+  n: Noticia; asideColor: string; asideOpacity?: number; sinAside?: boolean; filas: number
+}) {
+  const aside = sinAside ? '' : alLadoDelKicker(n)
+  // Pill y fecha se recortan a las MISMAS filas que reservó filasKicker, así la
+  // fila del kicker mide siempre lo que la columna le tiene reservado.
+  const recorte: CSSProperties = {
+    display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: filas, overflow: 'hidden',
+  }
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 28 }}>
-      <div style={{
-        background: NARANJA, borderRadius: 999, padding: '16px 40px', fontWeight: 600,
-        fontSize: 28, letterSpacing: '0.08em', textTransform: 'uppercase', color: '#FFFFFF',
-      }}>
-        {n.kicker || categoriaMeta(n.categoria).label}
-      </div>
-      {!sinAside && aside && (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 28, maxWidth: '100%', flex: 'none' }}>
+      <div style={{ background: NARANJA, borderRadius: 999, padding: '16px 40px', minWidth: 0 }}>
         <div style={{
-          fontWeight: 600, fontSize: 26, letterSpacing: '0.08em', textTransform: 'uppercase',
-          color: asideColor, opacity: asideOpacity,
+          ...recorte,
+          fontWeight: 600, fontSize: KICKER_FS, lineHeight: KICKER_LH, letterSpacing: '0.08em',
+          textTransform: 'uppercase', color: '#FFFFFF',
+        }}>
+          {textoKicker(n)}
+        </div>
+      </div>
+      {aside && (
+        <div style={{
+          ...recorte,
+          fontWeight: 600, fontSize: ASIDE_FS, lineHeight: KICKER_LH, letterSpacing: '0.08em',
+          textTransform: 'uppercase', color: asideColor, opacity: asideOpacity,
         }}>
           {aside}
         </div>
@@ -66,17 +143,21 @@ function KickerRow({ n, asideColor, asideOpacity, sinAside }: {
   )
 }
 
-function Titulo({ titulo, color, acento, size }: { titulo: string; color: string; acento: string; size: number }) {
-  const [a, b] = tituloPartes(titulo)
+function Titulo({ titulo, color, acento, a }: {
+  titulo: string; color: string; acento: string; a: BloqueAjustado | undefined
+}) {
+  const [x, y] = tituloPartes(titulo)
   return (
-    <div style={{ fontFamily: NUNITO, fontWeight: 900, fontSize: size, lineHeight: 0.98, letterSpacing: '-0.02em', color }}>
-      {a}{b && <><br /><span style={{ color: acento }}>{b}</span></>}
-    </div>
+    <Recortado a={a} holgura={a ? Math.round(a.fontSize * 0.2) : 0} style={{
+      fontFamily: NUNITO, fontWeight: 900, letterSpacing: '-0.02em', color,
+    }}>
+      {x}{y && <><br /><span style={{ color: acento }}>{y}</span></>}
+    </Recortado>
   )
 }
 
 const Linea = ({ color }: { color: string }) => (
-  <div style={{ width: 310, height: 8, background: color }} />
+  <div style={{ width: 310, height: ALTO_LINEA, background: color, flex: 'none' }} />
 )
 
 function BotonNoticia({ n, claro }: { n: Noticia; claro?: boolean }) {
@@ -87,8 +168,9 @@ function BotonNoticia({ n, claro }: { n: Noticia; claro?: boolean }) {
       {...(externo ? { target: '_blank', rel: 'noopener noreferrer' } : {})}
       style={{
         background: claro ? PASTEL : VIOLETA, borderRadius: 999, padding: '24px 52px',
-        fontWeight: 600, fontSize: 30, color: claro ? VIOLETA_TXT : '#FFFFFF',
+        fontWeight: 600, fontSize: 30, lineHeight: 1.5, color: claro ? VIOLETA_TXT : '#FFFFFF',
         display: 'flex', alignItems: 'center', gap: 18, textDecoration: 'none',
+        flex: 'none', whiteSpace: 'nowrap',
       }}
     >
       Ir a la noticia <span style={{ fontFamily: NUNITO, fontWeight: 900 }}>→</span>
@@ -99,7 +181,8 @@ function BotonNoticia({ n, claro }: { n: Noticia; claro?: boolean }) {
 const Logo = ({ blanco }: { blanco?: boolean }) => (
   <img
     src={blanco ? '/novedades/logo-blanco.png' : '/novedades/logo-violeta.png'}
-    alt="Mediterranea Carghas" style={{ width: 290 }} draggable={false}
+    alt="Mediterranea Carghas"
+    style={{ width: ANCHO_LOGO, height: ALTO_LOGO, flex: 'none' }} draggable={false}
   />
 )
 
@@ -115,28 +198,50 @@ function ArcosClaros() {
   )
 }
 
-// ── Variantes de slide ───────────────────────────────────────────────────
+/** Columna derecha de todas las variantes: mensaje + botón + logo. El mensaje es
+ *  lo único de alto variable; botón y logo entran como alto fijo. */
+function ajusteDerecha(
+  texto: string,
+  { ancho, alto, gap, base, lineHeight, factor, extra = 0 }:
+    { ancho: number; alto: number; gap: number; base: number; lineHeight: number; factor?: number; extra?: number },
+) {
+  const bloques: BloqueTexto[] = texto.trim()
+    ? [{ clave: 'mensaje', texto, ancho, tamanos: escalones(base), lineHeight, factor, extra }]
+    : []
+  return ajustarColumna(bloques, { alto: alto - COLCHON, gap, fijos: [ALTO_BOTON, ALTO_LOGO] })
+}
+
+// ── Variantes de slide ────────────────────────────────────
+// Cada variante le pasa a ajustarColumna su geometría real en px de diseño:
+// ancho útil (columna menos paddings) y alto útil (900 menos paddings), con los
+// altos fijos de kicker / línea / botón / logo. Nota nueva o nota larga, el
+// cálculo se rehace solo: nadie tiene que contar caracteres.
 
 function SlideVioleta({ n }: { n: Noticia }) {
+  const ANCHO = 790
+  const filas = filasKicker(textoKicker(n), alLadoDelKicker(n), { ancho: ANCHO })
+  const izq = ajustarColumna([
+    { clave: 'titulo', texto: tituloMedible(n.titulo), ancho: ANCHO, tamanos: escalones(86), lineHeight: 0.98, factor: ANCHO_CARACTER.titulo },
+    ...(n.bajada.trim() ? [{ clave: 'bajada', texto: n.bajada, ancho: ANCHO, tamanos: escalones(38), lineHeight: 1.3 }] : []),
+  ], { alto: 720 - COLCHON, gap: 30, fijos: [altoKicker(filas), ALTO_LINEA] })
+  const der = ajusteDerecha(n.mensaje, { ancho: 520, alto: 710, gap: 30, base: 33, lineHeight: 1.35 })
   return (
     <div style={{ ...slideBase, background: `linear-gradient(160deg, ${VIOLETA} 0%, ${VIOLETA_TXT} 55%, ${INDIGO} 100%)` }}>
       <div style={{ position: 'absolute', top: -300, right: -300, width: 460, height: 460, borderRadius: '50%', background: 'rgba(155,209,229,0.18)', pointerEvents: 'none' }} />
       <div style={{ position: 'absolute', top: -330, right: -330, width: 560, height: 560, borderRadius: '50%', border: '26px solid rgba(155,209,229,0.35)', boxSizing: 'border-box', pointerEvents: 'none' }} />
       <div style={{ position: 'absolute', bottom: -300, left: -300, width: 440, height: 440, borderRadius: '50%', border: '22px solid rgba(206,255,255,0.25)', boxSizing: 'border-box', pointerEvents: 'none' }} />
-      <div style={{ position: 'relative', boxSizing: 'border-box', flex: 'none', width: 940, padding: '90px 40px 90px 110px', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'space-between', gap: 30 }}>
-        <KickerRow n={n} asideColor={CELESTE} />
-        <Titulo titulo={n.titulo} color="#FFFFFF" acento={CELESTE} size={86} />
+      <div style={columna({ flex: 'none', width: 940, padding: '90px 40px 90px 110px', alignItems: 'flex-start', justifyContent: 'space-between', gap: 30 })}>
+        <KickerRow n={n} asideColor={CELESTE} filas={filas} />
+        <Titulo titulo={n.titulo} color="#FFFFFF" acento={CELESTE} a={izq.titulo} />
         <Linea color={NARANJA} />
-        {n.bajada && (
-          <div style={{ fontWeight: 400, fontSize: 38, lineHeight: 1.3, color: PASTEL, textWrap: 'pretty' }}>{conNegrita(n.bajada, { color: '#FFFFFF' })}</div>
-        )}
+        <Recortado a={izq.bajada} style={{ fontWeight: 400, color: PASTEL, textWrap: 'pretty' }}>
+          {conNegrita(n.bajada, { color: '#FFFFFF' })}
+        </Recortado>
       </div>
-      <div style={{ position: 'relative', boxSizing: 'border-box', flex: 1, padding: '100px 110px 90px 30px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: n.mensaje ? 'space-between' : 'center', gap: 30 }}>
-        {n.mensaje && (
-          <div style={{ fontWeight: 300, fontSize: 33, lineHeight: 1.35, color: '#FFFFFF', opacity: 0.92, textAlign: 'center', textWrap: 'pretty' }}>
-            {conNegrita(n.mensaje, { fontWeight: 600 })}
-          </div>
-        )}
+      <div style={columna({ flex: 1, padding: '100px 110px 90px 30px', alignItems: 'center', justifyContent: n.mensaje ? 'space-between' : 'center', gap: 30 })}>
+        <Recortado a={der.mensaje} style={{ fontWeight: 300, color: '#FFFFFF', opacity: 0.92, textAlign: 'center', textWrap: 'pretty' }}>
+          {conNegrita(n.mensaje, { fontWeight: 600 })}
+        </Recortado>
         <BotonNoticia n={n} claro />
         <Logo blanco />
       </div>
@@ -145,27 +250,42 @@ function SlideVioleta({ n }: { n: Noticia }) {
 }
 
 function SlideCeleste({ n }: { n: Noticia }) {
+  const ANCHO = 750
+  const filas = filasKicker(textoKicker(n), alLadoDelKicker(n), { ancho: ANCHO })
+  const izq = ajustarColumna([
+    { clave: 'titulo', texto: tituloMedible(n.titulo), ancho: ANCHO, tamanos: escalones(84), lineHeight: 0.98, factor: ANCHO_CARACTER.titulo },
+    ...(n.subtitulo.trim() ? [{ clave: 'subtitulo', texto: n.subtitulo, ancho: ANCHO - 80, tamanos: escalones(34), lineHeight: 1.5, factor: ANCHO_CARACTER.titulo, extra: 32 }] : []),
+    ...(n.bajada.trim() ? [{ clave: 'bajada', texto: n.bajada, ancho: ANCHO, tamanos: escalones(32), lineHeight: 1.3 }] : []),
+  ], { alto: 720 - COLCHON, gap: 26, fijos: [altoKicker(filas)] })
+  const der = ajusteDerecha(n.mensaje, { ancho: 590 - 88, alto: 700, gap: 28, base: 32, lineHeight: 1.3, extra: 80 })
   return (
     <div style={{ ...slideBase, background: `#cfe4f0 url(/novedades/bg-gradient.webp) center/cover no-repeat` }}>
       <ArcosClaros />
-      <div style={{ position: 'relative', boxSizing: 'border-box', flex: 'none', width: 900, padding: '90px 40px 90px 110px', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'space-between', gap: 26 }}>
-        <KickerRow n={n} asideColor={VIOLETA} asideOpacity={0.7} />
-        <Titulo titulo={n.titulo} color={VIOLETA} acento={VIOLETA} size={84} />
-        {n.subtitulo && (
-          <div style={{ background: PASTEL, borderRadius: 999, padding: '16px 40px', fontFamily: NUNITO, fontWeight: 900, fontSize: 34, color: VIOLETA_TXT }}>
-            {n.subtitulo}
-          </div>
-        )}
-        {n.bajada && (
-          <div style={{ fontWeight: 400, fontSize: 32, lineHeight: 1.3, color: VIOLETA_TXT, textWrap: 'pretty' }}>{conNegrita(n.bajada, { color: VIOLETA })}</div>
-        )}
+      <div style={columna({ flex: 'none', width: 900, padding: '90px 40px 90px 110px', alignItems: 'flex-start', justifyContent: 'space-between', gap: 26 })}>
+        <KickerRow n={n} asideColor={VIOLETA} asideOpacity={0.7} filas={filas} />
+        <Titulo titulo={n.titulo} color={VIOLETA} acento={VIOLETA} a={izq.titulo} />
+        <Recortado
+          a={izq.subtitulo}
+          caja={{ background: PASTEL, borderRadius: 999, padding: '16px 40px', minWidth: 0 }}
+          style={{ fontFamily: NUNITO, fontWeight: 900, color: VIOLETA_TXT }}
+        >
+          {n.subtitulo}
+        </Recortado>
+        <Recortado a={izq.bajada} style={{ fontWeight: 400, color: VIOLETA_TXT, textWrap: 'pretty' }}>
+          {conNegrita(n.bajada, { color: VIOLETA })}
+        </Recortado>
       </div>
-      <div style={{ position: 'relative', boxSizing: 'border-box', flex: 1, padding: '110px 110px 90px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: n.mensaje ? 'space-between' : 'center', gap: 28 }}>
-        {n.mensaje && (
-          <div style={{ alignSelf: 'stretch', background: '#FFFFFF', borderRadius: 28, padding: '40px 44px', boxShadow: '0 30px 70px rgba(40,60,90,0.14)', fontWeight: 400, fontSize: 32, lineHeight: 1.3, color: VIOLETA_TXT, textWrap: 'pretty' }}>
-            {conNegrita(n.mensaje, { color: VIOLETA })}
-          </div>
-        )}
+      <div style={columna({ flex: 1, padding: '110px 110px 90px 0', alignItems: 'center', justifyContent: n.mensaje ? 'space-between' : 'center', gap: 28 })}>
+        <Recortado
+          a={der.mensaje}
+          caja={{
+            alignSelf: 'stretch', background: '#FFFFFF', borderRadius: 28, padding: '40px 44px',
+            boxShadow: '0 30px 70px rgba(40,60,90,0.14)',
+          }}
+          style={{ fontWeight: 400, color: VIOLETA_TXT, textWrap: 'pretty' }}
+        >
+          {conNegrita(n.mensaje, { color: VIOLETA })}
+        </Recortado>
         <BotonNoticia n={n} />
         <Logo />
       </div>
@@ -174,27 +294,30 @@ function SlideCeleste({ n }: { n: Noticia }) {
 }
 
 function SlideActualizacion({ n }: { n: Noticia }) {
+  const ANCHO = 730
+  const filas = filasKicker(textoKicker(n), '', { ancho: ANCHO })
+  const izq = ajustarColumna([
+    { clave: 'bajada', texto: n.bajada, ancho: ANCHO, tamanos: escalones(44), lineHeight: 1.3 },
+    ...(n.subtitulo.trim() ? [{ clave: 'subtitulo', texto: n.subtitulo, ancho: ANCHO, tamanos: escalones(32), lineHeight: 1.3 }] : []),
+  ], { alto: 710 - COLCHON, gap: 28, fijos: [altoKicker(filas), ALTO_LINEA] })
+  const der = ajusteDerecha(n.mensaje, { ancho: 610, alto: 700, gap: 28, base: 32, lineHeight: 1.35 })
   return (
     <div style={{ ...slideBase, background: `#cfe4f0 url(/novedades/bg-gradient.webp) center/cover no-repeat` }}>
       <ArcosClaros />
-      <div style={{ position: 'relative', boxSizing: 'border-box', flex: 'none', width: 880, padding: '100px 40px 90px 110px', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'space-between', gap: 28 }}>
-        <KickerRow n={n} asideColor={VIOLETA} sinAside />
-        <div style={{ fontWeight: 400, fontSize: 44, lineHeight: 1.3, color: VIOLETA_TXT, textWrap: 'pretty' }}>
+      <div style={columna({ flex: 'none', width: 880, padding: '100px 40px 90px 110px', alignItems: 'flex-start', justifyContent: 'space-between', gap: 28 })}>
+        <KickerRow n={n} asideColor={VIOLETA} sinAside filas={filas} />
+        <Recortado a={izq.bajada} style={{ fontWeight: 400, color: VIOLETA_TXT, textWrap: 'pretty' }}>
           {conNegrita(n.bajada, { fontFamily: NUNITO, fontWeight: 900, color: VIOLETA })}
-        </div>
+        </Recortado>
         <Linea color={NARANJA} />
-        {n.subtitulo && (
-          <div style={{ fontWeight: 400, fontSize: 32, lineHeight: 1.3, color: VIOLETA_TXT, textWrap: 'pretty' }}>
-            {conNegrita(n.subtitulo, { color: VIOLETA })}
-          </div>
-        )}
+        <Recortado a={izq.subtitulo} style={{ fontWeight: 400, color: VIOLETA_TXT, textWrap: 'pretty' }}>
+          {conNegrita(n.subtitulo, { color: VIOLETA })}
+        </Recortado>
       </div>
-      <div style={{ position: 'relative', boxSizing: 'border-box', flex: 1, padding: '110px 110px 90px 0', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: n.mensaje ? 'space-between' : 'center', gap: 28 }}>
-        {n.mensaje && (
-          <div style={{ fontWeight: 400, fontSize: 32, lineHeight: 1.35, color: VIOLETA_TXT, textAlign: 'center', textWrap: 'pretty' }}>
-            {conNegrita(n.mensaje, { color: VIOLETA })}
-          </div>
-        )}
+      <div style={columna({ flex: 1, padding: '110px 110px 90px 0', alignItems: 'center', justifyContent: n.mensaje ? 'space-between' : 'center', gap: 28 })}>
+        <Recortado a={der.mensaje} style={{ fontWeight: 400, color: VIOLETA_TXT, textAlign: 'center', textWrap: 'pretty' }}>
+          {conNegrita(n.mensaje, { color: VIOLETA })}
+        </Recortado>
         <BotonNoticia n={n} />
         <Logo />
       </div>
@@ -203,22 +326,34 @@ function SlideActualizacion({ n }: { n: Noticia }) {
 }
 
 function SlidePapel({ n }: { n: Noticia }) {
+  const ANCHO = 570
+  const filas = filasKicker(textoKicker(n), alLadoDelKicker(n), { ancho: ANCHO })
+  const izq = ajustarColumna([
+    { clave: 'titulo', texto: tituloMedible(n.titulo), ancho: ANCHO, tamanos: escalones(78), lineHeight: 0.98, factor: ANCHO_CARACTER.titulo },
+    ...(n.bajada.trim() ? [{ clave: 'bajada', texto: n.bajada, ancho: ANCHO, tamanos: escalones(34), lineHeight: 1.3 }] : []),
+  ], { alto: 720 - COLCHON, gap: 32, fijos: [altoKicker(filas), ALTO_LINEA] })
+  const der = ajusteDerecha(n.mensaje, { ancho: 640 - 88, alto: 720, gap: 28, base: 46, lineHeight: 1.12, factor: ANCHO_CARACTER.titulo, extra: 80 })
   return (
     <div style={{ ...slideBase, background: `#f4f6f8 url(/novedades/bg-paper.webp) center/cover no-repeat` }}>
-      <div style={{ boxSizing: 'border-box', flex: 'none', width: 760, background: `linear-gradient(160deg, ${VIOLETA} 0%, ${VIOLETA_TXT} 60%, ${INDIGO} 100%)`, padding: '90px 80px 90px 110px', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', justifyContent: 'center', gap: 32 }}>
-        <KickerRow n={n} asideColor={CELESTE} />
-        <Titulo titulo={n.titulo} color="#FFFFFF" acento={CELESTE} size={78} />
+      <div style={columna({ flex: 'none', width: 760, background: `linear-gradient(160deg, ${VIOLETA} 0%, ${VIOLETA_TXT} 60%, ${INDIGO} 100%)`, padding: '90px 80px 90px 110px', alignItems: 'flex-start', justifyContent: 'center', gap: 32 })}>
+        <KickerRow n={n} asideColor={CELESTE} filas={filas} />
+        <Titulo titulo={n.titulo} color="#FFFFFF" acento={CELESTE} a={izq.titulo} />
         <Linea color={CELESTE} />
-        {n.bajada && (
-          <div style={{ fontWeight: 400, fontSize: 34, lineHeight: 1.3, color: PASTEL, textWrap: 'pretty' }}>{conNegrita(n.bajada, { color: '#FFFFFF' })}</div>
-        )}
+        <Recortado a={izq.bajada} style={{ fontWeight: 400, color: PASTEL, textWrap: 'pretty' }}>
+          {conNegrita(n.bajada, { color: '#FFFFFF' })}
+        </Recortado>
       </div>
-      <div style={{ position: 'relative', boxSizing: 'border-box', flex: 1, padding: '90px 100px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: n.mensaje ? 'space-between' : 'center', gap: 28 }}>
-        {n.mensaje && (
-          <div style={{ alignSelf: 'stretch', background: '#FFFFFF', borderRadius: 28, padding: '40px 44px', boxShadow: '0 30px 70px rgba(40,60,90,0.12)', fontFamily: NUNITO, fontWeight: 900, fontSize: 46, lineHeight: 1.12, color: VIOLETA, textWrap: 'pretty' }}>
-            {n.mensaje}
-          </div>
-        )}
+      <div style={columna({ flex: 1, padding: '90px 100px', alignItems: 'center', justifyContent: n.mensaje ? 'space-between' : 'center', gap: 28 })}>
+        <Recortado
+          a={der.mensaje}
+          caja={{
+            alignSelf: 'stretch', background: '#FFFFFF', borderRadius: 28, padding: '40px 44px',
+            boxShadow: '0 30px 70px rgba(40,60,90,0.12)',
+          }}
+          style={{ fontFamily: NUNITO, fontWeight: 900, color: VIOLETA, textWrap: 'pretty' }}
+        >
+          {n.mensaje}
+        </Recortado>
         <BotonNoticia n={n} />
         <Logo />
       </div>
