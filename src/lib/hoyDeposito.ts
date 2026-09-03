@@ -49,6 +49,10 @@ export const RETIROS_DIAS_ADELANTE = 7
 /** LIBRE: se avisa desde 5 días antes (Brian: mismo umbral que HOY admin). */
 export const LIBRE_DIAS_AVISO = 5
 
+/** Un vacío sin LIBRE cargado va al final de la lista, no adelante: no se sabe
+ *  cuándo vence, pero devolverlo sigue siendo obligación. */
+export const SIN_LIBRE_DIAS = 9999
+
 // ── Helpers ────────────────────────────────────────────────────────────
 
 const txt = (v: unknown): string => String(v ?? '').trim()
@@ -292,9 +296,38 @@ export const DETALLE_RETIRO: Record<EstadoRetiro, string> = {
 
 // ── Card 3: LIBRE por vencer / vencidos ────────────────────────────────
 
+/** ¿Se puede devolver el vacío? Igual que el retiro, dos condiciones (Brian
+ *  03/09): la devolución tiene que estar PAGA y tiene que haber TERMINAL de
+ *  devolución asignada. Sin terminal el depósito no sabe a dónde llevarlo; sin
+ *  pago no se lo reciben. Que la fila lo diga nos obliga a completarlo. */
+export type EstadoDevolucion = 'listo' | 'falta_pago' | 'falta_terminal' | 'faltan_ambos'
+
+export function estadoDevolucion(pagada: boolean, terminalDev: string): EstadoDevolucion {
+  const tiene = !!String(terminalDev || '').trim()
+  if (pagada && tiene) return 'listo'
+  if (!pagada && !tiene) return 'faltan_ambos'
+  return pagada ? 'falta_terminal' : 'falta_pago'
+}
+
+export const ETIQUETA_DEVOLUCION: Record<EstadoDevolucion, string> = {
+  listo: 'LISTO PARA DEVOLVER',
+  falta_pago: 'Falta pago de la devolución',
+  falta_terminal: 'Falta terminal de devolución',
+  faltan_ambos: 'Falta terminal y pago',
+}
+
+export const DETALLE_DEVOLUCION: Record<EstadoDevolucion, string> = {
+  listo: 'La devolución está paga y la terminal asignada: se puede devolver.',
+  falta_pago: 'Falta que paguemos la devolución. Lo estamos gestionando.',
+  falta_terminal: 'Falta que asignemos la terminal de devolución. Te avisamos.',
+  faltan_ambos: 'Falta asignar la terminal de devolución y pagarla. Lo estamos gestionando.',
+}
+
 export type SeveridadLibre = 'vencido' | 'hoy' | 'urgente' | 'proximo'
 
 export interface LibrePorVencer extends FilaDeposito {
+  /** ¿Se puede devolver ya? (pago + terminal asignada). */
+  estado: EstadoDevolucion
   libre: string
   /** Días hasta el vencimiento: <0 vencido · 0 hoy · 1-2 urgente · 3-5 próximo. */
   dias: number
@@ -312,9 +345,11 @@ export function severidadLibre(dias: number): SeveridadLibre {
 }
 
 /**
- * Contenedores de mi depósito que todavía no se devolvieron y cuyo LIBRE vence
- * dentro de LIBRE_DIAS_AVISO días o ya venció. Mismos cortes que la tira de
- * LIBRE de HOY admin (vencido / hoy / 1-2 d) más la franja de aviso a 5 días.
+ * Contenedores de mi depósito que todavía no se devolvieron. TODOS los que ya
+ * están (o estuvieron) en el predio, venza el LIBRE cuando venza: el vacío hay
+ * que devolverlo igual, y verlo desde el día del trasiego evita la corrida del
+ * final. Los cortes de color son los de la tira de LIBRE de HOY admin
+ * (vencido / hoy / 1-2 d / próximo).
  * "DEVUELTO" en LIBRE o una DEV_FECHA = ya devuelto, no entra. Con un aviso
  * "devolví" confirmado la fila desaparece.
  *
@@ -337,21 +372,30 @@ export function libresPorVencer(
       if (devuelto(op, cab)) continue
       const retiro = fechaRetiro(op, cab)
       if (retiro && retiro > hoyISO) continue
+      // Desde el día en que el contenedor entra al depósito ya hay un vacío
+      // que devolver: antes solo aparecía cuando el LIBRE estaba por vencer
+      // (5 días), y el depósito se enteraba tarde. Brian 03/09: "no solo
+      // cuando se estén por vencer; los que estén pendientes de devolución —
+      // hoy estamos haciendo la A8121, a partir de hoy le tiene que aparecer".
+      // Sin LIBRE cargado también entra: el vacío existe igual.
       const libre = fechaISO(libreDe(op, cab))
-      if (!libre) continue
-      const dias = diasEntre(hoyISO, libre)
-      if (dias === null || dias > LIBRE_DIAS_AVISO) continue
+      const dias = libre ? diasEntre(hoyISO, libre) : null
       const base = filaBase(op, cab)
       const aviso = estadoAvisoDe(avisos, 'devolvi', base.ref, base.cntr)
       if (aviso?.estado === 'confirmado') continue
+      const dev = txt(op.DEV)
       out.push({
         ...base,
         aviso,
-        libre,
-        dias,
-        severidad: severidadLibre(dias),
+        estado: estadoDevolucion(
+          !!(cab as unknown as { DEVOLUCION_PAGADA?: boolean }).DEVOLUCION_PAGADA,
+          dev,
+        ),
+        libre: libre || '',
+        dias: dias ?? SIN_LIBRE_DIAS,
+        severidad: dias === null ? 'proximo' : severidadLibre(dias),
         terminal: txt(cab.TERMINAL),
-        dev: txt(op.DEV),
+        dev,
       })
     }
   }

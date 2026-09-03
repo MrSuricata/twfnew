@@ -1297,7 +1297,7 @@ async function partnerShipmentsVisibles(db: any, payload: any): Promise<
     // telex: respaldo del TLX de la operativa para el aviso "TLX pendiente".
     // monto_terminal / pago_terminal_at NO viajan al partner: solo alimentan el
     // booleano TERMINAL_PAGADA (el depósito no ve plata).
-    .select('ref,cliente,etd,eta,contenedor,n_cntr,doc_number,linea,buque,terminal,tipo,libre,telex,operativas,archived,deposito,transporte,salida,eta_fiscal,operativa,fiscal,descarga,dev,pkgs,kg,m3,observacion,mode,stock,oog,wood,monto_terminal,pago_terminal_at')
+    .select('ref,cliente,etd,eta,contenedor,n_cntr,doc_number,linea,buque,terminal,tipo,libre,telex,operativas,archived,deposito,transporte,salida,eta_fiscal,operativa,fiscal,descarga,dev,pkgs,kg,m3,observacion,mode,stock,oog,wood,monto_terminal,pago_terminal_at,monto_devolucion,pago_devolucion_at')
     .neq('source', 'sheet')
     .eq('archived', false)
     .limit(5000)
@@ -1377,6 +1377,9 @@ async function partnerShipmentsVisibles(db: any, payload: any): Promise<
       // ¿Está paga la terminal? Estampado en Pagos, o monto 0 (convención de la
       // planilla vieja: 0 = ya pagado). null/undefined = sin datos = NO pagada.
       TERMINAL_PAGADA: !!r.pago_terminal_at || Number(r.monto_terminal) === 0,
+      // Ídem la devolución del vacío (CDEV): con esto y la terminal de
+      // devolución, el depósito sabe si puede devolverlo (Brian 03/09).
+      DEVOLUCION_PAGADA: !!r.pago_devolucion_at || Number(r.monto_devolucion) === 0,
       operativas: ops,
     }
   })
