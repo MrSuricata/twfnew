@@ -5,6 +5,7 @@ import {
   llegadasADestino, esperandoSalida, llegadasAMontevideo, embarcadas, hoyCliente, alertasCliente,
   pasoSiguiente, textoDias, rutaDe, tipoDe, filtrarCargas, opcionesFiltro, FILTRO_TODO,
   DESTINO_DIAS_ADELANTE, MVD_DIAS_ADELANTE, CLIENTE_ENTREGADA_DIAS, DIAS_LLEGADA_SUPUESTA,
+  novedadesCliente,
 } from './hoyCliente'
 
 const HOY = '2026-09-02'
@@ -435,5 +436,83 @@ describe('el cliente ve "en depósito" cuando el contenedor ya se retiró (Brian
   })
   it('con salida cargada ya no espera: sale de esta card', () => {
     expect(esperandoSalida([carga({ RETIRADO: '2026-09-08' }, { SALIDA: '2026-09-09' })], hoy)).toEqual([])
+  })
+})
+
+describe('novedadesCliente — fotos e informes que el cliente todavía no vio', () => {
+  const HOY_N = '2026-09-10'
+  const dia = (iso: string) => Date.parse(iso + 'T12:00:00Z')
+  const carga = (ref: string, op: Record<string, unknown> = {}, extra: Record<string, unknown> = {}) => ({
+    REF: ref, CLIENTE: 'DEMO', ETD: '2026-08-01', ETA: '2026-09-05', PAIS: 'UY',
+    POD: 'MONTEVIDEO', POL: 'SHANGHAI', TERMINAL: 'TCP', N: 1, CNTR: 'X1', MODE: 'fcl',
+    operativas: [{ REF: ref, CNTR_OP: 'X1', OPERATIVA: 'TRASIEGO', ...op }],
+    ...extra,
+  }) as unknown as Parameters<typeof novedadesCliente>[0][number]
+
+  it('agrupa las fotos por carga y lugar, y dice dónde se sacaron', () => {
+    const n = novedadesCliente(
+      [carga('A1', { DEPOSITO: 'GODILCO' })],
+      [
+        { shipmentRef: 'A1', photoType: 'origen', createdAt: dia('2026-09-08') },
+        { shipmentRef: 'A1', photoType: 'origen', createdAt: dia('2026-09-09') },
+        { shipmentRef: 'A1', photoType: 'uruguay', createdAt: dia('2026-09-10') },
+      ],
+      [], HOY_N,
+    )
+    expect(n).toHaveLength(2)
+    const uy = n.find(x => x.lugar.includes('GODILCO'))!
+    expect(uy.cantidad).toBe(1)
+    expect(uy.dias).toBe(0)
+    const origen = n.find(x => x.lugar.includes('origen'))!
+    expect(origen.cantidad).toBe(2)
+    expect(origen.lugar).toBe('en origen (SHANGHAI)')
+    expect(origen.fecha).toBe('2026-09-09')   // la más reciente del grupo
+  })
+  it('marca CARGANDO AHORA cuando el camión carga hoy y las fotos son de acá', () => {
+    const n = novedadesCliente(
+      [carga('A2', { SALIDA: HOY_N, DEPOSITO: 'PLANIR' })],
+      [{ shipmentRef: 'A2', photoType: 'uruguay', createdAt: dia(HOY_N) }],
+      [], HOY_N,
+    )
+    expect(n[0].cargandoAhora).toBe(true)
+  })
+  it('las fotos de origen nunca son "cargando ahora"', () => {
+    const n = novedadesCliente(
+      [carga('A3', { SALIDA: HOY_N })],
+      [{ shipmentRef: 'A3', photoType: 'origen', createdAt: dia(HOY_N) }],
+      [], HOY_N,
+    )
+    expect(n[0].cargandoAhora).toBe(false)
+  })
+  it('el informe operativo entra como novedad propia', () => {
+    const n = novedadesCliente(
+      [carga('A4')], [],
+      [{ shipmentRef: 'A4', title: 'Informe de carga', createdAt: dia('2026-09-09') }],
+      HOY_N,
+    )
+    expect(n[0].clase).toBe('informe')
+    expect(n[0].lugar).toBe('Informe de carga')
+  })
+  it('lo viejo no aparece, y lo de otro cliente tampoco', () => {
+    const n = novedadesCliente(
+      [carga('A5')],
+      [
+        { shipmentRef: 'A5', photoType: 'origen', createdAt: dia('2026-08-01') },
+        { shipmentRef: 'OTRA', photoType: 'origen', createdAt: dia(HOY_N) },
+      ],
+      [], HOY_N,
+    )
+    expect(n).toEqual([])
+  })
+  it('primero lo de hoy', () => {
+    const n = novedadesCliente(
+      [carga('A6'), carga('A7')],
+      [
+        { shipmentRef: 'A6', photoType: 'origen', createdAt: dia('2026-09-06') },
+        { shipmentRef: 'A7', photoType: 'origen', createdAt: dia(HOY_N) },
+      ],
+      [], HOY_N,
+    )
+    expect(n.map(x => x.ref)).toEqual(['A7', 'A6'])
   })
 })

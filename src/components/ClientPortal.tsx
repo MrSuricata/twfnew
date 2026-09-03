@@ -73,9 +73,12 @@ interface ClientPortalProps {
   /** Cliente del catálogo ya resuelto. Lo usa la vista previa: casi ningún
    *  cliente tiene email, así que buscarlo por email no alcanza. */
   clienteResuelto?: ClientAccount
+  /** Fotos e informes para la vista previa (en el portal real se piden al server). */
+  fotos?: OriginPhoto[]
+  informes?: OperativeReport[]
 }
 
-export default function ClientPortal({ onLogout, clientEmail, clientName = '', shipments = [], clients = [], reports = [], preview = false, clienteResuelto }: ClientPortalProps) {
+export default function ClientPortal({ onLogout, clientEmail, clientName = '', shipments = [], clients = [], reports = [], preview = false, clienteResuelto, fotos = [], informes = [] }: ClientPortalProps) {
   const [activeTab, setActiveTab] = useState('active')
   const [selectedShipment, setSelectedShipment] = useState<ParsedShipment | null>(null)
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false)
@@ -523,6 +526,8 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
           shipments={activeShipmentsRaw}
           mostrarRuta={mostrarRuta}
           mostrarTipo={mostrarTipo}
+          fotos={serverPhotos.length > 0 ? serverPhotos : fotos}
+          informes={clientReports.length > 0 ? clientReports : informes}
           alerts={visibleAlerts.filter(a => a.severity === 'critical' || a.severity === 'warning')}
           hoyISO={hoyISO}
           onVerCarga={verCarga}

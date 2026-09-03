@@ -242,12 +242,17 @@ export function cargasMontecon(
     })
   }
 
-  // Orden = llegada del buque (Brian 02/09: "deberían mostrarse en orden de
-  // llegada"), sin agrupar por terminal ni por estado: Montecon y TCP mezcladas
-  // por ETA. Lo urgente no se pierde: REAGENDAR va en rojo con su chip en el
-  // header. Las RETIRADAS van al fondo — ya no son una llegada, son el
-  // recordatorio de avisar al cliente.
-  const rango = (e: EstadoAgenda) => (e === 'retirado' ? 1 : 0)
+  // Orden: PRIMERO las retiradas, después el resto por llegada del buque.
+  //
+  // Las retiradas encabezan porque son la única fila con una acción que hay que
+  // hacer YA: avisarle al cliente que su contenedor está en depósito. Al fondo
+  // (como estaban hasta el 03/09) había que scrollear toda la card para
+  // encontrarlas — Brian: "el botón de avisado al cliente me queda allá abajo;
+  // debería quedar al principio para verlo rápido, avisar y marcarlo".
+  // Dentro de cada grupo manda la ETA (Brian 02/09: "en orden de llegada"),
+  // sin agrupar por terminal: Montecon y TCP mezcladas. REAGENDAR no se pierde:
+  // va en rojo y con su chip en el encabezado.
+  const rango = (e: EstadoAgenda) => (e === 'retirado' ? 0 : 1)
   return out.sort((a, b) => {
     if (rango(a.estado) !== rango(b.estado)) return rango(a.estado) - rango(b.estado)
     if (a.dias !== b.dias) return a.dias - b.dias
