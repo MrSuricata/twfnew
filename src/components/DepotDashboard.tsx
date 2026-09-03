@@ -36,7 +36,7 @@ import {
 import { fmtDateDMY, fmtNum, hoyISO } from '@/lib/format'
 import { formatKg, formatM3 } from '@/lib/truckUtils'
 import { colorDeposito } from '@/lib/depositoColor'
-import { ETIQUETA_RETIRO, DETALLE_RETIRO } from '@/lib/hoyDeposito'
+import { ETIQUETA_RETIRO, DETALLE_RETIRO, ETIQUETA_DEVOLUCION, DETALLE_DEVOLUCION } from '@/lib/hoyDeposito'
 
 interface DepotDashboardProps {
   shipments: ParsedShipment[]
@@ -307,7 +307,7 @@ export default function DepotDashboard({ shipments, depotName, userName, onLogou
         <Seccion
           icono={<ArrowUUpLeft size={22} weight="duotone" />}
           titulo="Vacíos a devolver"
-          subtitulo={`vacíos a devolver · aviso desde ${LIBRE_DIAS_AVISO} días antes${libresVencidos ? ` · ${libresVencidos} vencido${libresVencidos === 1 ? '' : 's'}` : ''}`}
+          subtitulo={`todos los contenedores de tu depósito sin devolver · en verde, los que ya podés llevar${libresVencidos ? ` · ${libresVencidos} con LIBRE vencido` : ''}`}
           cantidad={libres.length}
           tono="alerta"
         >
@@ -367,6 +367,16 @@ export default function DepotDashboard({ shipments, depotName, userName, onLogou
                     >
                       <FilaTitulo>
                         <Ref>{l.ref}</Ref>
+                        {/* ¿Se puede devolver ya? Pago de la devolución +
+                            terminal asignada (Brian 03/09). */}
+                        <ChipPanel
+                          title={DETALLE_DEVOLUCION[l.estado]}
+                          clase={l.estado === 'listo'
+                            ? 'bg-emerald-600 text-white border-emerald-700'
+                            : 'bg-amber-100 text-amber-900 border-amber-400'}
+                        >
+                          {ETIQUETA_DEVOLUCION[l.estado]}
+                        </ChipPanel>
                         <span className="font-mono text-sm whitespace-nowrap">{l.cntr || '—'}{l.tipo && <span className="ml-1 text-muted-foreground">{l.tipo}</span>}</span>
                         <span className="text-sm text-foreground/80 truncate max-w-full sm:max-w-[220px]" title={l.cliente}>{l.cliente || '—'}</span>
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${sev.badge}`}>

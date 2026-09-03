@@ -36,8 +36,9 @@ const carga = (
   MBL: 'DEMO' + ref, LINEA: 'MAERSK', BUQUE: 'DEMO VESSEL ' + ref.slice(-1),
   TERMINAL: 'TCP', LIBRE_HASTA: '', PAIS: 'UY', POL: 'SHANGHAI', POD: 'MONTEVIDEO',
   MODE: 'fcl', containers: [], calculatedN: ops.length, calculatedLibreHasta: '',
-  // Los dos booleanos que decide el equipo y mira el depósito (Brian 03/09).
-  LIBERADA: true, TERMINAL_PAGADA: true,
+  // Los booleanos que decide el equipo y mira el depósito (Brian 03/09):
+  // si puede retirar y si puede devolver el vacío.
+  LIBERADA: true, TERMINAL_PAGADA: true, DEVOLUCION_PAGADA: true,
   operativas: ops.map(o => ({ ...o, REF: ref })),
   ...extra,
 } as unknown as ParsedShipment)
@@ -68,9 +69,9 @@ export function demoPartnerShipments(): ParsedShipment[] {
       op({
         CNTR_OP: 'DEMO1000003', DEPOSITO: 'GODILCO', TRANSPORTE: 'TRANSCAL',
         FISCAL: 'TERRAMAR', LIBRE: dia(-2), PKGS: 96, KG: 12500, M3: 58,
-        DESCRIPCION: 'MAQUINARIA', LUGAR_SALIDA: 'GODILCO',
+        DESCRIPCION: 'MAQUINARIA', LUGAR_SALIDA: 'GODILCO', DEV: 'STL',
       }),
-    ]),
+    ], { DEVOLUCION_PAGADA: false } as Partial<ParsedShipment>),
     // Carga IMO que sale en 3 días — PLANIR / CARRARA
     carga('D9004', 'DEMO DELTA S.A.', dia(-4), [
       op({

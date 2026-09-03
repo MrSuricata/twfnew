@@ -9,6 +9,7 @@ import {
   RETIROS_DIAS_ADELANTE,
   LIBRE_DIAS_AVISO,
   estadoRetiro, ETIQUETA_RETIRO,
+  estadoDevolucion, ETIQUETA_DEVOLUCION,
 } from './hoyDeposito'
 import type { OperativaPartner } from './hoyDeposito'
 import type { ParsedShipment } from './shipmentTypes'
@@ -158,7 +159,10 @@ describe('retirosProximos — contenedores que retiro de la terminal', () => {
 })
 
 describe('libresPorVencer — vacíos que hay que devolver', () => {
-  it(`entra con LIBRE hasta ${LIBRE_DIAS_AVISO} días, con la severidad de HOY admin`, () => {
+  it('entran TODOS los pendientes, ordenados por vencimiento, con la severidad de HOY admin', () => {
+    // Brian 03/09: antes solo entraban los que vencían dentro de 5 días y el
+    // depósito se enteraba tarde. Ahora el vacío aparece desde que está en el
+    // predio, venza cuando venza.
     const filas = libresPorVencer([
       carga('V', [{ LIBRE: '2026-08-30' }]),
       carga('H', [{ LIBRE: HOY }]),
@@ -171,15 +175,22 @@ describe('libresPorVencer — vacíos que hay que devolver', () => {
       ['H', 'hoy', 0],
       ['U', 'urgente', 2],
       ['P', 'proximo', 5],
+      ['LEJOS', 'proximo', 6],
     ])
   })
 
-  it('DEVUELTO en LIBRE = ya se devolvió: no entra (ni texto raro, ni sin LIBRE)', () => {
-    expect(libresPorVencer([
-      carga('D', [{ LIBRE: 'DEVUELTO' }]),
-      carga('T', [{ LIBRE: 'CONFIRMAR' }]),
-      carga('S', [{ LIBRE: '' }]),
-    ], HOY, 'PLANIR', [])).toEqual([])
+  it('DEVUELTO en LIBRE = ya se devolvió: no entra', () => {
+    expect(libresPorVencer([carga('D', [{ LIBRE: 'DEVUELTO' }])], HOY, 'PLANIR', [])).toEqual([])
+  })
+
+  it('sin LIBRE o con texto sin fecha entra igual, al final: el vacío existe', () => {
+    const filas = libresPorVencer([
+      carga('CONFECHA', [{ LIBRE: '2026-09-03' }]),
+      carga('TEXTO', [{ LIBRE: 'CONFIRMAR' }]),
+      carga('SIN', [{ LIBRE: '' }]),
+    ], HOY, 'PLANIR', [])
+    expect(filas.map(f => f.ref)).toEqual(['CONFECHA', 'SIN', 'TEXTO'])
+    expect(filas.filter(f => f.ref !== 'CONFECHA').every(f => f.libre === '')).toBe(true)
   })
 
   it('con fecha de devolución confirmada por la naviera (DEV_FECHA) tampoco entra', () => {
@@ -298,5 +309,27 @@ describe('estadoRetiro — dos condiciones, no una (Brian 03/09)', () => {
     expect(ETIQUETA_RETIRO.listo).toBe('LISTO PARA RETIRAR')
     const otras = ['falta_liberacion', 'falta_pago', 'faltan_ambos'] as const
     for (const e of otras) expect(ETIQUETA_RETIRO[e]).toMatch(/^Falta/)
+  })
+})
+
+describe('estadoDevolucion — dos condiciones para llevar el vacío (Brian 03/09)', () => {
+  it('listo solo con la devolución paga Y terminal asignada', () => {
+    expect(estadoDevolucion(true, 'STL')).toBe('listo')
+  })
+  it('paga pero sin terminal: el depósito no sabe a dónde llevarlo', () => {
+    expect(estadoDevolucion(true, '')).toBe('falta_terminal')
+    expect(estadoDevolucion(true, '   ')).toBe('falta_terminal')
+  })
+  it('con terminal pero sin pagar: no se lo reciben', () => {
+    expect(estadoDevolucion(false, 'MPS')).toBe('falta_pago')
+  })
+  it('sin nada, dice que faltan las dos', () => {
+    expect(estadoDevolucion(false, '')).toBe('faltan_ambos')
+  })
+  it('solo una etiqueta habilita', () => {
+    expect(ETIQUETA_DEVOLUCION.listo).toBe('LISTO PARA DEVOLVER')
+    for (const e of ['falta_pago', 'falta_terminal', 'faltan_ambos'] as const) {
+      expect(ETIQUETA_DEVOLUCION[e]).toMatch(/^Falta/)
+    }
   })
 })
