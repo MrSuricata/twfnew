@@ -1393,7 +1393,7 @@ async function partnerShipmentsVisibles(db: any, payload: any): Promise<
   // el SELECT no la trae, pero cualquier campo sensible que alguien agregue
   // mañana adentro de operativas saldría solo. Mismo criterio que el portal de
   // clientes (api/_lib/clientShipments.ts).
-  const opSegura = (op: any, rolEsTransporte: boolean, oogCarga: string, woodCarga: string, descripcionCarga = '') => ({
+  const opSegura = (op: any, rolEsTransporte: boolean, oogCarga: string, woodCarga: string, descripcionCarga = '', turnoCarga = '', retiradoCarga = '') => ({
     CNTR_OP: op.CNTR_OP || '',
     DEPOSITO: op.DEPOSITO || '',
     // El transporte ajeno NO se muestra: en una operativa compartida
@@ -1428,6 +1428,13 @@ async function partnerShipmentsVisibles(db: any, payload: any): Promise<
     // viene vacía (A8121 "MOTOPARTES" salía "—" en el Plan de carga, 03/09):
     // la operativa manda y la carga es el respaldo.
     DESCRIPCION: op.DESCRIPCION || descripcionCarga || '',
+    // Turno de Montecon y marca de retirado: nacen en `montecon_agenda`, que se
+    // lleva por REF, así que abajo se estampan a nivel CARGA. Se bajan también a
+    // cada operativa porque el HOY del depósito trabaja por contenedor y los lee
+    // ahí: sin esto llegaban siempre vacíos y "ya lo retiramos" no sacaba la
+    // fila (Brian 03/09). Misma regla que WOOD/DESCRIPCION: la operativa manda.
+    TURNO_RETIRO: op.TURNO_RETIRO || turnoCarga || '',
+    RETIRADO: op.RETIRADO || retiradoCarga || '',
   })
   const filtered = allShipments.map((shipment: any) => {
     const operativas: any[] = shipment.operativas || []
@@ -1467,7 +1474,7 @@ async function partnerShipmentsVisibles(db: any, payload: any): Promise<
       safe.TURNO_RETIRO = esMontecon ? (ag?.fecha_retiro || '') : ''
       safe.RETIRADO = ag?.retirado_at || ''
     }
-    return { ...safe, operativas: matchingOps.map((op: any) => opSegura(op, esTransporte, shipment.OOG || '', shipment.WOOD_CARGA || '', String(shipment.DESCRIPCION_CARGA || ''))) }
+    return { ...safe, operativas: matchingOps.map((op: any) => opSegura(op, esTransporte, shipment.OOG || '', shipment.WOOD_CARGA || '', String(shipment.DESCRIPCION_CARGA || ''), String(safe.TURNO_RETIRO || ''), String(safe.RETIRADO || ''))) }
   }).filter(Boolean)
 
   return { shipments: filtered, alcance: rawFilter.trim(), nombre }
