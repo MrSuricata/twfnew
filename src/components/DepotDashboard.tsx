@@ -160,11 +160,36 @@ const btnGris = 'h-8 px-2 rounded-full border border-border text-xs text-muted-f
 const btnDeshacer = 'text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground disabled:opacity-50 disabled:no-underline'
 const inputChico = 'h-8 rounded-md border border-input bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring/50'
 
-const claseSeveridad: Record<SeveridadLibre, { fila: string; badge: string; texto: (d: number) => string }> = {
-  vencido: { fila: 'border-red-300 bg-red-50/60', badge: 'bg-red-600 text-white', texto: d => `vencido hace ${-d}d` },
-  hoy: { fila: 'border-orange-300 bg-orange-50/60', badge: 'bg-orange-500 text-white', texto: () => 'vence HOY' },
-  urgente: { fila: 'border-amber-300 bg-amber-50/50', badge: 'bg-amber-400 text-amber-950', texto: d => `vence en ${d}d` },
-  proximo: { fila: 'border-border bg-background/50', badge: 'bg-slate-200 text-slate-800', texto: d => `vence en ${d}d` },
+const claseSeveridad: Record<SeveridadLibre, { fila: string; badge: string }> = {
+  vencido: { fila: 'border-red-300 bg-red-50/60', badge: 'bg-red-600 text-white' },
+  hoy: { fila: 'border-orange-300 bg-orange-50/60', badge: 'bg-orange-500 text-white' },
+  urgente: { fila: 'border-amber-300 bg-amber-50/50', badge: 'bg-amber-400 text-amber-950' },
+  proximo: { fila: 'border-border bg-background/50', badge: 'bg-slate-200 text-slate-800' },
+  // Sin fecha de LIBRE no hay plazo: se pinta en celeste (dato faltante), nunca
+  // con los colores de vencimiento.
+  sin_dato: { fila: 'border-sky-300 bg-sky-50/60', badge: 'bg-sky-600 text-white' },
+}
+
+/** Fondo de las filas que están por un dato que falta, no por un vencimiento. */
+const TINTE_FALTA_DATO = 'border-sky-300 bg-sky-50/60'
+
+/**
+ * El texto del badge de la fila. Sin fecha de LIBRE se dice exactamente eso:
+ * antes se mostraba el 9999 que la lógica usaba para ordenar y la fila decía
+ * "vence en 9999d" (Brian 03/09).
+ */
+function textoLibre(l: LibrePorVencer): string {
+  if (l.dias === null) return 'sin fecha de libre'
+  if (l.dias < 0) return `vencido hace ${-l.dias}d`
+  if (l.dias === 0) return 'vence HOY'
+  return `vence en ${l.dias}d`
+}
+
+/** Qué dato nos falta, en la frase que el depósito puede reenviar. */
+function textoFaltaDato(l: LibrePorVencer): string {
+  if (l.faltaLibre && l.faltaDev) return 'Nos falta cargar la fecha de libre y la terminal de devolución.'
+  if (l.faltaLibre) return 'Nos falta cargar la fecha de libre de este contenedor.'
+  return 'Nos falta asignar la terminal donde se devuelve el vacío.'
 }
 
 // ── Panel ─────────────────────────────────────────────────────────────
@@ -195,6 +220,14 @@ export default function DepotDashboard({ shipments, depotName, userName, onLogou
   const lcls = useMemo(() => lclADesconsolidar(shipments, hoy, depotName, avisos), [shipments, hoy, depotName, avisos])
   const misAvisos = useMemo(() => [...avisos].sort((a, b) => b.createdAt.localeCompare(a.createdAt)), [avisos])
   const libresVencidos = libres.filter(l => l.severidad === 'vencido').length
+  const libresSinDato = libres.filter(l => l.motivo === 'falta_dato').length
+  // Se dice la regla, no "todos los contenedores": acá solo entran los vacíos
+  // con la operativa ya hecha, y por vencimiento o por dato faltante (Brian 03/09).
+  const subtituloVacios = [
+    `solo con la operativa ya hecha · libre a ${LIBRE_DIAS_AVISO} días o menos, o con datos faltantes`,
+    libresVencidos ? `${libresVencidos} con LIBRE vencido` : '',
+    libresSinDato ? `${libresSinDato} esperando un dato nuestro` : '',
+  ].filter(Boolean).join(' · ')
 
   const clave = (ref: string, cntr: string) => `${ref}|${cntr}`
 
@@ -358,20 +391,21 @@ export default function DepotDashboard({ shipments, depotName, userName, onLogou
         <Seccion
           icono={<ArrowUUpLeft size={22} weight="duotone" />}
           titulo="Vacíos a devolver"
-          subtitulo={`todos los contenedores de tu depósito sin devolver · en verde, los que ya podés llevar${libresVencidos ? ` · ${libresVencidos} con LIBRE vencido` : ''}`}
+          subtitulo={subtituloVacios}
           cantidad={libres.length}
           tono="alerta"
         >
-          {libres.length === 0 ? <Vacio texto="Ningún vacío con el libre por vencer. Todo al día." /> : (
+          {libres.length === 0 ? <Vacio texto="Ningún vacío con el libre por vencer ni con datos faltantes. Todo al día." /> : (
             <ul>
               {libres.map((l, i) => {
                 const sev = claseSeveridad[l.severidad]
+                const faltaDato = l.motivo === 'falta_dato'
                 const k = clave(l.ref, l.cntr)
                 const editando = fechaDevolvi[k] !== undefined
                 return (
                   <li key={`${l.ref}-${l.cntr}-${i}`}>
                     <PanelFila
-                      tinte={sev.fila}
+                      tinte={faltaDato ? TINTE_FALTA_DATO : sev.fila}
                       accion={(
                       <>
                       {l.aviso?.estado === 'pendiente'
@@ -431,12 +465,23 @@ export default function DepotDashboard({ shipments, depotName, userName, onLogou
                         <span className="font-mono text-sm whitespace-nowrap">{l.cntr || '—'}{l.tipo && <span className="ml-1 text-muted-foreground">{l.tipo}</span>}</span>
                         <span className="text-sm text-foreground/80 truncate max-w-full sm:max-w-[220px]" title={l.cliente}>{l.cliente || '—'}</span>
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${sev.badge}`}>
-                          {sev.texto(l.dias)}
+                          {textoLibre(l)}
                         </span>
+                        {/* No es un vencimiento: está en la lista porque falta un
+                            dato NUESTRO (libre o terminal de devolución). */}
+                        {faltaDato && (
+                          <ChipPanel title={textoFaltaDato(l)} clase="bg-sky-100 text-sky-900 border-sky-400">
+                            NOS FALTA UN DATO
+                          </ChipPanel>
+                        )}
                       </FilaTitulo>
                       <FilaDatos>
-                        <Dato label="Libre" fuerte>{fmtDateDMY(l.libre)}</Dato>
-                        {l.dev && <Dato label="Devolver en" fuerte>{l.dev}</Dato>}
+                        <Dato label="Libre" fuerte>
+                          {l.libre ? fmtDateDMY(l.libre) : <span className="text-sky-700">sin fecha</span>}
+                        </Dato>
+                        <Dato label="Devolver en" fuerte>
+                          {l.dev || <span className="text-sky-700">sin terminal</span>}
+                        </Dato>
                       </FilaDatos>
                     </PanelFila>
                   </li>
