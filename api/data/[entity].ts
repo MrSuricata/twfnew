@@ -1454,11 +1454,17 @@ async function partnerShipmentsVisibles(db: any, payload: any): Promise<
     delete safe.C_TERMINAL; delete safe.C_DEV; delete safe.LOCALES
     delete safe.FLETE; delete safe.FORMA_DE_PAGO; delete safe.VTO
     const esTransporte = payload.role === 'transport'
-    // Depósito: turno de retiro / retirado de Montecon (solo si la terminal es MONTECON).
+    // Depósito: el TURNO es de Montecon (TCP no agenda), pero el RETIRADO vale
+    // para cualquier terminal. Iba atado a Montecon, así que si el equipo
+    // marcaba retirada una carga de TCP desde HOY, al depósito le seguía
+    // apareciendo como pendiente de retirar (Brian 03/09: "si yo desde admin ya
+    // apreté retirado, a ellos les debe salir de la lista"). Desde el #344 el
+    // aviso "retiré" también estampa RETIRADO en TCP, así que la fila se cierra
+    // sola por los dos lados.
     if (payload.role === 'depot') {
       const esMontecon = String(shipment.TERMINAL || '').toUpperCase().includes('MONTECON')
-      const ag = esMontecon ? agendaPorRef.get(String(shipment.REF || '').trim().toUpperCase()) : undefined
-      safe.TURNO_RETIRO = ag?.fecha_retiro || ''
+      const ag = agendaPorRef.get(String(shipment.REF || '').trim().toUpperCase())
+      safe.TURNO_RETIRO = esMontecon ? (ag?.fecha_retiro || '') : ''
       safe.RETIRADO = ag?.retirado_at || ''
     }
     return { ...safe, operativas: matchingOps.map((op: any) => opSegura(op, esTransporte, shipment.OOG || '', shipment.WOOD_CARGA || '', String(shipment.DESCRIPCION_CARGA || ''))) }
