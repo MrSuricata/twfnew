@@ -3,6 +3,7 @@ import {
   esVigente, noticiasVigentes, alertasVigentes, claveAlertas, rowToNoticia, categoriaMeta,
   estiloSlide, tituloPartes, tituloPlano, linkNoticia, ordenSlides, recencia, type Noticia,
   avisosRotativos, indiceSiguiente, indiceValido, linkDiario, anclaNoticia,
+  lineasEstimadas, ajustarColumna, filasKicker, ANCHO_CARACTER, type BloqueTexto,
 } from './noticias'
 
 const HOY = '2026-08-28'
@@ -164,5 +165,194 @@ describe('el banner manda al Diario, no a la fuente (Brian 03/09)', () => {
   it('la fuente externa sigue disponible aparte', () => {
     expect(linkNoticia(noticia({ linkUrl: 'https://diario.com/nota' }))).toEqual({ href: 'https://diario.com/nota', externo: true })
     expect(linkNoticia(noticia({ linkUrl: '' })).externo).toBe(false)
+  })
+})
+
+
+// ── El texto del slide nunca queda cortado (Brian 03/09) ─────────────────
+// "acá en el diario logístico aparece texto cortado, no puede pasarnos más".
+// La regla es una sola: lo que cada bloque RESERVA es la misma cantidad de
+// renglones que después recorta el CSS, así que la suma de las reservas más los
+// altos fijos y los espacios entre bloques nunca puede pasarse del alto de la
+// columna. Si eso se cumple, no hay renglón partido contra el borde.
+
+/** El alto que ocupa una columna con el reparto que devolvió ajustarColumna. */
+const altoTotal = (
+  res: Record<string, { alto: number }>, bloques: BloqueTexto[],
+  { gap, fijos = [] }: { gap: number; fijos?: number[] },
+): number => {
+  const hijos = bloques.length + fijos.length
+  return bloques.reduce((a, b) => a + res[b.clave].alto, 0)
+    + fijos.reduce((a, b) => a + b, 0)
+    + gap * Math.max(0, hijos - 1)
+}
+
+const repetir = (t: string, veces: number) => Array.from({ length: veces }, () => t).join(' ')
+
+// Textos reales de la nota que reportó Brian (conflicto en TCP, estilo celeste).
+const TCP_TITULO = 'Puerto de Montevideo: conflicto en TCP'
+const TCP_SUBTITULO = 'La terminal opera con normalidad, pero el sindicato sigue en asamblea permanente y el convenio vencido.'
+const TCP_BAJADA = 'Katoen Natie presentó el 26/08 lo que llamó su propuesta **"definitiva"** (mejoras en 3 de los 6 puntos) y el sindicato la rechazó: declaró **asamblea permanente** y evalúa nuevas medidas. La mediación sigue en el Ministerio de Trabajo.'
+
+/** La columna izquierda del slide celeste, tal cual la arma el carrusel. */
+const columnaCeleste = (n: { titulo: string; subtitulo: string; bajada: string }): BloqueTexto[] => [
+  { clave: 'titulo', texto: n.titulo, ancho: 750, tamanos: [84, 76, 69], lineHeight: 0.98, factor: ANCHO_CARACTER.titulo },
+  { clave: 'subtitulo', texto: n.subtitulo, ancho: 670, tamanos: [34, 31, 28], lineHeight: 1.5, factor: ANCHO_CARACTER.titulo, extra: 32 },
+  { clave: 'bajada', texto: n.bajada, ancho: 750, tamanos: [32, 29, 26], lineHeight: 1.3 },
+]
+const CAJA_CELESTE = { alto: 708, gap: 26, fijos: [74] }
+
+describe('lineasEstimadas — cuántos renglones ocupa un texto', () => {
+  it('un texto corto entra en un renglón', () => {
+    expect(lineasEstimadas('Hola', { ancho: 750, fontSize: 32 })).toBe(1)
+  })
+  it('texto vacío no ocupa nada (el bloque no se dibuja)', () => {
+    expect(lineasEstimadas('', { ancho: 750, fontSize: 32 })).toBe(0)
+    expect(lineasEstimadas('   ', { ancho: 750, fontSize: 32 })).toBe(0)
+  })
+  it('los asteriscos de las negritas no ocupan ancho: no se ven en pantalla', () => {
+    const con = lineasEstimadas('**' + TCP_BAJADA + '**', { ancho: 750, fontSize: 32 })
+    const sin = lineasEstimadas(TCP_BAJADA.replace(/\*\*/g, ''), { ancho: 750, fontSize: 32 })
+    expect(con).toBe(sin)
+  })
+  it('cuanto más angosta la columna, más renglones', () => {
+    const ancho = lineasEstimadas(TCP_BAJADA, { ancho: 750, fontSize: 32 })
+    const angosto = lineasEstimadas(TCP_BAJADA, { ancho: 400, fontSize: 32 })
+    expect(angosto).toBeGreaterThan(ancho)
+  })
+  it('cuanto más grande la fuente, más renglones', () => {
+    const chica = lineasEstimadas(TCP_BAJADA, { ancho: 750, fontSize: 26 })
+    const grande = lineasEstimadas(TCP_BAJADA, { ancho: 750, fontSize: 44 })
+    expect(grande).toBeGreaterThan(chica)
+  })
+  it('el "|" del título cuenta como salto de renglón de verdad', () => {
+    // Dos mitades cortas: una sola línea cada una, dos en total.
+    expect(lineasEstimadas('China cerrada\ndel 1 al 7', { ancho: 570, fontSize: 78, factor: ANCHO_CARACTER.titulo })).toBe(2)
+  })
+  it('una palabra más larga que el renglón se parte en varios', () => {
+    expect(lineasEstimadas('a'.repeat(60), { ancho: 200, fontSize: 32 })).toBeGreaterThan(1)
+  })
+  it('estima el ancho de la nota del TCP como lo que se ve en pantalla (6 renglones a 32px en 750)', () => {
+    expect(lineasEstimadas(TCP_BAJADA, { ancho: 750, fontSize: 32 })).toBe(6)
+  })
+})
+
+describe('ajustarColumna — la reserva nunca se pasa del alto de la columna', () => {
+  it('la nota del TCP entra entera achicando un escalón: nada recortado', () => {
+    const bloques = columnaCeleste({ titulo: TCP_TITULO, subtitulo: TCP_SUBTITULO, bajada: TCP_BAJADA })
+    const res = ajustarColumna(bloques, CAJA_CELESTE)
+    expect(altoTotal(res, bloques, CAJA_CELESTE)).toBeLessThanOrEqual(CAJA_CELESTE.alto)
+    expect(res.bajada.recortado).toBe(false)
+    expect(res.titulo.recortado).toBe(false)
+    expect(res.subtitulo.recortado).toBe(false)
+  })
+
+  it('con texto corto no achica la fuente ni recorta', () => {
+    const bloques = columnaCeleste({ titulo: 'China cerrada', subtitulo: 'Del 1 al 7 de octubre.', bajada: 'Fábricas y puertos detenidos.' })
+    const res = ajustarColumna(bloques, CAJA_CELESTE)
+    expect(res.titulo.fontSize).toBe(84)
+    expect(res.bajada.fontSize).toBe(32)
+    expect(Object.values(res).every(b => !b.recortado)).toBe(true)
+  })
+
+  it('con una nota el DOBLE de larga sigue entrando: recorta, pero no se pasa', () => {
+    const bloques = columnaCeleste({
+      titulo: repetir(TCP_TITULO, 3),
+      subtitulo: repetir(TCP_SUBTITULO, 3),
+      bajada: repetir(TCP_BAJADA, 3),
+    })
+    const res = ajustarColumna(bloques, CAJA_CELESTE)
+    expect(altoTotal(res, bloques, CAJA_CELESTE)).toBeLessThanOrEqual(CAJA_CELESTE.alto)
+    expect(res.bajada.recortado).toBe(true)
+  })
+
+  it('por larguísimo que sea el texto, ningún bloque desaparece: piso de dos renglones', () => {
+    const bloques = columnaCeleste({
+      titulo: repetir(TCP_TITULO, 20),
+      subtitulo: repetir(TCP_SUBTITULO, 20),
+      bajada: repetir(TCP_BAJADA, 20),
+    })
+    const res = ajustarColumna(bloques, CAJA_CELESTE)
+    expect(altoTotal(res, bloques, CAJA_CELESTE)).toBeLessThanOrEqual(CAJA_CELESTE.alto)
+    for (const b of bloques) expect(res[b.clave].maxLineas).toBeGreaterThanOrEqual(2)
+  })
+
+  it('el alto reservado es exactamente los renglones que después recorta el CSS', () => {
+    const bloques = columnaCeleste({ titulo: TCP_TITULO, subtitulo: TCP_SUBTITULO, bajada: TCP_BAJADA })
+    const res = ajustarColumna(bloques, CAJA_CELESTE)
+    for (const b of bloques) {
+      const a = res[b.clave]
+      expect(a.alto).toBeCloseTo(a.maxLineas * a.fontSize * a.lineHeight + (b.extra || 0), 5)
+    }
+  })
+
+  it('un bloque vacío no reserva nada (ni su padding)', () => {
+    const bloques = columnaCeleste({ titulo: TCP_TITULO, subtitulo: '', bajada: TCP_BAJADA })
+    const res = ajustarColumna(bloques, CAJA_CELESTE)
+    expect(res.subtitulo.maxLineas).toBe(0)
+    expect(res.subtitulo.alto).toBe(0)
+    expect(res.subtitulo.recortado).toBe(false)
+  })
+
+  it('achica la fuente antes de recortar', () => {
+    const corto = ajustarColumna(columnaCeleste({ titulo: 'Corto', subtitulo: 'Corto', bajada: 'Corto' }), CAJA_CELESTE)
+    const largo = ajustarColumna(columnaCeleste({ titulo: TCP_TITULO, subtitulo: TCP_SUBTITULO, bajada: TCP_BAJADA }), CAJA_CELESTE)
+    expect(largo.bajada.fontSize).toBeLessThan(corto.bajada.fontSize)
+  })
+
+  it('la columna derecha (mensaje + botón + logo) tampoco se pasa', () => {
+    const bloques: BloqueTexto[] = [{
+      clave: 'mensaje', texto: repetir(TCP_BAJADA, 6), ancho: 502,
+      tamanos: [32, 29, 26], lineHeight: 1.3, extra: 80,
+    }]
+    const caja = { alto: 688, gap: 28, fijos: [93, 101] }
+    const res = ajustarColumna(bloques, caja)
+    expect(altoTotal(res, bloques, caja)).toBeLessThanOrEqual(caja.alto)
+    expect(res.mensaje.maxLineas).toBeGreaterThan(0)
+  })
+
+  it('las cuatro variantes aguantan cualquier texto sin pasarse del alto', () => {
+    // Geometría real de cada slide: [bloques, alto útil, gap, altos fijos].
+    const variantes: Array<[string, BloqueTexto[], { alto: number; gap: number; fijos: number[] }]> = [
+      ['violeta izq', [
+        { clave: 'titulo', texto: repetir(TCP_TITULO, 8), ancho: 790, tamanos: [86, 77, 71], lineHeight: 0.98, factor: ANCHO_CARACTER.titulo },
+        { clave: 'bajada', texto: repetir(TCP_BAJADA, 8), ancho: 790, tamanos: [38, 34, 31], lineHeight: 1.3 },
+      ], { alto: 708, gap: 30, fijos: [74, 8] }],
+      ['celeste izq', columnaCeleste({ titulo: repetir(TCP_TITULO, 8), subtitulo: repetir(TCP_SUBTITULO, 8), bajada: repetir(TCP_BAJADA, 8) }), CAJA_CELESTE],
+      ['actualizacion izq', [
+        { clave: 'bajada', texto: repetir(TCP_BAJADA, 8), ancho: 730, tamanos: [44, 40, 36], lineHeight: 1.3 },
+        { clave: 'subtitulo', texto: repetir(TCP_SUBTITULO, 8), ancho: 730, tamanos: [32, 29, 26], lineHeight: 1.3 },
+      ], { alto: 698, gap: 28, fijos: [74, 8] }],
+      ['papel izq', [
+        { clave: 'titulo', texto: repetir(TCP_TITULO, 8), ancho: 570, tamanos: [78, 70, 64], lineHeight: 0.98, factor: ANCHO_CARACTER.titulo },
+        { clave: 'bajada', texto: repetir(TCP_BAJADA, 8), ancho: 570, tamanos: [34, 31, 28], lineHeight: 1.3 },
+      ], { alto: 708, gap: 32, fijos: [116, 8] }],
+    ]
+    for (const [nombre, bloques, caja] of variantes) {
+      const res = ajustarColumna(bloques, caja)
+      // El nombre va en la aserción para que, si alguna vez falla, el error
+      // diga qué variante se pasó.
+      expect({ [nombre]: altoTotal(res, bloques, caja) <= caja.alto }).toEqual({ [nombre]: true })
+      for (const b of bloques) expect(res[b.clave].maxLineas).toBeGreaterThanOrEqual(2)
+    }
+  })
+
+  it('una columna sin bloques de texto no rompe', () => {
+    expect(ajustarColumna([], { alto: 700, gap: 28, fijos: [93, 101] })).toEqual({})
+  })
+})
+
+describe('filasKicker — la pill del kicker mide lo que la columna le reserva', () => {
+  it('un kicker corto con fecha al lado entra en una fila', () => {
+    expect(filasKicker('Aviso operativo', '02/09/2026', { ancho: 750 })).toBe(1)
+  })
+  it('kicker + texto largo al lado no entran: dos filas', () => {
+    expect(filasKicker('Aviso operativo', 'Jueves 3 y viernes 4', { ancho: 750 })).toBe(2)
+  })
+  it('sin texto al lado, el kicker tiene toda la columna', () => {
+    expect(filasKicker('Actualización · 02/09', '', { ancho: 730 })).toBe(1)
+  })
+  it('en la columna angosta del slide papel, un kicker largo pasa a dos filas', () => {
+    expect(filasKicker('Actualización de último momento', 'Setiembre 2026', { ancho: 570 })).toBe(2)
   })
 })
