@@ -269,7 +269,16 @@ function SlideCeleste({ n }: { n: Noticia }) {
           caja={{ background: PASTEL, borderRadius: 999, padding: '16px 40px', minWidth: 0 }}
           style={{ fontFamily: NUNITO, fontWeight: 900, color: VIOLETA_TXT }}
         >
-          {n.subtitulo}
+          {/* Mismo caso que el mensaje de la variante papel: iba en crudo y los
+              asteriscos se verían literales. En la pill el texto ya es Nunito
+              900, así que el énfasis también va por color + subrayado. */}
+          {conNegrita(n.subtitulo, {
+            color: INDIGO,
+            textDecoration: 'underline',
+            textDecorationColor: VIOLETA,
+            textDecorationThickness: 3,
+            textUnderlineOffset: 4,
+          })}
         </Recortado>
         <Recortado a={izq.bajada} style={{ fontWeight: 400, color: VIOLETA_TXT, textWrap: 'pretty' }}>
           {conNegrita(n.bajada, { color: VIOLETA })}
@@ -352,7 +361,18 @@ function SlidePapel({ n }: { n: Noticia }) {
           }}
           style={{ fontFamily: NUNITO, fontWeight: 900, color: VIOLETA, textWrap: 'pretty' }}
         >
-          {n.mensaje}
+          {/* Iba en crudo: una nota "papel" con **negritas** mostraba los
+              asteriscos en la web pública. El énfasis acá NO puede ser ni más
+              peso ni el violeta (el texto base ya es Nunito 900 violeta) ni el
+              naranja (reservado para la pill del aviso): se marca con el
+              subrayado celeste, el mismo recurso que la línea de la portada. */}
+          {conNegrita(n.mensaje, {
+            color: INDIGO,
+            textDecoration: 'underline',
+            textDecorationColor: CELESTE,
+            textDecorationThickness: 5,
+            textUnderlineOffset: 6,
+          })}
         </Recortado>
         <BotonNoticia n={n} />
         <Logo />
