@@ -10,7 +10,7 @@
  * Misma piel que TodayDashboard (cards accent-top, pill de conteo, variantes
  * Med por useBrand) para que el cambio de área no se sienta como otra app.
  */
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -73,6 +73,14 @@ export default function HoyLcl({
   const med = useBrand().id === 'med'
   // Para ubicar los avisos `senasa` por el modo de la ref (ver avisosDeArea).
   const shipmentsModo = useMemo(() => dbShipments.map(s => ({ ref: s.ref, mode: s.mode })), [dbShipments])
+  // La ref de un aviso de partner abre el panel de la carga (Brian 03/09:
+  // "apretar donde dice A8050 y que se abra el modal, linkeado"). Acá la clave
+  // del overlay es el id de la fila: la ref sola solo resuelve FCL.
+  const abrirCargaPorRef = useCallback((ref: string) => {
+    const buscada = String(ref || '').trim().toUpperCase()
+    const fila = dbShipments.find(s => String(s.ref || '').trim().toUpperCase() === buscada)
+    onOpenDetail?.(fila?.id || ref)
+  }, [dbShipments, onOpenDetail])
   // Fecha LOCAL (misma que la bandeja de stock): con UTC, de noche "hoy" ya era mañana.
   const hoyISO = hoyLocal()
 
@@ -132,7 +140,12 @@ export default function HoyLcl({
       </div>
 
       {/* ── Avisos de partners (desconsolide + senasa de refs LCL) ── */}
-      <AvisosPartnersCard area="lcl" shipmentsModo={shipmentsModo} onResuelto={onReloadFromDB} />
+      <AvisosPartnersCard
+        area="lcl"
+        shipmentsModo={shipmentsModo}
+        onResuelto={onReloadFromDB}
+        onAbrirCarga={onOpenDetail ? abrirCargaPorRef : undefined}
+      />
 
       {isDataLoading && sinNada && (
         <Card className="border-dashed">

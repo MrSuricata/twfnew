@@ -199,3 +199,180 @@ export function indiceValido(actual: number, total: number): number {
   if (total <= 0) return 0
   return Math.min(Math.max(0, actual), total - 1)
 }
+
+// ── Cuánto texto entra en un slide del carrusel (Brian 03/09) ─────────────
+// "acá en el diario logístico aparece texto cortado, no puede pasarnos más".
+// El slide se maqueta en una caja fija de 1600×900 y después se escala entero,
+// así que una nota larga desbordaba ese alto y el último renglón quedaba
+// partido contra el borde (pasaba en la nota del conflicto en TCP, que cortaba
+// a la mitad de "Trabajo"). Acá calculamos, para el alto real de cada columna,
+// cuántas líneas entra cada bloque; el componente las recorta con line-clamp,
+// que corta SIEMPRE en un borde de renglón y termina en puntos suspensivos, y
+// el botón "Ir a la noticia" lleva a leerla completa.
+//
+// La garantía no depende de que la estimación sea exacta: el alto que reserva
+// cada bloque es el mismo número de líneas que después recorta el CSS, así que
+// la suma de las reservas nunca puede pasarse del alto de la columna. Si la
+// estimación se queda corta lo único que pasa es que sobran puntos suspensivos;
+// nunca queda un renglón cortado por la mitad.
+
+/** Ancho medio de un carácter, como fracción del tamaño de fuente. Medido con
+ *  canvas sobre las fuentes reales del slide (Montserrat 400/600 y Nunito 900)
+ *  con los textos que hay cargados hoy, y redondeado PARA ARRIBA a propósito:
+ *  conviene estimar de más (una nota queda un punto más chica) que de menos
+ *  (aparecerían puntos suspensivos donde el texto entraba entero). */
+export const ANCHO_CARACTER = {
+  /** Montserrat 300/400, texto corrido. Medido 0,50. */
+  texto: 0.55,
+  /** Nunito 900 con letter-spacing -0.02em, títulos y mensajes destacados. Medido 0,49. */
+  titulo: 0.52,
+  /** Montserrat 600 en MAYÚSCULAS con letter-spacing 0.08em (kicker). Medido 0,70. */
+  kicker: 0.70,
+} as const
+
+/** Los `**` de las negritas nunca se ven en pantalla: no ocupan ancho. */
+const sinNegritas = (texto: string): string => String(texto || '').replace(/\*\*/g, '')
+
+/** Cuántas líneas ocupa un texto en un ancho dado. Corta por palabras igual que
+ *  el navegador (una palabra más larga que la línea se parte en varias) y
+ *  respeta los saltos de línea explícitos (`\n`), que es como el título manda
+ *  su segunda mitad. */
+export function lineasEstimadas(
+  texto: string,
+  { ancho, fontSize, factor = ANCHO_CARACTER.texto }: { ancho: number; fontSize: number; factor?: number },
+): number {
+  const limpio = sinNegritas(texto).trim()
+  if (!limpio) return 0
+  const cupo = Math.max(1, Math.floor(ancho / (fontSize * factor)))
+  let lineas = 0
+  for (const parrafo of limpio.split('\n')) {
+    let enLinea = 0
+    lineas++
+    for (const palabra of parrafo.split(/\s+/).filter(Boolean)) {
+      if (enLinea === 0) {
+        enLinea = palabra.length
+        if (palabra.length > cupo) lineas += Math.ceil(palabra.length / cupo) - 1
+      } else if (enLinea + 1 + palabra.length <= cupo) {
+        enLinea += 1 + palabra.length
+      } else {
+        lineas++
+        enLinea = palabra.length
+        if (palabra.length > cupo) lineas += Math.ceil(palabra.length / cupo) - 1
+      }
+    }
+  }
+  return lineas
+}
+
+export interface BloqueTexto {
+  /** Nombre con el que el componente lee el resultado. */
+  clave: string
+  texto: string
+  /** Ancho útil del texto en px de diseño (la columna menos sus paddings). */
+  ancho: number
+  /** Escalones de tamaño de fuente, del más grande al más chico: si el texto no
+   *  entra, primero se achica un punto antes de recortar. */
+  tamanos: number[]
+  lineHeight: number
+  /** Ancho medio de carácter (ver ANCHO_CARACTER). */
+  factor?: number
+  /** Alto propio del bloque además del texto: el padding de la tarjeta blanca o
+   *  el de la pill celeste. */
+  extra?: number
+}
+
+export interface BloqueAjustado {
+  clave: string
+  fontSize: number
+  lineHeight: number
+  /** Líneas que se muestran. 0 = no entra nada y el bloque no se dibuja. */
+  maxLineas: number
+  /** Alto que el bloque tiene reservado en la columna. */
+  alto: number
+  /** El texto no entró entero: termina en puntos suspensivos. */
+  recortado: boolean
+}
+
+/** Renglones que se le aseguran a cada bloque antes de repartir el resto: un
+ *  bloque que aparece con un solo renglón no se entiende. */
+const PISO_LINEAS = 2
+
+function repartir(bloques: BloqueTexto[], paso: number, libre: number): BloqueAjustado[] {
+  const items = bloques.map(b => {
+    const fontSize = b.tamanos[Math.min(paso, b.tamanos.length - 1)]
+    const caja = fontSize * b.lineHeight
+    const extra = b.extra || 0
+    const pide = lineasEstimadas(b.texto, { ancho: b.ancho, fontSize, factor: b.factor })
+    return { b, fontSize, caja, extra, pide, lineas: 0 }
+  })
+  // El padding propio de cada bloque se reserva de entrada: sin él no hay
+  // tarjeta que dibujar.
+  let usado = items.reduce((a, it) => a + (it.pide > 0 ? it.extra : 0), 0)
+  // Primero el piso: cada bloque se lleva sus dos renglones antes de que nadie
+  // pida un tercero. Sin esto, una bajada larguísima se quedaba con todo el
+  // alto y la pill del subtítulo desaparecía entera de la tarjeta.
+  for (const it of items) {
+    while (it.lineas < Math.min(it.pide, PISO_LINEAS) && usado + it.caja <= libre) {
+      it.lineas++
+      usado += it.caja
+    }
+  }
+  // Después, reparto por goteo: cada vuelta le damos una línea al bloque al que
+  // más le falta, así ninguno se queda corto mientras otro se lleva todo.
+  for (;;) {
+    let mejor = -1
+    let mayorFalta = 0
+    items.forEach((it, ix) => {
+      const falta = it.pide - it.lineas
+      if (falta <= 0 || usado + it.caja > libre) return
+      if (falta > mayorFalta) { mayorFalta = falta; mejor = ix }
+    })
+    if (mejor < 0) break
+    items[mejor].lineas++
+    usado += items[mejor].caja
+  }
+  return items.map(it => ({
+    clave: it.b.clave,
+    fontSize: it.fontSize,
+    lineHeight: it.b.lineHeight,
+    maxLineas: it.lineas,
+    alto: it.lineas > 0 ? it.lineas * it.caja + it.extra : 0,
+    recortado: it.lineas < it.pide,
+  }))
+}
+
+/** Reparte el alto de una columna del slide entre sus bloques de texto.
+ *  `fijos` son los altos de los hijos que no llevan texto variable (el kicker,
+ *  la línea naranja, el botón, el logo): entran en la cuenta pero no se tocan.
+ *  Devuelve, por clave, el tamaño de fuente y el tope de líneas de cada bloque. */
+export function ajustarColumna(
+  bloques: BloqueTexto[],
+  { alto, gap, fijos = [] }: { alto: number; gap: number; fijos?: number[] },
+): Record<string, BloqueAjustado> {
+  const hijos = bloques.length + fijos.length
+  const libre = alto - fijos.reduce((a, b) => a + b, 0) - gap * Math.max(0, hijos - 1)
+  const pasos = Math.max(1, ...bloques.map(b => b.tamanos.length))
+  let elegido = repartir(bloques, 0, libre)
+  for (let paso = 1; paso < pasos && elegido.some(b => b.recortado); paso++) {
+    elegido = repartir(bloques, paso, libre)
+  }
+  const res: Record<string, BloqueAjustado> = {}
+  for (const b of elegido) res[b.clave] = b
+  return res
+}
+
+/** Filas que ocupa la fila del kicker (pill naranja + fecha al lado). Es lo
+ *  único de alto variable que no es texto corrido, y el componente recorta pill
+ *  y fecha a esta misma cantidad de líneas: así la reserva es exacta. */
+export function filasKicker(
+  kicker: string,
+  aside: string,
+  { ancho, fontPill = 28, fontAside = 26, padPill = 80, gap = 28 }:
+    { ancho: number; fontPill?: number; fontAside?: number; padPill?: number; gap?: number },
+): 1 | 2 {
+  const anchoPill = padPill + sinNegritas(kicker).trim().length * fontPill * ANCHO_CARACTER.kicker
+  const anchoAside = sinNegritas(aside).trim()
+    ? gap + sinNegritas(aside).trim().length * fontAside * ANCHO_CARACTER.kicker
+    : 0
+  return anchoPill + anchoAside <= ancho ? 1 : 2
+}

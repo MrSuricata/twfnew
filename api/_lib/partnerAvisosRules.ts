@@ -15,7 +15,10 @@
 // igual al contrato.
 
 import { z } from 'zod'
-import type { PartnerAviso, PartnerAvisoDato, PartnerAvisoTipo, PartnerRol } from '../../src/lib/partnerAvisos.js'
+import type {
+  AvisoCancelable, PartnerAviso, PartnerAvisoDato, PartnerAvisoEstado, PartnerAvisoTipo,
+  PartnerRol, QuienCancela, ResultadoCancelable,
+} from '../../src/lib/partnerAvisos.js'
 
 /** Espejo de TIPOS_POR_ROL del contrato (test: partnerAvisosRules.test.ts). */
 export const TIPOS_POR_ROL_API: Record<PartnerRol, PartnerAvisoTipo[]> = {
@@ -104,6 +107,49 @@ export function cntrPerteneceACarga(
   const enOps = (carga.operativas || []).some(o => up(o?.CNTR_OP) === c)
   if (enOps) return true
   return String(carga.CNTR || '').split(/[\s,;/]+/).some(x => up(x) === c)
+}
+
+// ── Deshacer un aviso (Brian 03/09) ───────────────────────────────────────
+// ESPEJO de `puedeCancelarAviso` del contrato (src/lib/partnerAvisos.ts), por
+// la misma razón que TIPOS_POR_ROL_API: la API no importa código de src/.
+// El test partnerAvisosRules.test.ts corre las dos implementaciones sobre la
+// misma matriz de casos y exige que respondan idéntico.
+
+const ALCANCE_API = (v: unknown): string => String(v ?? '').trim().toUpperCase()
+
+const NO_CANCELABLE_API: Record<string, string> = {
+  confirmado: 'El equipo ya confirmó este aviso y la carga quedó actualizada. Si te equivocaste, escribile al equipo: lo corrigen ellos.',
+  rechazado: 'El equipo ya rechazó este aviso, no hace falta deshacerlo. Podés volver a avisar cuando corresponda.',
+  cancelado: 'Este aviso ya lo habías cancelado.',
+}
+
+/**
+ * Los DOS candados del deshacer, en el único lugar que manda (el server):
+ *   1. el aviso es SUYO — mismo rol y mismo alcance vivo (releído de
+ *      `partner_users`, nunca el del token);
+ *   2. sigue PENDIENTE — confirmado significa que la acción ya se aplicó sobre
+ *      la carga y deshacerla acá dejaría los datos inconsistentes.
+ * Primero "¿es tuyo?": de un aviso ajeno no se filtra ni el estado.
+ */
+export function puedeCancelarAvisoAPI(aviso: AvisoCancelable, quien: QuienCancela): ResultadoCancelable {
+  const mismoRol = String(aviso.partnerRole || '') === String(quien.rol || '')
+  const mismoAlcance = !!ALCANCE_API(quien.alcance) && ALCANCE_API(aviso.partnerFilter) === ALCANCE_API(quien.alcance)
+  if (!mismoRol || !mismoAlcance) {
+    return { puede: false, motivo: 'ajeno', mensaje: 'Ese aviso no es tuyo.' }
+  }
+  if (aviso.estado !== 'pendiente') {
+    return { puede: false, motivo: 'resuelto', mensaje: NO_CANCELABLE_API[aviso.estado] || 'Ese aviso ya no está pendiente.' }
+  }
+  return { puede: true }
+}
+
+/** Fila cruda de `partner_avisos` → lo mínimo que mira `puedeCancelarAvisoAPI`. */
+export function filaCancelable(row: Record<string, unknown>): AvisoCancelable {
+  return {
+    partnerRole: String(row.partner_role ?? '') as PartnerRol,
+    partnerFilter: String(row.partner_filter ?? ''),
+    estado: String(row.estado ?? '') as PartnerAvisoEstado,
+  }
 }
 
 /** Fila de `partner_avisos` → contrato camelCase (src/lib/partnerAvisos.ts). */

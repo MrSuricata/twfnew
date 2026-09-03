@@ -1148,6 +1148,21 @@ export async function crearPartnerAviso(input: import('./partnerAvisos').NuevoPa
   return data.aviso
 }
 
+/** Partner: DESHACER un aviso propio que sigue pendiente (Brian 03/09: "que el
+ *  depósito pueda deshacer una acción si se equivoca"). No borra nada: el aviso
+ *  queda 'cancelado' y el equipo lo sigue viendo. El server revalida los dos
+ *  candados (que sea suyo y que siga pendiente): si el equipo ya lo confirmó
+ *  devuelve 409 con el mensaje que hay que mostrarle tal cual al partner. */
+export async function cancelarPartnerAviso(id: string): Promise<import('./partnerAvisos').PartnerAviso> {
+  const res = await authFetch(`/api/data/partner-avisos?id=${encodeURIComponent(id)}`, { method: 'DELETE' })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
+  const data = await res.json()
+  return data.aviso
+}
+
 /** Admin/owner: confirmar (ejecuta la acción real) o rechazar (con motivo). */
 export async function resolverPartnerAviso(id: string, accion: 'confirmar' | 'rechazar', motivo?: string): Promise<import('./partnerAvisos').PartnerAviso> {
   const res = await authFetch(`/api/data/partner-avisos?id=${encodeURIComponent(id)}`, {

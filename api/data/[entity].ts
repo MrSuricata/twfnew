@@ -44,6 +44,8 @@ import {
   mapFilaToAviso,
   patchDevolvi,
   patchDesconsolide,
+  puedeCancelarAvisoAPI,
+  filaCancelable,
 } from '../_lib/partnerAvisosRules.js'
 import { broadcastTrucksLive, clientIdFromRequest } from '../_lib/realtimeBroadcast.js'
 import { z } from 'zod'
@@ -1307,20 +1309,20 @@ async function handlePartnerShipments(req: VercelRequest, res: VercelResponse, d
   return res.status(200).json({ shipments: visibles.shipments, syncedAt: new Date().toISOString() })
 }
 
-/** Lo que el partner tiene derecho a ver: alcance FRESCO de partner_users +
- *  shipments filtradas y saneadas (lista blanca opSegura). Lo comparten
- *  partner-shipments (la lista) y partner-avisos (para saber sobre qué refs
- *  puede avisar). Devuelve {status:403} si el acceso fue desactivado. */
-async function partnerShipmentsVisibles(db: any, payload: any): Promise<
-  { status: 403; error: string } | { shipments: any[]; alcance: string; nombre: string }
+/** Alcance VIVO del partner (PLANIR, GODILCO, TRANSCAL…) releído de
+ *  `partner_users`, sin traer ninguna carga. Lo usan partnerShipmentsVisibles
+ *  y el deshacer de partner-avisos, que solo necesita saber quién es.
+ *
+ *  Revocación efectiva (auditoría 01/09): el JWT dura 12 h y sólo se validaba
+ *  la firma, así que un partner dado de baja seguía entrando hasta medio día,
+ *  y si le cambiabas el transporte seguía viendo el viejo. Se relee la fila
+ *  en cada pedido: la baja y el cambio de alcance valen al instante.
+ *  Si la consulta falla NO se cierra la puerta (un hipo de la DB no puede
+ *  dejar al partner afuera): se sigue con el alcance del token. */
+async function partnerAlcanceVivo(db: any, payload: any): Promise<
+  { status: 403; error: string } | { alcance: string; nombre: string }
 > {
   let nombre = String(payload?.name || '').trim()
-  // Revocación efectiva (auditoría 01/09): el JWT dura 12 h y sólo se validaba
-  // la firma, así que un partner dado de baja seguía entrando hasta medio día,
-  // y si le cambiabas el transporte seguía viendo el viejo. Se relee la fila
-  // en cada pedido: la baja y el cambio de alcance valen al instante.
-  // Si la consulta falla NO se cierra la puerta (un hipo de la DB no puede
-  // dejar al partner afuera): se sigue con el alcance del token.
   let alcanceVivo: string | null = null
   const emailToken = String(payload?.email || '').trim().toLowerCase()
   if (emailToken) {
@@ -1336,6 +1338,24 @@ async function partnerShipmentsVisibles(db: any, payload: any): Promise<
       if (String(fila.name || '').trim()) nombre = String(fila.name).trim()
     }
   }
+  // Mismo respaldo que usaba partnerShipmentsVisibles cuando la DB no contesta.
+  return {
+    alcance: alcanceVivo ?? String(payload?.filterValue || payload?.depotName || payload?.transportName || '').trim(),
+    nombre,
+  }
+}
+
+/** Lo que el partner tiene derecho a ver: alcance FRESCO de partner_users +
+ *  shipments filtradas y saneadas (lista blanca opSegura). Lo comparten
+ *  partner-shipments (la lista) y partner-avisos (para saber sobre qué refs
+ *  puede avisar). Devuelve {status:403} si el acceso fue desactivado. */
+async function partnerShipmentsVisibles(db: any, payload: any): Promise<
+  { status: 403; error: string } | { shipments: any[]; alcance: string; nombre: string }
+> {
+  const quien = await partnerAlcanceVivo(db, payload)
+  if ('status' in quien) return quien
+  const nombre = quien.nombre
+  const alcanceVivo: string | null = quien.alcance || null
 
   // La web es master desde el flip (16/06): SIEMPRE se lee la tabla `shipments`.
   // Auditoría 26/08 — dos agujeros cerrados:
@@ -3185,9 +3205,15 @@ async function handleOperatorAssignments(req: VercelRequest, res: VercelResponse
 // solo sobre cargas de su alcance. Confirmar ejecuta la acción que YA existe
 // en la app (misma función, mismo rastro). Spec:
 // docs/superpowers/specs/2026-09-01-partner-hoy-avisos-design.md
-// GET   → partner: los suyos (30 d) · admin: pendientes + resueltos de 7 d
-// POST  → solo depot/transport: {tipo, ref, cntr?, dato?}
+// GET    → partner: los suyos (30 d) · admin: pendientes + resueltos de 7 d
+// POST   → solo depot/transport: {tipo, ref, cntr?, dato?}
 // PATCH ?id= → solo admin/owner: {accion:'confirmar'|'rechazar', motivo?}
+// DELETE ?id= → solo depot/transport: DESHACER un aviso propio y pendiente
+//   (Brian 03/09: "que el depósito pueda deshacer una acción si se equivoca").
+//   No borra la fila: la deja en estado 'cancelado' para que el equipo vea que
+//   hubo un aviso y se canceló. Los dos candados están en puedeCancelarAvisoAPI
+//   y, además, repetidos en el WHERE del UPDATE (que sea atómico contra una
+//   confirmación simultánea del equipo).
 
 const AVISOS_DIAS_PARTNER = 30
 const AVISOS_DIAS_RESUELTOS_ADMIN = 7
@@ -3398,6 +3424,61 @@ async function handlePartnerAvisos(req: VercelRequest, res: VercelResponse, db: 
     if (!upd) return res.status(409).json({ error: 'Ese aviso lo resolvió otra persona hace un instante.' })
     logAudit(db, payload, `aviso_partner_${v.data.accion}`, 'partner_avisos', refOf(aviso.ref), {
       id, tipo: aviso.tipo, cntr: aviso.cntr, partner: aviso.partner_filter, dato: aviso.dato, motivo: motivo || undefined,
+    })
+    return res.status(200).json({ aviso: mapFilaToAviso(upd) })
+  }
+
+  // DESHACER (Brian 03/09). Se marca 'cancelado' en vez de borrar: el equipo
+  // tiene que poder ver que hubo un aviso y que el partner lo dio de baja.
+  if (req.method === 'DELETE') {
+    if (!esPartner) return res.status(403).json({ error: 'Deshacer un aviso lo hace el partner que lo mandó.' })
+    const id = String(req.query.id || '').trim()
+    if (!id) return res.status(400).json({ error: 'id required' })
+
+    // CANDADO 1 — quién sos AHORA. El alcance no sale del token: se relee de
+    // partner_users (un partner dado de baja o mudado de depósito no puede
+    // tocar nada), igual que en el GET y el POST.
+    const quien = await partnerAlcanceVivo(db, payload)
+    if ('status' in quien) return res.status(quien.status).json({ error: quien.error })
+    if (!quien.alcance) return res.status(403).json({ error: 'Tu usuario no tiene un depósito o transporte asignado.' })
+
+    const { data: aviso, error: errAviso } = await db.from('partner_avisos').select(AVISO_COLS).eq('id', id).maybeSingle()
+    if (errAviso) throw errAviso
+    // Aviso ajeno o inexistente = lo mismo para el de afuera: 404 sin detalles.
+    if (!aviso) return res.status(404).json({ error: 'Aviso no encontrado' })
+
+    // CANDADO 2 — propio Y pendiente (regla pura compartida con el portal).
+    const permiso = puedeCancelarAvisoAPI(filaCancelable(aviso), { rol: payload.role, alcance: quien.alcance })
+    if (!permiso.puede) {
+      // 'ajeno' → 404 (no se confirma que exista); 'resuelto' → 409 con el
+      // mensaje que explica que eso lo corrige el equipo.
+      if (permiso.motivo === 'ajeno') return res.status(404).json({ error: 'Aviso no encontrado' })
+      return res.status(409).json({ error: permiso.mensaje })
+    }
+
+    const nowIso = new Date().toISOString()
+    const partnerEmail = String((payload as any).email || '').trim().toLowerCase()
+    // Los dos candados van TAMBIÉN en el WHERE: si el equipo confirma en el
+    // mismo instante, el update no encuentra fila y el partner ve el 409 en vez
+    // de pisar un aviso ya aplicado sobre la carga.
+    const { data: upd, error } = await db.from('partner_avisos')
+      .update({
+        estado: 'cancelado',
+        resolved_at: nowIso,
+        resolved_by: quien.nombre || partnerEmail || quien.alcance,
+      })
+      .eq('id', id)
+      .eq('estado', 'pendiente')
+      .eq('partner_role', payload.role)
+      .ilike('partner_filter', ilikeExacto(quien.alcance))
+      .select(AVISO_COLS)
+      .maybeSingle()
+    if (error) throw error
+    if (!upd) {
+      return res.status(409).json({ error: 'El equipo resolvió este aviso hace un instante. Si te equivocaste, escribiles: lo corrigen ellos.' })
+    }
+    logAudit(db, { email: partnerEmail } as any, `aviso_partner_cancelado:${aviso.tipo}`, 'partner_avisos', refOf(aviso.ref), {
+      id, tipo: aviso.tipo, cntr: aviso.cntr, partner: aviso.partner_filter, dato: aviso.dato,
     })
     return res.status(200).json({ aviso: mapFilaToAviso(upd) })
   }
