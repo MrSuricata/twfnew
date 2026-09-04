@@ -180,13 +180,25 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
     setSeguimientosArea(a)
     try { localStorage.setItem(SEGUIMIENTOS_AREA_KEY, a) } catch { /* ignorar */ }
   }, [])
-  // Cola de seguimientos: cuántos updates tocan hoy EN SU ÁREA (badge).
-  const seguimientosCount = useMemo(() => {
-    const cargas = (dbShipments || []).map(s => ({
-      ref: s.ref, etd: s.etd, eta: s.eta, seguimiento: s.seguimiento, mode: s.mode, archived: s.archived,
-    }))
-    return colaSeguimientos(cargas, new Date(), seguimientosArea).pendientes.length
-  }, [dbShipments, seguimientosArea])
+  // Cola de seguimientos. El badge cuenta lo de SU área; el conteo de la otra
+  // viaja aparte para que el supervisor no pierda de vista el atraso ajeno:
+  // partir la cola no puede volver invisible el trabajo del otro equipo.
+  //
+  // El map tiene que llevar los MISMOS campos que arma el tablero: `salida`,
+  // `descarga` y `eta_fiscal` son las señales de llegada real. Sin ellas el
+  // badge contaba como "¿llegó?" cargas que el tablero ya había descartado —
+  // decía 30 y adentro había 12. Si acá se agrega un campo, va también allá.
+  const cargasSeguimiento = useMemo(() =>
+    (dbShipments || []).map(s => ({
+      ref: s.ref, etd: s.etd, eta: s.eta, seguimiento: s.seguimiento, mode: s.mode,
+      archived: s.archived, salida: s.salida, descarga: s.descarga, etaFiscal: s.eta_fiscal,
+    })), [dbShipments])
+  const seguimientosCount = useMemo(
+    () => colaSeguimientos(cargasSeguimiento, new Date(), seguimientosArea).pendientes.length,
+    [cargasSeguimiento, seguimientosArea])
+  const seguimientosOtraArea = useMemo(
+    () => colaSeguimientos(cargasSeguimiento, new Date(), seguimientosArea === 'fcl' ? 'lcl' : 'fcl').pendientes.length,
+    [cargasSeguimiento, seguimientosArea])
   // TWF brand has no ops tabs → land on the first content tab.
   // Pantalla de inicio POR USUARIO (admin_users.home_area, viaja en el JWT):
   // Nico arranca en Seguimientos, el resto donde diga su selector de Equipo.
@@ -702,6 +714,7 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
               onOpenDetail={onOpenDetail}
               area={seguimientosArea}
               onAreaChange={cambiarSeguimientosArea}
+              pendientesOtraArea={seguimientosOtraArea}
             />
           </TabsContent>
 

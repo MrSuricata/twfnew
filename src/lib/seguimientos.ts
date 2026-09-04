@@ -30,7 +30,7 @@
  *
  * NOTA: la cola lee la tabla `shipments` (FCL + LCL). El alta vigente de LCL
  * es esa: verificado con datos el 04/09/2026 — `lcl_air_shipments` tiene UNA
- * fila, de mayo, contra 444 LCL en `shipments` (la última, de hoy). El manager
+ * fila, de mayo, contra las LCL en `shipments` (la última, de hoy). El manager
  * legacy (tabla lcl_air, pestaña Camiones) quedó muerto: no hay nada afuera de
  * la cola por ese lado ni nada que migrar.
  */
@@ -140,10 +140,9 @@ export function areaInicial(homeArea?: string | null, guardada?: string | null):
   return 'fcl'
 }
 
-/**
- * Arma la cola. `area` la parte por modalidad (sin `area` vienen las dos
- * juntas, como antes — lo usa el badge de la pestaña).
- */
+/** Sin `area` no filtra: devuelve la cola completa. Hoy no lo llama nadie en
+ *  producción —el tablero y el badge pasan siempre el área— y queda para los
+ *  tests y para cualquier vista futura que quiera el total sin partir. */
 export function colaSeguimientos(cargas: CargaSeguimiento[], hoy: Date, area?: AreaSeguimiento): ColaSeguimientos {
   const h = medianoche(hoy)
   const pendientes: FilaSeguimiento[] = []

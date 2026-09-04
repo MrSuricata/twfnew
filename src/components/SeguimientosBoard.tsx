@@ -62,12 +62,16 @@ interface Props {
    *  badge de la pestaña cuente lo mismo que se ve acá adentro. */
   area: AreaSeguimiento
   onAreaChange: (a: AreaSeguimiento) => void
+  /** Pendientes de la OTRA área. Se pinta en su chip para que partir la cola
+   *  no vuelva invisible el atraso del otro equipo: el supervisor tiene que
+   *  ver desde acá que del otro lado hay 40 sin mandar. */
+  pendientesOtraArea?: number
 }
 
 /** Ítem envuelto para groupByVoyage (necesita { buque, eta } arriba). */
 interface ItemViaje { buque: string; eta: string; fila: FilaSeguimiento }
 
-export default function SeguimientosBoard({ dbShipments, onPatchShipment, onOpenDetail, area, onAreaChange }: Props) {
+export default function SeguimientosBoard({ dbShipments, onPatchShipment, onOpenDetail, area, onAreaChange, pendientesOtraArea = 0 }: Props) {
   // Fino por marca (handoff 03-admin · Seguimientos): tipografía y verdes del
   // sistema bajo Mediterránea; TWF intacto.
   const med = useBrand().id === 'med'
@@ -634,6 +638,13 @@ export default function SeguimientosBoard({ dbShipments, onPatchShipment, onOpen
                 className={`h-8 px-3 rounded-md text-sm font-semibold transition-colors ${area === a.id ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
               >
                 {a.label}
+                {/* El número solo aparece en el chip de la otra área: en el
+                    propio ya está el "N de M enviados hoy" de al lado. */}
+                {area !== a.id && pendientesOtraArea > 0 && (
+                  <span className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-muted-foreground/20 px-1 text-[10px] font-bold tabular-nums">
+                    {pendientesOtraArea}
+                  </span>
+                )}
               </button>
             ))}
           </div>
