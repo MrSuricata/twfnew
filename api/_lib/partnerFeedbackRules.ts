@@ -77,6 +77,11 @@ export function estadoTrasAccionAPI(actual: FeedbackEstado, accion: FeedbackAcci
   return actual === 'respondido' ? 'respondido' : 'leido'
 }
 
+/** Espejo de `cambiaEstado`: marcar visto dos veces no escribe la segunda. */
+export function cambiaEstadoAPI(actual: FeedbackEstado, accion: FeedbackAccion): boolean {
+  return accion === 'responder' || estadoTrasAccionAPI(actual, accion) !== actual
+}
+
 // ── Body del POST (partner) ──────────────────────────────────────────────
 // El tope duro del schema es 10x el del negocio: un texto de 5000 caracteres
 // tiene que caer con el mensaje amigable de `validarTextoAPI` ("no puede pasar

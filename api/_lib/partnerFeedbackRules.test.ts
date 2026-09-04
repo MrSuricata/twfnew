@@ -10,12 +10,12 @@
  */
 import { describe, it, expect } from 'vitest'
 import {
-  validarTextoAPI, validarRespuestaAPI, sanearContextoAPI, estadoTrasAccionAPI,
+  validarTextoAPI, validarRespuestaAPI, sanearContextoAPI, estadoTrasAccionAPI, cambiaEstadoAPI,
   validarNuevoFeedback, validarResponderFeedback, mapFilaToComentario,
   TOPE_TEXTO_API,
 } from './partnerFeedbackRules.js'
 import {
-  validarTexto, validarRespuesta, sanearContexto, estadoTrasAccion, armarContexto,
+  validarTexto, validarRespuesta, sanearContexto, estadoTrasAccion, cambiaEstado, armarContexto,
   CONTEXTO_VACIO, type FeedbackAccion, type FeedbackEstado,
 } from '../../src/lib/partnerFeedback.js'
 
@@ -130,13 +130,14 @@ describe('la copia de la API responde igual que el contrato', () => {
     for (const t of textos) expect(validarRespuestaAPI(t)).toEqual(validarRespuesta(t))
   })
 
-  it('estadoTrasAccion: misma tabla de transiciones', () => {
+  it('estadoTrasAccion y cambiaEstado: misma tabla de transiciones', () => {
     const estados: FeedbackEstado[] = ['nuevo', 'leido', 'respondido']
     const acciones: FeedbackAccion[] = ['visto', 'responder']
     let casos = 0
     for (const e of estados) {
       for (const a of acciones) {
         expect(estadoTrasAccionAPI(e, a)).toBe(estadoTrasAccion(e, a))
+        expect(cambiaEstadoAPI(e, a)).toBe(cambiaEstado(e, a))
         casos++
       }
     }
