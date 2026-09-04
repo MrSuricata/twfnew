@@ -71,6 +71,12 @@ export interface ParsedShipment extends ShipmentRecord {
   calculatedN: number
   calculatedLibreHasta: string
   operativas?: OperativasRecord[]
+  /** La referencia PROPIA del cliente ("1410" de Chiapero), `shipments.client_ref`.
+   *  No viene de la planilla: la mandan el endpoint del portal
+   *  (api/_lib/clientShipments) y dbFclToParsedShipment (vista "Ver como").
+   *  Spec 04/09 (D2): en el portal manda esta cuando existe y sirve; `REF`
+   *  sigue siendo la clave interna (anclas, keys, matching). */
+  CLIENT_REF?: string
   // Etapa 3 migración FCL: presentes cuando la carga viene del espejo en DB.
   __dbId?: string        // id de la fila en `shipments` (para editar)
   __webEdited?: string[] // campos pisados por ediciones web (badge ✏️)

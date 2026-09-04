@@ -249,7 +249,7 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
         const desc = ops[0]?.DESCRIPCION || ''
         const containers = s.containers.map(c => c.number).join(' ')
         const opsContainers = ops.map(o => o.CNTR_OP).join(' ')
-        const clientRef = String((s as { CLIENT_REF?: string }).CLIENT_REF || '')
+        const clientRef = String(s.CLIENT_REF || '')
         return (
           s.REF.toLowerCase().includes(q) ||
           clientRef.toLowerCase().includes(q) ||
