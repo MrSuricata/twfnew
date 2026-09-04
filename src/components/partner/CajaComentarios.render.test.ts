@@ -132,6 +132,14 @@ describe('CajaComentarios — el botón fijo, en los dos portales', () => {
     expect(html).toContain('fixed bottom-4 right-4')
   })
 
+  it('en el celular queda el globito solo, pero sigue anunciado', () => {
+    const html = renderToStaticMarkup(h(CajaComentarios, { pantalla: 'HOY del depósito' }))
+    // El texto se esconde por CSS (no desaparece del DOM) y el botón tiene
+    // aria-label: en el celular las acciones de cada fila viven en esa esquina.
+    expect(html).toContain('hidden sm:inline')
+    expect(html).toContain('aria-label="¿Algo no funcionó? Contanos"')
+  })
+
   it('sin respuestas nuevas no hay cartel arriba del portal', () => {
     const html = renderToStaticMarkup(h(CajaComentarios, { pantalla: 'HOY del transporte' }))
     expect(html).not.toContain('El equipo respondió')

@@ -292,10 +292,14 @@ export default function CajaComentarios({ pantalla, preview = false }: CajaComen
         onClick={abrir}
         data-testid="boton-comentarios"
         title="Contanos si algo no funcionó"
-        className="fixed bottom-4 right-4 z-40 inline-flex items-center gap-2 rounded-full border border-border bg-card/95 px-4 py-2.5 text-sm font-semibold text-foreground shadow-lg backdrop-blur transition-colors hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        aria-label="¿Algo no funcionó? Contanos"
+        // En el celular queda solo el globito: el depósito trabaja parado en
+        // el predio y las acciones de cada fila ("Retiré", "Devolví") viven
+        // justo en esa esquina — un botón ancho encima sería un estorbo.
+        className="fixed bottom-4 right-4 z-40 inline-flex items-center gap-2 rounded-full border border-border bg-card/95 p-3 sm:px-4 sm:py-2.5 text-sm font-semibold text-foreground shadow-lg backdrop-blur transition-colors hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <ChatCircleDots size={18} weight="duotone" />
-        ¿Algo no funcionó?
+        <span className="hidden sm:inline">¿Algo no funcionó?</span>
         {sinVer.length > 0 && (
           <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-emerald-600 px-1.5 text-[11px] font-bold text-white">
             {sinVer.length}
