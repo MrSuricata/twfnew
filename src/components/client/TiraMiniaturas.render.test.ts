@@ -11,8 +11,8 @@
 import { describe, it, expect } from 'vitest'
 import { createElement as h } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import TiraMiniaturas, { fuenteMiniatura } from './TiraMiniaturas'
-import { galeriaDeNovedad, tiraDeMiniaturas } from '@/lib/cargaCliente'
+import TiraMiniaturas from './TiraMiniaturas'
+import { fuenteMiniatura, galeriaDeNovedad, tiraDeMiniaturas } from '@/lib/cargaCliente'
 import type { OriginPhoto } from '@/lib/quotationTypes'
 
 const foto = (id: string, extra: Partial<OriginPhoto> = {}): OriginPhoto => ({
@@ -66,6 +66,25 @@ describe('TiraMiniaturas — la foto se ve donde está el aviso', () => {
   it('la foto vieja sin miniatura no deja un cuadro roto: no se dibuja', () => {
     const html = render([foto('a'), foto('sin', { thumbnailUrl: null, thumbnailData: '' })])
     expect((html.match(/<img/g) || []).length).toBe(1)
+  })
+
+  it('el "+N" no cuenta fotos sin miniatura: dos se dibujan, no hay "+5"', () => {
+    const html = render([
+      foto('a'), foto('b'),
+      ...Array.from({ length: 5 }, (_, i) => foto(`vieja${i}`, { thumbnailUrl: null, thumbnailData: '' })),
+    ])
+    expect((html.match(/<img/g) || []).length).toBe(2)
+    expect(html).not.toMatch(/\+\d/)
+  })
+
+  it('con las primeras cuatro sin miniatura la tira NO desaparece', () => {
+    const html = render([
+      ...Array.from({ length: 4 }, (_, i) => foto(`vieja${i}`, { thumbnailUrl: null, thumbnailData: '' })),
+      foto('c'), foto('d'),
+    ])
+    expect(html).toContain('src="https://firmada/c?token=abc"')
+    expect(html).toContain('src="https://firmada/d?token=abc"')
+    expect((html.match(/<img/g) || []).length).toBe(2)
   })
 
   it('sin ninguna miniatura la tira no se dibuja (la fila queda como estaba)', () => {

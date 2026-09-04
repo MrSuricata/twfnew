@@ -276,6 +276,10 @@ interface FotoMin {
   shipmentRef?: string | null
   photoType?: string | null
   createdAt?: number | null
+  /** URL firmada de la miniatura (fotos ya migradas a Storage). */
+  thumbnailUrl?: string | null
+  /** El base64 viejo, de las que todavía no se migraron. */
+  thumbnailData?: string | null
 }
 
 export interface GrupoFotos<T> {
@@ -412,12 +416,25 @@ export interface TiraMiniaturas<T> {
   visibles: T[]
   /** Cuántas quedaron afuera: el "+N". 0 = no va el "+N". */
   mas: number
-  /** Cuántas hay en la galería que anunció la fila. */
+  /** Cuántas de las que anunció la fila se pueden dibujar. */
   total: number
   /** La primera que NO entró: es donde abre el visor al tocar el "+N", así el
    *  cliente sigue justo donde la tira se cortó. null si entraron todas. */
   siguiente: T | null
 }
+
+/**
+ * La fuente con la que se dibuja una miniatura: la URL firmada, o el base64
+ * viejo de las fotos que todavía no se migraron a Storage. '' = no hay nada
+ * que dibujar.
+ */
+export const fuenteMiniatura = (f: FotoMin | null | undefined): string =>
+  String(f?.thumbnailUrl || f?.thumbnailData || '')
+
+/** ¿Se puede DIBUJAR como miniatura? Una foto vieja sin migrar no tiene:
+ *  el visor la abre igual (pide el full al server), pero en la tira no va. */
+export const sePuedeDibujar = (f: FotoMin | null | undefined): boolean =>
+  fuenteMiniatura(f) !== ''
 
 /**
  * La tira de miniaturas de una fila de novedades: hasta `max` fotos y el "+N"
@@ -427,11 +444,17 @@ export interface TiraMiniaturas<T> {
  * fotos son —eso lo decidió la fila, que es la que puso el texto—: solo
  * cuántas entran. Sin fotos la tira sale vacía y la fila sigue siendo la de
  * antes (texto + fecha): nunca un hueco.
+ *
+ * `visibles` y el "+N" se deciden sobre las que SE PUEDEN DIBUJAR. Antes se
+ * contaban sobre la lista cruda y el componente descartaba las que no tenían
+ * miniatura recién al pintar: salían dos miniaturas y un "+5", y si las
+ * primeras cuatro eran viejas sin migrar la tira desaparecía entera —"+N"
+ * incluido— porque no quedaba ninguna imagen que dibujar.
  */
 export function tiraDeMiniaturas<T extends FotoMin>(
   galeria: T[], max = MAX_MINIATURAS,
 ): TiraMiniaturas<T> {
-  const todas = (galeria || []).filter(Boolean)
+  const todas = (galeria || []).filter(sePuedeDibujar)
   const tope = Math.max(0, Math.floor(Number(max) || 0))
   return {
     visibles: todas.slice(0, tope),

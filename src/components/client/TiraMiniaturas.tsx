@@ -21,6 +21,11 @@
  *    remonta— y las miniaturas quedaban en ícono de cámara hasta recargar.
  *  · Los colores salen del tono de la card (piel común, `clasesTono`), no de
  *    hex sueltos: bajo Mediterránea se resuelven solos.
+ *
+ * Qué fotos entran y cuántas quedan en el "+N" NO se decide acá: viene hecho
+ * de `tiraDeMiniaturas` (lib/cargaCliente), que ya descartó las que no se
+ * pueden dibujar. Si acá se volviera a filtrar, el "+N" contaría fotos que
+ * después no aparecen.
  */
 import { useState } from 'react'
 import { Camera, Images } from '@phosphor-icons/react'
@@ -29,12 +34,8 @@ import { clasesTono, type TonoPanel } from '@/components/partner/PanelCard'
 import {
   claveDeFuentes, rotasVigentes, conRota, SIN_ROTAS, type RotasMiniaturas,
 } from '@/lib/firmasFotos'
+import { fuenteMiniatura } from '@/lib/cargaCliente'
 import type { OriginPhoto } from '@/lib/quotationTypes'
-
-/** La fuente de la miniatura: la URL firmada, o el base64 viejo de las fotos
- *  que todavía no se migraron a Storage. '' = no hay nada que dibujar. */
-export const fuenteMiniatura = (f: OriginPhoto | null | undefined): string =>
-  String(f?.thumbnailUrl || f?.thumbnailData || '')
 
 export default function TiraMiniaturas({
   visibles, mas, siguiente, etiqueta, tono = 'info', onAbrir, onRota,
@@ -55,14 +56,15 @@ export default function TiraMiniaturas({
   const med = useBrand().id === 'med'
   const t = clasesTono(tono, med)
   const [rotas, setRotas] = useState<RotasMiniaturas>(SIN_ROTAS)
-  const conFuente = visibles.filter(f => fuenteMiniatura(f))
   // La huella de lo que se está dibujando AHORA: id + fuente de cada foto.
-  const clave = claveDeFuentes(conFuente.map(f => `${f.id}|${fuenteMiniatura(f)}`))
+  const clave = claveDeFuentes(visibles.map(f => `${f.id}|${fuenteMiniatura(f)}`))
   // Rotas de ESTAS fuentes. Si el portal ya trajo firmas nuevas, ninguna.
   const rotasAhora = rotasVigentes(rotas, clave)
   // Sin miniaturas (fotos viejas sin migrar) la tira no se dibuja: la fila
-  // queda como estaba, nunca con un hueco.
-  if (conFuente.length === 0) return null
+  // queda como estaba, nunca con un hueco. Quién entra y quién va al "+N" lo
+  // decidió `tiraDeMiniaturas`, que ya descartó las que no se pueden dibujar:
+  // acá no se filtra nada, o el "+N" volvería a contar lo que no se dibuja.
+  if (visibles.length === 0) return null
 
   const marcarRota = (id: string) => {
     setRotas(prev => conRota(prev, clave, id))
@@ -79,7 +81,7 @@ export default function TiraMiniaturas({
 
   return (
     <div className="flex items-center gap-2 flex-wrap" role="group" aria-label={`Fotos: ${etiqueta}`}>
-      {conFuente.map((f, i) => {
+      {visibles.map((f, i) => {
         const rota = rotasAhora.includes(f.id)
         return (
           <button
@@ -112,7 +114,7 @@ export default function TiraMiniaturas({
       {mas > 0 && (
         <button
           type="button"
-          onClick={() => onAbrir(siguiente || conFuente[conFuente.length - 1])}
+          onClick={() => onAbrir(siguiente || visibles[visibles.length - 1])}
           aria-label={`Ver las otras ${mas} fotos de ${etiqueta}`}
           className={cajaMas}
         >

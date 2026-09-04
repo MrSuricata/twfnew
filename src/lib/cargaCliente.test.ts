@@ -11,7 +11,7 @@ import {
   contenedoresCarga, textoContenedores, filaCargaCliente, lineaTiempoCliente,
   datosFicha, contenedoresDeCarga, agruparFotosPorLugar, informesDeCarga, fechaDeSubida,
   lugarDeFoto, galeriaDeCarga, galeriaDeNovedad, tiraDeMiniaturas, indiceEnGaleria,
-  MAX_MINIATURAS,
+  MAX_MINIATURAS, fuenteMiniatura, sePuedeDibujar,
 } from './cargaCliente'
 import { estadoCliente, etiquetaEstado, novedadesCliente, traducirAlerta } from './hoyCliente'
 import type { ParsedShipment, OperativasRecord, ShipmentAlert } from './shipmentTypes'
@@ -443,6 +443,67 @@ describe('la tira dibuja lo que el texto anuncia, no el historial entero', () =>
     expect(fila.clase).toBe('informe')
     expect(fila.fotoIds).toEqual([])
     expect(galeriaDeNovedad(mezcla, fila)).toEqual([])
+  })
+})
+
+// ── El "+N" no puede contar fotos que no se dibujan ─────────────────────
+
+describe('la tira cuenta sobre lo que se puede dibujar', () => {
+  const HOY_V = '2026-09-10'
+  const cuando = (iso: string) => Date.parse(iso + 'T12:00:00Z')
+  /** Foto vieja sin migrar a Storage: no tiene miniatura de ninguna clase. */
+  const legacy = (id: string, n: number) => ({
+    id, shipmentRef: 'A8121', photoType: 'uruguay', createdAt: cuando(HOY_V) - n * 1000,
+  })
+  const conMini = (id: string, n: number) => ({
+    ...legacy(id, n), thumbnailUrl: `https://firmada/${id}`,
+  })
+  const ids = (fotos: { id: string }[]) => fotos.map(f => f.id)
+  const tira = (fotos: { id: string }[]) =>
+    tiraDeMiniaturas(galeriaDeNovedad(fotos, { ref: 'A8121', lugarFoto: 'uruguay', fotoIds: ids(fotos) }))
+
+  it('sePuedeDibujar: URL firmada, base64 viejo, o nada', () => {
+    expect(sePuedeDibujar({ thumbnailUrl: 'https://firmada/x' })).toBe(true)
+    expect(sePuedeDibujar({ thumbnailData: 'data:image/jpeg;base64,AAA' })).toBe(true)
+    expect(sePuedeDibujar({ thumbnailUrl: null, thumbnailData: '' })).toBe(false)
+    expect(sePuedeDibujar(null)).toBe(false)
+    expect(fuenteMiniatura({ thumbnailUrl: null, thumbnailData: 'data:x' })).toBe('data:x')
+  })
+
+  it('siete fotos y solo dos con miniatura: dos miniaturas y NINGÚN "+5"', () => {
+    const t = tira([
+      conMini('a', 1), conMini('b', 2),
+      ...Array.from({ length: 5 }, (_, i) => legacy(`vieja${i}`, 3 + i)),
+    ])
+    expect(ids(t.visibles)).toEqual(['a', 'b'])
+    expect(t.mas).toBe(0)          // antes: 3 (7 − 4) y se dibujaban dos
+    expect(t.total).toBe(2)
+    expect(t.siguiente).toBeNull()
+  })
+
+  it('si las primeras cuatro son viejas sin migrar, la tira NO desaparece', () => {
+    // El caso peor del bug: `visibles` eran las cuatro legacy, el componente
+    // las descartaba al pintar y devolvía null — se perdía la tira entera,
+    // "+N" y fotos con miniatura incluidas.
+    const t = tira([
+      ...Array.from({ length: 4 }, (_, i) => legacy(`vieja${i}`, i)),
+      conMini('c', 5), conMini('d', 6),
+    ])
+    expect(ids(t.visibles)).toEqual(['c', 'd'])
+    expect(t.mas).toBe(0)
+    expect(t.total).toBe(2)
+  })
+
+  it('con seis dibujables el "+N" sigue siendo el de siempre', () => {
+    const t = tira(Array.from({ length: 6 }, (_, i) => conMini(`f${i}`, i)))
+    expect(t.visibles).toHaveLength(4)
+    expect(t.mas).toBe(2)
+    expect(t.siguiente?.id).toBe('f4')
+  })
+
+  it('sin ninguna dibujable la tira sale vacía (la fila queda como estaba)', () => {
+    const t = tira(Array.from({ length: 3 }, (_, i) => legacy(`v${i}`, i)))
+    expect(t).toEqual({ visibles: [], mas: 0, total: 0, siguiente: null })
   })
 })
 

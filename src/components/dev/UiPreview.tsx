@@ -47,6 +47,12 @@ const foto = (ref: string, tipo: 'origen' | 'uruguay', dias: number, i: number) 
   fileName: `foto-${i}.jpg`, fileType: 'image/jpeg', createdBy: 'demo',
   thumbnailData: miniatura(`${tipo === 'origen' ? 'ORIGEN' : 'MVD'} ${i}`, tipo === 'origen' ? '#0f766e' : '#1d4ed8'),
 }) as never
+/** Foto vieja SIN migrar a Storage: no tiene miniatura de ninguna clase. En
+ *  producción hay muchas; la tira no las puede dibujar (el visor sí las abre,
+ *  pide el full) y por eso tampoco pueden entrar en el "+N". */
+const fotoSinMiniatura = (ref: string, tipo: 'origen' | 'uruguay', dias: number, i: number) => ({
+  ...(foto(ref, tipo, dias, i) as unknown as Record<string, unknown>), thumbnailData: '',
+}) as never
 const fotosDemo = [
   // D9001 tiene los DOS lugares y dos días: es la carga para mirar la ficha.
   // Y SEIS fotos en Montevideo, para ver la tira de 4 miniaturas con el "+2"
@@ -54,8 +60,11 @@ const fotosDemo = [
   foto('D9001', 'uruguay', 0, 1), foto('D9001', 'uruguay', 0, 2), foto('D9001', 'uruguay', 0, 3),
   foto('D9001', 'uruguay', 0, 9), foto('D9001', 'uruguay', 0, 10), foto('D9001', 'uruguay', 0, 11),
   foto('D9001', 'origen', 21, 4), foto('D9001', 'origen', 21, 5),
-  // D9005: tres fotos de origen, para ver la tira SIN "+N".
+  // D9005: tres fotos de origen, para ver la tira SIN "+N". Dos de ellas son
+  // viejas sin migrar: la fila dice cinco y se dibujan tres, sin un "+2" que
+  // prometa miniaturas que no existen.
   foto('D9005', 'origen', 2, 6), foto('D9005', 'origen', 2, 7), foto('D9005', 'origen', 3, 8),
+  fotoSinMiniatura('D9005', 'origen', 3, 12), fotoSinMiniatura('D9005', 'origen', 3, 13),
   // D9003: UNA foto de esta semana y SIETE del mes pasado, mismo lugar. Es el
   // caso con el que la revisión encontró que el texto y las miniaturas no
   // hablaban de lo mismo: la fila decía "1 foto en depósito GODILCO" y abajo
