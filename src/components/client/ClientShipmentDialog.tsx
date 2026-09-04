@@ -271,7 +271,10 @@ export default function ClientShipmentDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       {/* La cáscara va transparente: la superficie visible es la PanelCard de
           adentro (piel común), que ya trae borde de color, radio y recorte. */}
-      <DialogContent className="max-w-3xl w-[calc(100%-2rem)] max-h-[92vh] p-0 gap-0 border-0 bg-transparent shadow-none overflow-hidden">
+      {/* `sm:max-w-3xl` y no solo `max-w-3xl`: la cáscara de shadcn trae
+          `sm:max-w-lg`, que en pantalla grande le gana a la clase sin variante
+          y dejaba la ficha en 512px con los datos apretados. */}
+      <DialogContent className="max-w-3xl sm:max-w-3xl w-[calc(100%-2rem)] max-h-[92vh] p-0 gap-0 border-0 bg-transparent shadow-none overflow-hidden">
         {/* Radix necesita su propio título/descripción para anunciar el
             diálogo; el encabezado a la vista lo pinta PanelCard. */}
         <DialogTitle className="sr-only">Carga {refs.principal}</DialogTitle>

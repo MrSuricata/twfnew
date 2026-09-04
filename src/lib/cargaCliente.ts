@@ -189,12 +189,13 @@ export function lineaTiempoCliente(s: ParsedShipment, hoyISO: string): PasoLinea
     const i = ESTADO_CLIENTE_ORDEN.indexOf(paso)
     const alcanzado = i <= iActual
     const iso = fechaDelPaso(s, paso)
-    const futura = !!iso && iso > hoyISO
     return {
       estado: paso,
       label: etiquetaEstado(s, paso),
       fecha: iso ? fmtDateDMY(iso) : '',
-      detalle: iso ? (futura ? 'Estimado' : '') : (alcanzado ? '' : 'Pendiente'),
+      // Una fecha en un paso que TODAVÍA no pasó es una estimación, y se dice:
+      // si no, el cliente lee "En camino · 04/09" y entiende que ya salió.
+      detalle: alcanzado ? '' : (iso ? 'Estimado' : 'Pendiente'),
       alcanzado,
       actual: paso === actual,
     }

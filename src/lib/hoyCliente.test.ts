@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { ParsedShipment, OperativasRecord, ShipmentAlert } from './shipmentTypes'
 import {
-  estadoCliente, etiquetaEstado, proximoHito, progresoCliente, esActivaParaCliente,
+  estadoCliente, etiquetaEstado, proximoHito, esActivaParaCliente,
   llegadasADestino, esperandoSalida, llegadasAMontevideo, embarcadas, hoyCliente, alertasCliente,
   pasoSiguiente, textoDias, rutaDe, tipoDe, filtrarCargas, opcionesFiltro, FILTRO_TODO,
   DESTINO_DIAS_ADELANTE, MVD_DIAS_ADELANTE, CLIENTE_ENTREGADA_DIAS, DIAS_LLEGADA_SUPUESTA,
@@ -120,11 +120,6 @@ describe('estadoCliente — 6 pasos en lenguaje del cliente (ruta Montevideo)', 
     const s = carga({ ETA: dia(-6) }, [op({ OPERATIVA: 'CARGA A PISO', LIBRE: 'DEVUELTO' })])
     expect(estadoCliente(s, HOY)).toBe('en_montevideo')
     expect(esperandoSalida([s], HOY)).toHaveLength(1)
-  })
-  it('progresoCliente crece con el estado', () => {
-    expect(progresoCliente('por_embarcar')).toBe(0)
-    expect(progresoCliente('en_montevideo')).toBe(40)
-    expect(progresoCliente('entregada')).toBe(100)
   })
 })
 

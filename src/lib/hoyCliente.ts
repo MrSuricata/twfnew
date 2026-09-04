@@ -226,11 +226,6 @@ export const ESTADO_CLIENTE_CLASE: Record<EstadoCliente, string> = {
   entregada: 'bg-gray-100 text-gray-600',
 }
 
-/** Avance 0..100 para la barra de la fila expandida: derivado del estado. */
-export function progresoCliente(estado: EstadoCliente): number {
-  return Math.round((ESTADO_CLIENTE_ORDEN.indexOf(estado) / (ESTADO_CLIENTE_ORDEN.length - 1)) * 100)
-}
-
 export function estadoCliente(s: ParsedShipment, hoyISO: string): EstadoCliente {
   if (!llegoAPuerto(s, hoyISO)) {
     const dEtd = dias(hoyISO, s.ETD)
