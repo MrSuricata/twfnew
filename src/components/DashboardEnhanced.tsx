@@ -73,7 +73,7 @@ import OperationDetailOverlay from './operations/OperationDetailOverlay'
 import ChecksBoard from './checks/ChecksBoard'
 import { ParsedShipment } from '@/lib/shipmentTypes'
 import { ClientAccount, ShipmentDocument, OperativeReport, OriginPhoto, QuoteFormData } from '@/lib/quotationTypes'
-import { Truck, TruckLoad, LclAirShipment } from '@/lib/truckTypes'
+import { Truck, TruckLoad } from '@/lib/truckTypes'
 import { BillingRecord, buildBillableItems, indexBilling } from '@/lib/billingTypes'
 import { OperatorAssignment, DbShipment, UnifiedOperation } from '@/lib/operationsTypes'
 import Breadcrumbs from './Breadcrumbs'
@@ -90,7 +90,6 @@ interface DashboardEnhancedProps {
   quotes?: QuoteFormData[]
   trucks?: Truck[]
   truckLoads?: TruckLoad[]
-  lclAir?: LclAirShipment[]
   billing?: BillingRecord[]
   assignments?: OperatorAssignment[]
   dbShipments?: DbShipment[]
@@ -108,8 +107,6 @@ interface DashboardEnhancedProps {
   onCreateTruckWithLoads?: (truck: Truck, loads: TruckLoad[]) => Promise<boolean>
   onRefreshTrucks?: () => Promise<boolean>
   onDeleteTruckLoad?: (id: string) => void
-  onUpdateLclAir?: (shipments: LclAirShipment[]) => void
-  onDeleteLclAir?: (id: string) => void
   onUpdateBilling?: (row: BillingRecord) => void
   onClearBilling?: (ref: string) => void
   onPatchShipment?: (id: string, fields: Record<string, unknown>) => void
@@ -145,7 +142,7 @@ const HOY_AREAS: { id: HoyArea; label: string }[] = [
   { id: 'lcl', label: 'LCL Montevideo' },
 ]
 
-export default function DashboardEnhanced({ onLogout, isDataLoading = false, clients = [], shipments = [], documents = [], reports = [], originPhotos = [], quotes = [], trucks = [], truckLoads = [], lclAir = [], billing = [], assignments = [], dbShipments = [], dbSyncError = null, onUpdateShipments, onUpdateClients, onUpdateDocuments, onUpdateReports, onUpdateOriginPhotos, onUpdateQuotes, onUpdateTrucks, onDeleteTruck, onUpdateTruckLoads, onCreateTruckWithLoads, onDeleteTruckLoad, onUpdateLclAir, onDeleteLclAir, onUpdateBilling, onClearBilling, onPatchShipment, onCreateShipment, onDeleteShipment, onPatchFclField, onRenameRef, onRefreshTrucks, onReloadFromDB }: DashboardEnhancedProps) {
+export default function DashboardEnhanced({ onLogout, isDataLoading = false, clients = [], shipments = [], documents = [], reports = [], originPhotos = [], quotes = [], trucks = [], truckLoads = [], billing = [], assignments = [], dbShipments = [], dbSyncError = null, onUpdateShipments, onUpdateClients, onUpdateDocuments, onUpdateReports, onUpdateOriginPhotos, onUpdateQuotes, onUpdateTrucks, onDeleteTruck, onUpdateTruckLoads, onCreateTruckWithLoads, onDeleteTruckLoad, onUpdateBilling, onClearBilling, onPatchShipment, onCreateShipment, onDeleteShipment, onPatchFclField, onRenameRef, onRefreshTrucks, onReloadFromDB }: DashboardEnhancedProps) {
   const brand = useBrand()
   const ops = brand.capabilities.opsAdmin
   // Flip Etapa 4: post-flip las FCL viven en dbShipments. Reconstruirlas a
@@ -745,7 +742,6 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
             <TrucksManagement
               trucks={trucks}
               truckLoads={truckLoads}
-              lclAir={lclAir}
               dbShipments={dbShipments}
               shipments={fclShipments}
               clients={clients}
@@ -754,8 +750,6 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
               onUpdateTruckLoads={(l, ids) => { if (onUpdateTruckLoads) onUpdateTruckLoads(l, ids) }}
               onCreateTruckWithLoads={onCreateTruckWithLoads}
               onDeleteTruckLoad={(id) => { if (onDeleteTruckLoad) onDeleteTruckLoad(id) }}
-              onUpdateLclAir={(s) => { if (onUpdateLclAir) onUpdateLclAir(s) }}
-              onDeleteLclAir={(id) => { if (onDeleteLclAir) onDeleteLclAir(id) }}
               onRefreshTrucks={onRefreshTrucks}
               onCreateShipment={onCreateShipment}
               onPatchShipment={onPatchShipment}

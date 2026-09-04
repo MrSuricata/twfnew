@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Truck as TruckIcon, Boat, Package } from '@phosphor-icons/react'
-import type { Truck, TruckLoad, LclAirShipment } from '@/lib/truckTypes'
+import type { Truck, TruckLoad } from '@/lib/truckTypes'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
 import type { DbShipment, Operator } from '@/lib/operationsTypes'
 import type { CatalogClient } from '@/lib/clientCatalog'
@@ -15,10 +15,6 @@ import SugerenciasCamion from './SugerenciasCamion'
 interface TrucksManagementProps {
   trucks: Truck[]
   truckLoads: TruckLoad[]
-  /** @deprecated Registro viejo `lcl_air_shipments`. Ya no se usa: el alta y la
-   *  lista de LCL/aéreo salen de `shipments` (mode lcl|air). Queda declarado —
-   *  opcional y sin leer — solo porque DashboardEnhanced todavía lo pasa. */
-  lclAir?: LclAirShipment[]
   dbShipments?: DbShipment[]
   shipments: ParsedShipment[]
   /** Operativos para el alta de carga desde el armador (diálogo Nueva carga). */
@@ -28,10 +24,6 @@ interface TrucksManagementProps {
   /** Camión nuevo con sus cargas, respetando la FK y la ventana de escritura de App. */
   onCreateTruckWithLoads?: (truck: Truck, loads: TruckLoad[]) => Promise<boolean>
   onDeleteTruckLoad: (id: string) => void
-  /** @deprecated Ídem `lclAir`: escribían en `lcl_air_shipments`. Sin uso. */
-  onUpdateLclAir?: (shipments: LclAirShipment[]) => void
-  /** @deprecated Ídem `lclAir`. Sin uso. */
-  onDeleteLclAir?: (id: string) => void
   onRefreshTrucks?: () => Promise<boolean>
   /** Alta real de una carga (App.handleCreateShipment). false = abortada. */
   onCreateShipment?: (row: DbShipment, opts?: { duplicadoConfirmado?: boolean }) => boolean | void
