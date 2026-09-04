@@ -22,7 +22,7 @@ import { toast } from 'sonner'
 import { useEventosCalendario } from '@/components/agenda/AvisosCalendario'
 import { avisoParaFecha } from '@/lib/calendarioEventos'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
-import type { Truck, TruckLoad, LclAirShipment, TruckStatus } from '@/lib/truckTypes'
+import type { Truck, TruckLoad, TruckStatus } from '@/lib/truckTypes'
 import type { DbShipment, Operator } from '@/lib/operationsTypes'
 import { suggestNextRef } from '@/lib/operationsTypes'
 import {
@@ -74,7 +74,6 @@ interface TruckBuilderProps {
   truck: Truck
   trucks: Truck[]
   truckLoads: TruckLoad[]
-  lclAir: LclAirShipment[]
   dbShipments: DbShipment[]
   shipments: ParsedShipment[]
   /** Operativos para el alta de carga desde el armador. */
@@ -92,7 +91,7 @@ interface TruckBuilderProps {
 }
 
 export default function TruckBuilder(props: TruckBuilderProps) {
-  const { truck, trucks, truckLoads, lclAir, dbShipments, shipments, onBack, onUpdateTrucks, onUpdateTruckLoads, onDeleteTruckLoad, onDeleteTruck, onCreateShipment, onPatchShipment, clients = [] } = props
+  const { truck, trucks, truckLoads, dbShipments, shipments, onBack, onUpdateTrucks, onUpdateTruckLoads, onDeleteTruckLoad, onDeleteTruck, onCreateShipment, onPatchShipment, clients = [] } = props
 
   // Fiscales ya usados en las cargas → combo del alta (igual que LclAirManager).
   const knownFiscales = useMemo(
@@ -322,33 +321,8 @@ export default function TruckBuilder(props: TruckBuilderProps) {
     avisarEntregaPlanta({ ref: s.REF, cliente: prefill.client, fiscal: prefill.fiscal, entregaPlanta: esPlanta(s.REF) })
   }
 
-  const addLclAir = (s: LclAirShipment) => {
-    const load: TruckLoad = {
-      id: newId('load'),
-      truckId: truck.id,
-      sourceType: s.modality,
-      sourceRef: s.ref,
-      cntr: '',
-      client: s.client,
-      fiscal: s.fiscal,
-      kg: s.kg,
-      m3: s.m3,
-      pkgs: s.pkgs,
-      description: s.description,
-      mvdArrival: s.etaMvd,
-      desconsolDate: s.desconsolDate,
-      bl: s.mblHbl || '',
-      stock: '',
-      wood: s.wood,
-      overrides: {},
-      position: allMine.length,
-      pending: isDraft ? null : 'add',
-    }
-    onUpdateTruckLoads([...truckLoads, load], [load.id])
-    toast.success(`${s.ref} agregado al camión`)
-  }
-
-  // Add an LCL/aéreo load from the unified `shipments` table.
+  // Las LCL/aéreas se agregan SIEMPRE desde la tabla unificada (`addDb`): el
+  // registro viejo `lcl_air_shipments` salió del armador el 04/09/2026.
   const addDb = (s: DbShipment) => {
     // El telex solo aplica a marítimo: un aéreo no tiene telex que liberar.
     if ((s.mode === 'fcl' || s.mode === 'lcl') && !confirmarTelexAlSumar(s.ref, s.telex ? 'SI' : '')) return
@@ -813,13 +787,11 @@ export default function TruckBuilder(props: TruckBuilderProps) {
         <Card className="lg:sticky lg:top-4 lg:h-[calc(100vh-8rem)] flex flex-col">
           <AvailableLoadsPanel
             shipments={shipments}
-            lclAir={lclAir}
             dbShipments={dbShipments}
             trucks={trucks}
             truckLoads={truckLoads}
             currentTruckId={truck.id}
             onAddFcl={addFcl}
-            onAddLclAir={addLclAir}
             onAddDb={addDb}
             onCreateNew={onCreateShipment ? () => setNewCargoOpen(true) : undefined}
           />

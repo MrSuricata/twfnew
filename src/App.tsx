@@ -3,7 +3,7 @@ import { toast } from 'sonner'
 import { Language, getStoredLanguage, setStoredLanguage } from '@/lib/i18n'
 import { QuoteFormData, ClientAccount, ShipmentDocument, OperativeReport, OriginPhoto } from '@/lib/quotationTypes'
 import { ParsedShipment } from '@/lib/shipmentTypes'
-import { Truck, TruckLoad, LclAirShipment } from '@/lib/truckTypes'
+import { Truck, TruckLoad } from '@/lib/truckTypes'
 import { getBrand } from '@/lib/brand'
 import { canApplyTrucksRefresh, createTrucksWriteWindow } from '@/lib/trucksRefreshGuard'
 import { BillingRecord } from '@/lib/billingTypes'
@@ -15,7 +15,7 @@ import UiPreview from '@/components/dev/UiPreview'
 import { filterShipments } from '@/lib/sheetsSync'
 import { verifySession, clearAuth, authFetch, hasStoredToken, adoptImpersonationToken, onSesionVencida } from '@/lib/authClient'
 import { shouldRestoreSession } from '@/lib/authGate'
-import { loadAdminData, saveQuotes, saveDocuments, saveReports, saveClients, saveTrucks, saveTruckLoads, saveLclAir, deleteTruck as apiDeleteTruck, deleteTruckLoad as apiDeleteTruckLoad, deleteLclAir as apiDeleteLclAir, saveBilling, deleteBilling as apiDeleteBilling, patchDbShipment, createDbShipment, deleteDbShipment, patchFclShipment, renameShipmentRef, fetchTrucks, fetchTruckLoads } from '@/lib/dataClient'
+import { loadAdminData, saveQuotes, saveDocuments, saveReports, saveClients, saveTrucks, saveTruckLoads, deleteTruck as apiDeleteTruck, deleteTruckLoad as apiDeleteTruckLoad, saveBilling, deleteBilling as apiDeleteBilling, patchDbShipment, createDbShipment, deleteDbShipment, patchFclShipment, renameShipmentRef, fetchTrucks, fetchTruckLoads } from '@/lib/dataClient'
 
 import Login from './components/Login'
 import ClientLogin from './components/ClientLogin'
@@ -135,7 +135,6 @@ function App() {
   const [originPhotos, setOriginPhotos] = useState<OriginPhoto[]>(() => loadFromStorage('twf-origin-photos', []))
   const [trucks, setTrucks] = useState<Truck[]>(() => loadFromStorage('twf-trucks', []))
   const [truckLoads, setTruckLoads] = useState<TruckLoad[]>(() => loadFromStorage('twf-truck-loads', []))
-  const [lclAir, setLclAir] = useState<LclAirShipment[]>(() => loadFromStorage('twf-lcl-air', []))
   const [billing, setBilling] = useState<BillingRecord[]>(() => loadFromStorage('twf-billing', []))
   const [assignments, setAssignments] = useState<OperatorAssignment[]>(() => loadFromStorage('twf-operator-assignments', []))
   const [dbShipments, setDbShipments] = useState<DbShipment[]>(() => loadFromStorage('twf-db-shipments', []))
@@ -188,7 +187,6 @@ function App() {
   // guardas que ya tenían camiones y clientes.
   const pendingShipmentWritesRef = useRef(0)
   const lastShipmentWriteTsRef = useRef(0)
-  const pendingLclAirWritesRef = useRef(0)
   const pendingBillingWritesRef = useRef(0)
 
   // ── Load data from Supabase when admin logs in ──
@@ -257,11 +255,6 @@ function App() {
       if (!trucksWindowOpen && canApplyTrucksRefresh(pendingTruckLoadsWritesRef.current, loadStartTs, lastTruckLoadsWriteTsRef.current)) {
         setTruckLoads(prev => (data.truckLoads.length === 0 && prev.length > 0) ? prev : data.truckLoads)
         if (data.truckLoads.length > 0) saveToStorage('twf-truck-loads', data.truckLoads)
-      }
-
-      if (pendingLclAirWritesRef.current === 0) {
-        setLclAir(data.lclAir)
-        saveToStorage('twf-lcl-air', data.lclAir)
       }
 
       if (pendingBillingWritesRef.current === 0) {
@@ -790,31 +783,10 @@ function App() {
     }
   }
 
-  const handleUpdateLclAir = (updated: LclAirShipment[]) => {
-    setLclAir(updated)
-    saveToStorage('twf-lcl-air', updated)
-    if (isAdminLoggedIn && updated.length > 0) {
-      pendingLclAirWritesRef.current += 1
-      saveLclAir(updated)
-        .catch(err => { console.warn('[DB] Failed to save LCL/Air:', err); toast.error('No se pudo guardar la carga LCL/aérea') })
-        .finally(() => {
-          pendingLclAirWritesRef.current = Math.max(0, pendingLclAirWritesRef.current - 1)
-        })
-    }
-  }
-
-  const handleDeleteLclAir = async (id: string) => {
-    const next = lclAir.filter(l => l.id !== id)
-    setLclAir(next)
-    saveToStorage('twf-lcl-air', next)
-    if (isAdminLoggedIn) {
-      try {
-        await apiDeleteLclAir(id)
-      } catch (err) {
-        console.warn('[DB] Failed to delete LCL/Air:', err); toast.error('No se pudo borrar la carga LCL/aérea')
-      }
-    }
-  }
+  // Las LCL/aéreas NO tienen handlers propios acá: se dan de alta, se editan y
+  // se borran como cualquier carga (handleCreateShipment / handlePatchShipment /
+  // handleDeleteShipment) sobre `shipments`. El registro viejo
+  // `lcl_air_shipments` salió de la app el 04/09/2026 — ver dataClient.ts.
 
   // ── Billing overlay ──
   // upsert one ref's billing row (mark facturada / pendiente / no_aplica).
@@ -1174,7 +1146,6 @@ function App() {
           quotes={quotes}
           trucks={trucks}
           truckLoads={truckLoads}
-          lclAir={lclAir}
           billing={billing}
           assignments={assignments}
           dbShipments={dbShipments}
@@ -1191,8 +1162,6 @@ function App() {
           onCreateTruckWithLoads={handleCreateTruckWithLoads}
           onRefreshTrucks={refreshTrucksFromDb}
           onDeleteTruckLoad={handleDeleteTruckLoad}
-          onUpdateLclAir={handleUpdateLclAir}
-          onDeleteLclAir={handleDeleteLclAir}
           onUpdateBilling={handleUpdateBilling}
           onClearBilling={handleClearBilling}
           onPatchShipment={handlePatchShipment}

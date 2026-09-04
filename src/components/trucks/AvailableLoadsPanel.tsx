@@ -13,20 +13,18 @@ import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import { Plus, MagnifyingGlass, Package, Boat, Airplane, Truck as TruckIcon } from '@phosphor-icons/react'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
-import type { LclAirShipment, Truck, TruckLoad, LoadSource } from '@/lib/truckTypes'
+import type { Truck, TruckLoad, LoadSource } from '@/lib/truckTypes'
 import type { DbShipment } from '@/lib/operationsTypes'
-import { formatKg, formatM3, getAssignedCntrs, cntrKey, contenedoresLibres, isFclAvailable, isLclAirAvailable } from '@/lib/truckUtils'
+import { formatKg, formatM3, getAssignedCntrs, cntrKey, contenedoresLibres, isFclAvailable } from '@/lib/truckUtils'
 import { useBrand } from '@/lib/brand'
 
 interface AvailableLoadsPanelProps {
   shipments: ParsedShipment[]
-  lclAir: LclAirShipment[]
   dbShipments?: DbShipment[]          // unified table (LCL/aéreo) — la fuente nueva
   trucks: Truck[]
   truckLoads: TruckLoad[]
   currentTruckId: string
   onAddFcl: (shipment: ParsedShipment, cntr?: string) => void
-  onAddLclAir: (shipment: LclAirShipment) => void
   onAddDb?: (shipment: DbShipment) => void
   /** Abre el alta de carga desde el armador (cuando la carga aún no existe). */
   onCreateNew?: () => void
@@ -51,19 +49,16 @@ interface AvailableRow {
   imo?: boolean          // ☢️ mercancía peligrosa
   entregaPlanta?: boolean // 🏭 del fiscal directo a la planta del cliente
   fcl?: ParsedShipment
-  lclAir?: LclAirShipment
   db?: DbShipment
 }
 
 export default function AvailableLoadsPanel({
   shipments,
-  lclAir,
   dbShipments,
   trucks,
   truckLoads,
   currentTruckId,
   onAddFcl,
-  onAddLclAir,
   onAddDb,
   onCreateNew,
 }: AvailableLoadsPanelProps) {
@@ -150,11 +145,12 @@ export default function AvailableLoadsPanel({
       }
     }
 
-    // LCL / Air from the unified `shipments` table (the new source of truth).
-    const dbRefs = new Set<string>()
+    // LCL / aéreo de la tabla unificada `shipments` — la ÚNICA fuente desde el
+    // 04/09/2026. El registro viejo `lcl_air_shipments` ya no se lee acá: tenía
+    // una sola fila, de mayo, y estaba migrada a `shipments` (archivada), así
+    // que la rama vieja no ofrecía nada y solo mantenía viva la tabla vieja.
     for (const s of (dbShipments || [])) {
       if (s.mode !== 'lcl' && s.mode !== 'air') continue
-      dbRefs.add(s.ref)
       if (modeFilter === 'fcl') continue
       if (modeFilter !== 'all' && modeFilter !== s.mode) continue
       if (inThisTruck.has(s.ref)) continue
@@ -181,32 +177,8 @@ export default function AvailableLoadsPanel({
       })
     }
 
-    // LCL / Air from the legacy registry (lcl_air_shipments) — skip any ref
-    // already provided by the DB above to avoid duplicates.
-    for (const s of lclAir) {
-      if (modeFilter === 'fcl') continue
-      if (modeFilter !== 'all' && modeFilter !== s.modality) continue
-      if (dbRefs.has(s.ref)) continue
-      if (inThisTruck.has(s.ref)) continue
-      if (!isLclAirAvailable(s, assignedElsewhere, { showArchived })) continue
-      if (onlyArrived && s.status === 'en_origen') continue
-      if (onlyArrived && s.status === 'en_transito') continue
-      out.push({
-        ref: s.ref,
-        type: s.modality,
-        client: s.client,
-        fiscal: s.fiscal,
-        kg: s.kg,
-        m3: s.m3,
-        pkgs: s.pkgs,
-        description: s.description,
-        mvdArrival: s.etaMvd,
-        lclAir: s,
-      })
-    }
-
     return out
-  }, [shipments, lclAir, dbShipments, modeFilter, assignedElsewhere, inThisTruck, showArchived, onlyArrived, plantaByRef])
+  }, [shipments, dbShipments, modeFilter, assignedElsewhere, inThisTruck, showArchived, onlyArrived, plantaByRef])
 
   const fiscals = useMemo(() => {
     const set = new Set<string>()
@@ -347,7 +319,6 @@ export default function AvailableLoadsPanel({
                 onAdd={() => {
                   if (r.fcl) onAddFcl(r.fcl, r.cntr || '')
                   else if (r.db) onAddDb?.(r.db)
-                  else if (r.lclAir) onAddLclAir(r.lclAir)
                 }}
               />
             ))}

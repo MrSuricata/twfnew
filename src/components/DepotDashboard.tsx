@@ -5,8 +5,9 @@
  *
  * El ORDEN no es fijo: lo decide `lib/seccionesDeposito.ts` según lo que haya
  * hoy. Con operativas del día manda el día; sin operativas, la card vacía baja
- * (sigue estando: que diga "no hay nada" también es información) y suben los
- * vacíos que sangran y los retiros que ya se pueden ir a buscar.
+ * SIEMPRE —haya o no algo urgente— aunque sigue estando (que diga "no hay nada"
+ * también es información), y arriba quedan retiros y vacíos: entre esos dos
+ * sube primero lo que sangra y después lo que ya se puede ir a buscar.
  *
  * El depósito PROPONE ("Retiré", "Devolví el vacío", "Desconsolidé, stock Nº")
  * y el equipo confirma desde HOY admin: acá no se escribe nada en la operación,
@@ -243,8 +244,9 @@ export default function DepotDashboard({ shipments, depotName, userName, onLogou
     avisos: misAvisos.length,
   }), [hoyOps, retiros, libres, lcls, misAvisos])
 
-  // Sin trabajo hoy, la card vacía deja de ser lo primero que se lee y suben
-  // los vacíos que sangran y los retiros que ya se pueden ir a buscar.
+  // Sin trabajo hoy, la card vacía deja de ser lo primero que se lee —siempre,
+  // no solo cuando hay algo urgente— y arriba quedan los vacíos que sangran y
+  // los retiros que ya se pueden ir a buscar.
   const ordenCalculado = useMemo(() => ordenSeccionesDeposito(estadoSecciones), [estadoSecciones])
   // …pero el orden NO se mueve mientras el usuario está apuntando a una fila.
   // Los datos cambian solos (al mandar un aviso se refrescan, y una

@@ -10,6 +10,13 @@
  * El estado tampoco se elige más: sale de los datos (ver `lclEstados`). El
  * desplegable manual dejó cuatro cargas congeladas en "en origen" desde junio.
  *
+ * 04/09/2026 — UNA sola alta: esta pantalla y el alta de Operaciones escriben
+ * las dos en `shipments` (mode lcl|air), que es la fuente única. El registro
+ * viejo `lcl_air_shipments` se sacó de toda la app (dataClient, armador de
+ * camiones y endpoint): Brian preguntó "¿por qué vamos a tener los dos?" con
+ * 444 cargas de un lado y 1 fila de mayo del otro, ya migrada. La tabla no se
+ * borró — queda en Supabase como archivo histórico, sin lector.
+ *
  * Alta (Brian 01/09/2026): la ref la escribe el operativo (se sugiere la
  * autogenerada pero se puede pisar) y el formulario pide los mismos datos
  * clave que el alta LCL desde Operaciones — mismo componente <LclDatosClave>

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { Truck as TruckIcon, Boat, Package } from '@phosphor-icons/react'
-import type { Truck, TruckLoad, LclAirShipment } from '@/lib/truckTypes'
+import type { Truck, TruckLoad } from '@/lib/truckTypes'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
 import type { DbShipment, Operator } from '@/lib/operationsTypes'
 import type { CatalogClient } from '@/lib/clientCatalog'
@@ -15,7 +15,6 @@ import SugerenciasCamion from './SugerenciasCamion'
 interface TrucksManagementProps {
   trucks: Truck[]
   truckLoads: TruckLoad[]
-  lclAir: LclAirShipment[]
   dbShipments?: DbShipment[]
   shipments: ParsedShipment[]
   /** Operativos para el alta de carga desde el armador (diálogo Nueva carga). */
@@ -25,8 +24,6 @@ interface TrucksManagementProps {
   /** Camión nuevo con sus cargas, respetando la FK y la ventana de escritura de App. */
   onCreateTruckWithLoads?: (truck: Truck, loads: TruckLoad[]) => Promise<boolean>
   onDeleteTruckLoad: (id: string) => void
-  onUpdateLclAir: (shipments: LclAirShipment[]) => void
-  onDeleteLclAir: (id: string) => void
   onRefreshTrucks?: () => Promise<boolean>
   /** Alta real de una carga (App.handleCreateShipment). false = abortada. */
   onCreateShipment?: (row: DbShipment, opts?: { duplicadoConfirmado?: boolean }) => boolean | void
@@ -83,7 +80,6 @@ export default function TrucksManagement(props: TrucksManagementProps) {
         truck={selectedTruck}
         trucks={props.trucks}
         truckLoads={props.truckLoads}
-        lclAir={props.lclAir}
         dbShipments={props.dbShipments || []}
         shipments={props.shipments}
         onBack={() => setSelectedTruckId(null)}

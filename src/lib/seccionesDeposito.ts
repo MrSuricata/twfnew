@@ -7,16 +7,27 @@
  * programados"*, con OCHO retiros justo abajo. "El que entra a trabajar lee
  * primero que no tiene nada que hacer".
  *
- * La regla que decidió, y que vive acá:
- *  · **Si hay operativas hoy**, "Operativas de hoy" va primero. Es el trabajo
+ * La regla, en una línea: **sin operativas hoy, esa card no encabeza nunca.**
+ *  · **Con operativas hoy**, "Operativas de hoy" va primero. Es el trabajo
  *    del día y no lo desplaza nada.
- *  · **Si no hay**, esa card BAJA pero NO desaparece —que diga "no hay nada"
- *    también es información— y suben las urgentes, en este orden:
+ *  · **Sin operativas**, esa card BAJA pero NO desaparece —que diga "no hay
+ *    nada" también es información— y arriba quedan las dos cards de trabajo
+ *    real, retiros y vacíos. Entre ESAS DOS manda la urgencia, en el orden
+ *    que eligió Brian:
  *      1. **Vacíos vencidos o a ≤5 días**: "primero lo que sangra", el
  *         demurrage corre todos los días.
  *      2. **Retiros en verde**: liberado + terminal paga, se puede ir a
  *         buscar YA.
- *      3. El resto, en el orden de siempre.
+ *    Si no hay nada urgente, esas dos van en el orden de siempre (retiros,
+ *    vacíos) y "Hoy" baja igual: tercera.
+ *
+ * Por qué SIN EXCEPCIÓN (cambio del 04/09, misma mañana): la primera versión
+ * bajaba la card solo cuando había algo urgente, así que con el portal en cero
+ * "hoy no tenés nada" volvía a ser el titular. Brian dijo que le daba lo mismo
+ * y que decidiéramos: se eligió la regla sin excepción porque se explica en una
+ * línea y no hay que acordarse de cuándo aplica. El costo conocido es que en un
+ * día totalmente vacío lo primero pasa a ser "Retiros próximos: 0", que no dice
+ * más que la otra — pero tampoco menos.
  *
  * Lo que este archivo NO hace: inventar una definición nueva de "urgente".
  * Las dos señales salen tal cual de `lib/hoyDeposito.ts` — `motivo:
@@ -100,18 +111,28 @@ export const SIN_NADA: EstadoSeccionesDeposito = {
 
 /**
  * El orden en que se pintan las cards. Ver el docblock del archivo: con
- * operativas hoy manda el trabajo del día; sin operativas, sube lo que
- * sangra (vacíos) y después lo que se puede ir a buscar (retiros en verde).
+ * operativas hoy manda el trabajo del día; sin operativas, "Hoy" baja SIEMPRE
+ * debajo de retiros y vacíos, y entre esos dos sube primero lo que sangra
+ * (vacíos por vencer) y después lo que se puede ir a buscar (retiros en verde).
  */
 export function ordenSeccionesDeposito(e: EstadoSeccionesDeposito): readonly SeccionDepositoId[] {
   if (e.operativasHoy > 0) return ORDEN_BASE_DEPOSITO
-  const arriba: SeccionDepositoId[] = []
+
   // El orden de estos dos `if` ES la prioridad que eligió Brian: primero lo que
   // sangra, después lo que se puede ir a buscar.
-  if (e.vaciosPorVencer > 0) arriba.push('vacios')
-  if (e.retirosListos > 0) arriba.push('retiros')
-  if (arriba.length === 0) return ORDEN_BASE_DEPOSITO
-  return [...arriba, ...ORDEN_BASE_DEPOSITO.filter(id => !arriba.includes(id))]
+  const urgentes: SeccionDepositoId[] = []
+  if (e.vaciosPorVencer > 0) urgentes.push('vacios')
+  if (e.retirosListos > 0) urgentes.push('retiros')
+
+  // Las dos cards de trabajo real van arriba SIEMPRE, con o sin urgencia: sin
+  // nada urgente quedan en el orden de siempre. "Hoy" cae justo debajo — nunca
+  // encabeza cuando está en cero, que es toda la regla.
+  const trabajo: SeccionDepositoId[] = [
+    ...urgentes,
+    ...(['retiros', 'vacios'] as const).filter(id => !urgentes.includes(id)),
+  ]
+  const resto = ORDEN_BASE_DEPOSITO.filter(id => id !== 'hoy' && !trabajo.includes(id))
+  return [...trabajo, 'hoy', ...resto]
 }
 
 /**
