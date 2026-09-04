@@ -14,7 +14,9 @@
  *
  * Tres motivos y dos umbrales, porque no son lo mismo:
  *  · `intervalo` — el reloj de fondo. Se pide a las 4 h, la mitad de la vida
- *    de la firma: si el pedido falla, todavía quedan 4 h de margen.
+ *    de la firma: si el pedido falla, todavía quedan 4 h de margen. El reloj
+ *    PREGUNTA cada `TICK_FIRMAS_MS` (minutos): el que decide es el umbral, no
+ *    el pulso del `setInterval`.
  *  · `volvio` — el cliente volvió a la pestaña. Es el momento en que MIRA,
  *    así que alcanza con que la última vuelta no sea de recién: sin este
  *    piso, alguien que alterna entre dos pestañas dispara un pedido (y una
@@ -31,6 +33,20 @@ export const FIRMA_TTL_MS = 8 * 60 * 60 * 1000
 
 /** Cada cuánto se vuelve a pedir por reloj: la mitad de la vida de la firma. */
 export const REFRESCO_FIRMAS_MS = 4 * 60 * 60 * 1000
+
+/**
+ * Cada cuánto CORRE el reloj de fondo. No es el umbral: es el pulso con el que
+ * el portal le pregunta a `tocaRefrescarFirmas`.
+ *
+ * Son dos cosas distintas y confundirlas dejaba el refresco sin efecto: el
+ * intervalo corría cada `REFRESCO_FIRMAS_MS` y preguntaba con ese mismo
+ * umbral, pero la ventana se cuenta desde que el pedido RESOLVIÓ (arranque +
+ * latencia), así que el primer tick llegaba con `edad = 4 h − latencia` y se
+ * salteaba SIEMPRE. El refresco terminaba cayendo a las 8 h: el TTL exacto,
+ * margen cero. Con un pulso corto el que decide es el umbral, que es lo que
+ * pedía el diseño "reloj + umbral".
+ */
+export const TICK_FIRMAS_MS = 10 * 60 * 1000
 
 /** Piso entre pedidos disparados por el usuario (volver a la pestaña, una
  *  miniatura rota). Ni un pedido por cada cambio de foco. */
@@ -68,4 +84,90 @@ export function firmaVencida(ultimoMs: number | null | undefined, ahoraMs: numbe
   const ultimo = Number(ultimoMs)
   if (!Number.isFinite(ultimo) || ultimo <= 0) return false
   return Number(ahoraMs) - ultimo >= FIRMA_TTL_MS
+}
+
+// ── El pedido en sí: una ventana que corre solo si el pedido SIRVIÓ ────────
+
+/**
+ * El estado del refresco, sin React: cuándo fue el último pedido que trajo
+ * firmas nuevas y si hay uno en vuelo. El portal lo guarda en un `useRef` y le
+ * pregunta; acá se puede testear.
+ *
+ * Dos cosas que el portal hacía mal y que este objeto no deja repetir:
+ *  · Marcaba la ventana ANTES del fetch, así que un pedido que fallaba
+ *    (offline de un minuto, 500 del server) quemaba las 4 h igual y el próximo
+ *    intento por reloj era recién 4 h después — con la firma ya vencida.
+ *  · Sin "en vuelo", contar solo los pedidos que salieron bien haría que 20
+ *    miniaturas rotas dispararan 20 fetch: la ventana todavía no corrió.
+ */
+export interface RefrescoFirmas {
+  /** ¿Sale un pedido ahora? Si vuelve `true`, queda marcado como en vuelo. */
+  pedir(motivo: MotivoRefresco, ahoraMs?: number): boolean
+  /** El pedido terminó. `ok` = trajo firmas nuevas: recién ahí corre la ventana. */
+  termino(ok: boolean, ahoraMs?: number): void
+  /** Cuándo resolvió el último pedido que sirvió (0 = ninguno todavía). */
+  ultimoOk(): number
+  /** Hay un pedido esperando respuesta. */
+  enVuelo(): boolean
+}
+
+export function crearRefrescoFirmas(ultimoOkMs = 0): RefrescoFirmas {
+  const inicial = Number(ultimoOkMs)
+  let ultimo = Number.isFinite(inicial) && inicial > 0 ? inicial : 0
+  let vuelo = false
+  return {
+    pedir(motivo, ahoraMs = Date.now()) {
+      if (vuelo) return false
+      if (!tocaRefrescarFirmas(ultimo, ahoraMs, motivo)) return false
+      vuelo = true
+      return true
+    },
+    termino(ok, ahoraMs = Date.now()) {
+      vuelo = false
+      if (ok) ultimo = ahoraMs
+    },
+    ultimoOk: () => ultimo,
+    enVuelo: () => vuelo,
+  }
+}
+
+// ── Las miniaturas que fallaron ───────────────────────────────────────────
+
+/**
+ * Qué miniaturas fallaron, atado a LAS FUENTES con las que fallaron.
+ *
+ * Sin ese atado, una miniatura rota quedaba rota para siempre: la fila tiene
+ * `key` estable, el componente no se vuelve a montar cuando llegan URLs
+ * nuevas, y con `rota === true` el `<img>` ni se dibuja. El refresco traía
+ * firmas buenas y el cliente seguía viendo íconos de cámara hasta recargar la
+ * página — justo el bug que este módulo existe para curar.
+ */
+export interface RotasMiniaturas {
+  /** Huella de las fuentes que se dibujaban cuando fallaron. */
+  clave: string
+  /** Ids de las que fallaron con ESA clave. */
+  ids: string[]
+}
+
+export const SIN_ROTAS: RotasMiniaturas = { clave: '', ids: [] }
+
+/** La huella de lo que se está dibujando: si cambia, las firmas son otras. */
+export function claveDeFuentes(fuentes: readonly string[]): string {
+  // JSON y no un `join`: una fuente con el separador adentro no puede hacer
+  // que dos listas distintas den la misma clave.
+  return JSON.stringify([...(fuentes || [])])
+}
+
+/** Las que siguen rotas para estas fuentes. Fuentes nuevas → ninguna. */
+export function rotasVigentes(estado: RotasMiniaturas | null | undefined, clave: string): string[] {
+  return estado && estado.clave === clave ? estado.ids : []
+}
+
+/** Marca una miniatura como rota, olvidando las de fuentes viejas. */
+export function conRota(
+  estado: RotasMiniaturas | null | undefined, clave: string, id: string,
+): RotasMiniaturas {
+  const vigentes = rotasVigentes(estado, clave)
+  if (vigentes.includes(id)) return estado as RotasMiniaturas
+  return { clave, ids: [...vigentes, id] }
 }

@@ -48,7 +48,7 @@ import { matchesPattern, findClientByEmail } from '@/lib/clientMatching'
 import { useBrand } from '@/lib/brand'
 import { saludoPersonal } from '@/lib/saludo'
 import { downloadClientStatusPdf } from '@/lib/clientStatusPdf'
-import { tocaRefrescarFirmas, REFRESCO_FIRMAS_MS, type MotivoRefresco } from '@/lib/firmasFotos'
+import { crearRefrescoFirmas, TICK_FIRMAS_MS, type MotivoRefresco, type RefrescoFirmas } from '@/lib/firmasFotos'
 import HoyCliente from './HoyCliente'
 import {
   estadoCliente, ESTADO_CLIENTE_LABEL, ESTADO_CLIENTE_ORDEN, traducirAlerta,
@@ -121,8 +121,10 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
   const [serverShipments, setServerShipments] = useState<ParsedShipment[]>([])
   const [serverReports, setServerReports] = useState<OperativeReport[]>([])
   const [serverPhotos, setServerPhotos] = useState<OriginPhoto[]>([])
-  /** Cuándo se pidieron por última vez las fotos (y con ellas, sus firmas). */
-  const ultimoPedidoFotos = useRef<number>(0)
+  /** El refresco de las firmas de las fotos: cuándo se pidieron por última vez
+   *  CON ÉXITO y si hay un pedido en vuelo (lib/firmasFotos). */
+  const refrescoFirmas = useRef<RefrescoFirmas | null>(null)
+  if (!refrescoFirmas.current) refrescoFirmas.current = crearRefrescoFirmas()
   const [isLoadingData, setIsLoadingData] = useState(true)
 
   // ── Filter states ──
@@ -163,7 +165,8 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
         }
         if (photosData.status === 'fulfilled' && photosData.value) {
           setServerPhotos(photosData.value)
-          ultimoPedidoFotos.current = Date.now()
+          // Las firmas son de recién: desde acá corren las 8 h.
+          refrescoFirmas.current?.termino(true)
         }
       } catch (err) {
         console.warn('Failed to fetch client data from server:', err)
@@ -182,16 +185,29 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
   // (`useNoticias`); cuándo toca lo decide `lib/firmasFotos`.
   const refrescarFotos = useCallback((motivo: MotivoRefresco) => {
     if (preview) return   // la vista previa del admin no habla con el server
-    if (!tocaRefrescarFirmas(ultimoPedidoFotos.current, Date.now(), motivo)) return
-    ultimoPedidoFotos.current = Date.now()
+    const refresco = refrescoFirmas.current
+    if (!refresco || !refresco.pedir(motivo)) return
     fetchClientOriginPhotos()
-      .then(fotos => { if (fotos && fotos.length > 0) setServerPhotos(fotos) })
-      .catch(() => { /* se conserva lo que había: mejor una firma vieja que nada */ })
+      .then(fotos => {
+        // La ventana corre recién cuando el pedido TRAJO firmas nuevas: uno
+        // que falla no puede dejarnos otras 4 h sin volver a intentar.
+        refresco.termino(true)
+        if (fotos && fotos.length > 0) setServerPhotos(fotos)
+      })
+      .catch(() => {
+        // Se conserva lo que había: mejor una firma vieja que nada. Y el
+        // próximo tick del reloj (minutos) reintenta.
+        refresco.termino(false)
+      })
   }, [preview])
 
   useEffect(() => {
     if (preview) return
-    const timer = window.setInterval(() => refrescarFotos('intervalo'), REFRESCO_FIRMAS_MS)
+    // El reloj PREGUNTA cada pocos minutos; el que decide es el umbral de
+    // `tocaRefrescarFirmas`. Con el pulso igual al umbral (como estaba) el
+    // primer tick caía con `edad = 4 h − latencia` y se salteaba siempre: el
+    // refresco terminaba ocurriendo a las 8 h, justo cuando la firma vencía.
+    const timer = window.setInterval(() => refrescarFotos('intervalo'), TICK_FIRMAS_MS)
     const alVolver = () => { if (document.visibilityState === 'visible') refrescarFotos('volvio') }
     document.addEventListener('visibilitychange', alVolver)
     return () => {

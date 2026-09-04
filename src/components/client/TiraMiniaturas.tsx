@@ -14,6 +14,11 @@
  *    dura 8 h y un portal abierto toda la jornada las pasa: la foto que falla
  *    se reemplaza por una caja con la cámara y se avisa al portal para que
  *    vuelva a pedir las URLs (`onRota` → firmasFotos.tocaRefrescarFirmas).
+ *  · Y ese "rota" DURA LO QUE DURA LA FUENTE. La lista de rotas se ata a las
+ *    fuentes que se estaban dibujando (`claveDeFuentes`): cuando el refresco
+ *    trae URLs nuevas, la clave cambia y nadie sigue roto. Sin eso el arreglo
+ *    de arriba no se veía —la `key` de la fila es estable, el componente no
+ *    remonta— y las miniaturas quedaban en ícono de cámara hasta recargar.
  *  · Los colores salen del tono de la card (piel común, `clasesTono`), no de
  *    hex sueltos: bajo Mediterránea se resuelven solos.
  */
@@ -21,6 +26,9 @@ import { useState } from 'react'
 import { Camera, Images } from '@phosphor-icons/react'
 import { useBrand } from '@/lib/brand'
 import { clasesTono, type TonoPanel } from '@/components/partner/PanelCard'
+import {
+  claveDeFuentes, rotasVigentes, conRota, SIN_ROTAS, type RotasMiniaturas,
+} from '@/lib/firmasFotos'
 import type { OriginPhoto } from '@/lib/quotationTypes'
 
 /** La fuente de la miniatura: la URL firmada, o el base64 viejo de las fotos
@@ -46,14 +54,18 @@ export default function TiraMiniaturas({
 }) {
   const med = useBrand().id === 'med'
   const t = clasesTono(tono, med)
-  const [rotas, setRotas] = useState<string[]>([])
+  const [rotas, setRotas] = useState<RotasMiniaturas>(SIN_ROTAS)
   const conFuente = visibles.filter(f => fuenteMiniatura(f))
+  // La huella de lo que se está dibujando AHORA: id + fuente de cada foto.
+  const clave = claveDeFuentes(conFuente.map(f => `${f.id}|${fuenteMiniatura(f)}`))
+  // Rotas de ESTAS fuentes. Si el portal ya trajo firmas nuevas, ninguna.
+  const rotasAhora = rotasVigentes(rotas, clave)
   // Sin miniaturas (fotos viejas sin migrar) la tira no se dibuja: la fila
   // queda como estaba, nunca con un hueco.
   if (conFuente.length === 0) return null
 
   const marcarRota = (id: string) => {
-    setRotas(prev => (prev.includes(id) ? prev : [...prev, id]))
+    setRotas(prev => conRota(prev, clave, id))
     onRota?.()
   }
 
@@ -68,7 +80,7 @@ export default function TiraMiniaturas({
   return (
     <div className="flex items-center gap-2 flex-wrap" role="group" aria-label={`Fotos: ${etiqueta}`}>
       {conFuente.map((f, i) => {
-        const rota = rotas.includes(f.id)
+        const rota = rotasAhora.includes(f.id)
         return (
           <button
             key={f.id}
