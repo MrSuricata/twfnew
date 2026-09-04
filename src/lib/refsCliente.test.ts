@@ -4,7 +4,7 @@
  * vuelve a poner "TWF " adelante o le come la "A" a una LCL, salta acá.
  */
 import { describe, it, expect } from 'vitest'
-import { refsCliente, refClienteSana, numeroNuestro, refsEnLinea, REF_CLIENTE_MAX } from './refsCliente'
+import { refsCliente, refClienteSana, numeroNuestro, refsEnLinea, esAliasNuestro, REF_CLIENTE_MAX } from './refsCliente'
 
 describe('numeroNuestro — el número pelado, sin marca y sin A', () => {
   it('le saca la A a las refs de la planilla', () => {
@@ -111,8 +111,11 @@ describe('refsCliente — principal, secundaria y REF intacta', () => {
   })
 
   it('si el cliente cargó nuestro propio número, no se muestra dos veces', () => {
+    // Lo que se VE es lo mismo de siempre: "8121" y nada al lado. Cambia solo
+    // `propia`, que ahora dice la verdad — eso no es una referencia del
+    // cliente, es la nuestra copiada (ver `esAliasNuestro`).
     expect(refsCliente({ REF: 'A8121', CLIENT_REF: '8121' }, 'CHIAPERO'))
-      .toEqual({ principal: '8121', secundaria: '', propia: true })
+      .toEqual({ principal: '8121', secundaria: '', propia: false })
     expect(refsCliente({ REF: 'A8121', CLIENT_REF: 'A8121' }, 'CHIAPERO').secundaria).toBe('')
   })
 
@@ -134,5 +137,62 @@ describe('refsEnLinea — para los chips angostos', () => {
   it('junta las dos con un punto, o deja sola la nuestra', () => {
     expect(refsEnLinea(refsCliente({ REF: 'A8121', CLIENT_REF: '1410' }, 'CHIAPERO'))).toBe('1410 · 8121')
     expect(refsEnLinea(refsCliente({ REF: 'A8121', CLIENT_REF: '' }, 'CHIAPERO'))).toBe('8121')
+  })
+})
+
+// ── Alias de nuestra propia ref (verificado contra la base el 04/09/2026) ────
+// Las 243 LCL activas traen en `client_ref` un alias NUESTRO, no la ref del
+// cliente. Sin este filtro, el portal le mostraría a cada cliente de LCL un
+// código interno en grande, presentado como "su" referencia.
+describe('esAliasNuestro / LCL: client_ref trae un alias nuestro', () => {
+  it('reconoce el alias con otro prefijo y los mismos dígitos', () => {
+    expect(esAliasNuestro('LCL127', 'E127')).toBe(true)
+    expect(esAliasNuestro('LCL160B', 'E160 B')).toBe(true)
+    expect(esAliasNuestro('LCL00365UY', 'E365')).toBe(true)
+  })
+
+  it('reconoce el alias cuando nuestra ref lo contiene (Buenos Aires)', () => {
+    expect(esAliasNuestro('LCLBUE6040203', 'R84I26040203')).toBe(true)
+    expect(esAliasNuestro('LCLBUE6050049', 'R84I26050049')).toBe(true)
+  })
+
+  it('NO confunde con las refs propias reales de los clientes FCL', () => {
+    // Los 15 casos sanos que hay hoy en la base, con su ref nuestra.
+    const reales: [string, string][] = [
+      ['1400', 'A7996'], ['1405', 'A7997'], ['2051-2', 'A8006'], ['OCE 80-1', 'A8007'],
+      ['1417', 'A8045'], ['1401', 'A8081'], ['1409', 'A8087'], ['1408', 'A8088'],
+      ['1410', 'A8121'], ['1416', 'A8131'], ['4291', 'A8146'], ['1425', 'A8148'],
+      ['LY26-BP001-1', 'A8213'], ['2051-5 / 2054', 'A8283'], ['1419', 'A8325'],
+    ]
+    for (const [clientRef, ref] of reales) {
+      expect(esAliasNuestro(clientRef, ref), `${clientRef} vs ${ref}`).toBe(false)
+    }
+  })
+
+  it('no se deja engañar por coincidencias de uno o dos dígitos', () => {
+    // "8121" CONTIENE "1", pero una ref de un dígito no prueba nada.
+    expect(esAliasNuestro('1', 'A8121')).toBe(false)
+    expect(esAliasNuestro('12', 'A8121')).toBe(false)
+    expect(esAliasNuestro('OCE 80-1', 'A8007')).toBe(false)
+  })
+
+  it('sin dígitos de un lado, no hay alias que valga', () => {
+    expect(esAliasNuestro('EXP', 'A8121')).toBe(false)
+    expect(esAliasNuestro('', 'A8121')).toBe(false)
+    expect(esAliasNuestro('1410', '')).toBe(false)
+  })
+
+  it('la carga LCL entera: se muestra NUESTRA ref, no el alias', () => {
+    const r = refsCliente({ REF: 'E127', CLIENT_REF: 'LCL127' }, 'EQUIPO ORIGINAL VMG SA')
+    expect(r.principal).toBe('E127')
+    expect(r.propia).toBe(false)
+    expect(r.secundaria).toBe('')
+  })
+
+  it('la carga FCL de Chiapero sigue mostrando la del cliente', () => {
+    const r = refsCliente({ REF: 'A8121', CLIENT_REF: '1410' }, 'CHIAPERO Y ASOC. S.R.L.')
+    expect(r.principal).toBe('1410')
+    expect(r.secundaria).toBe('8121')
+    expect(r.propia).toBe(true)
   })
 })

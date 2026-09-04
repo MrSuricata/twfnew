@@ -9,9 +9,10 @@
  *
  * De ahí las tres reglas:
  *  · PRINCIPAL = la referencia del cliente, si está cargada y SIRVE. Es texto
- *    libre cargado a mano: hay una carga cuya `client_ref` dice literalmente
- *    el nombre del cliente, y un párrafo tampoco es un título. Lo que no pasa
- *    el filtro no se muestra: la principal vuelve a ser nuestro número.
+ *    libre cargado a mano: hay cargas cuya `client_ref` dice literalmente el
+ *    nombre del cliente, un párrafo tampoco es un título, y —lo más común—
+ *    muchas traen un ALIAS NUESTRO en vez de la ref del cliente. Lo que no
+ *    pasa el filtro no se muestra: la principal vuelve a ser nuestro número.
  *  · NUESTRO NÚMERO = los dígitos y nada más. Sin la "A" (regla de los mails
  *    con clientes) y SIN prefijo de marca: "8121", nunca "TWF 8121".
  *  · SECUNDARIA = la otra, siempre visible. El cliente llama o escribe citando
@@ -53,6 +54,33 @@ export function numeroNuestro(ref: unknown): string {
   return txt(ref).replace(/^A(?=\d)/, '')
 }
 
+/** Los dígitos de una ref, sin ceros a la izquierda: "LCL127" y "E127" son
+ *  los dos "127". Es lo que permite reconocer un alias de nuestra propia ref. */
+const digitos = (v: unknown): string => txt(v).replace(/\D/g, '').replace(/^0+/, '')
+
+/** Cantidad mínima de dígitos para animarse a decir "esto es un alias nuestro".
+ *  Con menos, la coincidencia es casualidad: nuestra "8121" CONTIENE "1". */
+const MIN_DIGITOS_ALIAS = 3
+
+/**
+ * ¿Lo cargado en `client_ref` es en realidad NUESTRA propia ref con otra
+ * cara? Verificado contra la base el 04/09/2026: de las 243 LCL activas, las
+ * 243 traen un alias nuestro y NINGUNA la ref del cliente — "E127" tiene
+ * "LCL127", "E160 B" tiene "LCL160B", "R84I26040203" tiene "LCLBUE6040203".
+ * Mostrarlas como "su referencia" sería peor que no hacer nada: le pondríamos
+ * al cliente, en grande, un código interno que él nunca vio.
+ *
+ * Se comparan los DÍGITOS, que es lo que sobrevive al cambio de prefijo, y se
+ * acepta que uno contenga al otro (nuestra "8426040203" contiene "6040203").
+ * Las 16 FCL con ref propia real no se tocan: "1410" no vive dentro de "8121".
+ */
+export function esAliasNuestro(clientRef: unknown, ref: unknown): boolean {
+  const c = digitos(clientRef)
+  const n = digitos(ref)
+  if (c.length < MIN_DIGITOS_ALIAS || n.length < MIN_DIGITOS_ALIAS) return false
+  return c === n || c.includes(n) || n.includes(c)
+}
+
 /** Nombres comparables: mayúsculas, sin acentos y sin espacios de más, para
  *  que "chiapero  y asoc." y "CHIAPERO Y ASOC." sean el mismo nombre. */
 const claveNombre = (v: unknown): string =>
@@ -60,8 +88,9 @@ const claveNombre = (v: unknown): string =>
 
 /**
  * ¿La referencia del cliente sirve como título de la carga?
- * No sirve si está vacía, si es el nombre del cliente (dato mal cargado) o si
- * pasa de REF_CLIENTE_MAX caracteres.
+ * No sirve si está vacía, si pasa de REF_CLIENTE_MAX caracteres, si es el
+ * nombre del cliente (dato mal cargado) o si es un alias de nuestra propia
+ * ref (ver `esAliasNuestro`).
  */
 export function refClienteSana(clientRef: unknown, ...nombres: unknown[]): boolean {
   const r = txt(clientRef)
@@ -81,7 +110,7 @@ export function refsCliente(
 ): RefsCliente {
   const nuestro = numeroNuestro(s?.REF)
   const propia = txt(s?.CLIENT_REF)
-  if (!refClienteSana(propia, nombreCliente, s?.CLIENTE)) {
+  if (!refClienteSana(propia, nombreCliente, s?.CLIENTE) || esAliasNuestro(propia, s?.REF)) {
     return { principal: nuestro, secundaria: '', propia: false }
   }
   // Si el cliente cargó exactamente nuestro número, no se repite dos veces.
