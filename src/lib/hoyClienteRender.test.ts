@@ -90,4 +90,30 @@ describe('HoyCliente (render estático)', () => {
   it('sin cargas no pinta nada', () => {
     expect(render([])).toBe('<div class="space-y-4 mb-8"></div>')
   })
+
+  // El caso de la A8045 (Brian, 04/09, mirando el portal como CHIAPERO): llega a
+  // Montevideo el 6, sale el 7 y arriba a RAFAELA el 9. La fila aparece, pero
+  // diciendo que la fecha es estimada y por qué.
+  it('la carga que todavía viaja en el buque: fecha estimada y por qué', () => {
+    const html = render([
+      carga({ REF: 'A8045', CLIENT_REF: '1417', ETA: dia(4) }, [op({ SALIDA: dia(5), ETA_FISC: dia(7), FISCAL: 'ZP RAFAELA' })]),
+    ])
+    expect(html).toContain('Llegan a destino')
+    expect(html).toContain('TODAVÍA EN EL BUQUE')
+    expect(html).toContain('llega a Montevideo el 06/09/2026')  // la ETA del buque, en la fila
+    expect(html).toContain('Llega (estimado)')
+    expect(html).toContain('09/09/2026')                        // la fecha de fiscal
+    expect(html).toContain('ZP RAFAELA')
+    // No desaparece de "Llegan a Montevideo" ni se cuela en Embarcadas.
+    expect(html).toContain('Llegan a Montevideo')
+    expect(html).not.toContain('Embarcadas')
+    expect(html).not.toContain('Sin movimientos')
+  })
+
+  it('en el buque sin fecha de fiscal: no promete nada, solo "Llegan a Montevideo"', () => {
+    const html = render([carga({ REF: 'A8046', ETA: dia(4) }, [op({ SALIDA: '', ETA_FISC: '' })])])
+    expect(html).toContain('Llegan a Montevideo')
+    expect(html).not.toContain('Llegan a destino')
+    expect(html).not.toContain('TODAVÍA EN EL BUQUE')
+  })
 })
