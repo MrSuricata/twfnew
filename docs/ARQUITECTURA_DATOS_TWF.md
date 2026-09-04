@@ -10,7 +10,7 @@ _Decisión (02/06/2026): migrar a Supabase como **fuente única de verdad**, por
 | Dato | Vive en | Editable en app |
 |------|---------|-----------------|
 | FCL (cargas) | Google Sheet → cache JSON en `shipments_cache` (1 fila) | ❌ no |
-| LCL + Aéreo | `lcl_air_shipments` (Supabase) | ✅ |
+| LCL + Aéreo | `shipments` (Supabase), `mode` lcl/air | ✅ |
 | Terrestre / consolidados | `trucks` + `truck_loads` | ✅ |
 | Cotizaciones, fotos, reportes, clientes, partners | Supabase | ✅ |
 
@@ -77,7 +77,9 @@ Cuando llega el **último contenedor** de la referencia (todas sus partes en fis
 | Operativas: TLX, Depósito, Salida, ETA_Fisc, LIBRE, Operativa, KG, M3, Descripción, Fiscal, DEV, Tipo, WOOD | telex, deposito, salida, eta_fiscal, libre, operativa, kg, m3, descripcion, fiscal, dev, mode/tipo, wood |
 | (nuevo) | dest_country, dest_port, transit — derivar de Fiscal/destino |
 
-LCL/aéreo de `lcl_air_shipments` entran como `mode=LCL/AIR`.
+LCL/aéreo ya viven en `shipments` con `mode=lcl/air`. El registro viejo
+`lcl_air_shipments` salió de la app el 04/09/2026 (una sola alta, la de
+Operaciones); la tabla queda en Supabase como archivo histórico.
 
 ---
 

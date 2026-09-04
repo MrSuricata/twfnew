@@ -2,8 +2,9 @@
 // TAREA C — una vista única de TODA carga (FCL/LCL/aéreo/terrestre) para la
 // grilla tipo-planilla. Por ahora NO migra datos: es un adaptador que une
 // las fuentes existentes (FCL del cache de la Sheet, read-only · LCL/aéreo
-// de lcl_air_shipments, editable). El operativo se asigna vía overlay por
-// ref (operator_assignments), sin tocar la planilla.
+// de `shipments` con mode lcl|air, editable — el registro viejo
+// `lcl_air_shipments` salió de la app el 04/09/2026). El operativo se asigna
+// vía overlay por ref (operator_assignments), sin tocar la planilla.
 // ──────────────────────────────────────────────────────────────────────
 
 import type { ParsedShipment, OperativasRecord } from './shipmentTypes'

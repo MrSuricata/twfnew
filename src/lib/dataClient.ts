@@ -8,7 +8,7 @@ import { authFetch } from './authClient'
 import type { QuoteFormData, ClientAccount, ClientPortalUser, ShipmentDocument, OperativeReport, OriginPhoto } from './quotationTypes'
 import type { ParsedShipment } from './shipmentTypes'
 import { applyWebEdits } from './shipmentTypes'
-import type { Truck, TruckLoad, LclAirShipment } from './truckTypes'
+import type { Truck, TruckLoad } from './truckTypes'
 import type { BillingRecord } from './billingTypes'
 import type { Operator, OperatorAssignment, DbShipment } from './operationsTypes'
 import { fclToColumns } from './operationsTypes'
@@ -567,37 +567,16 @@ export async function deleteTruckLoad(id: string): Promise<void> {
   }
 }
 
-// ── LCL / Air shipments ──
-
-export async function fetchLclAir(): Promise<LclAirShipment[]> {
-  const res = await authFetch('/api/data/lcl-air')
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  const data = await res.json()
-  return data.shipments || []
-}
-
-export async function saveLclAir(shipments: LclAirShipment[]): Promise<void> {
-  if (shipments.length === 0) return
-  const res = await authFetch('/api/data/lcl-air', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(shipments),
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.error || `HTTP ${res.status}`)
-  }
-}
-
-export async function deleteLclAir(id: string): Promise<void> {
-  const res = await authFetch(`/api/data/lcl-air?id=${encodeURIComponent(id)}`, {
-    method: 'DELETE',
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.error || `HTTP ${res.status}`)
-  }
-}
+// ── LCL / aéreo: acá NO hay cliente de `lcl_air_shipments` ──
+//
+// El alta vigente de una LCL/aérea es LA DE OPERACIONES: tabla `shipments`
+// con `mode` lcl|air (444 cargas, la última dada de alta el 04/09/2026). El
+// registro viejo `lcl_air_shipments` tenía UNA fila, de mayo, ya migrada y
+// archivada en `shipments`.
+//
+// Brian, 04/09/2026: "¿por qué vamos a tener los dos?". Se sacó la puerta de
+// entrada — fetch/save/delete de `lcl-air` y su endpoint. La tabla queda en
+// Supabase intacta, como archivo histórico; nadie la lee desde la app.
 
 // ── Billing overlay ──
 
@@ -973,7 +952,6 @@ export interface AdminData {
   clients: ClientAccount[]
   trucks: Truck[]
   truckLoads: TruckLoad[]
-  lclAir: LclAirShipment[]
   billing: BillingRecord[]
   operators: Operator[]
   assignments: OperatorAssignment[]
@@ -993,7 +971,7 @@ async function softFetch<T>(fn: () => Promise<T[]>, label: string): Promise<T[]>
 }
 
 export async function loadAdminData(): Promise<AdminData> {
-  const [shipmentsRes, quotes, documents, reports, originPhotos, clients, trucks, truckLoads, lclAir, billing] = await Promise.all([
+  const [shipmentsRes, quotes, documents, reports, originPhotos, clients, trucks, truckLoads, billing] = await Promise.all([
     fetchShipmentsFromDB(),
     fetchQuotes(),
     fetchDocuments(),
@@ -1002,7 +980,6 @@ export async function loadAdminData(): Promise<AdminData> {
     fetchClients(),
     softFetch(fetchTrucks, 'trucks'),
     softFetch(() => fetchTruckLoads(), 'truck-loads'),
-    softFetch(fetchLclAir, 'lcl-air'),
     softFetch(fetchBilling, 'billing'),
   ])
 
@@ -1023,7 +1000,6 @@ export async function loadAdminData(): Promise<AdminData> {
     clients,
     trucks,
     truckLoads,
-    lclAir,
     billing,
     operators,
     assignments,

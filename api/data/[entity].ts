@@ -24,7 +24,6 @@ import {
   NotificationTaskPatchSchema,
   TruckRowSchema,
   TruckLoadRowSchema,
-  LclAirRowSchema,
   TruckCounterRequestSchema,
   BillingRowSchema,
   OperatorRowSchema,
@@ -177,8 +176,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         return handleTrucks(req, res, db, payload)
       case 'truck-loads':
         return handleTruckLoads(req, res, db, payload)
-      case 'lcl-air':
-        return handleLclAir(req, res, db)
+      // 'lcl-air' (registro viejo `lcl_air_shipments`) se retiró el 04/09/2026:
+      // el alta vigente de LCL/aéreo es la de Operaciones, que escribe en
+      // `shipments` con mode lcl|air. La tabla sigue en Supabase (archivo
+      // histórico, 1 fila de mayo ya migrada) pero no se expone por la API.
       case 'truck-counter':
         return handleTruckCounter(req, res, db)
       case 'billing':
@@ -1998,80 +1999,6 @@ async function handleTruckLoads(req: VercelRequest, res: VercelResponse, db: any
       return res.status(200).json({ deleted: true })
     }
     return res.status(400).json({ error: 'id or truckId required' })
-  }
-
-  return res.status(405).json({ error: 'Method not allowed' })
-}
-
-// ── LCL / Air shipments ────────────────────────────────────────────
-
-function mapLclAirRowToApi(s: any) {
-  return {
-    id: s.id,
-    ref: s.ref,
-    modality: s.modality,
-    client: s.client || '',
-    origin: s.origin || '',
-    mblHbl: s.mbl_hbl || '',
-    etaMvd: s.eta_mvd || '',
-    desconsolDate: s.desconsol_date || '',
-    pkgs: Number(s.pkgs) || 0,
-    kg: Number(s.kg) || 0,
-    m3: Number(s.m3) || 0,
-    fiscal: s.fiscal || '',
-    description: s.description || '',
-    wood: !!s.wood,
-    status: s.status || 'en_origen',
-    notes: s.notes || '',
-    createdAt: s.created_at_ts,
-  }
-}
-
-async function handleLclAir(req: VercelRequest, res: VercelResponse, db: any) {
-  if (req.method === 'GET') {
-    const { data, error } = await db
-      .from('lcl_air_shipments')
-      .select('*')
-      .order('created_at_ts', { ascending: false })
-      .limit(2000)
-    if (error) throw error
-    return res.status(200).json({ shipments: (data || []).map(mapLclAirRowToApi) })
-  }
-
-  if (req.method === 'POST') {
-    const v = validateBatch(LclAirRowSchema, req.body)
-    if (!v.ok) return res.status(400).json({ error: v.error })
-    const now = Date.now()
-    const rows = v.items.map((s) => ({
-      id: s.id,
-      ref: s.ref,
-      modality: s.modality,
-      client: s.client || '',
-      origin: s.origin || '',
-      mbl_hbl: s.mblHbl || s.mbl_hbl || '',
-      eta_mvd: isoDateOrNull(s.etaMvd ?? s.eta_mvd),
-      desconsol_date: isoDateOrNull(s.desconsolDate ?? s.desconsol_date),
-      pkgs: s.pkgs ?? 0,
-      kg: s.kg ?? 0,
-      m3: s.m3 ?? 0,
-      fiscal: s.fiscal || '',
-      description: s.description || '',
-      wood: !!s.wood,
-      status: s.status || 'en_origen',
-      notes: s.notes || '',
-      created_at_ts: s.createdAt || s.created_at_ts || now,
-    }))
-    const { error } = await db.from('lcl_air_shipments').upsert(rows, { onConflict: 'id' })
-    if (error) throw error
-    return res.status(200).json({ saved: true, count: rows.length })
-  }
-
-  if (req.method === 'DELETE') {
-    const id = req.query.id as string
-    if (!id) return res.status(400).json({ error: 'id required' })
-    const { error } = await db.from('lcl_air_shipments').delete().eq('id', id)
-    if (error) throw error
-    return res.status(200).json({ deleted: true })
   }
 
   return res.status(405).json({ error: 'Method not allowed' })

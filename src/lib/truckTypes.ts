@@ -5,7 +5,16 @@
 
 export type TruckStatus = 'planning' | 'loaded' | 'in_transit' | 'delivered'
 export type LoadSource = 'fcl' | 'lcl' | 'air'
+// ── Registro viejo `lcl_air_shipments` (ARCHIVO) ──────────────────────
+// Tipos del manager LCL/aéreo anterior. Desde el 04/09/2026 la app no lee ni
+// escribe esa tabla: el alta vigente es la de Operaciones — `shipments` con
+// `mode` lcl|air (444 cargas al 04/09; el registro viejo tenía UNA, de mayo, ya
+// migrada y archivada). La tabla queda en Supabase como archivo histórico.
+// Estos tipos sobreviven solo porque DashboardEnhanced todavía declara los
+// props muertos; cuando se limpien, todo este bloque se va.
+/** @deprecated ver arriba: el alta vigente es `shipments` con mode lcl|air. */
 export type LclAirModality = 'lcl' | 'air'
+/** @deprecated ídem. Los estados vivos se derivan en `lib/lclEstados.ts`. */
 export type LclAirStatus =
   | 'en_origen'
   | 'en_transito'
@@ -92,7 +101,8 @@ export interface TruckLoad {
   pending: 'add' | 'remove' | null
 }
 
-// ── LCL / Air registry entry (refs not in the FCL planilla) ──
+/** @deprecated Fila del registro viejo `lcl_air_shipments`. Ver el bloque
+ *  ARCHIVO arriba: hoy una LCL/aérea es un `DbShipment` con mode lcl|air. */
 export interface LclAirShipment {
   id: string
   ref: string                       // LCL-0001, AIR-0001
@@ -202,14 +212,6 @@ export function deriveTruckDisplayInfo(t: Truck, today: Date): { status: TruckSt
   if (status === 'in_transit') return { status, label: 'En Frontera', hoy: false }
   if (status === 'loaded' && isToday(t.loadDate)) return { status, label: 'Carga HOY', hoy: true }
   return { status, label: TRUCK_STATUS_LABELS[status], hoy: false }
-}
-
-export const LCL_AIR_STATUS_LABELS: Record<LclAirStatus, string> = {
-  en_origen: 'En Origen',
-  en_transito: 'En Tránsito',
-  arribado: 'Arribado',
-  desconsolidado: 'Desconsolidado',
-  despachado: 'Despachado',
 }
 
 // Colores por VARIABLE de marca (src/index.css): bajo TWF los defaults del

@@ -12,7 +12,6 @@ import type {
   Truck,
   TruckLoad,
   TruckStatus,
-  LclAirShipment,
   LoadSource,
 } from './truckTypes'
 import { applyTruckPending } from './truckTypes'
@@ -229,17 +228,6 @@ export function isFclAvailable(
     if (allSalidaOld) return false
   }
 
-  return true
-}
-
-export function isLclAirAvailable(
-  s: LclAirShipment,
-  assignedRefs: Set<string>,
-  opts: AvailabilityOptions = {}
-): boolean {
-  const { showArchived = false } = opts
-  if (assignedRefs.has(s.ref)) return false
-  if (!showArchived && s.status === 'despachado') return false
   return true
 }
 

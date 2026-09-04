@@ -15,7 +15,10 @@ import SugerenciasCamion from './SugerenciasCamion'
 interface TrucksManagementProps {
   trucks: Truck[]
   truckLoads: TruckLoad[]
-  lclAir: LclAirShipment[]
+  /** @deprecated Registro viejo `lcl_air_shipments`. Ya no se usa: el alta y la
+   *  lista de LCL/aéreo salen de `shipments` (mode lcl|air). Queda declarado —
+   *  opcional y sin leer — solo porque DashboardEnhanced todavía lo pasa. */
+  lclAir?: LclAirShipment[]
   dbShipments?: DbShipment[]
   shipments: ParsedShipment[]
   /** Operativos para el alta de carga desde el armador (diálogo Nueva carga). */
@@ -25,8 +28,10 @@ interface TrucksManagementProps {
   /** Camión nuevo con sus cargas, respetando la FK y la ventana de escritura de App. */
   onCreateTruckWithLoads?: (truck: Truck, loads: TruckLoad[]) => Promise<boolean>
   onDeleteTruckLoad: (id: string) => void
-  onUpdateLclAir: (shipments: LclAirShipment[]) => void
-  onDeleteLclAir: (id: string) => void
+  /** @deprecated Ídem `lclAir`: escribían en `lcl_air_shipments`. Sin uso. */
+  onUpdateLclAir?: (shipments: LclAirShipment[]) => void
+  /** @deprecated Ídem `lclAir`. Sin uso. */
+  onDeleteLclAir?: (id: string) => void
   onRefreshTrucks?: () => Promise<boolean>
   /** Alta real de una carga (App.handleCreateShipment). false = abortada. */
   onCreateShipment?: (row: DbShipment, opts?: { duplicadoConfirmado?: boolean }) => boolean | void
@@ -83,7 +88,6 @@ export default function TrucksManagement(props: TrucksManagementProps) {
         truck={selectedTruck}
         trucks={props.trucks}
         truckLoads={props.truckLoads}
-        lclAir={props.lclAir}
         dbShipments={props.dbShipments || []}
         shipments={props.shipments}
         onBack={() => setSelectedTruckId(null)}
