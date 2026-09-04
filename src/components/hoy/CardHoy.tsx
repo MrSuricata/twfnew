@@ -17,7 +17,7 @@
  * `extras` son los chips que siguen a la vista con la card plegada ("3 para
  * reagendar"). Viven DENTRO del botón del header: contenido no interactivo.
  */
-import type { ReactNode } from 'react'
+import { Fragment, type ReactNode } from 'react'
 import { PanelPlegable, Chip, clasesTono, type TonoPanel } from '@/components/partner/PanelCard'
 import { cardHoy, type CardHoyId } from '@/lib/hoyCards'
 import type { CardsPlegadas } from '@/lib/cardsPlegadas'
@@ -64,6 +64,18 @@ export function ChipUrgente({ tono, children, title }: {
 }) {
   const med = useBrand().id === 'med'
   return <Chip title={title} clase={`${clasesTono(tono, med).pill} border-transparent`}>{children}</Chip>
+}
+
+/**
+ * Los chips del header, ya filtrados. Cada card los arma condicionalmente
+ * (`n > 0 && <ChipUrgente…>`), y si NINGUNO aplica devuelve `undefined` en vez
+ * de un fragmento vacío: así el panel no pinta el contenedor de extras cuando
+ * no hay nada urgente que avisar.
+ */
+export function chipsHeader(...chips: ReactNode[]): ReactNode | undefined {
+  const vivos = chips.filter(Boolean)
+  if (vivos.length === 0) return undefined
+  return vivos.map((chip, i) => <Fragment key={i}>{chip}</Fragment>)
 }
 
 /** El cuerpo de una card de HOY que no son filas de `PanelFila`: le pone el
