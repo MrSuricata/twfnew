@@ -30,7 +30,7 @@ import {
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import { authFetch, getAdminLevel, getAdminHomeArea } from '@/lib/authClient'
-import { colaSeguimientos } from '@/lib/seguimientos'
+import { colaSeguimientos, areaInicial, SEGUIMIENTOS_AREA_KEY, type AreaSeguimiento } from '@/lib/seguimientos'
 import { isPushSupported, isSubscribed, subscribePush, unsubscribePush, isIosWithoutStandalone, getPushPrefs, patchPushPrefs, DEFAULT_PUSH_PREFS, type PushPrefs } from '@/lib/push'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Switch } from '@/components/ui/switch'
@@ -167,13 +167,38 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
     }
     return set
   }, [dbShipments])
-  // Cola de seguimientos: cuántos updates tocan hoy (badge de la pestaña).
-  const seguimientosCount = useMemo(() => {
-    const cargas = (dbShipments || []).map(s => ({
-      ref: s.ref, etd: s.etd, eta: s.eta, seguimiento: s.seguimiento, mode: s.mode, archived: s.archived,
-    }))
-    return colaSeguimientos(cargas, new Date()).pendientes.length
-  }, [dbShipments])
+  // Área de la cola de Seguimientos: FCL (Nico) o LCL (consolidados). Vive
+  // acá y no adentro del tablero para que el badge de la pestaña cuente lo
+  // MISMO que se ve al abrirla. Mismo criterio que el área de HOY: manda el
+  // home_area del usuario, después la última elección en este navegador.
+  const [seguimientosArea, setSeguimientosArea] = useState<AreaSeguimiento>(() => {
+    let guardada: string | null = null
+    try { guardada = localStorage.getItem(SEGUIMIENTOS_AREA_KEY) } catch { /* sin storage: default */ }
+    return areaInicial(getAdminHomeArea(), guardada)
+  })
+  const cambiarSeguimientosArea = useCallback((a: AreaSeguimiento) => {
+    setSeguimientosArea(a)
+    try { localStorage.setItem(SEGUIMIENTOS_AREA_KEY, a) } catch { /* ignorar */ }
+  }, [])
+  // Cola de seguimientos. El badge cuenta lo de SU área; el conteo de la otra
+  // viaja aparte para que el supervisor no pierda de vista el atraso ajeno:
+  // partir la cola no puede volver invisible el trabajo del otro equipo.
+  //
+  // El map tiene que llevar los MISMOS campos que arma el tablero: `salida`,
+  // `descarga` y `eta_fiscal` son las señales de llegada real. Sin ellas el
+  // badge contaba como "¿llegó?" cargas que el tablero ya había descartado —
+  // decía 30 y adentro había 12. Si acá se agrega un campo, va también allá.
+  const cargasSeguimiento = useMemo(() =>
+    (dbShipments || []).map(s => ({
+      ref: s.ref, etd: s.etd, eta: s.eta, seguimiento: s.seguimiento, mode: s.mode,
+      archived: s.archived, salida: s.salida, descarga: s.descarga, etaFiscal: s.eta_fiscal,
+    })), [dbShipments])
+  const seguimientosCount = useMemo(
+    () => colaSeguimientos(cargasSeguimiento, new Date(), seguimientosArea).pendientes.length,
+    [cargasSeguimiento, seguimientosArea])
+  const seguimientosOtraArea = useMemo(
+    () => colaSeguimientos(cargasSeguimiento, new Date(), seguimientosArea === 'fcl' ? 'lcl' : 'fcl').pendientes.length,
+    [cargasSeguimiento, seguimientosArea])
   // TWF brand has no ops tabs → land on the first content tab.
   // Pantalla de inicio POR USUARIO (admin_users.home_area, viaja en el JWT):
   // Nico arranca en Seguimientos, el resto donde diga su selector de Equipo.
@@ -687,6 +712,9 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
               dbShipments={dbShipments}
               onPatchShipment={onPatchShipment}
               onOpenDetail={onOpenDetail}
+              area={seguimientosArea}
+              onAreaChange={cambiarSeguimientosArea}
+              pendientesOtraArea={seguimientosOtraArea}
             />
           </TabsContent>
 

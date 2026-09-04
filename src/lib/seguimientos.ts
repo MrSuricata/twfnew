@@ -22,10 +22,17 @@
  *
  * El resto de las cargas vivas con seguimiento fresco cuentan como "al día".
  *
- * NOTA: la cola lee la tabla `shipments` (FCL + LCL unificadas). Las LCL del
- * manager legacy (tabla lcl_air, pestaña Camiones) NO entran — si el equipo
- * sigue dando de alta LCL por ahí, esas cargas quedan fuera del seguimiento
- * semanal. Pendiente confirmar con Brian cuál es el alta vigente.
+ * DOS COLAS (Brian 04/09/2026): la regla de arriba no cambia, pero el trabajo
+ * se parte por MODALIDAD — FCL (Nico) y LCL (el equipo de consolidados) son
+ * dos rutinas distintas y cada uno abre en la suya (`area`). El progreso del
+ * día también se cuenta por área: mezclarlas contaminaba el porcentaje con
+ * cargas que no son de quien lo mira.
+ *
+ * NOTA: la cola lee la tabla `shipments` (FCL + LCL). El alta vigente de LCL
+ * es esa: verificado con datos el 04/09/2026 — `lcl_air_shipments` tiene UNA
+ * fila, de mayo, contra las LCL en `shipments` (la última, de hoy). El manager
+ * legacy (tabla lcl_air, pestaña Camiones) quedó muerto: no hay nada afuera de
+ * la cola por ese lado ni nada que migrar.
  */
 
 import { parseLocalDate } from './shipmentTypes'
@@ -63,6 +70,18 @@ export interface FilaSeguimiento {
   etaVencidaDias?: number
 }
 
+/** Progreso del día en UN área (el % que mira quien está laburando). */
+export interface ProgresoDia {
+  /** Updates que ya salieron hoy (la carga quedó sellada con la fecha de hoy). */
+  enviados: number
+  /** Los que faltan = pendientes.length. */
+  faltan: number
+  /** enviados + faltan. 0 = no hay trabajo del día. */
+  total: number
+  /** Porcentaje entero de avance; 0 cuando no hay trabajo. */
+  pct: number
+}
+
 export interface ColaSeguimientos {
   /** Las que hay que enviar hoy, ordenadas: nunca-enviadas primero, después
    *  las más atrasadas; a igualdad, la ETA más próxima arriba. */
@@ -72,6 +91,8 @@ export interface ColaSeguimientos {
    *  proactivo y necesita verlas/tocarlas sin ir al modal de Operaciones).
    *  Ordenadas: más próximas a vencer primero; a igualdad, ETA más próxima. */
   alDia: FilaSeguimiento[]
+  /** Cuánto se avanzó hoy EN ESTA ÁREA. */
+  progreso: ProgresoDia
 }
 
 const MS_DIA = 86_400_000
@@ -86,22 +107,61 @@ export const SEGUIMIENTO_ETA_VENCIDA_DIAS = 10
 
 const medianoche = (d: Date): Date => new Date(d.getFullYear(), d.getMonth(), d.getDate())
 
-/** ¿Es una carga que viaja en buque? El seguimiento semanal es marítimo. */
-const esMaritima = (mode: string | null | undefined): boolean => {
-  const m = String(mode || '').toLowerCase()
-  return m === 'fcl' || m === 'lcl'
+/** Área de trabajo de la cola: cada modalidad es una rutina y un equipo. */
+export type AreaSeguimiento = 'fcl' | 'lcl'
+
+/** Áreas en el orden del selector. */
+export const AREAS_SEGUIMIENTO: { id: AreaSeguimiento; label: string }[] = [
+  { id: 'fcl', label: 'FCL' },
+  { id: 'lcl', label: 'LCL' },
+]
+
+/** Última área elegida a mano, por navegador (misma idea que 'twf-hoy-area'). */
+export const SEGUIMIENTOS_AREA_KEY = 'twf-seguimientos-area'
+
+/** Área de una carga. null = no viaja en buque (aéreo/terrestre no tienen
+ *  seguimiento semanal) y queda fuera de las dos colas. */
+export function areaDeCarga(mode: string | null | undefined): AreaSeguimiento | null {
+  const m = String(mode || '').trim().toLowerCase()
+  return m === 'fcl' || m === 'lcl' ? m : null
 }
 
-export function colaSeguimientos(cargas: CargaSeguimiento[], hoy: Date): ColaSeguimientos {
+/**
+ * Área con la que abre el tablero. Mismo criterio que el selector de área de
+ * HOY: manda el `home_area` del usuario (el equipo LCL entra en la suya aunque
+ * en este navegador se haya mirado otra), después la última elección guardada,
+ * y si no hay nada, FCL. Los home_area que no son un área de la cola ('hoy',
+ * 'seguimientos'…) no fuerzan nada: para esos vale lo guardado.
+ */
+export function areaInicial(homeArea?: string | null, guardada?: string | null): AreaSeguimiento {
+  if (String(homeArea || '').trim().toLowerCase() === 'lcl') return 'lcl'
+  const g = String(guardada || '').trim().toLowerCase()
+  if (g === 'fcl' || g === 'lcl') return g
+  return 'fcl'
+}
+
+/** Sin `area` no filtra: devuelve la cola completa. Hoy no lo llama nadie en
+ *  producción —el tablero y el badge pasan siempre el área— y queda para los
+ *  tests y para cualquier vista futura que quiera el total sin partir. */
+export function colaSeguimientos(cargas: CargaSeguimiento[], hoy: Date, area?: AreaSeguimiento): ColaSeguimientos {
   const h = medianoche(hoy)
   const pendientes: FilaSeguimiento[] = []
   const alDia: FilaSeguimiento[] = []
+  let enviados = 0
 
   const lleno = (s: string | null | undefined): boolean => Boolean(String(s || '').trim())
 
   for (const c of cargas) {
     if (c.archived) continue
-    if (!esMaritima(c.mode)) continue
+    const areaCarga = areaDeCarga(c.mode)
+    if (!areaCarga) continue
+    if (area && areaCarga !== area) continue
+
+    // Trabajo hecho HOY. Se cuenta acá arriba, antes de los filtros de viaje:
+    // una carga que se avisó hoy y después llegó (o se corrió fuera de la
+    // ventana) igual fue trabajo del día — si no, el % bajaba solo.
+    const seg = parseSegDate(String(c.seguimiento || ''))
+    if (seg && medianoche(seg).getTime() === h.getTime()) enviados++
 
     // Ya llegó a su puerto → no se avisa más. Pero la llegada REAL la marcan
     // los HECHOS (salida / descarga / fiscal cargadas), no el calendario: una
@@ -130,7 +190,6 @@ export function colaSeguimientos(cargas: CargaSeguimiento[], hoy: Date): ColaSeg
       (medianoche(eta).getTime() - h.getTime()) / MS_DIA <= SEGUIMIENTO_ETA_PROX_DIAS
     if (!embarcada && !llegaPronto) continue
 
-    const seg = parseSegDate(String(c.seguimiento || ''))
     if (!seg) {
       pendientes.push({ carga: c, dias: null, ...(etaVencidaDias !== undefined ? { etaVencidaDias } : {}) })
       continue
@@ -168,7 +227,15 @@ export function colaSeguimientos(cargas: CargaSeguimiento[], hoy: Date): ColaSeg
     return a.carga.ref.localeCompare(b.carga.ref)
   })
 
-  return { pendientes, alDia }
+  const total = enviados + pendientes.length
+  const progreso: ProgresoDia = {
+    enviados,
+    faltan: pendientes.length,
+    total,
+    pct: total > 0 ? Math.round((enviados / total) * 100) : 0,
+  }
+
+  return { pendientes, alDia, progreso }
 }
 
 /** Grupo de destino para encabezar la cola (los updates salen en tandas). */

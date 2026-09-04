@@ -1,10 +1,16 @@
-// Cola de seguimientos — pestaña "Seguimientos" (Brian 13/08, rediseño 17/08).
+// Cola de seguimientos — pestaña "Seguimientos" (Brian 13/08, rediseño 17/08,
+// separación FCL/LCL 04/09).
 // El trabajo semanal de Nico agrupado POR BUQUE: mira una sola vez dónde viene
 // cada buque (link a MarineTraffic), corrige UNA ETA que se propaga a todas las
 // cargas del viaje (misma lógica que "ETA por buque" de Operaciones), copia el
 // texto del update con su propio formato de mail, y marca la tanda entera como
 // enviada. Barra de progreso del día arriba. Todo deja rastro en
 // seguimientos_log (trazabilidad del buque).
+//
+// Son DOS colas, una por modalidad, con un selector arriba: FCL es la rutina de
+// Nico y LCL la del equipo de consolidados. Cada uno abre en la suya (el área la
+// decide el Dashboard con areaInicial: home_area del usuario → última elección
+// guardada → FCL) y el progreso del día y el historial siguen esa misma elección.
 
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
@@ -15,7 +21,8 @@ import { dbShipmentToOperation, buildPerContainerPatch, SEGUIMIENTO_DIAS } from 
 import { groupByVoyage, buildEtaShiftPatch } from '@/lib/vesselGroups'
 import {
   colaSeguimientos, grupoDestino, ORDEN_GRUPOS, textoUpdate, nombreBuqueBase,
-  type CargaSeguimiento, type FilaSeguimiento,
+  areaDeCarga, AREAS_SEGUIMIENTO,
+  type CargaSeguimiento, type FilaSeguimiento, type AreaSeguimiento,
 } from '@/lib/seguimientos'
 import { trackingCarrier } from '@/lib/trackingLinea'
 import { cambiosDeBuque, detectarTrasbordo, lineaDeTiempo, type CambioBuque, type AuditRow } from '@/lib/trasbordo'
@@ -51,12 +58,20 @@ interface Props {
   onPatchShipment?: (id: string, fields: Record<string, unknown>) => void
   /** Abre la ficha completa (panel de Operaciones) para la carga. */
   onOpenDetail?: (ref: string) => void
+  /** Área que se está mirando. El estado vive en el Dashboard para que el
+   *  badge de la pestaña cuente lo mismo que se ve acá adentro. */
+  area: AreaSeguimiento
+  onAreaChange: (a: AreaSeguimiento) => void
+  /** Pendientes de la OTRA área. Se pinta en su chip para que partir la cola
+   *  no vuelva invisible el atraso del otro equipo: el supervisor tiene que
+   *  ver desde acá que del otro lado hay 40 sin mandar. */
+  pendientesOtraArea?: number
 }
 
 /** Ítem envuelto para groupByVoyage (necesita { buque, eta } arriba). */
 interface ItemViaje { buque: string; eta: string; fila: FilaSeguimiento }
 
-export default function SeguimientosBoard({ dbShipments, onPatchShipment, onOpenDetail }: Props) {
+export default function SeguimientosBoard({ dbShipments, onPatchShipment, onOpenDetail, area, onAreaChange, pendientesOtraArea = 0 }: Props) {
   // Fino por marca (handoff 03-admin · Seguimientos): tipografía y verdes del
   // sistema bajo Mediterránea; TWF intacto.
   const med = useBrand().id === 'med'
@@ -78,17 +93,13 @@ export default function SeguimientosBoard({ dbShipments, onPatchShipment, onOpen
       salida: s.salida, descarga: s.descarga, etaFiscal: s.eta_fiscal,
     })), [dbShipments])
 
-  const cola = useMemo(() => colaSeguimientos(cargas, hoy), [cargas, hoy])
+  const cola = useMemo(() => colaSeguimientos(cargas, hoy, area), [cargas, hoy, area])
 
-  // Progreso del día: lo enviado HOY (sella seguimiento=hoy) + lo que falta.
-  const enviadosHoy = useMemo(() => {
-    const h = hoyIso()
-    return (dbShipments || []).filter(s =>
-      !s.archived && (s.mode === 'fcl' || s.mode === 'lcl') && (s.seguimiento || '').trim() === h
-    ).length
-  }, [dbShipments, hoyKey]) // eslint-disable-line react-hooks/exhaustive-deps
-  const totalDia = cola.pendientes.length + enviadosHoy
-  const pctDia = totalDia > 0 ? Math.round((enviadosHoy / totalDia) * 100) : 0
+  // Progreso del día del ÁREA que se está mirando (lo calcula la lib junto con
+  // la cola): antes contaba FCL + LCL juntas y el % se ensuciaba con updates
+  // que no son de quien lo mira.
+  const { enviados: enviadosHoy, total: totalDia, pct: pctDia } = cola.progreso
+  const etiquetaArea = AREAS_SEGUIMIENTO.find(a => a.id === area)?.label || area.toUpperCase()
 
   // Destino → grupos de VIAJE (mismo criterio que "ETA por buque" de
   // Operaciones: buque + cercanía de ETA). Las cargas sin buque van a un
@@ -164,6 +175,17 @@ export default function SeguimientosBoard({ dbShipments, onPatchShipment, onOpen
     for (const s of dbShipments || []) {
       const k = String(s.ref || '').trim().toUpperCase()
       if (k && !m.has(k)) m.set(k, String(s.cliente || '').trim())
+    }
+    return m
+  }, [dbShipments])
+  /** REF → área (FCL/LCL), para que el historial siga el selector: el log
+   *  guarda la ref, no la modalidad. */
+  const areaPorRef = useMemo(() => {
+    const m = new Map<string, AreaSeguimiento>()
+    for (const s of dbShipments || []) {
+      const k = String(s.ref || '').trim().toUpperCase()
+      const a = areaDeCarga(s.mode)
+      if (k && a && !m.has(k)) m.set(k, a)
     }
     return m
   }, [dbShipments])
@@ -448,7 +470,6 @@ export default function SeguimientosBoard({ dbShipments, onPatchShipment, onOpen
           </button>
           <span className="text-sm text-foreground/85 truncate min-w-0 flex-1 basis-36">
             {c.cliente || '—'}
-            {c.mode === 'lcl' && <span className="ml-2 text-[10px] font-bold text-sky-600">LCL</span>}
           </span>
           {tras.hubo && (
             <span
@@ -602,12 +623,35 @@ export default function SeguimientosBoard({ dbShipments, onPatchShipment, onOpen
     <div className="space-y-5">{/* Fino por marca (handoff 03-admin · Seguimientos) */}
       {/* ── Header + progreso del día ── */}
       <div>
-        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <h1 className={med ? 'titulo-med text-3xl text-med-violeta' : 'text-2xl font-bold tracking-tight'}>Seguimientos</h1>
+          {/* Dos colas separadas (Brian 04/09): mismo selector que el área de
+              HOY. Cada uno abre en la suya y la elección se recuerda. */}
+          <div role="tablist" aria-label="Área de seguimientos" className="inline-flex rounded-lg border border-border bg-muted/40 p-0.5">
+            {AREAS_SEGUIMIENTO.map(a => (
+              <button
+                key={a.id}
+                type="button"
+                role="tab"
+                aria-selected={area === a.id}
+                onClick={() => onAreaChange(a.id)}
+                className={`h-8 px-3 rounded-md text-sm font-semibold transition-colors ${area === a.id ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'}`}
+              >
+                {a.label}
+                {/* El número solo aparece en el chip de la otra área: en el
+                    propio ya está el "N de M enviados hoy" de al lado. */}
+                {area !== a.id && pendientesOtraArea > 0 && (
+                  <span className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-muted-foreground/20 px-1 text-[10px] font-bold tabular-nums">
+                    {pendientesOtraArea}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
           <p className="text-sm text-muted-foreground">
             {totalDia > 0
               ? <><b className="text-foreground">{enviadosHoy} de {totalDia}</b> enviados hoy · {cola.alDia.length} al día</>
-              : <>{cola.alDia.length} cargas en viaje, todas al día</>}
+              : <>{cola.alDia.length} cargas {etiquetaArea} en viaje, todas al día</>}
           </p>
         </div>
         {totalDia > 0 && (
@@ -629,8 +673,8 @@ export default function SeguimientosBoard({ dbShipments, onPatchShipment, onOpen
               <CheckCircle size={18} weight="fill" className={med ? 'text-med-ok shrink-0' : 'text-emerald-600 shrink-0'} />
               <p className={med ? 'text-sm text-med-ok' : 'text-sm text-emerald-700'}>
                 {enviadosHoy > 0
-                  ? <><b>¡Terminaste!</b> {enviadosHoy} update{enviadosHoy === 1 ? '' : 's'} enviado{enviadosHoy === 1 ? '' : 's'} hoy — todos los seguimientos al día.</>
-                  : <><b>¡Felicitaciones!</b> Todos los seguimientos están al día — ninguna carga en viaje lleva 7 días sin update.</>}
+                  ? <><b>¡Terminaste!</b> {enviadosHoy} update{enviadosHoy === 1 ? '' : 's'} enviado{enviadosHoy === 1 ? '' : 's'} hoy — todos los seguimientos {etiquetaArea} al día.</>
+                  : <><b>¡Felicitaciones!</b> Los seguimientos {etiquetaArea} están al día — ninguna carga en viaje lleva 7 días sin update.</>}
               </p>
             </div>
           )}
@@ -752,6 +796,8 @@ export default function SeguimientosBoard({ dbShipments, onPatchShipment, onOpen
         <TabsContent value="historial" className="mt-4">
           <HistorialSeguimientos
             clientePorRef={clientePorRef}
+            areaPorRef={areaPorRef}
+            area={area}
             onOpenDetail={onOpenDetail}
             recargarToken={recargarToken}
           />

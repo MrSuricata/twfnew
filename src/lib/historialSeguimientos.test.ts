@@ -213,3 +213,34 @@ describe('agruparPorDia', () => {
     expect(g.map(x => x.eventos.length)).toEqual([2, 1, 3])
   })
 })
+
+// ─── Historial por área (Brian 04/09/2026) ──────────────────────────────
+// La cola se separó en FCL y LCL, y el historial tiene que seguir la misma
+// elección: `seguimientos_log` guarda la ref, no la modalidad, así que el área
+// se pega desde las cargas que la pantalla ya tiene en memoria.
+
+describe('filtrarEventos — por área', () => {
+  const areas = new Map<string, 'fcl' | 'lcl'>([['A7938', 'fcl'], ['L500', 'lcl']])
+  const eventos = armarEventos([
+    fila({ ref: 'A7938' }),
+    fila({ ref: 'L500' }),
+    fila({ ref: 'BORRADA' }),   // ya no está en el listado: área desconocida
+  ], clientes, areas)
+
+  it('pega el área de cada ref', () => {
+    expect(eventos.map(e => e.area).sort()).toEqual(['', 'fcl', 'lcl'])
+  })
+
+  it('area=fcl esconde las LCL (y al revés)', () => {
+    expect(filtrarEventos(eventos, { area: 'fcl' }).map(e => e.ref)).toEqual(['A7938', 'BORRADA'])
+    expect(filtrarEventos(eventos, { area: 'lcl' }).map(e => e.ref)).toEqual(['L500', 'BORRADA'])
+  })
+
+  it('sin área no filtra nada', () => {
+    expect(filtrarEventos(eventos, {})).toHaveLength(3)
+  })
+
+  it('el área se combina con el filtro de texto', () => {
+    expect(filtrarEventos(eventos, { area: 'lcl', texto: 'A7938' })).toHaveLength(0)
+  })
+})
