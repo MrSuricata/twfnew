@@ -43,9 +43,17 @@ export const DEVOLUCIONES_PLAZA = ['STL', 'MPS', 'TCP', 'MONTECON', 'MURCHISON']
 /** Mismas opciones de operativa que el alta (NewShipmentDialog). */
 export const OPERATIVA_OPCIONES = ['TRASIEGO', 'CONTENEDOR', 'CARGA A PISO']
 
+/** Madera: tri-estado. El select ofrece las dos RESPUESTAS; "sin definir" es
+ *  justamente lo que la card está reclamando, así que no es una opción. */
+export const MADERA_OPCIONES = [
+  { value: 'SI', label: 'Sí, lleva madera' },
+  { value: 'NO', label: 'No lleva madera' },
+]
+
 export const FALTANTE_INPUTS: Partial<Record<keyof CargaCampos, FaltanteInput>> = {
   cliente: { widget: 'cliente', placeholder: 'Elegí el cliente' },
   clientRef: { widget: 'text', placeholder: 'ref del cliente (ej: 1410)' },
+  wood: { widget: 'select', opciones: MADERA_OPCIONES },
   pais: { widget: 'select', opciones: (EDITABLE_FIELDS.pais?.options ?? []).filter(o => o.value !== '') },
   eta: { widget: 'date' },
   buque: { widget: 'text', placeholder: 'BUQUE VIAJE' },
@@ -134,6 +142,19 @@ export function buildFaltantePatch(
       return { ok: true, patch: { contenedor: columna, operativas: arr } }
     }
     return { ok: true, patch: { contenedor: serializeCntr(lista) } }
+  }
+
+  // Madera: booleano en la columna Y 'SI'/'' en el array por contenedor (de
+  // ahí lo leen el partner y el rollup del espejo FCL). Escribir solo la
+  // columna dejaba el array diciendo lo contrario — mismo modo de falla que
+  // el contenedor y los pesos.
+  if (campo === 'wood') {
+    const si = texto.toUpperCase() === 'SI'
+    if (!si && texto.toUpperCase() !== 'NO') return { ok: false, error: 'Elegí Sí o No' }
+    if (operativas && operativas.length > 0) {
+      return { ok: true, patch: { wood: si, operativas: operativas.map(o => ({ ...o, WOOD: si ? 'SI' : '' })) } }
+    }
+    return { ok: true, patch: { wood: si } }
   }
 
   let valor: unknown = texto

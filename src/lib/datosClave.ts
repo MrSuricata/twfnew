@@ -71,13 +71,22 @@ const LCL: DatoClave[] = [
 const FCL: DatoClave[] = [
   { key: 'ref', label: 'Ref', control: 'texto', obligatorioAlta: true, reclamable: false },
   { key: 'cliente', label: 'Cliente', control: 'cliente', obligatorioAlta: true, reclamable: false },
+  // La referencia PROPIA del cliente. Se reclama desde el rediseño 04/09: el
+  // portal muestra la del cliente cuando existe, y hoy la tienen 16 de 377
+  // cargas — sin cargarla al alta, 3 de cada 4 clientes siguen viendo la
+  // nuestra. Qué clientes la usan lo decide datosFaltantes (no se le pide a
+  // todo el mundo un dato que su cliente no tiene).
+  { key: 'client_ref', label: 'Ref. del cliente', control: 'texto', obligatorioAlta: false, reclamable: true, hint: 'ej: 1410' },
   { key: 'contenedor', label: 'Contenedor', control: 'texto', obligatorioAlta: false, reclamable: true },
   { key: 'eta', label: 'ETA', control: 'fecha', obligatorioAlta: false, reclamable: true },
   { key: 'buque', label: 'Buque', control: 'texto', obligatorioAlta: false, reclamable: true },
   { key: 'linea', label: 'Línea', control: 'combo', obligatorioAlta: false, reclamable: true },
   { key: 'doc_number', label: 'BL', control: 'texto', obligatorioAlta: false, reclamable: true },
   { key: 'fiscal', label: 'Fiscal', control: 'combo', obligatorioAlta: false, reclamable: true },
-  { key: 'wood', label: 'Madera', control: 'madera', obligatorioAlta: false, reclamable: false },
+  // Madera: define si hay que pedir SENASA el día de carga y va en el Word de
+  // AD/AT. 39 FCL activas la tienen sin definir (04/09) — se reclama, como en
+  // LCL. `null` = a confirmar; `false` es una respuesta, no un vacío.
+  { key: 'wood', label: 'Madera', control: 'madera', obligatorioAlta: false, reclamable: true },
   { key: 'imo', label: 'IMO', control: 'tilde', obligatorioAlta: false, reclamable: false },
   { key: 'oog', label: 'OOG', control: 'tilde', obligatorioAlta: false, reclamable: false },
 ]

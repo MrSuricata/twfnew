@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { datosFaltantes, faltantesUrgentes, faltantesFuturos, resumenFaltantes, type CargaCampos, FALTANTES_DIAS_COORDINACION } from './datosFaltantes'
+import { datosFaltantes, faltantesUrgentes, faltantesFuturos, resumenFaltantes, clientesConRefPropia, type CargaCampos, FALTANTES_DIAS_COORDINACION } from './datosFaltantes'
 
 const HOY = new Date(2026, 7, 17) // lunes 17/08/2026
 
@@ -8,7 +8,9 @@ function carga(c: Partial<CargaCampos> = {}): CargaCampos {
   return {
     mode: 'fcl', pais: 'UY', cliente: 'PERETTI', eta: '2026-10-20', etd: '',
     buque: '', linea: '', docNumber: '', cntr: '', pkgs: 0, kg: 0, m3: 0, agente: '',
-    deposito: '', operativa: '', transporte: '', fiscal: '', salida: '', ...c,
+    deposito: '', operativa: '', transporte: '', fiscal: '', salida: '',
+    // Madera respondida: los tests de OTRAS etapas no arrastran este faltante.
+    wood: false, ...c,
   }
 }
 
@@ -114,7 +116,7 @@ describe('urgentes y adelantar (Brian 28/08)', () => {
     mode: 'fcl', pais: 'UY', cliente: 'X', buque: 'B', linea: 'MSC', docNumber: 'MBL1',
     cntr: 'ABCD1234567', pkgs: 1, kg: 1, m3: 1, agente: 'AG', terminal: 'TCP',
     deposito: 'GODILCO', operativa: 'TRASIEGO', transporte: 'T', fiscal: 'F',
-    descripcion: 'REPUESTOS', etd: '2026-07-01', despacho: 'GOMEZ',
+    descripcion: 'REPUESTOS', etd: '2026-07-01', despacho: 'GOMEZ', wood: false,
   }
 
   it('llegada CON salida coordinada sigue en la tarjeta si falta la devolución', () => {
@@ -155,7 +157,7 @@ describe('ref del cliente como faltante para CHIAPERO/VMG (Brian 26/08)', () => 
   it('CHIAPERO embarcada sin ref cliente: la pide', () => {
     const f = datosFaltantes({ ...base, cliente: 'CHIAPERO Y ASOC. S.R.L.', clientRef: '' }, hoy)
     expect(f.map(x => x.campo)).toContain('clientRef')
-    expect(f.find(x => x.campo === 'clientRef')?.etiqueta).toBe('Ref cliente')
+    expect(f.find(x => x.campo === 'clientRef')?.etiqueta).toBe('Ref. del cliente')
   })
 
   it('las variantes de VMG también ("VMG S.A.", "EQUIPO ORIGINAL VMG")', () => {
@@ -178,6 +180,68 @@ describe('ref del cliente como faltante para CHIAPERO/VMG (Brian 26/08)', () => 
   it('en origen lejano sin embarcar todavía no se pide', () => {
     const f = datosFaltantes(carga({ cliente: 'CHIAPERO Y ASOC. S.R.L.', clientRef: '', eta: '2026-11-20' }), hoy)
     expect(f.map(x => x.campo)).not.toContain('clientRef')
+  })
+
+  // Rediseño 04/09 (D2): el portal muestra la ref del cliente cuando está, así
+  // que se pide también a los clientes que YA la usan, y se vuelve a pedir
+  // cuando lo cargado no sirve de referencia.
+  it('la ref que dice el NOMBRE del cliente no cuenta como cargada', () => {
+    const f = datosFaltantes({ ...base, cliente: 'VMG S.A.', clientRef: 'VMG S.A.' }, hoy)
+    expect(f.map(x => x.campo)).toContain('clientRef')
+  })
+
+  it('un cliente cualquiera que ya usa su ref en otra carga: se le pide en todas', () => {
+    const cargas = [
+      { ...base, ref: 'A1', cliente: 'BICI PERETTI S.A.', clientRef: 'PO-900' },
+      { ...base, ref: 'A2', cliente: 'BICI PERETTI S.A.', clientRef: '' },
+    ]
+    const u = faltantesUrgentes(cargas, hoy)
+    expect(u.find(x => x.carga.ref === 'A2')?.faltantes.map(f => f.campo)).toContain('clientRef')
+    expect(u.find(x => x.carga.ref === 'A1')?.faltantes.map(f => f.campo) ?? []).not.toContain('clientRef')
+  })
+
+  it('un cliente que NUNCA usó una ref propia no queda con un faltante imposible', () => {
+    const cargas = [{ ...base, ref: 'A3', cliente: 'REMONTAR S.R.L.', clientRef: '' }]
+    const u = faltantesUrgentes(cargas, hoy)
+    expect(u.flatMap(x => x.faltantes.map(f => f.campo))).not.toContain('clientRef')
+  })
+
+  it('clientesConRefPropia: solo los que tienen una ref SANA', () => {
+    const set = clientesConRefPropia([
+      { cliente: 'BICI PERETTI S.A.', clientRef: 'PO-900' },
+      { cliente: 'VMG S.A.', clientRef: 'VMG S.A.' },       // el nombre no es una ref
+      { cliente: 'REMONTAR S.R.L.', clientRef: '' },
+      { cliente: '', clientRef: '77' },                      // sin cliente no entra
+    ])
+    expect([...set]).toEqual(['BICI PERETTI S.A.'])
+  })
+})
+
+describe('madera como faltante en FCL (spec 04/09)', () => {
+  const hoy = new Date(2026, 7, 26)
+  const base = carga({ eta: '2026-09-05', etd: '2026-08-01', buque: 'B', linea: 'MSC', docNumber: 'MBL', cntr: 'ABCD1234567' })
+
+  it('sin definir (null o ausente) se pide, con la etiqueta Madera', () => {
+    for (const wood of [null, undefined]) {
+      const f = datosFaltantes({ ...base, wood }, hoy)
+      expect(f.map(x => x.campo)).toContain('wood')
+    }
+    expect(datosFaltantes({ ...base, wood: null }, hoy).find(x => x.campo === 'wood')?.etiqueta).toBe('Madera')
+  })
+
+  it('"No lleva madera" es una respuesta: deja de pedirse', () => {
+    expect(datosFaltantes({ ...base, wood: false }, hoy).map(x => x.campo)).not.toContain('wood')
+    expect(datosFaltantes({ ...base, wood: true }, hoy).map(x => x.campo)).not.toContain('wood')
+  })
+
+  it('LCL no la pide acá: tiene su propia card en HOY LCL', () => {
+    const f = datosFaltantes({ ...base, mode: 'lcl', cntr: '', wood: null }, hoy)
+    expect(f.map(x => x.campo)).not.toContain('wood')
+  })
+
+  it('en origen lejano, sin ETD ni ventana, todavía no se pide', () => {
+    const f = datosFaltantes(carga({ wood: null, eta: '2026-11-20' }), hoy)
+    expect(f.map(x => x.campo)).not.toContain('wood')
   })
 })
 
