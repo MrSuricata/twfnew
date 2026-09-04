@@ -56,8 +56,11 @@ export default function PartnerDashboardShell({
           <div className="flex items-center gap-3 min-w-0">
             <div className="p-2 bg-white/10 rounded-lg ring-1 ring-inset ring-white/20 shrink-0 [&_svg]:text-white">{icon}</div>
             <div className="min-w-0">
-              <p className="text-xs text-white/80 leading-tight">{saludoPersonal(userName)}</p>
-              <h1 className="titulo-med text-base text-white leading-tight truncate">{title}</h1>
+              {/* El saludo es lo primero que se lee al entrar y estaba en letra
+                  chica (Brian 04/09): ahora es el renglón grande del encabezado
+                  y el nombre del depósito queda de contexto, abajo. */}
+              <p className="text-lg sm:text-xl font-semibold text-white leading-tight">{saludoPersonal(userName)}</p>
+              <h1 className="titulo-med text-base text-white/90 leading-tight truncate">{title}</h1>
               <div className="flex items-center gap-1.5 text-xs text-white/70">
                 <User size={12} />
                 <span className="truncate">{userName}</span>
