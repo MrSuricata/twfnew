@@ -47,13 +47,15 @@ no se toca. Lo único que las roza es la propuesta para pasarlas a LCL.
 Las LCL viven en `shipments` con `mode='lcl'`, que es la tabla nueva y unificada.
 `lcl_air_shipments` (1 fila, de mayo) se retira.
 
-### Migración: una sola columna
+### Migración: tres columnas, ninguna de fecha
 
 ```sql
-alter table shipments add column if not exists stock text;
+alter table shipments add column if not exists stock         text;
+alter table shipments add column if not exists marca_cliente text;  -- stand_by | prioridad
+alter table shipments add column if not exists marca_motivo  text;
 ```
 
-Nada más. Las dos fechas que hacen falta ya existen:
+Ninguna fecha nueva: las dos que hacen falta ya existen:
 
 - `eta` — llegada a Montevideo
 - `desconsol_date` — fecha de desconsolidación
