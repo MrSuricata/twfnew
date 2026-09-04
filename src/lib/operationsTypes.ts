@@ -487,6 +487,9 @@ export function dbFclToParsedShipment(d: DbShipment): ParsedShipment {
     : (hasOp ? [op] : [])
   return {
     REF: d.ref, CLIENTE: d.cliente || '', ETD: d.etd || '', ETA: d.eta || '',
+    // La ref propia del cliente viaja también acá: es lo que "Ver como" le
+    // muestra a Brian, y sin esto no veía lo que ve el cliente (spec 04/09).
+    CLIENT_REF: d.client_ref || '',
     FT: 0, LIBRE_HASTA: d.libre || '', CNTR: d.contenedor || '', N: d.n_cntr || 0,
     MBL: d.doc_number || '', LINEA: d.linea || '', BUQUE: d.buque || '', TERMINAL: d.terminal || '',
     C_TERMINAL: 0, C_DEV: 0, LOCALES: 0, FLETE: 0, FORMA_DE_PAGO: 'al arribo', VTO: '',

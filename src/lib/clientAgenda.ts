@@ -76,7 +76,7 @@ export function eventosCliente(shipments: ParsedShipment[], hoyISO: string): Eve
     out.push({
       tipo, fecha,
       ref: txt(s.REF),
-      clientRef: txt((s as { CLIENT_REF?: string }).CLIENT_REF),
+      clientRef: txt(s.CLIENT_REF),
       cntr,
       buque: txt(s.BUQUE),
       dias: diffDias(hoyISO, fecha),

@@ -71,6 +71,12 @@ export interface ParsedShipment extends ShipmentRecord {
   calculatedN: number
   calculatedLibreHasta: string
   operativas?: OperativasRecord[]
+  /** La referencia PROPIA del cliente ("1410" de Chiapero), `shipments.client_ref`.
+   *  No viene de la planilla: la mandan el endpoint del portal
+   *  (api/_lib/clientShipments) y dbFclToParsedShipment (vista "Ver como").
+   *  Spec 04/09 (D2): en el portal manda esta cuando existe y sirve; `REF`
+   *  sigue siendo la clave interna (anclas, keys, matching). */
+  CLIENT_REF?: string
   // Etapa 3 migración FCL: presentes cuando la carga viene del espejo en DB.
   __dbId?: string        // id de la fila en `shipments` (para editar)
   __webEdited?: string[] // campos pisados por ediciones web (badge ✏️)
@@ -348,6 +354,11 @@ export function isShipmentCompleted(shipment: ParsedShipment): boolean {
  * Generate alerts for a list of shipments.
  * Produces libre-expiration warnings, status milestone notifications,
  * and operative report ready alerts.
+ *
+ * La ref NO va embebida en `message` (rediseño 04/09, D2): la carga se
+ * identifica por `shipmentRef` y la UI decide cómo pintarla (en el portal
+ * manda la ref del cliente cuando existe). Un consumidor que necesite la ref
+ * en el texto la arma él mismo — el digest de n8n no pasa por acá.
  */
 export function generateShipmentAlerts(shipments: ParsedShipment[], reports?: { id: string; shipmentRef: string; title: string; createdAt: number }[]): ShipmentAlert[] {
   const alerts: ShipmentAlert[] = []
@@ -365,7 +376,7 @@ export function generateShipmentAlerts(shipments: ParsedShipment[], reports?: { 
           type: 'report_ready',
           severity: 'info',
           title: 'Informe operativo disponible',
-          message: `${report.shipmentRef}: "${report.title}"`,
+          message: `"${report.title}"`,
           date: new Date(report.createdAt).toISOString().split('T')[0]
         })
       }
@@ -387,7 +398,7 @@ export function generateShipmentAlerts(shipments: ParsedShipment[], reports?: { 
               type: 'libre_vencido',
               severity: 'critical',
               title: `Días libres vencidos`,
-              message: `${s.REF}: vencido hace ${Math.abs(daysUntil)} día${Math.abs(daysUntil) === 1 ? '' : 's'} (${s.LIBRE_HASTA})`,
+              message: `Vencido hace ${Math.abs(daysUntil)} día${Math.abs(daysUntil) === 1 ? '' : 's'} (${s.LIBRE_HASTA})`,
               date: s.LIBRE_HASTA
             })
           } else if (daysUntil <= 2) {
@@ -398,8 +409,8 @@ export function generateShipmentAlerts(shipments: ParsedShipment[], reports?: { 
               severity: 'warning',
               title: `Días libres por vencer`,
               message: daysUntil === 0
-                ? `${s.REF}: los días libres vencen HOY`
-                : `${s.REF}: vence en ${daysUntil} día${daysUntil === 1 ? '' : 's'}`,
+                ? `Los días libres vencen HOY`
+                : `Vence en ${daysUntil} día${daysUntil === 1 ? '' : 's'}`,
               date: s.LIBRE_HASTA
             })
           } else if (daysUntil <= 5) {
@@ -409,7 +420,7 @@ export function generateShipmentAlerts(shipments: ParsedShipment[], reports?: { 
               type: 'libre_proximo',
               severity: 'info',
               title: `Próximo vencimiento`,
-              message: `${s.REF}: días libres vencen en ${daysUntil} días (${s.LIBRE_HASTA})`,
+              message: `Días libres vencen en ${daysUntil} días (${s.LIBRE_HASTA})`,
               date: s.LIBRE_HASTA
             })
           }
@@ -436,7 +447,7 @@ export function generateShipmentAlerts(shipments: ParsedShipment[], reports?: { 
           type: 'status_devuelto',
           severity: 'success',
           title: `Contenedor devuelto`,
-          message: `${s.REF}: contenedor devuelto exitosamente`,
+          message: `Contenedor devuelto exitosamente`,
           date: ops.find(o => !!o.DEV)?.DEV || ''
         })
       } else if (hasEtaFisc) {
@@ -449,8 +460,8 @@ export function generateShipmentAlerts(shipments: ParsedShipment[], reports?: { 
           severity: 'success',
           title: etaFiscToday ? `Llegando a fiscal hoy` : `En depósito fiscal`,
           message: etaFiscToday
-            ? `${s.REF}: su carga llega hoy a ${fiscalName}`
-            : `${s.REF}: su carga está en ${fiscalName}`,
+            ? `Su carga llega hoy a ${fiscalName}`
+            : `Su carga está en ${fiscalName}`,
           date: ops.find(o => !!o.ETA_FISC)?.ETA_FISC || ''
         })
       } else if (hasSalida) {
@@ -464,7 +475,7 @@ export function generateShipmentAlerts(shipments: ParsedShipment[], reports?: { 
             type: 'status_salio',
             severity: 'success',
             title: `Carga Hoy`,
-            message: `${s.REF}: ${todayOps.length} contenedor${todayOps.length > 1 ? 'es' : ''} sale hoy${extra}`,
+            message: `${todayOps.length} contenedor${todayOps.length > 1 ? 'es' : ''} sale${todayOps.length > 1 ? 'n' : ''} hoy${extra}`,
             date: todayOps[0]?.SALIDA || ''
           })
         } else {
@@ -474,7 +485,7 @@ export function generateShipmentAlerts(shipments: ParsedShipment[], reports?: { 
             type: 'status_salio',
             severity: 'success',
             title: `En Frontera`,
-            message: `${s.REF}: su carga está en frontera`,
+            message: `Su carga está en frontera`,
             date: ops.find(o => !!o.SALIDA)?.SALIDA || ''
           })
         }

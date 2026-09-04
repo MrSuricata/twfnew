@@ -179,6 +179,21 @@ describe('buildTruckByRef — estado derivado del camión por ref de origen', ()
 const fcl = (over: Partial<ParsedShipment> = {}): ParsedShipment =>
   ({ REF: 'A6902', CLIENTE: 'X', ETD: '', ETA: '', operativas: [], ...over }) as ParsedShipment
 
+describe('dbFclToParsedShipment — la ref propia del cliente viaja a "Ver como" (spec 04/09)', () => {
+  const fila = (over: Partial<DbShipment> = {}): DbShipment =>
+    ({ id: 'x', ref: 'A8121', mode: 'fcl', source: 'fcl', cliente: 'CHIAPERO', client_ref: '1410', ...over } as unknown as DbShipment)
+  it('CLIENT_REF sale de shipments.client_ref, tipado (sin casts)', () => {
+    expect(dbFclToParsedShipment(fila()).CLIENT_REF).toBe('1410')
+  })
+  it('sin ref del cliente viaja vacío, nunca undefined ni null', () => {
+    expect(dbFclToParsedShipment(fila({ client_ref: '' })).CLIENT_REF).toBe('')
+    expect(dbFclToParsedShipment(fila({ client_ref: null as unknown as string })).CLIENT_REF).toBe('')
+  })
+  it('mergeFclShipments conserva la ref del cliente de la DB', () => {
+    expect(mergeFclShipments([], [fila()])[0].CLIENT_REF).toBe('1410')
+  })
+})
+
 describe('mergeFclShipments — dedupe por REF (anti doble-conteo post-flip)', () => {
   const dbFcl = (ref: string): DbShipment => ({ id: ref, ref, mode: 'fcl', source: 'fcl' } as unknown as DbShipment)
   it('cache contaminado con FCL que ya está en la DB → no duplica (gana la DB)', () => {

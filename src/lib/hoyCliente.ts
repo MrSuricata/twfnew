@@ -726,8 +726,9 @@ export interface AlertaCliente {
   critica: boolean
 }
 
-/** Las alertas del portal hablan en nuestro idioma ("Días libres vencidos:
- *  A8045…"). Acá se traducen: ref del cliente y qué puede hacer. */
+/** Las alertas del portal hablan en nuestro idioma ("Días libres vencidos").
+ *  Acá se traducen: la ref del cliente sale de `shipmentRef` (el texto ya no
+ *  la trae, spec 04/09) y se dice qué puede hacer. */
 export function alertasCliente(alerts: ShipmentAlert[], shipments: ParsedShipment[]): AlertaCliente[] {
   const porRef = new Map<string, ParsedShipment>()
   for (const s of shipments || []) porRef.set(txt(s.REF), s)

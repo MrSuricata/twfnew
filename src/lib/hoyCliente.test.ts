@@ -382,7 +382,7 @@ describe('las cards son excluyentes: una carga (de un contenedor) está en UNA s
 describe('alertasCliente — card Atención en idioma del cliente', () => {
   const alerta = (a: Partial<ShipmentAlert>): ShipmentAlert => ({
     id: 'x', shipmentRef: 'A8045', type: 'libre_vencido', severity: 'critical',
-    title: 'Días libres vencidos', message: 'A8045: vencido hace 3 días (2026-08-30)', date: HOY, ...a,
+    title: 'Días libres vencidos', message: 'Vencido hace 3 días (2026-08-30)', date: HOY, ...a,
   })
   it('traduce las de días libres y muestra la ref del cliente', () => {
     const [a] = alertasCliente([alerta({})], [carga()])
