@@ -272,7 +272,10 @@ export function PanelPlegable({
         type="button"
         onClick={alternar}
         aria-expanded={estaAbierta}
-        className={`${t.header} w-full px-4 py-3.5 flex items-center gap-3 text-left transition-opacity hover:opacity-90`}
+        // `flex-wrap` como en PanelCard: con chips en el header y la card en una
+        // columna angosta (HOY en 3 columnas), sin esto los chips —que son
+        // `whitespace-nowrap`— aplastan el título hasta partirlo en tres renglones.
+        className={`${t.header} w-full px-4 py-3.5 flex flex-wrap items-center gap-3 text-left transition-opacity hover:opacity-90`}
       >
         <div className={`p-2 rounded-lg shrink-0 ${t.icono}`}>{icono}</div>
         <div className="min-w-0 flex-1">

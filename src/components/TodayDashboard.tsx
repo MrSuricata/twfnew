@@ -30,6 +30,10 @@ import {
   type TruckMatch,
 } from '@/lib/todayFilters'
 import ShipmentDetailsDialog from './ShipmentDetailsDialog'
+import CardHoy, { ChipUrgente, CuerpoCardHoy, chipsHeader } from './hoy/CardHoy'
+import { useCardsPlegadas, CLAVE_HOY_FCL } from '@/hooks/useCardsPlegadas'
+import { IDS_CARDS_HOY_FCL, type CardHoyId } from '@/lib/hoyCards'
+import type { CardsPlegadas } from '@/lib/cardsPlegadas'
 import ContainerQuickEdit from './operations/ContainerQuickEdit'
 import { deriveKnownTransportes, deriveKnownValues, DEPOSITOS_UY, type DbShipment } from '@/lib/operationsTypes'
 import { faltantesUrgentes, faltantesFuturos, resumenFaltantes, FALTANTES_DIAS_COORDINACION, type FaltanteUrgente, type CampoFaltante } from '@/lib/datosFaltantes'
@@ -586,6 +590,26 @@ export default function TodayDashboard({
   // informativo). Bajo TWF, ni una clase cambia.
   const med = useBrand().id === 'med'
 
+  // Plegado de las cards con memoria POR USUARIO (spec 04/09, D7): lo que el
+  // operador pliega sigue plegado entre recargas y entre refetches, porque el
+  // estado vive acá (modo controlado) y no adentro de cada panel. Plegada, la
+  // card SIGUE avisando: el header conserva el contador y los chips urgentes.
+  const plegadas = useCardsPlegadas(CLAVE_HOY_FCL, IDS_CARDS_HOY_FCL)
+
+  // ── Chips urgentes de los headers ──────────────────────────────────────
+  // Lo que la card seguiría gritando con el cuerpo plegado. Son los MISMOS
+  // criterios que ya pintan las filas adentro (no una regla nueva): el chip
+  // solo adelanta lo que verías al desplegar.
+  // Los dos son GRAVES: `todayFilters` define `grave = margen <= 0` ("sale antes
+  // o el mismo día que llega"). Se separan solo para decir CUÁL es el problema;
+  // el tono de los dos chips es `alerta`, igual que el rojo de la fila.
+  const pisadasImposibles = snapshot.salidasPisadas.filter(a => a.margen < 0).length
+  const pisadasMismoDia = snapshot.salidasPisadas.filter(a => a.margen === 0).length
+  const sinLiberarLlegadas = snapshot.sinLiberar.filter(a => a.severity === 'vencido').length
+  const sinLiberarUrgentes = snapshot.sinLiberar.filter(a => a.severity === 'urgente').length
+  const libreVencidos = snapshot.libreAlerts.filter(a => a.severity === 'vencido').length
+  const libreHoy = snapshot.libreAlerts.filter(a => a.severity === 'hoy').length
+
   // "jueves 2 de julio" — minúsculas como corresponde en español (sin la coma
   // del locale y SIN la clase `capitalize`, que capitalizaba mes y preposición).
   const todayLabel = new Date().toLocaleDateString('es-UY', {
@@ -659,19 +683,17 @@ export default function TodayDashboard({
 
       {/* ── Salidas pisadas por el buque ─────────────────── */}
       {snapshot.salidasPisadas.length > 0 && (
-        <Card className={med ? 'overflow-hidden bg-med-aviso-tinte border-2 border-med-aviso-borde' : 'accent-top overflow-hidden bg-destructive/[0.04] border-destructive/25'} style={{ ['--bar-color' as any]: 'var(--destructive)' }}>
-          <CardContent className="pt-5 pb-4">
-            <div className="flex items-center gap-2.5 mb-1">
-              <div className={med ? 'p-1.5 bg-med-aviso/10 rounded-md' : 'p-1.5 bg-destructive/10 rounded-md'}>
-                <Warning size={18} weight="fill" className={med ? 'text-med-aviso pulse-soft' : 'text-destructive pulse-soft'} />
-              </div>
-              <h2 className={med ? 'titulo-med text-[17px] text-med-aviso-texto' : 'text-sm font-semibold uppercase tracking-wide text-destructive'}>
-                Salidas pisadas por el buque
-              </h2>
-              <span className={med ? 'ml-auto inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-full bg-med-aviso text-white text-xs font-bold' : 'ml-auto inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-full bg-destructive text-destructive-foreground text-xs font-bold'}>
-                {snapshot.salidasPisadas.length}
-              </span>
-            </div>
+        <CardHoy
+          id="salidas-pisadas"
+          plegadas={plegadas}
+          icono={<Warning size={18} weight="fill" className="pulse-soft" />}
+          contador={snapshot.salidasPisadas.length}
+          extras={chipsHeader(
+            pisadasImposibles > 0 && <ChipUrgente tono="alerta">{pisadasImposibles} imposible{pisadasImposibles === 1 ? '' : 's'}</ChipUrgente>,
+            pisadasMismoDia > 0 && <ChipUrgente tono="alerta">{pisadasMismoDia} mismo día</ChipUrgente>,
+          )}
+        >
+          <CuerpoCardHoy>
             <p className="text-xs text-muted-foreground mb-3">
               El buque se movió y estas salidas quedaron pisadas (o muy justas) con la llegada a MVD — recoordinar con depósito y transporte.
             </p>
@@ -701,43 +723,27 @@ export default function TodayDashboard({
                 </button>
               ))}
             </div>
-          </CardContent>
-        </Card>
+          </CuerpoCardHoy>
+        </CardHoy>
       )}
 
       {/* ── Retiros de terminal (Brian 22/08 Montecon + 26/08 TCP): primera de
           las cards — turnos escasos en Montecon, y en ambas terminales el
           retiro termina con el aviso al cliente del traslado a depósito */}
       {(montecon.length > 0 || sinTerminal.length > 0) && (
-        <Card className={med ? 'overflow-hidden bg-med-info-tinte border-2 border-med-info-borde' : 'accent-top overflow-hidden bg-sky-500/[0.04] border-sky-500/25'} style={{ ['--bar-color' as any]: 'rgb(14 165 233)' }}>
-          <CardContent className="pt-5 pb-4">
-            <div className="flex items-center gap-2.5 mb-1">
-              <div className={med ? 'p-1.5 bg-med-violeta/10 rounded-md' : 'p-1.5 bg-sky-500/10 rounded-md'}>
-                <Anchor size={18} weight="fill" className={med ? 'text-med-violeta' : 'text-sky-600'} />
-              </div>
-              <h2 className={med ? 'titulo-med text-[17px] text-med-violeta' : 'text-sm font-semibold uppercase tracking-wide text-sky-700'}>
-                Retiros de terminal — Montecon y TCP
-              </h2>
-              <span className="text-[10px] text-muted-foreground whitespace-nowrap">próx. {MONTECON_DIAS_ADELANTE} días</span>
-              {monteconReagendar > 0 && (
-                <span className={med ? 'inline-flex items-center gap-1 text-xs font-bold text-med-error bg-med-error/10 border border-med-error/30 rounded-full px-2 py-0.5' : 'inline-flex items-center gap-1 text-xs font-bold text-red-700 bg-red-500/10 border border-red-500/30 rounded-full px-2 py-0.5'}>
-                  {monteconReagendar} para reagendar
-                </span>
-              )}
-              {monteconAvisar > 0 && (
-                <span className={med ? 'inline-flex items-center gap-1 text-xs font-bold text-med-aviso-texto bg-med-aviso/10 border border-med-aviso/30 rounded-full px-2 py-0.5' : 'inline-flex items-center gap-1 text-xs font-bold text-amber-700 bg-amber-500/10 border border-amber-500/30 rounded-full px-2 py-0.5'}>
-                  {monteconAvisar} avisar cliente
-                </span>
-              )}
-              {sinTerminal.length > 0 && (
-                <span className={med ? 'inline-flex items-center gap-1 text-xs font-bold text-med-error bg-med-error/10 border border-med-error/30 rounded-full px-2 py-0.5' : 'inline-flex items-center gap-1 text-xs font-bold text-red-700 bg-red-500/10 border border-red-500/30 rounded-full px-2 py-0.5'}>
-                  {sinTerminal.length} sin terminal
-                </span>
-              )}
-              <span className={med ? 'ml-auto inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-full bg-med-violeta text-med-celeste text-xs font-bold' : 'ml-auto inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-full bg-sky-500 text-white text-xs font-bold'}>
-                {montecon.length + sinTerminal.length}
-              </span>
-            </div>
+        <CardHoy
+          id="retiros-terminal"
+          plegadas={plegadas}
+          icono={<Anchor size={18} weight="fill" />}
+          subtitulo={`Próximos ${MONTECON_DIAS_ADELANTE} días`}
+          contador={montecon.length + sinTerminal.length}
+          extras={chipsHeader(
+            monteconReagendar > 0 && <ChipUrgente tono="alerta">{monteconReagendar} para reagendar</ChipUrgente>,
+            monteconAvisar > 0 && <ChipUrgente tono="aviso">{monteconAvisar} avisar cliente</ChipUrgente>,
+            sinTerminal.length > 0 && <ChipUrgente tono="alerta">{sinTerminal.length} sin terminal</ChipUrgente>,
+          )}
+        >
+          <CuerpoCardHoy>
             {sinTerminal.length > 0 && (
               <div className={med ? 'mt-1.5 mb-2.5 rounded-lg border border-med-error/40 bg-med-error/[0.06] px-2.5 py-2' : 'mt-1.5 mb-2.5 rounded-lg border border-red-500/40 bg-red-500/[0.06] px-2.5 py-2'}>
                 <div className="flex items-center gap-2 mb-1">
@@ -1004,8 +1010,8 @@ export default function TodayDashboard({
                 </div>
               ))}
             </div>
-          </CardContent>
-        </Card>
+          </CuerpoCardHoy>
+        </CardHoy>
       )}
 
       {/* ── Llegan sin liberar ───────────────────────────── */}
@@ -1020,19 +1026,17 @@ export default function TodayDashboard({
         </div>
       )}
       {snapshot.sinLiberar.length > 0 && (
-        <Card className={med ? 'overflow-hidden bg-med-aviso-tinte border-2 border-med-aviso-borde' : 'accent-top overflow-hidden bg-amber-500/[0.04] border-amber-500/25'} style={{ ['--bar-color' as any]: 'rgb(245 158 11)' }}>
-          <CardContent className="pt-5 pb-4">
-            <div className="flex items-center gap-2.5 mb-1">
-              <div className={med ? 'p-1.5 bg-med-aviso/10 rounded-md' : 'p-1.5 bg-amber-500/10 rounded-md'}>
-                <LockKey size={18} weight="fill" className={med ? 'text-med-aviso' : 'text-amber-600 dark:text-amber-400'} />
-              </div>
-              <h2 className={med ? 'titulo-med text-[17px] text-med-aviso-texto' : 'text-sm font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400'}>
-                Llegan sin liberar
-              </h2>
-              <span className={med ? 'ml-auto inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-full bg-med-aviso text-white text-xs font-bold' : 'ml-auto inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-full bg-amber-500 text-white text-xs font-bold'}>
-                {snapshot.sinLiberar.length}
-              </span>
-            </div>
+        <CardHoy
+          id="sin-liberar"
+          plegadas={plegadas}
+          icono={<LockKey size={18} weight="fill" />}
+          contador={snapshot.sinLiberar.length}
+          extras={chipsHeader(
+            sinLiberarLlegadas > 0 && <ChipUrgente tono="alerta">{sinLiberarLlegadas} ya {sinLiberarLlegadas === 1 ? 'llegó' : 'llegaron'}</ChipUrgente>,
+            sinLiberarUrgentes > 0 && <ChipUrgente tono="aviso">{sinLiberarUrgentes} llegan en 2d o menos</ChipUrgente>,
+          )}
+        >
+          <CuerpoCardHoy>
             <p className="text-xs text-muted-foreground mb-3">
               Llegan dentro de 10 días y la naviera todavía no confirmó la liberación — sin eso el contenedor no se retira.
             </p>
@@ -1074,25 +1078,22 @@ export default function TodayDashboard({
                 </div>
               ))}
             </div>
-          </CardContent>
-        </Card>
+          </CuerpoCardHoy>
+        </CardHoy>
       )}
 
       {/* ── Llegan con datos incompletos ─────────────────── */}
       {(incompletasTodas.length > 0 || adelantables.length > 0) && (
-        <Card className={med ? 'overflow-hidden bg-med-aviso-tinte border-2 border-med-aviso-borde' : 'accent-top overflow-hidden bg-amber-500/[0.04] border-amber-500/25'} style={{ ['--bar-color' as any]: 'rgb(245 158 11)' }}>
-          <CardContent className="pt-5 pb-4">
-            <div className="flex items-center gap-2.5 mb-1">
-              <div className={med ? 'p-1.5 bg-med-aviso/10 rounded-md' : 'p-1.5 bg-amber-500/10 rounded-md'}>
-                <PencilSimple size={18} weight="fill" className={med ? 'text-med-aviso' : 'text-amber-600'} />
-              </div>
-              <h2 className={med ? 'titulo-med text-[17px] text-med-aviso-texto' : 'text-sm font-semibold uppercase tracking-wide text-amber-700'}>
-                Llegan con datos incompletos
-              </h2>
-              <span className={med ? 'ml-auto inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-full bg-med-aviso text-white text-xs font-bold' : 'ml-auto inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-full bg-amber-500 text-white text-xs font-bold'}>
-                {incompletas.length}
-              </span>
-            </div>
+        <CardHoy
+          id="datos-incompletos"
+          plegadas={plegadas}
+          icono={<PencilSimple size={18} weight="fill" />}
+          contador={incompletas.length}
+          extras={chipsHeader(
+            montosCard.length > 0 && <ChipUrgente tono="alerta">{montosCard.length} sin montos</ChipUrgente>,
+          )}
+        >
+          <CuerpoCardHoy>
             <div className="flex items-center gap-1.5 mb-2">
               {([['datos', `Datos · ${incompletas.length}`], ['montos', `Montos · ${montosCard.length}`]] as const).map(([id, label]) => (
                 <button
@@ -1280,25 +1281,23 @@ export default function TodayDashboard({
               )}
             </div>
             )}
-          </CardContent>
-        </Card>
+          </CuerpoCardHoy>
+        </CardHoy>
       )}
 
       {/* ── LIBRE alerts strip ───────────────────────────── */}
       {snapshot.libreAlerts.length > 0 && (
-        <Card className="accent-top overflow-hidden bg-destructive/[0.03] border-destructive/20" style={{ ['--bar-color' as any]: 'var(--destructive)' }}>
-          <CardContent className="pt-5 pb-4">
-            <div className="flex items-center gap-2.5 mb-4">
-              <div className="p-1.5 bg-destructive/10 rounded-md">
-                <Siren size={18} weight="fill" className="text-destructive pulse-soft" />
-              </div>
-              <h2 className={med ? 'titulo-med text-[17px] text-destructive' : 'text-sm font-semibold uppercase tracking-wide text-destructive'}>
-                LIBRE vencido / crítico
-              </h2>
-              <span className="ml-auto inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-full bg-destructive text-destructive-foreground text-xs font-bold">
-                {snapshot.libreAlerts.length}
-              </span>
-            </div>
+        <CardHoy
+          id="libre-critico"
+          plegadas={plegadas}
+          icono={<Siren size={18} weight="fill" className="pulse-soft" />}
+          contador={snapshot.libreAlerts.length}
+          extras={chipsHeader(
+            libreVencidos > 0 && <ChipUrgente tono="alerta">{libreVencidos} vencido{libreVencidos === 1 ? '' : 's'}</ChipUrgente>,
+            libreHoy > 0 && <ChipUrgente tono="aviso">{libreHoy} vence{libreHoy === 1 ? '' : 'n'} hoy</ChipUrgente>,
+          )}
+        >
+          <CuerpoCardHoy>
             <div className="space-y-1">
               {snapshot.libreAlerts.map((a) => (
                 <LibreAlertRow
@@ -1317,19 +1316,17 @@ export default function TodayDashboard({
                 />
               ))}
             </div>
-          </CardContent>
-        </Card>
+          </CuerpoCardHoy>
+        </CardHoy>
       )}
 
       {/* ── 3-card grid (oculta durante la carga inicial — evita "Sin salidas hoy" falsos) ── */}
       {!initialLoading && (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <TodayCard
-          title="Saliendo hoy"
-          subtitle="Camiones saliendo de Uruguay"
-          icon={<Truck size={18} weight="fill" className="text-blue-600 dark:text-blue-400" />}
-          iconBg="bg-blue-100 dark:bg-blue-500/10"
-          barColor="var(--chart-2)"
+          id="saliendo-hoy"
+          plegadas={plegadas}
+          icon={<Truck size={18} weight="fill" />}
           matches={snapshot.salientes}
           trucks={snapshot.trucksSalientes}
           emptyLabel="Sin salidas hoy"
@@ -1339,11 +1336,9 @@ export default function TodayDashboard({
           onToggleAviso={toggleAviso}
         />
         <TodayCard
-          title="En frontera hoy"
-          subtitle="Estimado (salió hace 1-2 días)"
-          icon={<MapPin size={18} weight="fill" className="text-amber-600 dark:text-amber-400" />}
-          iconBg="bg-amber-100 dark:bg-amber-500/10"
-          barColor="oklch(0.75 0.15 70)"
+          id="en-frontera"
+          plegadas={plegadas}
+          icon={<MapPin size={18} weight="fill" />}
           matches={snapshot.frontera}
           trucks={snapshot.trucksFrontera}
           emptyLabel="Sin cargas en frontera"
@@ -1353,11 +1348,9 @@ export default function TodayDashboard({
           onToggleAviso={toggleAviso}
         />
         <TodayCard
-          title="Llegando a fiscal hoy"
-          subtitle="Arribos a depósito fiscal"
-          icon={<Warehouse size={18} weight="fill" className="text-emerald-600 dark:text-emerald-400" />}
-          iconBg="bg-emerald-100 dark:bg-emerald-500/10"
-          barColor="var(--chart-3)"
+          id="llegando-fiscal"
+          plegadas={plegadas}
+          icon={<Warehouse size={18} weight="fill" />}
           matches={snapshot.llegandoFiscal}
           trucks={snapshot.trucksLlegandoFiscal}
           emptyLabel="Sin arribos fiscales hoy"
@@ -1434,11 +1427,11 @@ function StatChip({ icon, label, tone }: StatChipProps) {
 }
 
 interface TodayCardProps {
-  title: string
-  subtitle: string
+  /** Id de la card en `CARDS_HOY_FCL`: de ahí salen título, tono y subtítulo,
+   *  y con él se guarda el plegado en `user_prefs`. */
+  id: CardHoyId
+  plegadas: CardsPlegadas
   icon: React.ReactNode
-  iconBg: string
-  barColor: string
   matches: OpMatch[]
   /** Consolidados de esta columna. Van arriba de las cargas sueltas: el camión
    *  se mueve como una unidad y sus cargas no se repiten abajo. */
@@ -1453,27 +1446,30 @@ interface TodayCardProps {
   onToggleAviso: (shipment: ParsedShipment, cntr: string, key: CheckStepKey, label: string) => void
 }
 
-function TodayCard({ title, subtitle, icon, iconBg, barColor, matches, trucks = [], emptyLabel, onRowClick, column, checksByRef, onToggleAviso }: TodayCardProps) {
+function TodayCard({ id, plegadas, icon, matches, trucks = [], emptyLabel, onRowClick, column, checksByRef, onToggleAviso }: TodayCardProps) {
   const med = useBrand().id === 'med'
   const stepKey = AVISO_STEP_BY_COLUMN[column]
   const avisoLabel = AVISO_LABEL_BY_COLUMN[column]
   const total = matches.length + trucks.length
+  // Lo que la card sigue avisando con el cuerpo plegado: lo que falta hacer
+  // (el aviso de cada fila) y, en las salidas, el telex que impide retirar.
+  // Mismos criterios que las filas de abajo — el chip solo los adelanta.
+  const sinAvisar = matches.filter(
+    m => !avisoForCntr((checksByRef.get(normalizeRef(m.shipment.REF)) || {})[stepKey], m.op.CNTR_OP || ''),
+  ).length
+  const sinTelex = column === 'salientes' ? matches.filter(m => isSinTelex(m.op.TLX)).length : 0
   return (
-    <Card
-      className="accent-top overflow-hidden shadow-sm hover:shadow-md transition-shadow card-lift"
-      style={{ ['--bar-color' as any]: barColor }}
+    <CardHoy
+      id={id}
+      plegadas={plegadas}
+      icono={icon}
+      contador={total}
+      extras={chipsHeader(
+        sinTelex > 0 && <ChipUrgente tono="alerta">🚨 {sinTelex} sin telex</ChipUrgente>,
+        sinAvisar > 0 && <ChipUrgente tono="aviso">{sinAvisar} sin avisar</ChipUrgente>,
+      )}
     >
-      <CardContent className="pt-5 pb-4">
-        <div className="flex items-center gap-2.5 mb-4">
-          <div className={`p-1.5 rounded-md ${iconBg}`}>{icon}</div>
-          <div className="flex-1 min-w-0">
-            <h3 className={med ? 'text-[11px] font-semibold uppercase tracking-[0.08em] text-med-gris-suave truncate' : 'text-sm font-semibold uppercase tracking-wide truncate'}>{title}</h3>
-            <p className={med ? 'text-[11px] text-med-gris-suave truncate' : 'text-[11px] text-muted-foreground truncate'}>{subtitle}</p>
-          </div>
-          <span className={med ? 'ref-med inline-flex items-center justify-center min-w-7 h-7 px-2 text-2xl tabular-nums' : 'inline-flex items-center justify-center min-w-7 h-7 px-2 rounded-full bg-muted text-foreground text-xs font-bold tabular-nums'}>
-            {total}
-          </span>
-        </div>
+      <CuerpoCardHoy>
         {/* Consolidados primero: son un camión entero, no una carga suelta. */}
         {trucks.length > 0 && (
           <div className="mb-3 space-y-2">
@@ -1562,8 +1558,8 @@ function TodayCard({ title, subtitle, icon, iconBg, barColor, matches, trucks = 
             })}
           </div>
         )}
-      </CardContent>
-    </Card>
+      </CuerpoCardHoy>
+    </CardHoy>
   )
 }
 
