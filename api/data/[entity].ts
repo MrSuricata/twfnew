@@ -3604,10 +3604,15 @@ async function handlePartnerFeedback(req: VercelRequest, res: VercelResponse, db
       .single()
     if (error) throw error
     // Auditoría con el EMAIL del partner (su token no trae name/user de admin).
-    // La ref del contexto va como `ref` del log: si el comentario es sobre una
-    // carga, aparece en el rastro de esa carga.
-    logAudit(db, { email: partnerEmail } as any, 'comentario_partner', 'partner_feedback', v.data.contexto.ref || '', {
-      id: nuevo.id, partner: quien.alcance || '', pantalla: v.data.contexto.pantalla, movil: v.data.contexto.movil,
+    // La ref del contexto va en `details`, NO como `ref` del log: la manda el
+    // cliente y acá no se coteja contra el alcance del partner (a diferencia de
+    // partner-avisos, que sí lo hace). Usándola como `ref` del log, un POST
+    // armado a mano metería una fila en el rastro de cualquier carga. Un
+    // comentario es sobre la herramienta, no sobre una carga: no necesita
+    // aparecer en ese rastro.
+    logAudit(db, { email: partnerEmail } as any, 'comentario_partner', 'partner_feedback', '', {
+      id: nuevo.id, partner: quien.alcance || '', pantalla: v.data.contexto.pantalla,
+      movil: v.data.contexto.movil, refDeclarada: v.data.contexto.ref || '',
     })
     return res.status(200).json({ comentario: mapFilaToComentario(nuevo) })
   }

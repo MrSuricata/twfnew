@@ -31,6 +31,7 @@ import TermsPage from './components/TermsPage'
 import { NovedadesPage } from './components/NovedadesSection'
 import PrivacyPage from './components/PrivacyPage'
 import NotFoundPage from './components/NotFoundPage'
+import { olvidarRefEnFoco } from '@/lib/refEnFoco'
 
 type View = 'public' | 'admin-login' | 'admin-dashboard' | 'client-login' | 'client-portal' | 'partner-login' | 'depot-dashboard' | 'transport-dashboard' | 'terms' | 'privacy' | 'novedades' | 'not-found' | 'ui-preview'
 
@@ -1086,6 +1087,9 @@ function App() {
   }
 
   const handlePartnerLogin = (_token: string, role: string, userData: any) => {
+    // Segundo candado: si la sesión anterior no cerró por la puerta (se cerró
+    // la pestaña, venció el token), el logout nunca corrió y la ref sigue viva.
+    olvidarRefEnFoco()
     setPartnerData({ role, name: userData.name, filterValue: userData.filterValue })
     loadPartnerShipments()
     if (role === 'depot') {
@@ -1099,6 +1103,11 @@ function App() {
     clearAuth()
     setPartnerData(null)
     setPartnerShipments([])
+    // La ref que quedó en foco muere con la sesión. Los depósitos trabajan en
+    // máquinas compartidas: sin esto, el de GODILCO marca una devolución, sale,
+    // y dentro de los 10 minutos del TTL el de TRANSCAL manda un comentario con
+    // la ref de una carga que no es suya (y que ni siquiera puede ver).
+    olvidarRefEnFoco()
     navigateTo('public')
   }
 
