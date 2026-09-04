@@ -613,6 +613,10 @@ export default function DepotDashboard({ shipments, depotName, userName, onLogou
         )}
       </Seccion>
     ),
+    // La agenda ya estaba en la página, pero suelta: entra al mapa para tener
+    // ancla y chip como el resto. No se envuelve en `Seccion` — trae su propia
+    // caja y meterla adentro de otra card duplicaría bordes y encabezado.
+    agenda: <AgendaCalendar shipments={shipments} depotFilter={depotName} partnerView={true} />,
   }
 
   return (
@@ -633,9 +637,6 @@ export default function DepotDashboard({ shipments, depotName, userName, onLogou
           // <section>: la card ya es una <section> y anidar dos no dice nada.
           <div key={id} id={anclaSeccion(id)}>{secciones[id]}</div>
         ))}
-
-
-        <AgendaCalendar shipments={shipments} depotFilter={depotName} partnerView={true} />
       </div>
     </PartnerDashboardShell>
   )

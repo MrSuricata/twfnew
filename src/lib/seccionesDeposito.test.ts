@@ -47,7 +47,7 @@ describe('ordenSeccionesDeposito — sin trabajo hoy sube lo urgente', () => {
 
   it('solo vacíos por vencer: suben ellos y el resto queda en el orden de siempre', () => {
     const orden = ordenSeccionesDeposito(estado({ vacios: 2, vaciosPorVencer: 2 }))
-    expect(orden).toEqual(['vacios', 'hoy', 'retiros', 'lcl', 'plan', 'avisos'])
+    expect(orden).toEqual(['vacios', 'hoy', 'retiros', 'lcl', 'plan', 'avisos', 'agenda'])
   })
 
   it('la card de "Hoy" BAJA pero nunca desaparece: siempre están las seis', () => {
@@ -79,20 +79,22 @@ describe('ordenSeccionesDeposito — sin trabajo hoy sube lo urgente', () => {
 })
 
 describe('chips de la barra', () => {
-  it('solo aparecen las secciones que tienen algo (y "Hoy", que está siempre)', () => {
+  it('las que dependen de un contador aparecen con datos; Hoy, Plan y Agenda están siempre', () => {
     const chips = chipsSeccionesDeposito(estado({ operativasHoy: 2, retiros: 3 }))
-    expect(chips.map(c => c.id)).toEqual(['hoy', 'retiros'])
+    expect(chips.map(c => c.id)).toEqual(['hoy', 'retiros', 'plan', 'agenda'])
   })
 
   it('sin LCL no hay chip de LCL', () => {
     const chips = chipsSeccionesDeposito(estado({ retiros: 1, vacios: 1, lcl: 0, avisos: 1 }))
     expect(chips.map(c => c.id)).not.toContain('lcl')
-    expect(chips.map(c => c.id)).toEqual(['hoy', 'retiros', 'vacios', 'avisos'])
+    expect(chips.map(c => c.id)).toEqual(['hoy', 'retiros', 'vacios', 'plan', 'avisos', 'agenda'])
   })
 
-  it('el plan de 14 días nunca va a la barra', () => {
+  it('el plan de 14 días SÍ va a la barra: se ve en la página, se navega', () => {
+    // Cambió el 04/09: sin chip, Brian lo leyó como un olvido, no como una
+    // decisión de no alargar la barra.
     const chips = chipsSeccionesDeposito(estado({ retiros: 5, vacios: 5, lcl: 5, avisos: 5 }))
-    expect(chips.map(c => c.id)).not.toContain('plan')
+    expect(chips.map(c => c.id)).toContain('plan')
   })
 
   it('los chips van en el MISMO orden que las cards (si no, el resaltado salta para atrás)', () => {
@@ -112,13 +114,18 @@ describe('chips de la barra', () => {
   })
 
   it('con un solo destino no se dibuja la barra', () => {
-    expect(hayBarraSecciones(chipsSeccionesDeposito(SIN_NADA))).toBe(false)
+    // Con el portal vacío ya hay tres destinos (Hoy, Plan, Agenda), así que la
+    // barra se dibuja igual; la guarda sigue viva para una lista de un solo id.
+    expect(hayBarraSecciones([{ id: 'hoy', chip: 'Hoy' }])).toBe(false)
+    expect(hayBarraSecciones(chipsSeccionesDeposito(SIN_NADA))).toBe(true)
     expect(hayBarraSecciones(chipsSeccionesDeposito(estado({ retiros: 1 })))).toBe(true)
   })
 
-  it('"Hoy" tiene contenido siempre; el plan nunca va a la barra', () => {
+  it('Hoy, Plan y Agenda están siempre; las demás dependen de su contador', () => {
     expect(seccionConContenido(SIN_NADA, 'hoy')).toBe(true)
-    expect(seccionConContenido(estado({ lcl: 99 }), 'plan')).toBe(false)
+    expect(seccionConContenido(SIN_NADA, 'plan')).toBe(true)
+    expect(seccionConContenido(SIN_NADA, 'agenda')).toBe(true)
+    expect(seccionConContenido(SIN_NADA, 'lcl')).toBe(false)
   })
 })
 
@@ -204,5 +211,38 @@ describe('puedeAdoptarOrden — el orden no cambia mientras el usuario apunta', 
 
   it('los dos ordenes que la regla puede producir son permutaciones del mismo set', () => {
     expect([...A].sort()).toEqual([...B].sort())
+  })
+})
+
+// ── Toda sección que se ve tiene su acceso directo ──────────────────────────
+// Brian preguntó "acá faltan plan de carga, agenda, vacíos por devolver, ¿no?"
+// mirando la barra. Una card visible sin chip se lee como un olvido.
+describe('la barra no deja secciones huérfanas', () => {
+  it('todas las secciones definidas tienen chip', () => {
+    const sinChip = SECCIONES_DEPOSITO.filter(s => !s.chip).map(s => s.id)
+    expect(sinChip).toEqual([])
+  })
+
+  it('plan y agenda están siempre, no dependen de un contador', () => {
+    expect(seccionConContenido(SIN_NADA, 'plan')).toBe(true)
+    expect(seccionConContenido(SIN_NADA, 'agenda')).toBe(true)
+  })
+
+  it('con el portal en cero igual se puede navegar a Hoy, Plan y Agenda', () => {
+    const ids = chipsSeccionesDeposito(SIN_NADA).map(c => c.id)
+    expect(ids).toEqual(['hoy', 'plan', 'agenda'])
+  })
+
+  it('con datos aparecen todas, en el orden en que se ven las cards', () => {
+    const lleno = estado({ operativasHoy: 2, retiros: 8, vacios: 9, lcl: 1, avisos: 3 })
+    expect(chipsSeccionesDeposito(lleno).map(c => c.id))
+      .toEqual(['hoy', 'retiros', 'vacios', 'lcl', 'plan', 'avisos', 'agenda'])
+  })
+
+  it('la agenda queda última también cuando el orden se da vuelta', () => {
+    const urgente = estado({ operativasHoy: 0, vacios: 4, vaciosPorVencer: 2, retiros: 3, retirosListos: 1 })
+    const ids = chipsSeccionesDeposito(urgente).map(c => c.id)
+    expect(ids[0]).toBe('vacios')
+    expect(ids[ids.length - 1]).toBe('agenda')
   })
 })
