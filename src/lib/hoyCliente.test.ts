@@ -397,8 +397,17 @@ describe('alertasCliente — card Atención en idioma del cliente', () => {
     const chiapero = carga({ REF: 'A8121', CLIENT_REF: 'CHIAPERO S.R.L.' })
     const [con] = alertasCliente([alerta({ shipmentRef: 'A8121' })], [chiapero], 'CHIAPERO S.R.L.')
     expect(con.refs).toEqual({ principal: '8121', secundaria: '', propia: false })
+  })
+  it('y se descarta IGUAL cuando no sabemos el nombre del cliente', () => {
+    // El portal saca el nombre de `client_users`, donde puede estar cargada la
+    // persona de contacto y no la razón social. Si el descarte dependiera solo
+    // de esa comparación, la razón social saldría de título grande. La regla
+    // `pareceNombre` (sin dígitos + más de una palabra) lo ataja sin saber
+    // quién mira.
+    const chiapero = carga({ REF: 'A8121', CLIENT_REF: 'CHIAPERO S.R.L.' })
     const [sin] = alertasCliente([alerta({ shipmentRef: 'A8121' })], [chiapero])
-    expect(sin.refs.principal).toBe('CHIAPERO S.R.L.')
+    expect(sin.refs.principal).toBe('8121')
+    expect(sin.refs.propia).toBe(false)
   })
 })
 

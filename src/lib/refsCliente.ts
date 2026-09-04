@@ -87,14 +87,35 @@ const claveNombre = (v: unknown): string =>
   txt(v).toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ')
 
 /**
+ * ¿Esto parece el NOMBRE de una empresa y no una referencia?
+ *
+ * Comparar contra el nombre del cliente no alcanza: el portal recibe ese
+ * nombre de `client_users`, donde puede estar cargado el de la persona de
+ * contacto y no la razón social — y entonces "BICI PERETTI S.A." pasaría el
+ * filtro y saldría de título grande (pasa hoy en la base: 4 cargas tienen la
+ * razón social metida en `client_ref`).
+ *
+ * Regla independiente de quién esté mirando: una referencia **sin un solo
+ * dígito y con más de una palabra** no es un identificador. Las refs reales
+ * de los clientes siempre traen números ("1410", "OCE 80-1", "2051-5 / 2054",
+ * "LY26-BP001-1"), y una sigla suelta de una palabra se conserva por las
+ * dudas.
+ */
+function pareceNombre(r: string): boolean {
+  return !/\d/.test(r) && r.trim().split(/\s+/).length > 1
+}
+
+/**
  * ¿La referencia del cliente sirve como título de la carga?
  * No sirve si está vacía, si pasa de REF_CLIENTE_MAX caracteres, si es el
- * nombre del cliente (dato mal cargado) o si es un alias de nuestra propia
- * ref (ver `esAliasNuestro`).
+ * nombre del cliente (dato mal cargado), si PARECE un nombre aunque no
+ * conozcamos el del cliente, o si es un alias de nuestra propia ref (ver
+ * `esAliasNuestro`).
  */
 export function refClienteSana(clientRef: unknown, ...nombres: unknown[]): boolean {
   const r = txt(clientRef)
   if (!r || r.length > REF_CLIENTE_MAX) return false
+  if (pareceNombre(r)) return false
   const clave = claveNombre(r)
   return !nombres.some(n => txt(n) && claveNombre(n) === clave)
 }

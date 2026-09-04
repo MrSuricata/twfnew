@@ -196,3 +196,27 @@ describe('esAliasNuestro / LCL: client_ref trae un alias nuestro', () => {
     expect(r.propia).toBe(true)
   })
 })
+
+// ── Parece un nombre, no una referencia ─────────────────────────────────────
+// Verificado en la base el 04/09/2026: 4 cargas FCL tienen la razón social
+// metida en `client_ref`. Comparar contra el nombre del cliente no alcanza,
+// porque el portal lo saca de `client_users` y ahí puede estar el nombre de la
+// persona de contacto en vez de la empresa.
+describe('refClienteSana / una razón social no es una referencia', () => {
+  it('descarta el nombre de empresa aunque no sepamos quién mira', () => {
+    expect(refClienteSana('CHIAPERO S.R.L.')).toBe(false)
+    expect(refClienteSana('BICI PERETTI S.A.')).toBe(false)
+    expect(refClienteSana('EQUIPO ORIGINAL VMG SA')).toBe(false)
+  })
+
+  it('conserva las refs reales, que siempre traen números', () => {
+    for (const r of ['1410', 'OCE 80-1', '2051-2', '2051-5 / 2054', 'LY26-BP001-1', '4291']) {
+      expect(refClienteSana(r), r).toBe(true)
+    }
+  })
+
+  it('una sigla de una sola palabra se conserva: puede ser una ref corta', () => {
+    expect(refClienteSana('VMG')).toBe(true)
+    expect(refClienteSana('EXP')).toBe(true)
+  })
+})

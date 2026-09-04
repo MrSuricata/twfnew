@@ -1854,6 +1854,13 @@ function IncompletaRow({ u, dbRow, expanded, onToggle, onPatchShipment, onOpenDe
 // el array `operativas`, reponer el snapshot completo pisaría commits
 // posteriores de la misma fila (misma razón por la que el revert de App es
 // granular por clave — con el array, la clave ES el conjunto entero).
+/** Lo que muestra el toast de un dato guardado: un booleano se dice "Sí"/"No"
+ *  (madera), y lo que no tiene valor cae al texto que eligió la UI. */
+function descripcionPatch(valor: unknown, texto: string): string {
+  if (typeof valor === 'boolean') return valor ? 'Sí' : 'No'
+  return String(valor ?? texto)
+}
+
 function CampoFaltanteInput({ campo, etiqueta, dbRow, onPatchShipment, transportes, agentes, lineas, clientes }: {
   campo: CampoFaltante['campo']
   etiqueta: string
@@ -1884,7 +1891,9 @@ function CampoFaltanteInput({ campo, etiqueta, dbRow, onPatchShipment, transport
     )
     onPatchShipment(dbRow.id, r.patch)
     toast.success(`${etiqueta} guardado · ${dbRow.ref}`, {
-      description: String((r.patch as Record<string, unknown>)[Object.keys(r.patch)[0]] ?? texto),
+      // Los faltantes booleanos (madera) guardan true/false: al operador se le
+      // dice "Sí"/"No", no el literal del campo.
+      description: descripcionPatch((r.patch as Record<string, unknown>)[Object.keys(r.patch)[0]], texto),
       ...(conArray ? {} : { action: { label: 'Deshacer', onClick: () => onPatchShipment(dbRow.id, previos) } }),
     })
   }
