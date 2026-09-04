@@ -19,6 +19,7 @@
  */
 
 import { parseLocalDate } from './shipmentTypes'
+import type { AreaSeguimiento } from './seguimientos'
 
 export type TipoEvento = 'enviado' | 'eta' | 'trasbordo' | 'deshecho'
 
@@ -43,6 +44,9 @@ export interface Evento extends FilaLog {
   /** Cliente de la carga: no vive en el log, se pega desde las cargas en
    *  memoria. '' si la ref ya no está en el listado. */
   cliente: string
+  /** Área (FCL/LCL) de la carga: tampoco vive en el log, se pega igual que el
+   *  cliente. '' cuando la ref ya no está en el listado. */
+  area: AreaSeguimiento | ''
 }
 
 export interface GrupoDia {
@@ -57,6 +61,10 @@ export interface FiltroHistorial {
   tipos?: string[]
   /** Busca en ref, cliente, buque y usuario. */
   texto?: string
+  /** Área elegida arriba (FCL/LCL). Los eventos de refs que ya no están en el
+   *  listado (área desconocida) NO se esconden: preferimos mostrar de más
+   *  antes que hacer desaparecer historial en silencio. */
+  area?: AreaSeguimiento
 }
 
 export const TIPOS_TODOS: TipoEvento[] = ['enviado', 'eta', 'trasbordo', 'deshecho']
@@ -92,15 +100,21 @@ export function diaDeFila(row: FilaLog): string {
 }
 
 /** Filas crudas → eventos ordenados del más nuevo al más viejo, con el cliente
- *  pegado. Las filas sin fecha quedan al final ('' ordena último). */
-export function armarEventos(rows: FilaLog[], clientePorRef?: Map<string, string>): Evento[] {
+ *  y el área pegados. Las filas sin fecha quedan al final ('' ordena último). */
+export function armarEventos(
+  rows: FilaLog[],
+  clientePorRef?: Map<string, string>,
+  areaPorRef?: Map<string, AreaSeguimiento>,
+): Evento[] {
   const eventos: Evento[] = (rows || []).map(r => {
     const dia = diaDeFila(r)
+    const ref = String(r?.ref || '').trim().toUpperCase()
     return {
       ...r,
       dia,
       orden: String(r?.created_at || '').trim() || dia,
-      cliente: clientePorRef?.get(String(r?.ref || '').trim().toUpperCase()) || '',
+      cliente: clientePorRef?.get(ref) || '',
+      area: areaPorRef?.get(ref) || '',
     }
   })
   return eventos.sort((a, b) => {
@@ -113,8 +127,10 @@ export function armarEventos(rows: FilaLog[], clientePorRef?: Map<string, string
 export function filtrarEventos(eventos: Evento[], filtro: FiltroHistorial): Evento[] {
   const tipos = filtro?.tipos && filtro.tipos.length > 0 ? new Set(filtro.tipos) : null
   const texto = String(filtro?.texto || '').trim().toLowerCase()
+  const area = filtro?.area
   return (eventos || []).filter(e => {
     if (tipos && !tipos.has(e.tipo)) return false
+    if (area && e.area && e.area !== area) return false
     if (!texto) return true
     return [e.ref, e.cliente, e.buque, e.usuario]
       .some(v => String(v || '').toLowerCase().includes(texto))
