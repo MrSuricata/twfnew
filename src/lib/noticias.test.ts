@@ -4,6 +4,7 @@ import {
   estiloSlide, tituloPartes, tituloPlano, linkNoticia, ordenSlides, recencia, type Noticia,
   avisosRotativos, indiceSiguiente, indiceValido, linkDiario, anclaNoticia,
   lineasEstimadas, ajustarColumna, filasKicker, ANCHO_CARACTER, type BloqueTexto,
+  reservaAvisos,
 } from './noticias'
 
 const HOY = '2026-08-28'
@@ -354,5 +355,79 @@ describe('filasKicker — la pill del kicker mide lo que la columna le reserva',
   })
   it('en la columna angosta del slide papel, un kicker largo pasa a dos filas', () => {
     expect(filasKicker('Actualización de último momento', 'Setiembre 2026', { ancho: 570 })).toBe(2)
+  })
+})
+
+describe('reservaAvisos — el banner de los portales no cambia de alto', () => {
+  // Tres notas de la misma rotación con textos de largos MUY distintos: es
+  // exactamente lo que hacía crecer y encoger la tarjeta cada 8 segundos.
+  const corta = noticia({ id: 'a', titulo: 'Paro en TCP', bajada: '' })
+  const media = noticia({
+    id: 'b',
+    titulo: 'Tifones en China: cierres portuarios en la costa sur',
+    bajada: 'Shenzhen y Guangzhou operan con demoras.',
+  })
+  const larga = noticia({
+    id: 'c',
+    titulo: 'Actualización del cronograma de feriados en Asia para el cierre del año',
+    bajada: 'Las fábricas paran una semana completa y las navieras adelantan los cortes '
+      + 'documentarios, así que conviene cerrar los embarques con margen y confirmar el '
+      + 'booking antes del corte de la semana anterior.',
+  })
+  const rotacion = [corta, media, larga]
+  const ANCHO = 327   // el ancho útil del banner en un celular de 375px
+
+  it('reserva lo que pide la nota MÁS LARGA, no la que se está viendo', () => {
+    const solaCorta = reservaAvisos([corta], { ancho: ANCHO, fontTitulo: 20 })
+    const todas = reservaAvisos(rotacion, { ancho: ANCHO, fontTitulo: 20 })
+    expect(todas.alto).toBeGreaterThan(solaCorta.alto)
+    expect(todas.lineasTitulo).toBe(reservaAvisos([larga], { ancho: ANCHO, fontTitulo: 20 }).lineasTitulo)
+  })
+
+  it('la reserva es la MISMA sea cual sea la nota que se muestra: por eso no salta', () => {
+    const uno = reservaAvisos(rotacion, { ancho: ANCHO, fontTitulo: 20 })
+    const otro = reservaAvisos([larga, corta, media], { ancho: ANCHO, fontTitulo: 20 })
+    expect(otro).toEqual(uno)
+  })
+
+  it('una nota sin bajada no baja la reserva de la bajada de las otras', () => {
+    const conBajada = reservaAvisos([media], { ancho: ANCHO, fontTitulo: 20 })
+    const conLaCortaAdentro = reservaAvisos([corta, media], { ancho: ANCHO, fontTitulo: 20 })
+    expect(conLaCortaAdentro.lineasBajada).toBe(conBajada.lineasBajada)
+    expect(conLaCortaAdentro.alto).toBe(conBajada.alto)
+  })
+
+  it('en un celular entran menos palabras por renglón: se reserva más alto', () => {
+    const celular = reservaAvisos(rotacion, { ancho: ANCHO, fontTitulo: 20 })
+    const escritorio = reservaAvisos(rotacion, { ancho: 900, fontTitulo: 24 })
+    expect(celular.alto).toBeGreaterThan(escritorio.alto)
+  })
+
+  it('el alto sale de las mismas líneas y line-heights que después recorta el CSS', () => {
+    const r = reservaAvisos([media], { ancho: ANCHO, fontTitulo: 20, lhTitulo: 1.3, lhBajada: 1.5, gapBajada: 6 })
+    const esperado = r.lineasTitulo * 20 * 1.3 + 6 + r.lineasBajada * 14 * 1.5
+    expect(r.alto).toBe(Math.ceil(esperado))
+  })
+
+  it('ninguna nota puede hacer un banner de media pantalla: hay techo de renglones', () => {
+    const infinita = noticia({
+      titulo: 'palabra '.repeat(80).trim(),
+      bajada: 'renglon '.repeat(200).trim(),
+    })
+    const r = reservaAvisos([infinita], { ancho: 300, fontTitulo: 20 })
+    expect(r.lineasTitulo).toBe(3)
+    expect(r.lineasBajada).toBe(3)
+    expect(r.alto).toBeLessThan(200)
+  })
+
+  it('antes de medir el ancho no se reserva nada (alto natural, sin salto raro)', () => {
+    expect(reservaAvisos(rotacion, { ancho: 0 })).toEqual({ lineasTitulo: 0, lineasBajada: 0, alto: 0 })
+    expect(reservaAvisos([], { ancho: 900 })).toEqual({ lineasTitulo: 0, lineasBajada: 0, alto: 0 })
+  })
+
+  it('la barra del título (dos líneas del Diario) no cuenta como texto', () => {
+    const conBarra = reservaAvisos([noticia({ titulo: 'Tifones en China:|cierres portuarios' })], { ancho: 900, fontTitulo: 24 })
+    const sinBarra = reservaAvisos([noticia({ titulo: 'Tifones en China cierres portuarios' })], { ancho: 900, fontTitulo: 24 })
+    expect(conBarra).toEqual(sinBarra)
   })
 })
