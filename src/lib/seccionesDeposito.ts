@@ -34,7 +34,7 @@
 
 /** Cada bloque del portal, en el orden de siempre. Se guarda en el plegado de
  *  cards: los ids son ESTABLES, renombrar uno deja huérfana la preferencia. */
-export type SeccionDepositoId = 'hoy' | 'retiros' | 'vacios' | 'lcl' | 'plan' | 'avisos'
+export type SeccionDepositoId = 'hoy' | 'retiros' | 'vacios' | 'lcl' | 'plan' | 'avisos' | 'agenda'
 
 export interface DefSeccionDeposito {
   id: SeccionDepositoId
@@ -46,17 +46,22 @@ export interface DefSeccionDeposito {
 /**
  * El orden de siempre, y el nombre corto de cada sección en la barra.
  *
- * El plan de 14 días no lleva chip: la barra que pidió Brian es
- * "Hoy · Retiros · Devoluciones · LCL · Mis avisos", y en un celular cada chip
- * de más es un chip que hay que deslizar para llegar a los que importan.
+ * TODA sección que se ve en la página tiene su chip. La primera versión dejó
+ * afuera el plan de 14 días para no alargar la barra en el celular, y Brian
+ * enseguida preguntó por qué faltaba: una card visible sin acceso directo se
+ * lee como un olvido, no como una decisión. La barra se desliza; el costo de
+ * un chip de más es mucho menor que el de una sección que parece perdida.
  */
 export const SECCIONES_DEPOSITO: readonly DefSeccionDeposito[] = [
   { id: 'hoy', chip: 'Hoy' },
   { id: 'retiros', chip: 'Retiros' },
   { id: 'vacios', chip: 'Devoluciones' },
   { id: 'lcl', chip: 'LCL' },
-  { id: 'plan' },
+  { id: 'plan', chip: 'Plan de carga' },
   { id: 'avisos', chip: 'Mis avisos' },
+  // La agenda estaba en la página desde antes, pero fuera del modelo de
+  // secciones: se veía y no se podía saltar a ella. Va última, como se ve.
+  { id: 'agenda', chip: 'Agenda' },
 ] as const
 
 /** El orden de siempre, solo los ids. */
@@ -123,8 +128,10 @@ export function seccionConContenido(e: EstadoSeccionesDeposito, id: SeccionDepos
     case 'vacios': return e.vacios > 0
     case 'lcl': return e.lcl > 0
     case 'avisos': return e.avisos > 0
-    // El plan de 14 días no va a la barra (ver SECCIONES_DEPOSITO).
-    case 'plan': return false
+    // El plan de 14 días y la agenda están SIEMPRE en la página (no dependen
+    // de un contador), así que siempre se pueden ofrecer para saltar.
+    case 'plan': return true
+    case 'agenda': return true
   }
 }
 
