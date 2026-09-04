@@ -21,6 +21,7 @@ import type { TonoPanel } from '@/components/partner/PanelCard'
 
 /** Id de card. Se guarda en `user_prefs.hoyFclCardsCerradas`: NO renombrar. */
 export type CardHoyId =
+  | 'comentarios-partners'
   | 'salidas-pisadas'
   | 'retiros-terminal'
   | 'sin-liberar'
@@ -40,6 +41,10 @@ export interface CardHoyDef {
 
 /** Las cards de HOY FCL, en el orden en que se ven en pantalla. */
 export const CARDS_HOY_FCL: readonly CardHoyDef[] = [
+  // Arriba de todo, al lado de los avisos: es lo que el depósito y el
+  // transporte dicen que no les funcionó, y solo se dice en la primera semana
+  // de uso (spec 04/09 de la caja de comentarios).
+  { id: 'comentarios-partners', titulo: 'Comentarios de partners', tono: 'info', subtitulo: 'Lo que no les funcionó, contado por ellos' },
   { id: 'salidas-pisadas', titulo: 'Salidas pisadas por el buque', tono: 'alerta' },
   { id: 'retiros-terminal', titulo: 'Retiros de terminal — Montecon y TCP', tono: 'info' },
   { id: 'sin-liberar', titulo: 'Llegan sin liberar', tono: 'aviso' },

@@ -134,9 +134,9 @@ describe('chipsHeader — sin nada urgente no hay contenedor vacío', () => {
 })
 
 describe('CARDS_HOY_FCL — los ids son la memoria del operador', () => {
-  it('las 8 cards de HOY FCL están definidas y sus ids son únicos', () => {
-    expect(CARDS_HOY_FCL).toHaveLength(8)
-    expect(new Set(IDS_CARDS_HOY_FCL).size).toBe(8)
+  it('las 9 cards de HOY FCL están definidas y sus ids son únicos', () => {
+    expect(CARDS_HOY_FCL).toHaveLength(9)
+    expect(new Set(IDS_CARDS_HOY_FCL).size).toBe(9)
   })
 
   it('cada id resuelve a su definición, con título y tono', () => {
