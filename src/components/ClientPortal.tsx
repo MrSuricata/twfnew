@@ -452,7 +452,12 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
                     >
                       {getAlertIcon(alert.severity)}
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm font-medium">{alert.title}</div>
+                        <div className="text-sm font-medium flex items-center gap-2 flex-wrap">
+                          <span>{alert.title}</span>
+                          {/* La ref ya no viene en el texto (spec 04/09, D2): se pinta
+                              desde shipmentRef, como en las pestañas de abajo. */}
+                          <Badge variant="outline" className="font-mono text-xs">{alert.shipmentRef}</Badge>
+                        </div>
                         <div className="text-xs text-muted-foreground mt-0.5">{alert.message}</div>
                         {alert.date && (
                           <div className="text-xs text-muted-foreground mt-1 font-mono">{alert.date}</div>
