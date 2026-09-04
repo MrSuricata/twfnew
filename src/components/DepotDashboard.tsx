@@ -25,7 +25,8 @@ import AgendaCalendar from '@/components/agenda/AgendaCalendar'
 import PartnerDashboardShell from '@/components/PartnerDashboardShell'
 import ProximasSalidas from '@/components/ProximasSalidas'
 import AvisoOperativo from '@/components/AvisoOperativo'
-import PanelCard, { PanelFila, FilaTitulo, FilaDatos, Ref, Chip as ChipPanel, Dato, type TonoPanel } from './partner/PanelCard'
+import { PanelFila, FilaTitulo, FilaDatos, Ref, Chip as ChipPanel, Dato } from './partner/PanelCard'
+import Seccion from './partner/SeccionPortal'
 import ChipTransporte from './trucks/ChipTransporte'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
 import { fetchPartnerAvisos, crearPartnerAviso, cancelarPartnerAviso } from '@/lib/dataClient'
@@ -44,9 +45,10 @@ import { formatKg, formatM3 } from '@/lib/truckUtils'
 import { colorDeposito } from '@/lib/depositoColor'
 import { ETIQUETA_RETIRO, DETALLE_RETIRO, ETIQUETA_DEVOLUCION, DETALLE_DEVOLUCION } from '@/lib/hoyDeposito'
 import {
-  ordenSeccionesDeposito, anclaSeccion,
+  ordenSeccionesDeposito, anclaSeccion, claveCardsDeposito, IDS_SECCIONES_DEPOSITO,
   type EstadoSeccionesDeposito, type SeccionDepositoId,
 } from '@/lib/seccionesDeposito'
+import { useCardsPlegadas } from '@/hooks/useCardsPlegadas'
 
 interface DepotDashboardProps {
   shipments: ParsedShipment[]
@@ -137,28 +139,6 @@ function EstadoAviso({ aviso, onDeshacer, deshaciendo = false }: {
   return null
 }
 
-/** Cada card con su color, para que se distingan de un vistazo (Brian 02/09). */
-function Seccion({ icono, titulo, subtitulo, cantidad, tono = 'neutro', children }: {
-  icono: ReactNode
-  titulo: string
-  subtitulo?: string
-  cantidad: number
-  tono?: TonoPanel
-  children: ReactNode
-}) {
-  return (
-    <PanelCard
-      tono={cantidad === 0 ? 'neutro' : tono}
-      icono={icono}
-      titulo={titulo}
-      subtitulo={subtitulo}
-      contador={cantidad}
-    >
-      {children}
-    </PanelCard>
-  )
-}
-
 function Vacio({ texto }: { texto: string }) {
   return <p className="px-4 py-4 text-sm text-muted-foreground">{texto}</p>
 }
@@ -206,6 +186,11 @@ function textoFaltaDato(l: LibrePorVencer): string {
 
 export default function DepotDashboard({ shipments, depotName, userName, onLogout, preview = false }: DepotDashboardProps) {
   const hoy = hoyISO()
+  // Plegado con memoria: clave propia del portal (no la de HOY del admin) y por
+  // usuario, porque la computadora del mostrador la usan varios. Sin sincronizar
+  // con `user_prefs`: ese endpoint es del admin y un 401 le mostraría al
+  // depósito un "Tu sesión venció" que no venció. Ver useCardsPlegadas.
+  const plegadas = useCardsPlegadas(claveCardsDeposito(userName), IDS_SECCIONES_DEPOSITO, { sincronizar: false })
   const [avisos, setAvisos] = useState<PartnerAviso[]>([])
   const [avisosError, setAvisosError] = useState<string | null>(null)
   const [enviando, setEnviando] = useState<Set<string>>(new Set())
@@ -586,7 +571,13 @@ export default function DepotDashboard({ shipments, depotName, userName, onLogou
     plan: <ProximasSalidas shipments={shipments} rol="depot" />,
     // Mis avisos
     avisos: (
-      <Seccion icono={<ChatCircleDots size={22} weight="duotone" />} titulo="Mis avisos" subtitulo="lo que avisaste y qué dijo el equipo · últimos 30 días" cantidad={misAvisos.length}>
+      <Seccion
+        icono={<ChatCircleDots size={22} weight="duotone" />}
+        titulo="Mis avisos"
+        subtitulo="lo que avisaste y qué dijo el equipo · últimos 30 días"
+        cantidad={misAvisos.length}
+        plegado={{ abierta: plegadas.estaAbierta('avisos'), onToggle: a => plegadas.toggle('avisos', a) }}
+      >
         {avisosError && <p className="px-4 py-2 text-xs text-red-700 bg-red-50 border-b border-red-200">{avisosError} · <button type="button" className="underline" onClick={cargarAvisos}>reintentar</button></p>}
         {misAvisos.length === 0 ? <Vacio texto="Todavía no mandaste ningún aviso. Cuando retires, devuelvas o desconsolides, avisá desde las cards de arriba." /> : (
           <ul className="divide-y divide-border">
