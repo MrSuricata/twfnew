@@ -1390,10 +1390,6 @@ export default function TodayDashboard({
             setQuickEditMatch(null)
             onOpenDetail?.(key)
           }}
-          onSaved={() => {
-            setQuickEditOpen(false)
-            setQuickEditMatch(null)
-          }}
         />
       )}
 

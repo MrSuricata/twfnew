@@ -731,10 +731,6 @@ export default function AgendaCalendar({
             setQuickEditEvent(null)
             onOpenDetail?.(key)
           }}
-          onSaved={() => {
-            setQuickEditOpen(false)
-            setQuickEditEvent(null)
-          }}
         />
       )}
 

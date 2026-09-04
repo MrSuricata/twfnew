@@ -1,21 +1,31 @@
-// ContainerQuickEdit — centered modal Dialog para editar las fechas de UN contenedor.
-// Salida MVD + Arribo fiscal + Lugar + Transporte. Botón "Más datos →" abre el panel completo.
-// Convertido de Popover a Dialog (2026-06) — centrado en pantalla, visualmente limpio.
+// ContainerQuickEdit — modal de cambios rápidos de UN contenedor.
+// Salida MVD + Arribo fiscal + Lugar + Transporte + el botón "Devuelto".
+// El botón "Más datos →" abre el panel completo.
+//
+// Piel: la común de los portales (partner/PanelCard) — rediseño 04/09, D6.
+// Header tintado por el micro-estado, `Dato` para lo de solo lectura, cero hex
+// sueltos (los colores salen de los tonos, que ya son brand-aware).
+//
+// ⚠️ EL GUARDADO NO SE TOCA. `commitSave` (orden de operaciones, guard
+// anti doble-save, propagación nivel-carga) es delicado y está cubierto por el
+// DnD de la Agenda: acá cambió la cáscara, no el guardado.
 
-import { useState, useRef } from 'react'
-import { toast } from 'sonner'
-import { CheckCircle, ArrowCounterClockwise } from '@phosphor-icons/react'
+import { useState, useRef, type ReactNode } from 'react'
+import { ShippingContainer } from '@phosphor-icons/react'
 import {
   Dialog,
   DialogContent,
+  DialogTitle,
+  DialogDescription,
 } from '@/components/ui/dialog'
+import PanelCard, { Chip, Dato, clasesTono, type TonoPanel } from '@/components/partner/PanelCard'
+import { useBrand } from '@/lib/brand'
 import type { ParsedShipment, OperativasRecord } from '@/lib/shipmentTypes'
 import { getShipmentStatus } from '@/lib/shipmentTypes'
 import { buildPerContainerPatch, applyLugarSalida, lugarOrDeposito } from '@/lib/operationsTypes'
 import { isSalidaBeforeArrival, avisoSalida, fmtDMY, etaVigente } from '@/lib/salidaCheck'
 import { reglaSalidaAntesDeLlegada, reglaSugerirEtaFiscal, reglaSinTelex } from '@/lib/quickEditReglas'
-import { fmtDateDMY } from '@/lib/format'
-import { isLibreDevuelto, libreDevueltoToggle, LIBRE_DEVUELTO } from '@/lib/libreDevuelto'
+import LibreDevueltoBlock, { toggleLibreDevuelto } from './LibreDevueltoBlock'
 
 // ─── Lugar options (mirrors ContainerDatesSection) ────────────────────────
 
@@ -94,15 +104,57 @@ function containerMicroStatus(shipment: ParsedShipment, op: OperativasRecord): s
   return getShipmentStatus(mini).label
 }
 
-// ─── Status badge color ───────────────────────────────────────────────────
+// ─── Piel: tono de la card + fila de campo ───────────────────────────────
 
-function statusBadgeClass(label: string): string {
+/**
+ * El color de la card según el micro-estado del contenedor. Reemplaza al viejo
+ * `statusBadgeClass`, que traía su propia paleta: ahora el color lo resuelve la
+ * piel común (`clasesTono`), que ya sale bien en TWF y en Mediterránea. Los
+ * casos son los MISMOS que antes; solo cambia de qué escala salen.
+ */
+function tonoDeEstado(label: string): TonoPanel {
   const l = label.toLowerCase()
-  if (l.includes('fiscal') || l.includes('devuelto')) return 'bg-green-100 text-green-700'
-  if (l.includes('hoy') || l.includes('salió')) return 'bg-blue-100 text-blue-700'
-  if (l.includes('frontera')) return 'bg-orange-100 text-orange-700'
-  if (l.includes('embarcado') || l.includes('viaje')) return 'bg-sky-100 text-sky-700'
-  return 'bg-slate-100 text-slate-600'
+  if (l.includes('fiscal') || l.includes('devuelto')) return 'ok'
+  if (l.includes('hoy') || l.includes('salió')) return 'info'
+  if (l.includes('frontera')) return 'aviso'
+  if (l.includes('embarcado') || l.includes('viaje')) return 'info'
+  return 'neutro'
+}
+
+/** El control de los campos editables. `ring` en vez del azul hardcodeado:
+ *  bajo Mediterránea el foco sale violeta sin tocar nada acá. */
+const CLASE_CONTROL = 'h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring/50 disabled:opacity-50 transition-shadow'
+
+/**
+ * Una fila de campo del modal, con el mismo aire que las filas de PanelCard.
+ *  · Editable: etiqueta arriba (ligada al control por `htmlFor`) + el control.
+ *  · Solo lectura: el `Dato` de la piel común — etiqueta y valor en una línea.
+ * `pie` es el aviso de abajo (p. ej. salida anterior a la llegada): se muestra
+ * en los dos modos, igual que antes.
+ */
+function CampoFila({ label, id, editable, valor, pie, children }: {
+  label: string
+  id: string
+  editable: boolean
+  valor: ReactNode
+  pie?: ReactNode
+  children: ReactNode
+}) {
+  return (
+    <div className="px-4 py-3 flex flex-col gap-1.5">
+      {editable ? (
+        <>
+          <label htmlFor={id} className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground/80">
+            {label}
+          </label>
+          {children}
+        </>
+      ) : (
+        <Dato label={label} fuerte>{valor}</Dato>
+      )}
+      {pie}
+    </div>
+  )
 }
 
 // ─── Props ────────────────────────────────────────────────────────────────
@@ -113,13 +165,10 @@ export interface ContainerQuickEditProps {
   editable: boolean
   open: boolean
   onOpenChange: (open: boolean) => void
-  /** Unused in Dialog mode — kept for API compatibility with call sites. */
-  children?: React.ReactNode
   /** Transportes ya usados en las cargas → sugerencias del combo Transporte. */
   knownTransportes?: string[]
   onPatch: (dbId: string, fields: Record<string, unknown>) => void | Promise<void>
   onMasDatos: () => void
-  onSaved?: () => void
 }
 
 // ─── Component ────────────────────────────────────────────────────────────
@@ -134,6 +183,8 @@ export default function ContainerQuickEdit({
   onPatch,
   onMasDatos,
 }: ContainerQuickEditProps) {
+  // La marca decide de qué escala salen los tonos de la piel (TWF / Med).
+  const med = useBrand().id === 'med'
   // Resolve the current op for this container
   const existing = shipment.operativas || []
   const key = cntr.trim().toUpperCase()
@@ -325,20 +376,15 @@ export default function ContainerQuickEdit({
   // permite deshacer restaurando el valor EXACTO anterior (fecha o vacío,
   // capturado ANTES de pisar). Con LIBRE ya DEVUELTO, el botón pasa a
   // "Deshacer devuelto" y limpia a '' (sin toast: el cambio se ve al instante).
-  const devuelto = isLibreDevuelto(libreVal)
-  const toggleDevuelto = async () => {
+  const toggleDevuelto = () => {
     if (!canSave || saving) return
-    const { next, prev } = libreDevueltoToggle(libreVal)
-    setLibreVal(next)
-    await commitSave({ libre: next })
-    if (next === LIBRE_DEVUELTO) {
-      toast.success('Contenedor devuelto', {
-        action: {
-          label: 'Deshacer',
-          onClick: () => { setLibreVal(prev); void commitSave({ libre: prev }) },
-        },
-      })
-    }
+    // Mismo commit de siempre (`commitSave` con su guard anti doble-save); el
+    // toggle, el toast y "Deshacer" viven en LibreDevueltoBlock, compartidos
+    // con "Datos clave de la carga".
+    void toggleLibreDevuelto(libreVal, async valor => {
+      setLibreVal(valor)
+      await commitSave({ libre: valor })
+    })
   }
 
   // Al cerrar el Dialog (X / Escape / click afuera / "Listo") comitear primero
@@ -359,9 +405,15 @@ export default function ContainerQuickEdit({
   })
 
   const lugarLabel = LUGAR_OPTIONS.find(o => o.value === lugar)?.label ?? lugar
-  // Id único por carga para el datalist (puede haber más de un quick-edit montado).
-  // Sin espacios: las refs split ("A6902 A") no son un id HTML válido.
-  const transporteListId = `qe-transportes-${(shipment.REF || 'x').replace(/\s+/g, '-')}`
+  // Ids únicos por carga (puede haber más de un quick-edit montado): el
+  // datalist del combo y los `htmlFor` de las etiquetas. Sin espacios: las
+  // refs split ("A6902 A") no son un id HTML válido.
+  const idBase = `qe-${(shipment.REF || 'x').replace(/\s+/g, '-')}`
+  const transporteListId = `${idBase}-transportes`
+  // Tono de la card = micro-estado del contenedor; el chip del header sale del
+  // MISMO tono, así color y texto nunca se contradicen.
+  const tono = tonoDeEstado(status)
+  const clases = clasesTono(tono, med)
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -369,201 +421,177 @@ export default function ContainerQuickEdit({
           recibía el MISMO keydown burbujeado y disparaba commitSave dos veces
           en el mismo dispatch (el guard anti doble-save aún no veía el ref
           actualizado) → doble confirm de sugerencia fiscal. */}
-      <DialogContent className="max-w-sm w-[calc(100%-2rem)] p-0 gap-0 overflow-hidden">
-        {/* ── Header ─────────────────────────────────────────────────── */}
-        <div className="px-5 pt-5 pb-4 border-b bg-[#1e3a8a]/5">
-          {/* REF + CNTR row */}
-          <div className="flex items-baseline gap-2 min-w-0 mb-2">
-            <span className="text-[15px] font-bold text-foreground leading-none">
-              {shipment.REF}
-            </span>
-            <span className="text-[12px] font-mono text-muted-foreground truncate">
-              {cntr}
-            </span>
-          </div>
-          {/* Micro-status chip */}
-          <span
-            className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full ${statusBadgeClass(status)}`}
-          >
-            <span className="w-1.5 h-1.5 rounded-full bg-current opacity-70" />
-            {status}
-          </span>
-        </div>
+      {/* La cáscara del diálogo queda transparente, sin borde ni sombra: la
+          superficie visible es la PanelCard de adentro (piel común), que ya
+          trae su radio, su borde de color y su recorte. */}
+      <DialogContent className="max-w-sm w-[calc(100%-2rem)] p-0 gap-0 border-0 bg-transparent shadow-none">
+        {/* Título y descripción accesibles: el encabezado a la vista lo pinta
+            PanelCard, pero Radix necesita su propio Title/Description para
+            anunciar el diálogo. Van sr-only para no repetir texto en pantalla. */}
+        <DialogTitle className="sr-only">
+          Cambios rápidos de la carga {shipment.REF}{cntr ? ` — contenedor ${cntr}` : ''}
+        </DialogTitle>
+        <DialogDescription className="sr-only">
+          Salida de Montevideo, arribo fiscal, lugar de salida y transporte. Cada campo se guarda al salir de él.
+        </DialogDescription>
 
-        {/* ── Fields ─────────────────────────────────────────────────── */}
-        <div className="px-5 pt-4 pb-3 space-y-3.5">
-          {/* Salida MVD */}
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Salida MVD
-            </label>
-            {editable ? (
-              <input
-                type="date"
-                value={drafts.salida}
-                onChange={e => setDrafts(d => ({ ...d, salida: e.target.value }))}
-                onBlur={() => void commitSave()}
-                onKeyDown={e => { if (e.key === 'Enter') void commitSave() }}
-                disabled={saving}
-                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-[#1e3a8a]/40 disabled:opacity-50 transition-shadow"
-              />
-            ) : (
-              <span className={`text-sm font-medium ${drafts.salida ? 'text-foreground' : 'text-muted-foreground'}`}>
-                {drafts.salida || '—'}
-              </span>
-            )}
-            {(() => {
+        <PanelCard
+          tono={tono}
+          icono={<ShippingContainer size={18} weight="fill" />}
+          titulo={shipment.REF}
+          subtitulo={cntr || 'Carga sin contenedor asignado'}
+          extras={
+            <>
+              <Chip clase={`${clases.pill} border-transparent`}>{status}</Chip>
+              {/* Hueco para la X de cerrar del diálogo, que se posiciona sobre
+                  la cabecera (top-4 right-4) y si no taparía el chip. */}
+              <span aria-hidden className="w-4" />
+            </>
+          }
+        >
+          {/* ── Salida MVD ─────────────────────────────────────────────── */}
+          <CampoFila
+            label="Salida MVD"
+            id={`${idBase}-salida`}
+            editable={editable}
+            valor={fmtDMY(drafts.salida) || '—'}
+            pie={(() => {
               const aviso = avisoSalida(drafts.salida, etaArrival)
               if (!aviso) return null
               const grave = isSalidaBeforeArrival(drafts.salida, etaArrival)
               return (
-                <span className={`text-[11px] font-medium ${grave ? 'text-red-600' : 'text-amber-600'}`}>
+                <span className={`text-xs font-medium ${grave ? 'text-red-600' : 'text-amber-600'}`}>
                   ⏰ {aviso} (llega {fmtDMY(etaArrival)})
                 </span>
               )
             })()}
-          </div>
+          >
+            <input
+              id={`${idBase}-salida`}
+              type="date"
+              value={drafts.salida}
+              onChange={e => setDrafts(d => ({ ...d, salida: e.target.value }))}
+              onBlur={() => void commitSave()}
+              onKeyDown={e => { if (e.key === 'Enter') void commitSave() }}
+              disabled={saving}
+              className={CLASE_CONTROL}
+            />
+          </CampoFila>
 
-          {/* Arribo fiscal */}
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Arribo fiscal
-            </label>
-            {editable ? (
-              <input
-                type="date"
-                value={drafts.etaFisc}
-                onChange={e => setDrafts(d => ({ ...d, etaFisc: e.target.value }))}
-                onBlur={() => void commitSave()}
-                onKeyDown={e => { if (e.key === 'Enter') void commitSave() }}
-                disabled={saving}
-                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-[#1e3a8a]/40 disabled:opacity-50 transition-shadow"
-              />
-            ) : (
-              <span className={`text-sm font-medium ${drafts.etaFisc ? 'text-foreground' : 'text-muted-foreground'}`}>
-                {drafts.etaFisc || '—'}
-              </span>
-            )}
-          </div>
+          {/* ── Arribo fiscal ──────────────────────────────────────────── */}
+          <CampoFila
+            label="Arribo fiscal"
+            id={`${idBase}-fiscal`}
+            editable={editable}
+            valor={fmtDMY(drafts.etaFisc) || '—'}
+          >
+            <input
+              id={`${idBase}-fiscal`}
+              type="date"
+              value={drafts.etaFisc}
+              onChange={e => setDrafts(d => ({ ...d, etaFisc: e.target.value }))}
+              onBlur={() => void commitSave()}
+              onKeyDown={e => { if (e.key === 'Enter') void commitSave() }}
+              disabled={saving}
+              className={CLASE_CONTROL}
+            />
+          </CampoFila>
 
-          {/* Lugar de salida */}
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Lugar de salida
-            </label>
-            {editable ? (
-              <select
-                value={lugar}
-                onChange={e => {
-                  const newLugar = e.target.value
-                  setLugar(newLugar)
-                  // Fix 3: pass the new lugar explicitly so commitSave reads
-                  // the just-typed draft dates (not a stale closure snapshot).
-                  void commitSave({ lugar: newLugar })
-                }}
-                disabled={saving || !shipment.__dbId}
-                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-[#1e3a8a]/40 disabled:opacity-50 transition-shadow"
-              >
-                {LUGAR_OPTIONS.map(o => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-                {/* Depósito fuera de la lista fija (ej. LOBRAUS) → opción dinámica */}
-                {lugar && !LUGAR_OPTIONS.some(o => o.value === lugar) && (
-                  <option value={lugar}>{lugar}</option>
-                )}
-              </select>
-            ) : (
-              <span className={`text-sm font-medium ${lugar ? 'text-foreground' : 'text-muted-foreground'}`}>
-                {lugarLabel || '—'}
-              </span>
-            )}
-          </div>
+          {/* ── Lugar de salida ────────────────────────────────────────── */}
+          <CampoFila
+            label="Lugar de salida"
+            id={`${idBase}-lugar`}
+            editable={editable}
+            valor={lugarLabel || '—'}
+          >
+            <select
+              id={`${idBase}-lugar`}
+              value={lugar}
+              onChange={e => {
+                const newLugar = e.target.value
+                setLugar(newLugar)
+                // Fix 3: pass the new lugar explicitly so commitSave reads
+                // the just-typed draft dates (not a stale closure snapshot).
+                void commitSave({ lugar: newLugar })
+              }}
+              disabled={saving || !shipment.__dbId}
+              className={CLASE_CONTROL}
+            >
+              {LUGAR_OPTIONS.map(o => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+              {/* Depósito fuera de la lista fija (ej. LOBRAUS) → opción dinámica */}
+              {lugar && !LUGAR_OPTIONS.some(o => o.value === lugar) && (
+                <option value={lugar}>{lugar}</option>
+              )}
+            </select>
+          </CampoFila>
 
-          {/* Transporte — dato de la CARGA (propaga a todos los contenedores).
-              Combo editable: sugiere los ya usados (datalist) + acepta uno nuevo. */}
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Transporte
-            </label>
-            {editable ? (
-              <>
-                <input
-                  type="text"
-                  list={transporteListId}
-                  value={transporte}
-                  onChange={e => setTransporte(e.target.value)}
-                  onBlur={() => void commitSave()}
-                  onKeyDown={e => { if (e.key === 'Enter') void commitSave() }}
-                  disabled={saving}
-                  placeholder="OLAVERRY, TRANSCAL…"
-                  className="h-9 w-full uppercase rounded-md border border-input bg-background px-3 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-[#1e3a8a]/40 disabled:opacity-50 transition-shadow"
-                />
-                <datalist id={transporteListId}>
-                  {knownTransportes.map(t => <option key={t} value={t} />)}
-                </datalist>
-              </>
-            ) : (
-              <span className={`text-sm font-medium uppercase ${transporte ? 'text-foreground' : 'text-muted-foreground'}`}>
-                {transporte || '—'}
-              </span>
-            )}
-          </div>
+          {/* ── Transporte — dato de la CARGA (propaga a todos los
+                contenedores). Combo editable: sugiere los ya usados por
+                datalist y acepta uno nuevo. ───────────────────────────────── */}
+          <CampoFila
+            label="Transporte"
+            id={`${idBase}-transporte`}
+            editable={editable}
+            valor={<span className="uppercase">{transporte || '—'}</span>}
+          >
+            <input
+              id={`${idBase}-transporte`}
+              type="text"
+              list={transporteListId}
+              value={transporte}
+              onChange={e => setTransporte(e.target.value)}
+              onBlur={() => void commitSave()}
+              onKeyDown={e => { if (e.key === 'Enter') void commitSave() }}
+              disabled={saving}
+              placeholder="OLAVERRY, TRANSCAL…"
+              className={`${CLASE_CONTROL} uppercase`}
+            />
+            <datalist id={transporteListId}>
+              {knownTransportes.map(t => <option key={t} value={t} />)}
+            </datalist>
+          </CampoFila>
 
-          {/* LIBRE (nivel-carga) + botón "Devuelto". La FECHA se edita en
-              Datos clave del panel ("Más datos"); acá display + acción rápida.
-              Display con respaldo calculatedLibreHasta (lo mismo que mira
-              libreAlerts); "Deshacer" restaura solo el valor GUARDADO. */}
-          <div className="flex flex-col gap-1">
-            <label className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Libre (máx. devolución)
-            </label>
-            <div className="flex items-center justify-between gap-2">
-              <span className={`text-sm font-medium ${devuelto ? 'text-emerald-600' : (libreVal || shipment.calculatedLibreHasta) ? 'text-foreground' : 'text-muted-foreground'}`}>
-                {fmtDateDMY(libreVal || shipment.calculatedLibreHasta || '') || '—'}
-              </span>
+          {/* ── LIBRE (nivel-carga) + botón "Devuelto" ───────────────────
+                La FECHA se edita en "Datos clave" del panel ("Más datos"); acá
+                va el display (con respaldo calculatedLibreHasta, lo mismo que
+                mira libreAlerts) y la acción rápida. Es el MISMO bloque que
+                usa ViabilityBlock: si cambia, cambia en los dos lugares. */}
+          <LibreDevueltoBlock
+            libre={libreVal}
+            respaldo={shipment.calculatedLibreHasta}
+            habilitado={canSave && !saving}
+            onToggle={toggleDevuelto}
+          />
+
+          {/* ── Pie ────────────────────────────────────────────────────── */}
+          <div className="px-4 py-3 bg-muted/30 flex items-center justify-between gap-3">
+            <span className="min-w-0 text-xs text-muted-foreground">
+              {!shipment.__dbId
+                ? <span className="font-medium text-destructive">Sin ID — edición no disponible</span>
+                : saving
+                  ? <span className="animate-pulse">Guardando…</span>
+                  : null}
+            </span>
+            <span className="shrink-0 flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => void toggleDevuelto()}
-                disabled={!canSave || saving}
-                title={!canSave ? 'Solo lectura' : devuelto ? 'Quitar la marca DEVUELTO (LIBRE queda vacío)' : 'Marcar contenedor devuelto (LIBRE = DEVUELTO)'}
-                className="inline-flex items-center gap-1 h-7 px-2 rounded-md border border-input bg-background text-[11px] font-medium text-muted-foreground transition-colors enabled:hover:bg-muted enabled:hover:text-foreground disabled:opacity-50"
+                onClick={onMasDatos}
+                className="text-xs font-semibold text-primary hover:underline underline-offset-2 transition-colors"
               >
-                {devuelto ? <ArrowCounterClockwise size={12} /> : <CheckCircle size={12} />}
-                {devuelto ? 'Deshacer devuelto' : 'Devuelto'}
+                Más datos →
               </button>
-            </div>
+              <button
+                type="button"
+                onClick={() => handleOpenChange(false)}
+                className="h-8 px-3 text-xs font-medium rounded-md border border-input bg-background hover:bg-muted transition-colors"
+              >
+                {saving ? 'Cancelar' : 'Listo'}
+              </button>
+            </span>
           </div>
-        </div>
-
-        {/* ── Footer ─────────────────────────────────────────────────── */}
-        <div className="flex items-center justify-between border-t px-5 py-3 bg-muted/20">
-          <div className="flex items-center gap-2">
-            {!shipment.__dbId && (
-              <span className="text-[11px] text-destructive font-medium">
-                Sin ID — edición no disponible
-              </span>
-            )}
-            {saving && (
-              <span className="text-[11px] text-muted-foreground animate-pulse">
-                Guardando…
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={onMasDatos}
-              className="text-[12px] font-semibold text-[#1e3a8a] hover:underline underline-offset-2 transition-colors"
-            >
-              Más datos →
-            </button>
-            <button
-              onClick={() => handleOpenChange(false)}
-              className="px-3 py-1.5 text-[12px] font-medium rounded-md border border-input bg-background hover:bg-muted transition-colors"
-            >
-              {saving ? 'Cancelar' : 'Listo'}
-            </button>
-          </div>
-        </div>
+        </PanelCard>
       </DialogContent>
     </Dialog>
   )
