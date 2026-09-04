@@ -2,7 +2,10 @@
  * /ui — SOLO EN DESARROLLO. Muestra los portales de depósito, transporte y
  * cliente con datos inventados, sin pedir cuenta.
  *
- * Existe porque esas tres pantallas solo se ven entrando con una cuenta real:
+ * Desde el rediseño 04/09 también muestra el modal de cambios rápidos del
+ * admin, que tiene el mismo problema: solo se ve con una carga real cargada.
+ *
+ * Existe porque esas pantallas solo se ven entrando con una cuenta real:
  * trabajar su diseño a ciegas es cómo se llegó a que Brian dijera "mucho
  * cúmulo de datos y líneas de texto" (02/09/2026). Acá se ven, se miden y se
  * arreglan.
@@ -14,14 +17,17 @@ import { useState } from 'react'
 import DepotDashboard from '../DepotDashboard'
 import TransportDashboard from '../TransportDashboard'
 import ClientPortal from '../ClientPortal'
+import ContainerQuickEdit from '../operations/ContainerQuickEdit'
 import { demoPartnerShipments } from '@/lib/demoPartner'
+import type { ParsedShipment } from '@/lib/shipmentTypes'
 
-type Vista = 'deposito' | 'transporte' | 'cliente'
+type Vista = 'deposito' | 'transporte' | 'cliente' | 'modal'
 
 const VISTAS: { id: Vista; label: string }[] = [
   { id: 'deposito', label: 'Depósito (GODILCO)' },
   { id: 'transporte', label: 'Transporte (TRANSCAL)' },
   { id: 'cliente', label: 'Cliente' },
+  { id: 'modal', label: 'Modal rápido (admin)' },
 ]
 
 const haceDias = (n: number): number => Date.now() - n * 86400000
@@ -42,8 +48,12 @@ const informesDemo = [{
 
 export default function UiPreview() {
   const [vista, setVista] = useState<Vista>('deposito')
+  const [modalAbierto, setModalAbierto] = useState(true)
   const shipments = demoPartnerShipments()
   const salir = () => { /* en el preview no hay sesión que cerrar */ }
+  // Una carga FCL de mentira con __dbId, para que el modal salga editable.
+  // Los guardados no van a ningún lado: acá se mira la piel, no el guardado.
+  const cargaModal = { ...shipments.find(s => s.CNTR), __dbId: 'demo' } as ParsedShipment
 
   return (
     <div className="min-h-screen bg-background">
@@ -73,6 +83,27 @@ export default function UiPreview() {
       )}
       {vista === 'transporte' && (
         <TransportDashboard shipments={shipments} transportName="TRANSCAL" userName="Irina Foos" onLogout={salir} preview />
+      )}
+      {vista === 'modal' && (
+        <div className="p-8">
+          <button
+            type="button"
+            onClick={() => setModalAbierto(true)}
+            className="h-9 px-4 rounded-md border border-input bg-background text-sm font-medium hover:bg-muted"
+          >
+            Abrir el modal
+          </button>
+          <ContainerQuickEdit
+            shipment={cargaModal}
+            cntr={cargaModal.CNTR || ''}
+            editable
+            knownTransportes={['OLAVERRY', 'TRANSCAL', 'VAIROLATTI']}
+            open={modalAbierto}
+            onOpenChange={setModalAbierto}
+            onPatch={() => {}}
+            onMasDatos={() => setModalAbierto(false)}
+          />
+        </div>
       )}
       {vista === 'cliente' && (
         <ClientPortal

@@ -143,7 +143,9 @@ export default function PanelCard({
   tono?: TonoPanel
   icono: ReactNode
   titulo: string
-  subtitulo?: string
+  /** ReactNode, no string: hay subtítulos que necesitan su propio formato (el
+   *  número de contenedor va en monoespaciada para cotejarlo carácter a carácter). */
+  subtitulo?: ReactNode
   /** Número del pill. Si es 0 se muestra igual (dice "no hay nada pendiente"). */
   contador?: number
   /** Chips del header, entre el título y el contador. */
