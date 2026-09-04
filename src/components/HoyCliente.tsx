@@ -13,17 +13,21 @@
  *
  * Spec: docs/superpowers/specs/2026-09-02-portal-cliente-hoy-design.md
  */
-import { useMemo, type ReactNode, type CSSProperties } from 'react'
-import { Card, CardContent } from '@/components/ui/card'
+import { useMemo, useState, type ReactNode } from 'react'
 import { Anchor, Boat, Camera, CheckCircle, EnvelopeSimple, Timer, Warehouse, Warning } from '@phosphor-icons/react'
 import type { ParsedShipment, ShipmentAlert } from '@/lib/shipmentTypes'
+import type { OperativeReport, OriginPhoto } from '@/lib/quotationTypes'
 import {
   hoyCliente, alertasCliente, textoDias, RUTA_CHIP, TIPO_LABEL,
   type EstadoLlegadaDestino, type Ruta, type Tipo, novedadesCliente,
 } from '@/lib/hoyCliente'
+import { galeriaDeCarga, indiceEnGaleria, tiraDeMiniaturas } from '@/lib/cargaCliente'
 import { fmtDateDMY } from '@/lib/format'
 import { useBrand } from '@/lib/brand'
-import PanelCard, { RefsCarga } from './partner/PanelCard'
+import PanelCard, { RefsCarga, clasesTono, type TonoPanel } from './partner/PanelCard'
+import TiraMiniaturas from './client/TiraMiniaturas'
+import TarjetaInforme from './client/TarjetaInforme'
+import VisorFotos from './VisorFotos'
 
 interface HoyClienteProps {
   /** Cargas activas del cliente, YA filtradas por ruta/tipo (sin el buscador de la lista). */
@@ -39,13 +43,26 @@ interface HoyClienteProps {
   /** Nombre del cliente que está mirando: se usa para descartar la ref propia
    *  mal cargada (la que dice el nombre del cliente) — spec 04/09, D2. */
   nombreCliente?: string
-  /** Fotos subidas (origen / Uruguay) e informes operativos del cliente. */
-  fotos?: { shipmentRef?: string | null; photoType?: string | null; createdAt?: number | null }[]
-  informes?: { shipmentRef?: string | null; title?: string | null; createdAt?: number | null }[]
-  /** Abre la carga en la lista (pestaña Mis cargas, fila desplegada). */
+  /** Fotos subidas (origen / Uruguay) e informes operativos del cliente.
+   *  ENTERAS: las miniaturas vienen firmadas del server (`thumbnailUrl`) y
+   *  antes se descartaban acá —el tipo solo pedía ref/tipo/fecha—, así que la
+   *  card podía contar las fotos pero no mostrarlas. */
+  fotos?: OriginPhoto[]
+  informes?: OperativeReport[]
+  /** Lleva a la carga en la lista de abajo (pestaña Mis cargas). */
   onVerCarga: (ref: string) => void
+  /** Abre la FICHA de la carga (modal del cliente), en la pestaña que se pida.
+   *  Es el destino de las filas de novedades: antes iban a la lista completa,
+   *  que es lo que Brian llamó "rarísimo" (04/09). */
+  onAbrirFicha?: (ref: string, pestana?: PestanaFicha) => void
+  /** Una miniatura no cargó: la firma dura 8 h y probablemente venció. El
+   *  portal vuelve a pedir las URLs (lib/firmasFotos). */
+  onFirmasVencidas?: () => void
   onVerAlertas: () => void
 }
+
+/** Las pestañas de la ficha del cliente (ClientShipmentDialog). */
+export type PestanaFicha = 'resumen' | 'fotos' | 'informes'
 
 type Tono = 'info' | 'aviso' | 'error'
 const MAX_FILAS = 6
@@ -97,6 +114,33 @@ function Fila({ med, onClick, children, extra }: { med: boolean; onClick: () => 
   )
 }
 
+/**
+ * Una fila de "Novedades": arriba el aviso, abajo LO QUE SE VINO A VER (las
+ * miniaturas, o el documento). No es un solo botón como las otras filas:
+ * adentro hay botones —cada miniatura, "Abrir" del informe— y un botón dentro
+ * de otro botón no es HTML válido.
+ *
+ * La barra de color a la izquierda es el "golpe de color" que pidió Brian:
+ * sale del tono de la card (piel común), no de un hex suelto.
+ */
+function FilaNovedad({ med, tono, cabecera, children }: {
+  med: boolean
+  tono: TonoPanel
+  cabecera: ReactNode
+  children?: ReactNode
+}) {
+  const t = clasesTono(tono, med)
+  return (
+    <div className={`rounded-lg border flex items-stretch overflow-hidden ${med ? 'border-med-info-borde bg-white' : 'border-border/60 bg-background/50'}`}>
+      <span aria-hidden className={`w-1.5 shrink-0 ${t.barra}`} />
+      <div className="min-w-0 flex-1 px-2.5 py-2">
+        {cabecera}
+        {children && <div className="mt-2">{children}</div>}
+      </div>
+    </div>
+  )
+}
+
 /** Marcas de ruta y tipo: solo cuando el cliente ve mezcla (props del portal). */
 function Marcas({ ruta, tipo, mostrarRuta, mostrarTipo }: { ruta: Ruta; tipo: Tipo; mostrarRuta?: boolean; mostrarTipo?: boolean }) {
   if (!mostrarRuta && !mostrarTipo) return null
@@ -138,9 +182,23 @@ const Derecha = ({ label, valor, detalle }: { label: string; valor: string; deta
   </span>
 )
 
-export default function HoyCliente({ shipments, alerts, hoyISO, nombreCliente = '', mostrarRuta, mostrarTipo, fotos = [], informes = [], onVerCarga, onVerAlertas }: HoyClienteProps) {
+export default function HoyCliente({ shipments, alerts, hoyISO, nombreCliente = '', mostrarRuta, mostrarTipo, fotos = [], informes = [], onVerCarga, onAbrirFicha, onFirmasVencidas, onVerAlertas }: HoyClienteProps) {
   const brand = useBrand()
   const med = brand.id === 'med'
+  // El visor de fotos: se abre DESDE la miniatura del aviso, sin pasar por la
+  // lista ni por la ficha (spec 04/09, D3). Recorre toda la galería de esa
+  // carga, arrancando en la foto que se tocó.
+  const [visor, setVisor] = useState<{ ref: string; indice: number } | null>(null)
+  const galeriaVisor = useMemo(
+    () => (visor ? galeriaDeCarga(fotos, visor.ref) : []),
+    [visor, fotos],
+  )
+  const abrirVisor = (ref: string, foto: OriginPhoto) => {
+    setVisor({ ref, indice: indiceEnGaleria(galeriaDeCarga(fotos, ref), foto.id) })
+  }
+  // La fila lleva a la FICHA (si el portal la ofrece); si no, a la lista.
+  const irACarga = (ref: string, pestana: PestanaFicha) =>
+    (onAbrirFicha ? onAbrirFicha(ref, pestana) : onVerCarga(ref))
   const hoy = useMemo(() => hoyCliente(shipments, hoyISO, nombreCliente), [shipments, hoyISO, nombreCliente])
   const atencion = useMemo(() => alertasCliente(alerts, shipments, nombreCliente), [alerts, shipments, nombreCliente])
   // Fotos e informes subidos esta semana: es lo que el cliente pregunta por
@@ -188,31 +246,66 @@ export default function HoyCliente({ shipments, alerts, hoyISO, nombreCliente = 
         <CardHoy
           med={med} tono="info" icon={<Camera size={18} weight="fill" />}
           titulo="Novedades de tus cargas"
-          subtitulo="Fotos e informes que subimos esta semana. Tocá la carga para verlos."
+          subtitulo="Fotos e informes que subimos esta semana. Tocá una foto para verla en grande."
           count={novedades.length}
           onVerMas={() => onVerCarga(novedades[MAX_FILAS].ref)}
         >
-          {novedades.slice(0, MAX_FILAS).map(n => (
-            <Fila key={`${n.ref}|${n.clase}|${n.lugar}`} med={med} onClick={() => onVerCarga(n.ref)}>
-              <RefsCarga refs={n.refs} />
-              <Marcas ruta={n.ruta} tipo={n.tipo} {...marcasMixtas} />
-              <span className="text-sm">
-                {n.clase === 'fotos'
-                  ? `${n.cantidad} foto${n.cantidad === 1 ? '' : 's'} ${n.lugar}`
-                  : n.lugar}
-              </span>
-              {n.cargandoAhora && (
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-600 text-white">
-                  CARGANDO AHORA
-                </span>
-              )}
-              <Derecha
-                label={n.clase === 'fotos' ? 'Fotos' : 'Informe'}
-                valor={fmtDateDMY(n.fecha)}
-                detalle={n.dias === 0 ? 'hoy' : n.dias === 1 ? 'ayer' : `hace ${n.dias}d`}
-              />
-            </Fila>
-          ))}
+          {novedades.slice(0, MAX_FILAS).map(n => {
+            // Las miniaturas de ESTA fila: las de esa carga y ese lugar
+            // (una carga puede traer una fila de origen y otra de Montevideo).
+            const tira = n.lugarFoto ? tiraDeMiniaturas(fotos, n.ref, n.lugarFoto) : null
+            const informe = n.informeId ? informes.find(r => r.id === n.informeId) : undefined
+            const texto = n.clase === 'fotos'
+              ? `${n.cantidad} foto${n.cantidad === 1 ? '' : 's'} ${n.lugar}`
+              : n.lugar
+            return (
+              <FilaNovedad
+                key={`${n.ref}|${n.clase}|${n.lugar}`}
+                med={med}
+                tono="info"
+                cabecera={(
+                  <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                    <button
+                      type="button"
+                      onClick={() => irACarga(n.ref, n.clase === 'informe' ? 'informes' : 'fotos')}
+                      title="Ver la ficha de esta carga"
+                      className={`min-w-0 text-left rounded flex flex-wrap items-center gap-x-2.5 gap-y-1 -mx-1 px-1 py-0.5 transition-colors ${med ? 'hover:bg-med-pastel/40' : 'hover:bg-muted/40'}`}
+                    >
+                      <RefsCarga refs={n.refs} />
+                      <Marcas ruta={n.ruta} tipo={n.tipo} {...marcasMixtas} />
+                      <span className="text-sm">{texto}</span>
+                    </button>
+                    {n.cargandoAhora && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-600 text-white">
+                        CARGANDO AHORA
+                      </span>
+                    )}
+                    <Derecha
+                      label={n.clase === 'fotos' ? 'Fotos' : 'Informe'}
+                      valor={fmtDateDMY(n.fecha)}
+                      detalle={n.dias === 0 ? 'hoy' : n.dias === 1 ? 'ayer' : `hace ${n.dias}d`}
+                    />
+                  </div>
+                )}
+              >
+                {tira && (
+                  <TiraMiniaturas
+                    visibles={tira.visibles}
+                    mas={tira.mas}
+                    siguiente={tira.siguiente}
+                    etiqueta={texto}
+                    onAbrir={f => abrirVisor(n.ref, f)}
+                    onRota={onFirmasVencidas}
+                  />
+                )}
+                {/* El informe, como tarjeta de documento: ícono grande, título,
+                    fecha y "Abrir". SIN miniatura de la primera página —eso
+                    necesita servidor y Vercel está en 12/12 funciones—, así que
+                    tampoco se promete. */}
+                {informe && <TarjetaInforme informe={informe} compacta />}
+              </FilaNovedad>
+            )
+          })}
         </CardHoy>
       )}
 
@@ -314,6 +407,17 @@ export default function HoyCliente({ shipments, alerts, hoyISO, nombreCliente = 
             </Fila>
           ))}
         </CardHoy>
+      )}
+
+      {/* El visor: pantalla completa, con las flechas para recorrer TODAS las
+          fotos de esa carga. Se abre desde una miniatura del aviso. */}
+      {visor && galeriaVisor.length > 0 && (
+        <VisorFotos
+          fotos={galeriaVisor}
+          indice={visor.indice}
+          onIndice={i => setVisor(v => (v ? { ...v, indice: i } : v))}
+          onCerrar={() => setVisor(null)}
+        />
       )}
 
       {nada && atencion.length === 0 && shipments.length > 0 && (

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ShipmentTableSkeleton } from '@/components/SkeletonLoaders'
 import BrandLogo from './BrandLogo'
@@ -41,13 +41,14 @@ import { authFetch } from '@/lib/authClient'
 import { fetchClientReports, fetchClientOriginPhotos } from '@/lib/dataClient'
 import { agendaCliente, EVENTO_LABELS } from '@/lib/clientAgenda'
 import { fmtDateDMY, hoyISO as hoyISOLocal } from '@/lib/format'
-import ClientShipmentDialog from './client/ClientShipmentDialog'
+import ClientShipmentDialog, { type PestanaFicha } from './client/ClientShipmentDialog'
 import FilaCarga from './client/FilaCarga'
 import AgendaCalendar from './agenda/AgendaCalendar'
 import { matchesPattern, findClientByEmail } from '@/lib/clientMatching'
 import { useBrand } from '@/lib/brand'
 import { saludoPersonal } from '@/lib/saludo'
 import { downloadClientStatusPdf } from '@/lib/clientStatusPdf'
+import { tocaRefrescarFirmas, REFRESCO_FIRMAS_MS, type MotivoRefresco } from '@/lib/firmasFotos'
 import HoyCliente from './HoyCliente'
 import {
   estadoCliente, ESTADO_CLIENTE_LABEL, ESTADO_CLIENTE_ORDEN, traducirAlerta,
@@ -84,6 +85,10 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
   const [activeTab, setActiveTab] = useState('active')
   const [selectedShipment, setSelectedShipment] = useState<ParsedShipment | null>(null)
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false)
+  // Con qué pestaña abre la ficha: desde el aviso de fotos de HOY abre en
+  // Fotos (spec 04/09, D3). Va en la `key` del modal para que remonte y el
+  // `defaultValue` de las pestañas se aplique de nuevo.
+  const [pestanaFicha, setPestanaFicha] = useState<PestanaFicha>('resumen')
   // Una fila por carga; el detalle vive en la ficha (ClientShipmentDialog), no
   // en un desplegable. Esto es lo que se resalta al llegar desde una card de
   // HOY, para que el cliente vea CUÁL de todas es la suya.
@@ -116,6 +121,8 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
   const [serverShipments, setServerShipments] = useState<ParsedShipment[]>([])
   const [serverReports, setServerReports] = useState<OperativeReport[]>([])
   const [serverPhotos, setServerPhotos] = useState<OriginPhoto[]>([])
+  /** Cuándo se pidieron por última vez las fotos (y con ellas, sus firmas). */
+  const ultimoPedidoFotos = useRef<number>(0)
   const [isLoadingData, setIsLoadingData] = useState(true)
 
   // ── Filter states ──
@@ -156,6 +163,7 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
         }
         if (photosData.status === 'fulfilled' && photosData.value) {
           setServerPhotos(photosData.value)
+          ultimoPedidoFotos.current = Date.now()
         }
       } catch (err) {
         console.warn('Failed to fetch client data from server:', err)
@@ -165,6 +173,32 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
     }
     fetchClientData()
   }, [clientEmail, preview])
+
+  // ── Las firmas de las fotos vencen a las 8 h ──────────────────────────
+  // Las miniaturas llegan con una URL firmada (THUMB_TTL = 8 h). Un portal
+  // abierto toda la jornada —lo normal en una oficina— pasa ese plazo y a
+  // partir de ahí muestra imágenes rotas, sin error visible. Se vuelven a
+  // pedir por reloj y al volver a la pestaña, igual que el Diario
+  // (`useNoticias`); cuándo toca lo decide `lib/firmasFotos`.
+  const refrescarFotos = useCallback((motivo: MotivoRefresco) => {
+    if (preview) return   // la vista previa del admin no habla con el server
+    if (!tocaRefrescarFirmas(ultimoPedidoFotos.current, Date.now(), motivo)) return
+    ultimoPedidoFotos.current = Date.now()
+    fetchClientOriginPhotos()
+      .then(fotos => { if (fotos && fotos.length > 0) setServerPhotos(fotos) })
+      .catch(() => { /* se conserva lo que había: mejor una firma vieja que nada */ })
+  }, [preview])
+
+  useEffect(() => {
+    if (preview) return
+    const timer = window.setInterval(() => refrescarFotos('intervalo'), REFRESCO_FIRMAS_MS)
+    const alVolver = () => { if (document.visibilityState === 'visible') refrescarFotos('volvio') }
+    document.addEventListener('visibilitychange', alVolver)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', alVolver)
+    }
+  }, [preview, refrescarFotos])
 
   // Por email SOLO si hay email (email vacío matcheaba al primer cliente sin
   // email del catálogo — "Bienvenido CENA HNOS"); sin match, manda el token.
@@ -358,9 +392,19 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
     }
   }
 
-  const handleViewDetails = (shipment: ParsedShipment) => {
+  const handleViewDetails = (shipment: ParsedShipment, pestana: PestanaFicha = 'resumen') => {
     setSelectedShipment(shipment)
+    setPestanaFicha(pestana)
     setDetailsDialogOpen(true)
+  }
+
+  /** Desde una card de HOY: abrir la FICHA de esa carga. Si la carga no está
+   *  en la lista visible (un filtro, una carga vieja) se cae al camino de
+   *  antes —llevar a la lista— en vez de no hacer nada. */
+  const abrirFicha = (ref: string, pestana: PestanaFicha = 'resumen') => {
+    const carga = clientShipments.find(s => s.REF === ref)
+    if (carga) handleViewDetails(carga, pestana)
+    else verCarga(ref)
   }
 
   return (
@@ -538,6 +582,8 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
           alerts={visibleAlerts.filter(a => a.severity === 'critical' || a.severity === 'warning')}
           hoyISO={hoyISO}
           onVerCarga={verCarga}
+          onAbrirFicha={abrirFicha}
+          onFirmasVencidas={() => refrescarFotos('rota')}
           onVerAlertas={() => setActiveTab('alerts')}
         />
 
@@ -984,7 +1030,9 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
           Tracking y HOY del admin. */}
       {selectedShipment && (
         <ClientShipmentDialog
+          key={`${selectedShipment.REF}|${pestanaFicha}`}
           shipment={selectedShipment}
+          pestanaInicial={pestanaFicha}
           open={detailsDialogOpen}
           onOpenChange={setDetailsDialogOpen}
           hoyISO={hoyISO}

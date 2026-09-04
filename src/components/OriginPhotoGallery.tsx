@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { Camera, Trash, SpinnerGap } from '@phosphor-icons/react'
 import { OriginPhoto } from '@/lib/quotationTypes'
-import { fetchOriginPhotoFile, deleteOriginPhoto } from '@/lib/dataClient'
-import OriginPhotoLightbox from './OriginPhotoLightbox'
+import { deleteOriginPhoto } from '@/lib/dataClient'
+import VisorFotos from './VisorFotos'
 
 interface OriginPhotoGalleryProps {
   photos: OriginPhoto[]
@@ -12,35 +12,11 @@ interface OriginPhotoGalleryProps {
 
 export default function OriginPhotoGallery({ photos, isAdmin = false, onDeletePhoto }: OriginPhotoGalleryProps) {
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
-  const [fullImages, setFullImages] = useState<Record<string, string>>({})
-  const [loadingFull, setLoadingFull] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
-  const openLightbox = async (index: number) => {
-    setLightboxIndex(index)
-    const photo = photos[index]
-    if (photo && !fullImages[photo.id]) {
-      setLoadingFull(photo.id)
-      const fileData = await fetchOriginPhotoFile(photo.id)
-      if (fileData) {
-        setFullImages(prev => ({ ...prev, [photo.id]: fileData }))
-      }
-      setLoadingFull(null)
-    }
-  }
-
-  const handleNavigate = async (newIndex: number) => {
-    setLightboxIndex(newIndex)
-    const photo = photos[newIndex]
-    if (photo && !fullImages[photo.id]) {
-      setLoadingFull(photo.id)
-      const fileData = await fetchOriginPhotoFile(photo.id)
-      if (fileData) {
-        setFullImages(prev => ({ ...prev, [photo.id]: fileData }))
-      }
-      setLoadingFull(null)
-    }
-  }
+  // Traer la foto grande y mostrarla es de `VisorFotos` (lo comparte con el
+  // aviso de HOY del cliente, que abre el visor sin pasar por esta galería).
+  const openLightbox = (index: number) => setLightboxIndex(index)
 
   const handleDelete = async (e: React.MouseEvent, photoId: string) => {
     e.stopPropagation()
@@ -120,15 +96,13 @@ export default function OriginPhotoGallery({ photos, isAdmin = false, onDeletePh
         ))}
       </div>
 
-      {/* Lightbox */}
+      {/* Visor */}
       {lightboxIndex !== null && (
-        <OriginPhotoLightbox
-          photos={photos}
-          currentIndex={lightboxIndex}
-          fullImages={fullImages}
-          loadingId={loadingFull}
-          onNavigate={handleNavigate}
-          onClose={() => setLightboxIndex(null)}
+        <VisorFotos
+          fotos={photos}
+          indice={lightboxIndex}
+          onIndice={setLightboxIndex}
+          onCerrar={() => setLightboxIndex(null)}
         />
       )}
     </>

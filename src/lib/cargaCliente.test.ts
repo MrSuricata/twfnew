@@ -285,12 +285,15 @@ describe('las miniaturas del aviso: hasta 4 y "+N"', () => {
     expect(tira.visibles).toHaveLength(4)
     expect(tira.mas).toBe(2)
     expect(tira.total).toBe(6)
+    // El "+N" abre justo donde la tira se cortó, no al principio otra vez.
+    expect(tira.siguiente?.id).toBe('uy1')
   })
 
   it('con 4 o menos no hay "+N"', () => {
     const tira = tiraDeMiniaturas(muchas, 'A8121', 'origen')
     expect(tira.visibles.map(f => f.id)).toEqual(['or2', 'or1'])   // la más nueva primero
     expect(tira.mas).toBe(0)
+    expect(tira.siguiente).toBeNull()
   })
 
   it('la tira es la del LUGAR de la fila, no la de toda la carga', () => {
@@ -299,7 +302,8 @@ describe('las miniaturas del aviso: hasta 4 y "+N"', () => {
   })
 
   it('sin fotos de esa carga la tira sale vacía (la fila no queda con un hueco)', () => {
-    expect(tiraDeMiniaturas(muchas, 'A0000', 'uruguay')).toEqual({ visibles: [], mas: 0, total: 0 })
+    expect(tiraDeMiniaturas(muchas, 'A0000', 'uruguay'))
+      .toEqual({ visibles: [], mas: 0, total: 0, siguiente: null })
     expect(tiraDeMiniaturas([], 'A8121', 'uruguay').total).toBe(0)
   })
 

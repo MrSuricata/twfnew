@@ -15,28 +15,27 @@
  *  · Resumen  — línea de tiempo derivada de `estadoCliente`, datos y
  *               contenedores contados de la lista real.
  *  · Fotos    — galería por lugar (origen / Montevideo) y día.
- *  · Informes — tarjeta de documento con botón "Abrir". SIN miniatura del
- *               PDF: renderizarla necesita servidor y Vercel está en 12/12
+ *  · Informes — tarjeta de documento con botón "Abrir" (`TarjetaInforme`,
+ *               compartida con el aviso de HOY). SIN miniatura del PDF:
+ *               renderizarla necesita servidor y Vercel está en 12/12
  *               funciones. Se dice así, no se promete.
  *
  * Sin "Libre": es dato nuestro. Las referencias, con la regla única de D2.
  */
-import { useState } from 'react'
-import { toast } from 'sonner'
 import { Boat, Camera, CheckCircle, Circle, FilePdf, Package } from '@phosphor-icons/react'
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import PanelCard, { Chip, Dato, PanelFila, FilaTitulo, FilaDatos } from '@/components/partner/PanelCard'
 import type { TonoPanel } from '@/components/partner/PanelCard'
 import OriginPhotoGallery from '@/components/OriginPhotoGallery'
+import TarjetaInforme from './TarjetaInforme'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
 import type { OperativeReport, OriginPhoto } from '@/lib/quotationTypes'
-import { fetchReportFile } from '@/lib/dataClient'
 import { refsCliente } from '@/lib/refsCliente'
 import { estadoCliente, etiquetaEstado } from '@/lib/hoyCliente'
 import {
   lineaTiempoCliente, datosFicha, contenedoresDeCarga, agruparFotosPorLugar,
-  informesDeCarga, textoContenedores, fechaDeSubida, type PasoLinea,
+  informesDeCarga, textoContenedores, type PasoLinea,
 } from '@/lib/cargaCliente'
 import type { EstadoCliente } from '@/lib/hoyCliente'
 
@@ -168,52 +167,8 @@ function Fotos({ fotos, ref_ }: { fotos: OriginPhoto[]; ref_: string }) {
 
 // ── Pestaña Informes ──────────────────────────────────────────────────────
 
-/** El base64 que devuelve el server, como archivo que el navegador puede
- *  abrir en una pestaña. Un `data:` URL directo lo bloquean los navegadores. */
-function urlDeArchivo(dataUrl: string): string {
-  if (/^https?:/i.test(dataUrl)) return dataUrl
-  const [cabecera, base64] = dataUrl.split(',')
-  const tipo = /:(.*?);/.exec(cabecera)?.[1] || 'application/pdf'
-  const bin = atob(base64 || '')
-  const bytes = new Uint8Array(bin.length)
-  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i)
-  return URL.createObjectURL(new Blob([bytes], { type: tipo }))
-}
-
 function Informes({ informes, ref_ }: { informes: OperativeReport[]; ref_: string }) {
-  const [abriendo, setAbriendo] = useState<string | null>(null)
   const lista = informesDeCarga(informes, ref_)
-
-  const abrir = async (r: OperativeReport) => {
-    setAbriendo(r.id)
-    try {
-      const data = r.fileData || await fetchReportFile(r.id)
-      if (!data) { toast.error('No pudimos traer el informe. Probá de nuevo en un rato.'); return }
-      const url = urlDeArchivo(data)
-      // OJO con 'noopener' en el tercer argumento: por spec hace que
-      // window.open devuelva null SIEMPRE, haya abierto la pestaña o no. Con
-      // eso, el fallback se disparaba siempre y el cliente se llevaba la
-      // pestaña Y una descarga en cada click. La protección va por rel.
-      const ventana = window.open(url, '_blank')
-      if (ventana) {
-        ventana.opener = null
-      } else {
-        // Bloqueador de pop-ups: se descarga, que es lo que el cliente
-        // quería igual.
-        const a = document.createElement('a')
-        a.href = url
-        a.download = r.fileName || 'informe.pdf'
-        a.rel = 'noopener'
-        a.click()
-      }
-      if (!/^https?:/i.test(data)) setTimeout(() => URL.revokeObjectURL(url), 60_000)
-    } catch {
-      toast.error('No pudimos abrir el informe. Escribinos y te lo mandamos por mail.')
-    } finally {
-      setAbriendo(null)
-    }
-  }
-
   if (lista.length === 0) {
     return (
       <div className="text-center py-12 text-muted-foreground">
@@ -225,39 +180,18 @@ function Informes({ informes, ref_ }: { informes: OperativeReport[]; ref_: strin
   }
   return (
     <div className="grid gap-3 sm:grid-cols-2">
-      {lista.map(r => (
-        <article key={r.id} className="rounded-xl border-2 border-border bg-card p-4 flex items-start gap-3">
-          {/* Ícono grande, no miniatura: renderizar la primera página del PDF
-              necesita servidor (Vercel está en 12/12 funciones). */}
-          <span className="shrink-0 rounded-lg bg-red-50 text-red-600 p-2.5">
-            <FilePdf size={32} weight="fill" />
-          </span>
-          <div className="min-w-0 flex-1">
-            <h3 className="text-sm font-bold leading-tight break-words">{r.title || 'Informe operativo'}</h3>
-            <p className="text-xs text-muted-foreground mt-0.5 tabular-nums">
-              {fechaDeSubida(r.createdAt)}
-              {r.containerNumber ? <span className="font-mono"> · {r.containerNumber}</span> : null}
-            </p>
-            <button
-              type="button"
-              onClick={() => void abrir(r)}
-              disabled={abriendo === r.id}
-              className="mt-3 inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-accent text-accent-foreground text-xs font-bold hover:opacity-90 disabled:opacity-60"
-            >
-              <FilePdf size={14} weight="fill" />
-              {abriendo === r.id ? 'Abriendo…' : 'Abrir'}
-            </button>
-          </div>
-        </article>
-      ))}
+      {lista.map(r => <TarjetaInforme key={r.id} informe={r} />)}
     </div>
   )
 }
 
 // ── El modal ──────────────────────────────────────────────────────────────
 
+export type PestanaFicha = 'resumen' | 'fotos' | 'informes'
+
 export default function ClientShipmentDialog({
   shipment, open, onOpenChange, hoyISO, nombreCliente = '', fotos = [], informes = [],
+  pestanaInicial = 'resumen',
 }: {
   shipment: ParsedShipment
   open: boolean
@@ -267,6 +201,10 @@ export default function ClientShipmentDialog({
   nombreCliente?: string
   fotos?: OriginPhoto[]
   informes?: OperativeReport[]
+  /** Con qué pestaña abre. Desde el aviso de fotos de HOY abre en Fotos: el
+   *  cliente vino a ver eso, no a leer el resumen (spec 04/09, D3).
+   *  Es el valor INICIAL: el portal remonta el modal para cambiarlo. */
+  pestanaInicial?: PestanaFicha
 }) {
   const refs = refsCliente(shipment, nombreCliente)
   const estado = estadoCliente(shipment, hoyISO)
@@ -308,7 +246,7 @@ export default function ClientShipmentDialog({
             </>
           }
         >
-          <Tabs defaultValue="resumen" className="gap-0">
+          <Tabs defaultValue={pestanaInicial} className="gap-0">
             <TabsList className="tabs-list-underline px-2">
               <TabsTrigger value="resumen" className="tab-underline">
                 <Boat size={18} className="mr-2" />

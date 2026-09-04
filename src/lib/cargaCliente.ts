@@ -385,6 +385,9 @@ export interface TiraMiniaturas<T> {
   mas: number
   /** Cuántas hay en total en ese lugar. */
   total: number
+  /** La primera que NO entró: es donde abre el visor al tocar el "+N", así el
+   *  cliente sigue justo donde la tira se cortó. null si entraron todas. */
+  siguiente: T | null
 }
 
 /**
@@ -397,7 +400,12 @@ export function tiraDeMiniaturas<T extends FotoMin>(
 ): TiraMiniaturas<T> {
   const todas = galeriaDeCarga(fotos, ref, lugar)
   const tope = Math.max(0, Math.floor(Number(max) || 0))
-  return { visibles: todas.slice(0, tope), mas: Math.max(0, todas.length - tope), total: todas.length }
+  return {
+    visibles: todas.slice(0, tope),
+    mas: Math.max(0, todas.length - tope),
+    total: todas.length,
+    siguiente: todas[tope] ?? null,
+  }
 }
 
 /**
