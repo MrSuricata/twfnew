@@ -114,6 +114,21 @@ describe('Novedades de tus cargas — la foto se ve donde está el aviso', () =>
     expect(html).toContain('src="https://firmada/or1"')
   })
 
+  it('anuncia 1 foto de esta semana: dibuja UNA miniatura, no el historial', () => {
+    // El caso de la revisión: 1 foto de esta semana y 7 del mes pasado, misma
+    // carga y mismo lugar. Decía "1 foto en depósito GODILCO" y abajo
+    // dibujaba cuatro miniaturas y un "+4" de fotos de hace un mes.
+    const html = render([
+      foto('nueva'),
+      ...Array.from({ length: 7 }, (_, i) => foto(`vieja${i}`, { createdAt: ts(-35 - i) })),
+    ])
+    expect(html).toContain('1 foto en depósito GODILCO')
+    expect((html.match(/src="https:\/\/firmada\//g) || []).length).toBe(1)
+    expect(html).toContain('src="https://firmada/nueva"')
+    expect(html).not.toContain('vieja')
+    expect(html).not.toMatch(/\+\d/)
+  })
+
   it('sin fotos ni informes la card no existe', () => {
     expect(render([])).not.toContain('Novedades de tus cargas')
   })

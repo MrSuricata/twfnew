@@ -496,6 +496,13 @@ export interface NovedadCliente extends FilaBase {
   informeId: string
   /** Cuántas fotos nuevas (1 para un informe). */
   cantidad: number
+  /** Los ids de LAS FOTOS QUE ESTA FILA CUENTA: las de la ventana, ni una más.
+   *  La tira de miniaturas y el visor las usan tal cual, así el texto ("3
+   *  fotos en depósito GODILCO") y lo que se ve abajo son lo mismo. Sin esto
+   *  la tira volvía a decidir por su cuenta —sin fecha— y el endpoint devuelve
+   *  el historial entero: 1 foto anunciada, 4 miniaturas y un "+4". Vacío en
+   *  un informe. */
+  fotoIds: string[]
   /** Día de la subida (ISO). */
   fecha: string
   /** Días desde la subida: 0 = hoy. */
@@ -507,7 +514,7 @@ export interface NovedadCliente extends FilaBase {
 /** Cuánto tiempo una subida sigue siendo "nueva" para el cliente. */
 export const NOVEDADES_DIAS = 7
 
-interface SubidaFoto { shipmentRef?: string | null; photoType?: string | null; createdAt?: number | null }
+interface SubidaFoto { id?: string | null; shipmentRef?: string | null; photoType?: string | null; createdAt?: number | null }
 interface SubidaInforme { id?: string; shipmentRef?: string | null; title?: string | null; createdAt?: number | null }
 
 const diaDeTimestamp = (ms: unknown): string => {
@@ -562,7 +569,7 @@ export function novedadesCliente(
   const out: NovedadCliente[] = []
 
   // Fotos: una fila por (carga, lugar), con la subida más reciente.
-  const grupos = new Map<string, { s: ParsedShipment; tipo: LugarFoto; n: number; fecha: string }>()
+  const grupos = new Map<string, { s: ParsedShipment; tipo: LugarFoto; n: number; fecha: string; ids: string[] }>()
   for (const f of fotos || []) {
     const ref = txt(f.shipmentRef).toUpperCase()
     const s = porRef.get(ref)
@@ -574,9 +581,18 @@ export function novedadesCliente(
     // fila anunciaría fotos que la tira de miniaturas no encuentra.
     const tipo: LugarFoto = txt(f.photoType).toLowerCase() === 'uruguay' ? 'uruguay' : 'origen'
     const clave = `${ref}|${tipo}`
+    // El id es lo que después le deja a la tira mostrar EXACTAMENTE estas
+    // fotos. Una subida sin id (no pasa en producción: el id lo pone el
+    // server) se cuenta igual, pero no se puede señalar.
+    const id = txt(f.id)
     const g = grupos.get(clave)
-    if (g) { g.n += 1; if (fecha > g.fecha) g.fecha = fecha }
-    else grupos.set(clave, { s, tipo, n: 1, fecha })
+    if (g) {
+      g.n += 1
+      if (id) g.ids.push(id)
+      if (fecha > g.fecha) g.fecha = fecha
+    } else {
+      grupos.set(clave, { s, tipo, n: 1, fecha, ids: id ? [id] : [] })
+    }
   }
   for (const g of grupos.values()) {
     out.push({
@@ -586,6 +602,7 @@ export function novedadesCliente(
       lugarFoto: g.tipo,
       informeId: '',
       cantidad: g.n,
+      fotoIds: g.ids,
       fecha: g.fecha,
       dias: dentroDeVentana(g.fecha) ?? 0,
       cargandoAhora: g.tipo !== 'origen' && cargaHoy(g.s, hoyISO),
@@ -606,6 +623,7 @@ export function novedadesCliente(
       lugarFoto: null,
       informeId: txt(i.id),
       cantidad: 1,
+      fotoIds: [],
       fecha,
       dias: d,
       cargandoAhora: false,

@@ -369,13 +369,42 @@ export const MAX_MINIATURAS = 4
 /**
  * Todas las fotos de una carga, la más nueva primero: es LA galería que abre
  * el visor cuando el cliente toca una miniatura. Con `lugar`, solo las de ese
- * lugar (que es lo que anuncia la fila: "3 fotos en depósito GODILCO").
+ * lugar (que es lo que anuncia la fila: "3 fotos en depósito GODILCO"); con
+ * `ids`, solo esas — que es como una fila de novedades le pasa SU ventana sin
+ * que acá adentro haya que saber nada de fechas.
  */
-export function galeriaDeCarga<T extends FotoMin>(fotos: T[], ref: string, lugar?: LugarFoto): T[] {
+export function galeriaDeCarga<T extends FotoMin>(
+  fotos: T[], ref: string, lugar?: LugarFoto, ids?: readonly string[] | null,
+): T[] {
+  const soloEstas = ids ? new Set(ids.map(i => txt(i)).filter(Boolean)) : null
   return (fotos || [])
-    .filter(f => mismaRef(f?.shipmentRef, ref) && (!lugar || lugarDeFoto(f) === lugar))
+    .filter(f => mismaRef(f?.shipmentRef, ref)
+      && (!lugar || lugarDeFoto(f) === lugar)
+      && (!soloEstas || soloEstas.has(txt(f?.id))))
     .slice()
     .sort((a, b) => Number(b?.createdAt || 0) - Number(a?.createdAt || 0))
+}
+
+/** Lo que una fila de novedades (`hoyCliente.novedadesCliente`) le dice a la
+ *  galería: qué carga, de qué lugar, y CUÁLES fotos contó. */
+export interface FuenteNovedad {
+  ref: string
+  lugarFoto: LugarFoto | null
+  fotoIds: string[]
+}
+
+/**
+ * Las fotos que ANUNCIA una fila de novedades: las de esa carga, ese lugar y
+ * esa ventana. Es la lista que dibuja la tira y la que recorre el visor: una
+ * sola, para que el texto y lo que se ve no puedan discrepar.
+ *
+ * Antes la tira volvía a decidir sola —todas las de la carga y el lugar, sin
+ * fecha— y el endpoint manda el historial completo: una carga con 1 foto de
+ * esta semana y 7 del mes pasado decía "1 foto en depósito GODILCO" y abajo
+ * dibujaba 4 miniaturas y un "+4".
+ */
+export function galeriaDeNovedad<T extends FotoMin>(fotos: T[], n: FuenteNovedad): T[] {
+  return galeriaDeCarga(fotos, n.ref, n.lugarFoto ?? undefined, n.fotoIds)
 }
 
 export interface TiraMiniaturas<T> {
@@ -383,7 +412,7 @@ export interface TiraMiniaturas<T> {
   visibles: T[]
   /** Cuántas quedaron afuera: el "+N". 0 = no va el "+N". */
   mas: number
-  /** Cuántas hay en total en ese lugar. */
+  /** Cuántas hay en la galería que anunció la fila. */
   total: number
   /** La primera que NO entró: es donde abre el visor al tocar el "+N", así el
    *  cliente sigue justo donde la tira se cortó. null si entraron todas. */
@@ -391,14 +420,18 @@ export interface TiraMiniaturas<T> {
 }
 
 /**
- * La tira de miniaturas de una fila de novedades: hasta `max` fotos y el
- * "+N" con lo que no entró. Sin fotos migradas a Storage la tira sale vacía
- * y la fila sigue siendo la de antes (texto + fecha): nunca un hueco.
+ * La tira de miniaturas de una fila de novedades: hasta `max` fotos y el "+N"
+ * con lo que no entró.
+ *
+ * Recibe la galería YA DECIDIDA (`galeriaDeNovedad`). Acá no se elige qué
+ * fotos son —eso lo decidió la fila, que es la que puso el texto—: solo
+ * cuántas entran. Sin fotos la tira sale vacía y la fila sigue siendo la de
+ * antes (texto + fecha): nunca un hueco.
  */
 export function tiraDeMiniaturas<T extends FotoMin>(
-  fotos: T[], ref: string, lugar: LugarFoto, max = MAX_MINIATURAS,
+  galeria: T[], max = MAX_MINIATURAS,
 ): TiraMiniaturas<T> {
-  const todas = galeriaDeCarga(fotos, ref, lugar)
+  const todas = (galeria || []).filter(Boolean)
   const tope = Math.max(0, Math.floor(Number(max) || 0))
   return {
     visibles: todas.slice(0, tope),

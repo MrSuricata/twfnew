@@ -21,7 +21,7 @@ import {
   hoyCliente, alertasCliente, textoDias, RUTA_CHIP, TIPO_LABEL,
   type EstadoLlegadaDestino, type Ruta, type Tipo, novedadesCliente,
 } from '@/lib/hoyCliente'
-import { galeriaDeCarga, indiceEnGaleria, tiraDeMiniaturas } from '@/lib/cargaCliente'
+import { galeriaDeCarga, galeriaDeNovedad, indiceEnGaleria, tiraDeMiniaturas } from '@/lib/cargaCliente'
 import { fmtDateDMY } from '@/lib/format'
 import { useBrand } from '@/lib/brand'
 import PanelCard, { RefsCarga, clasesTono, type TonoPanel } from './partner/PanelCard'
@@ -251,9 +251,11 @@ export default function HoyCliente({ shipments, alerts, hoyISO, nombreCliente = 
           onVerMas={() => onVerCarga(novedades[MAX_FILAS].ref)}
         >
           {novedades.slice(0, MAX_FILAS).map(n => {
-            // Las miniaturas de ESTA fila: las de esa carga y ese lugar
-            // (una carga puede traer una fila de origen y otra de Montevideo).
-            const tira = n.lugarFoto ? tiraDeMiniaturas(fotos, n.ref, n.lugarFoto) : null
+            // Las fotos de ESTA fila: las que la fila contó para armar su
+            // texto (esa carga, ese lugar, esa ventana). No se vuelven a
+            // elegir acá; si no, el texto dice "1 foto" y la tira dibuja 4.
+            const galeria = n.lugarFoto ? galeriaDeNovedad(fotos, n) : []
+            const tira = n.lugarFoto ? tiraDeMiniaturas(galeria) : null
             const informe = n.informeId ? informes.find(r => r.id === n.informeId) : undefined
             const texto = n.clase === 'fotos'
               ? `${n.cantidad} foto${n.cantidad === 1 ? '' : 's'} ${n.lugar}`

@@ -56,6 +56,13 @@ const fotosDemo = [
   foto('D9001', 'origen', 21, 4), foto('D9001', 'origen', 21, 5),
   // D9005: tres fotos de origen, para ver la tira SIN "+N".
   foto('D9005', 'origen', 2, 6), foto('D9005', 'origen', 2, 7), foto('D9005', 'origen', 3, 8),
+  // D9003: UNA foto de esta semana y SIETE del mes pasado, mismo lugar. Es el
+  // caso con el que la revisión encontró que el texto y las miniaturas no
+  // hablaban de lo mismo: la fila decía "1 foto en depósito GODILCO" y abajo
+  // se dibujaban cuatro miniaturas y un "+4" de fotos viejas. Acá tiene que
+  // verse UNA sola miniatura.
+  foto('D9003', 'uruguay', 1, 20),
+  ...Array.from({ length: 7 }, (_, i) => foto('D9003', 'uruguay', 34 + i, 21 + i)),
 ]
 /** PDF mínimo de verdad, así el botón "Abrir" de la ficha se puede probar. */
 const PDF_DEMO = 'data:application/pdf;base64,JVBERi0xLjEKMSAwIG9iajw8L1R5cGUvQ2F0YWxvZy9QYWdlcyAyIDAgUj4+ZW5kb2JqCjIgMCBvYmo8PC9UeXBlL1BhZ2VzL0tpZHNbMyAwIFJdL0NvdW50IDE+PmVuZG9iagozIDAgb2JqPDwvVHlwZS9QYWdlL1BhcmVudCAyIDAgUi9NZWRpYUJveFswIDAgMjAwIDIwMF0+PmVuZG9iagp0cmFpbGVyPDwvUm9vdCAxIDAgUj4+'

@@ -12,7 +12,7 @@ import { describe, it, expect } from 'vitest'
 import { createElement as h } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import TiraMiniaturas, { fuenteMiniatura } from './TiraMiniaturas'
-import { tiraDeMiniaturas } from '@/lib/cargaCliente'
+import { galeriaDeNovedad, tiraDeMiniaturas } from '@/lib/cargaCliente'
 import type { OriginPhoto } from '@/lib/quotationTypes'
 
 const foto = (id: string, extra: Partial<OriginPhoto> = {}): OriginPhoto => ({
@@ -23,7 +23,10 @@ const foto = (id: string, extra: Partial<OriginPhoto> = {}): OriginPhoto => ({
 } as OriginPhoto)
 
 const render = (fotos: OriginPhoto[], props: Record<string, unknown> = {}) => {
-  const tira = tiraDeMiniaturas(fotos, 'A8121', 'uruguay')
+  // Como en la card: la fila dice cuáles son sus fotos, la tira cuántas entran.
+  const tira = tiraDeMiniaturas(galeriaDeNovedad(
+    fotos, { ref: 'A8121', lugarFoto: 'uruguay', fotoIds: fotos.map(f => f.id) },
+  ))
   return renderToStaticMarkup(h(TiraMiniaturas, {
     visibles: tira.visibles,
     mas: tira.mas,

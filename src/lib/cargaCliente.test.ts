@@ -10,9 +10,10 @@ import { describe, it, expect } from 'vitest'
 import {
   contenedoresCarga, textoContenedores, filaCargaCliente, lineaTiempoCliente,
   datosFicha, contenedoresDeCarga, agruparFotosPorLugar, informesDeCarga, fechaDeSubida,
-  lugarDeFoto, galeriaDeCarga, tiraDeMiniaturas, indiceEnGaleria, MAX_MINIATURAS,
+  lugarDeFoto, galeriaDeCarga, galeriaDeNovedad, tiraDeMiniaturas, indiceEnGaleria,
+  MAX_MINIATURAS,
 } from './cargaCliente'
-import { estadoCliente, etiquetaEstado, traducirAlerta } from './hoyCliente'
+import { estadoCliente, etiquetaEstado, novedadesCliente, traducirAlerta } from './hoyCliente'
 import type { ParsedShipment, OperativasRecord, ShipmentAlert } from './shipmentTypes'
 
 const HOY = '2026-09-04'
@@ -265,11 +266,18 @@ describe('las miniaturas del aviso: hasta 4 y "+N"', () => {
   const muchas = [
     ...Array.from({ length: 6 }, (_, i) => ({
       id: `uy${i}`, shipmentRef: 'A8121', photoType: 'uruguay', createdAt: ts(2026, 9, 1) + i,
+      thumbnailUrl: `https://firmada/uy${i}`,
     })),
-    { id: 'or1', shipmentRef: 'A8121', photoType: 'origen', createdAt: ts(2026, 8, 20) },
-    { id: 'or2', shipmentRef: 'A8121', photoType: 'origen', createdAt: ts(2026, 8, 21) },
-    { id: 'ajena', shipmentRef: 'A9999', photoType: 'uruguay', createdAt: ts(2026, 9, 3) },
+    { id: 'or1', shipmentRef: 'A8121', photoType: 'origen', createdAt: ts(2026, 8, 20), thumbnailUrl: 'https://firmada/or1' },
+    { id: 'or2', shipmentRef: 'A8121', photoType: 'origen', createdAt: ts(2026, 8, 21), thumbnailUrl: 'https://firmada/or2' },
+    { id: 'ajena', shipmentRef: 'A9999', photoType: 'uruguay', createdAt: ts(2026, 9, 3), thumbnailUrl: 'https://firmada/ajena' },
   ]
+  /** Lo que hace la card: la FILA decide qué fotos son (su ventana), la tira
+   *  solo cuántas entran. Acá se le pasan todas las de ese lugar. */
+  const idsDe = (lugar: string) =>
+    muchas.filter(f => f.shipmentRef === 'A8121' && f.photoType === lugar).map(f => f.id)
+  const tiraDe = (lugar: 'origen' | 'uruguay') =>
+    tiraDeMiniaturas(galeriaDeNovedad(muchas, { ref: 'A8121', lugarFoto: lugar, fotoIds: idsDe(lugar) }))
 
   it('lugarDeFoto: lo que no dice "uruguay" es de origen (photo_type es texto libre)', () => {
     expect(lugarDeFoto({ photoType: 'uruguay' })).toBe('uruguay')
@@ -280,7 +288,7 @@ describe('las miniaturas del aviso: hasta 4 y "+N"', () => {
   })
 
   it('muestra 4 y dice cuántas quedaron afuera', () => {
-    const tira = tiraDeMiniaturas(muchas, 'A8121', 'uruguay')
+    const tira = tiraDe('uruguay')
     expect(MAX_MINIATURAS).toBe(4)
     expect(tira.visibles).toHaveLength(4)
     expect(tira.mas).toBe(2)
@@ -290,24 +298,24 @@ describe('las miniaturas del aviso: hasta 4 y "+N"', () => {
   })
 
   it('con 4 o menos no hay "+N"', () => {
-    const tira = tiraDeMiniaturas(muchas, 'A8121', 'origen')
+    const tira = tiraDe('origen')
     expect(tira.visibles.map(f => f.id)).toEqual(['or2', 'or1'])   // la más nueva primero
     expect(tira.mas).toBe(0)
     expect(tira.siguiente).toBeNull()
   })
 
   it('la tira es la del LUGAR de la fila, no la de toda la carga', () => {
-    expect(tiraDeMiniaturas(muchas, 'A8121', 'origen').total).toBe(2)
-    expect(tiraDeMiniaturas(muchas, 'A8121', 'uruguay').total).toBe(6)
+    expect(tiraDe('origen').total).toBe(2)
+    expect(tiraDe('uruguay').total).toBe(6)
   })
 
   it('sin fotos de esa carga la tira sale vacía (la fila no queda con un hueco)', () => {
-    expect(tiraDeMiniaturas(muchas, 'A0000', 'uruguay'))
-      .toEqual({ visibles: [], mas: 0, total: 0, siguiente: null })
-    expect(tiraDeMiniaturas([], 'A8121', 'uruguay').total).toBe(0)
+    const ajena = galeriaDeNovedad(muchas, { ref: 'A0000', lugarFoto: 'uruguay', fotoIds: ['uy0'] })
+    expect(tiraDeMiniaturas(ajena)).toEqual({ visibles: [], mas: 0, total: 0, siguiente: null })
+    expect(tiraDeMiniaturas([]).total).toBe(0)
   })
 
-  it('la galería que abre el visor es la de TODA la carga, lo más nuevo primero', () => {
+  it('la galería de TODA la carga sigue disponible, lo más nuevo primero', () => {
     const galeria = galeriaDeCarga(muchas, 'a8121')
     expect(galeria).toHaveLength(8)
     expect(galeria[0].id).toBe('uy5')
@@ -325,6 +333,84 @@ describe('las miniaturas del aviso: hasta 4 y "+N"', () => {
     expect(indiceEnGaleria(galeria, 'no-existe')).toBe(0)
     expect(indiceEnGaleria(galeria, '')).toBe(0)
     expect(indiceEnGaleria([], 'or1')).toBe(0)
+  })
+})
+
+// ── El texto de la fila y las miniaturas hablan de LO MISMO ──────────────
+
+describe('la tira dibuja lo que el texto anuncia, no el historial entero', () => {
+  // El caso que encontró la revisión: 1 foto de esta semana y 7 del mes
+  // pasado, misma carga y mismo lugar. El texto decía "1 foto en depósito
+  // GODILCO" y abajo se dibujaban 4 miniaturas y un "+4", porque la tira
+  // volvía a buscar por carga + lugar y el endpoint manda TODO el historial.
+  const HOY_N = '2026-09-10'
+  const cuando = (iso: string) => Date.parse(iso + 'T12:00:00Z')
+  const cargaN = {
+    REF: 'A8121', CLIENTE: 'DEMO', ETD: '2026-08-01', ETA: '2026-09-05', PAIS: 'UY',
+    POD: 'MONTEVIDEO', POL: 'SHANGHAI', TERMINAL: 'TCP', N: 1, CNTR: 'X1', MODE: 'fcl',
+    operativas: [{ REF: 'A8121', CNTR_OP: 'X1', OPERATIVA: 'TRASIEGO', DEPOSITO: 'GODILCO' }],
+  } as unknown as ParsedShipment
+  const mezcla = [
+    { id: 'hoy', shipmentRef: 'A8121', photoType: 'uruguay', createdAt: cuando('2026-09-09'), thumbnailUrl: 'https://firmada/hoy' },
+    ...Array.from({ length: 7 }, (_, i) => ({
+      id: `vieja${i}`, shipmentRef: 'A8121', photoType: 'uruguay',
+      createdAt: cuando('2026-08-05') + i, thumbnailUrl: `https://firmada/vieja${i}`,
+    })),
+  ]
+
+  it('1 foto anunciada = 1 miniatura, sin el "+4" de las del mes pasado', () => {
+    const [fila] = novedadesCliente([cargaN], mezcla, [], HOY_N)
+    expect(fila.cantidad).toBe(1)
+    expect(fila.lugar).toBe('en depósito GODILCO')
+    expect(fila.fotoIds).toEqual(['hoy'])
+
+    const galeria = galeriaDeNovedad(mezcla, fila)
+    expect(galeria.map(f => f.id)).toEqual(['hoy'])
+
+    const tira = tiraDeMiniaturas(galeria)
+    expect(tira.visibles.map(f => f.id)).toEqual(['hoy'])
+    expect(tira.mas).toBe(0)
+    // Lo que no puede volver a pasar: el texto dice una cosa y la tira otra.
+    expect(tira.total).toBe(fila.cantidad)
+  })
+
+  it('con nuevas y viejas mezcladas, la tira cuenta solo las que anuncia', () => {
+    const nuevas = Array.from({ length: 6 }, (_, i) => ({
+      id: `n${i}`, shipmentRef: 'A8121', photoType: 'uruguay',
+      createdAt: cuando('2026-09-08') + i, thumbnailUrl: `https://firmada/n${i}`,
+    }))
+    const todas = [...mezcla, ...nuevas]
+    const [fila] = novedadesCliente([cargaN], todas, [], HOY_N)
+    expect(fila.cantidad).toBe(7)                       // la de ayer + las seis
+    const tira = tiraDeMiniaturas(galeriaDeNovedad(todas, fila))
+    expect(tira.total).toBe(fila.cantidad)
+    expect(tira.visibles).toHaveLength(4)
+    expect(tira.mas).toBe(3)
+    expect(tira.visibles.map(f => f.id).some(id => id.startsWith('vieja'))).toBe(false)
+    expect(tira.siguiente?.id.startsWith('vieja')).toBe(false)
+  })
+
+  it('cada fila trae SUS fotos: la de origen no arrastra las de Montevideo', () => {
+    const conOrigen = [
+      ...mezcla,
+      { id: 'or-nueva', shipmentRef: 'A8121', photoType: 'origen', createdAt: cuando('2026-09-08'), thumbnailUrl: 'https://firmada/or-nueva' },
+    ]
+    const filas = novedadesCliente([cargaN], conOrigen, [], HOY_N)
+    const origen = filas.find(f => f.lugarFoto === 'origen')!
+    const uy = filas.find(f => f.lugarFoto === 'uruguay')!
+    expect(galeriaDeNovedad(conOrigen, origen).map(f => f.id)).toEqual(['or-nueva'])
+    expect(galeriaDeNovedad(conOrigen, uy).map(f => f.id)).toEqual(['hoy'])
+  })
+
+  it('una fila de informe no arrastra ninguna foto', () => {
+    const [fila] = novedadesCliente(
+      [cargaN], [],
+      [{ id: 'inf-1', shipmentRef: 'A8121', title: 'Informe', createdAt: cuando('2026-09-09') }],
+      HOY_N,
+    )
+    expect(fila.clase).toBe('informe')
+    expect(fila.fotoIds).toEqual([])
+    expect(galeriaDeNovedad(mezcla, fila)).toEqual([])
   })
 })
 
