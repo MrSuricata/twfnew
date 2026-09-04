@@ -505,6 +505,40 @@ describe('novedadesCliente — fotos e informes que el cliente todavía no vio',
     )
     expect(n).toEqual([])
   })
+  it('cada fila dice de qué lugar son sus fotos, para poder traer las miniaturas', () => {
+    const n = novedadesCliente(
+      [carga('A8', { DEPOSITO: 'GODILCO' })],
+      [
+        { shipmentRef: 'A8', photoType: 'origen', createdAt: dia('2026-09-09') },
+        { shipmentRef: 'A8', photoType: 'uruguay', createdAt: dia(HOY_N) },
+      ],
+      [], HOY_N,
+    )
+    expect(n.map(x => x.lugarFoto).sort()).toEqual(['origen', 'uruguay'])
+    expect(n.every(x => x.informeId === '')).toBe(true)
+  })
+
+  it('el informe trae su id: es lo que abre el PDF desde el aviso', () => {
+    const n = novedadesCliente(
+      [carga('A9')], [],
+      [{ id: 'inf-1', shipmentRef: 'A9', title: 'Informe de trasiego', createdAt: dia(HOY_N) }],
+      HOY_N,
+    )
+    expect(n[0].informeId).toBe('inf-1')
+    expect(n[0].lugarFoto).toBeNull()
+  })
+
+  it('las filas de fotos nombran la carga como el cliente la nombra (D2)', () => {
+    // Sin pasar el nombre del cliente, una CLIENT_REF que dice el nombre del
+    // cliente se colaba como título: la fila de fotos no lo estaba pasando.
+    const n = novedadesCliente(
+      [carga('A8121', {}, { CLIENT_REF: 'CHIAPERO S.R.L.' })],
+      [{ shipmentRef: 'A8121', photoType: 'origen', createdAt: dia(HOY_N) }],
+      [], HOY_N, undefined, 'CHIAPERO S.R.L.',
+    )
+    expect(n[0].refs.principal).toBe('8121')
+  })
+
   it('primero lo de hoy', () => {
     const n = novedadesCliente(
       [carga('A6'), carga('A7')],

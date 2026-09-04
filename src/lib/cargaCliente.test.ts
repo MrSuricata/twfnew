@@ -10,8 +10,10 @@ import { describe, it, expect } from 'vitest'
 import {
   contenedoresCarga, textoContenedores, filaCargaCliente, lineaTiempoCliente,
   datosFicha, contenedoresDeCarga, agruparFotosPorLugar, informesDeCarga, fechaDeSubida,
+  lugarDeFoto, galeriaDeCarga, galeriaDeNovedad, tiraDeMiniaturas, indiceEnGaleria,
+  MAX_MINIATURAS, fuenteMiniatura, sePuedeDibujar,
 } from './cargaCliente'
-import { estadoCliente, etiquetaEstado, traducirAlerta } from './hoyCliente'
+import { estadoCliente, etiquetaEstado, novedadesCliente, traducirAlerta } from './hoyCliente'
 import type { ParsedShipment, OperativasRecord, ShipmentAlert } from './shipmentTypes'
 
 const HOY = '2026-09-04'
@@ -254,6 +256,254 @@ describe('informesDeCarga', () => {
       { id: 'ajeno', shipmentRef: 'A9999', createdAt: ts(2026, 9, 3) },
     ]
     expect(informesDeCarga(informes, 'A8121').map(r => r.id)).toEqual(['nuevo', 'viejo'])
+  })
+})
+
+// ── Miniaturas en el aviso de HOY (D3) ───────────────────────────────────
+
+describe('las miniaturas del aviso: hasta 4 y "+N"', () => {
+  // Seis fotos en Montevideo y dos en origen, de la misma carga.
+  const muchas = [
+    ...Array.from({ length: 6 }, (_, i) => ({
+      id: `uy${i}`, shipmentRef: 'A8121', photoType: 'uruguay', createdAt: ts(2026, 9, 1) + i,
+      thumbnailUrl: `https://firmada/uy${i}`,
+    })),
+    { id: 'or1', shipmentRef: 'A8121', photoType: 'origen', createdAt: ts(2026, 8, 20), thumbnailUrl: 'https://firmada/or1' },
+    { id: 'or2', shipmentRef: 'A8121', photoType: 'origen', createdAt: ts(2026, 8, 21), thumbnailUrl: 'https://firmada/or2' },
+    { id: 'ajena', shipmentRef: 'A9999', photoType: 'uruguay', createdAt: ts(2026, 9, 3), thumbnailUrl: 'https://firmada/ajena' },
+  ]
+  /** Lo que hace la card: la FILA decide qué fotos son (su ventana), la tira
+   *  solo cuántas entran. Acá se le pasan todas las de ese lugar. */
+  const idsDe = (lugar: string) =>
+    muchas.filter(f => f.shipmentRef === 'A8121' && f.photoType === lugar).map(f => f.id)
+  const tiraDe = (lugar: 'origen' | 'uruguay') =>
+    tiraDeMiniaturas(galeriaDeNovedad(muchas, { ref: 'A8121', lugarFoto: lugar, fotoIds: idsDe(lugar) }))
+
+  it('lugarDeFoto: lo que no dice "uruguay" es de origen (photo_type es texto libre)', () => {
+    expect(lugarDeFoto({ photoType: 'uruguay' })).toBe('uruguay')
+    expect(lugarDeFoto({ photoType: 'URUGUAY' })).toBe('uruguay')
+    expect(lugarDeFoto({ photoType: 'origen' })).toBe('origen')
+    expect(lugarDeFoto({ photoType: '' })).toBe('origen')
+    expect(lugarDeFoto(null)).toBe('origen')
+  })
+
+  it('muestra 4 y dice cuántas quedaron afuera', () => {
+    const tira = tiraDe('uruguay')
+    expect(MAX_MINIATURAS).toBe(4)
+    expect(tira.visibles).toHaveLength(4)
+    expect(tira.mas).toBe(2)
+    expect(tira.total).toBe(6)
+    // El "+N" abre justo donde la tira se cortó, no al principio otra vez.
+    expect(tira.siguiente?.id).toBe('uy1')
+  })
+
+  it('con 4 o menos no hay "+N"', () => {
+    const tira = tiraDe('origen')
+    expect(tira.visibles.map(f => f.id)).toEqual(['or2', 'or1'])   // la más nueva primero
+    expect(tira.mas).toBe(0)
+    expect(tira.siguiente).toBeNull()
+  })
+
+  it('la tira es la del LUGAR de la fila, no la de toda la carga', () => {
+    expect(tiraDe('origen').total).toBe(2)
+    expect(tiraDe('uruguay').total).toBe(6)
+  })
+
+  it('sin fotos de esa carga la tira sale vacía (la fila no queda con un hueco)', () => {
+    const ajena = galeriaDeNovedad(muchas, { ref: 'A0000', lugarFoto: 'uruguay', fotoIds: ['uy0'] })
+    expect(tiraDeMiniaturas(ajena)).toEqual({ visibles: [], mas: 0, total: 0, siguiente: null })
+    expect(tiraDeMiniaturas([]).total).toBe(0)
+  })
+
+  it('la galería de TODA la carga sigue disponible, lo más nuevo primero', () => {
+    const galeria = galeriaDeCarga(muchas, 'a8121')
+    expect(galeria).toHaveLength(8)
+    expect(galeria[0].id).toBe('uy5')
+    expect(galeria.map(f => f.id)).not.toContain('ajena')
+  })
+
+  it('el índice del visor cae en la foto tocada', () => {
+    const galeria = galeriaDeCarga(muchas, 'A8121')
+    expect(indiceEnGaleria(galeria, 'or1')).toBe(7)
+    expect(indiceEnGaleria(galeria, 'uy5')).toBe(0)
+  })
+
+  it('una foto que no está en la galería abre en la primera, no en blanco', () => {
+    const galeria = galeriaDeCarga(muchas, 'A8121')
+    expect(indiceEnGaleria(galeria, 'no-existe')).toBe(0)
+    expect(indiceEnGaleria(galeria, '')).toBe(0)
+    expect(indiceEnGaleria([], 'or1')).toBe(0)
+  })
+})
+
+// ── El texto de la fila y las miniaturas hablan de LO MISMO ──────────────
+
+describe('la tira dibuja lo que el texto anuncia, no el historial entero', () => {
+  // El caso que encontró la revisión: 1 foto de esta semana y 7 del mes
+  // pasado, misma carga y mismo lugar. El texto decía "1 foto en depósito
+  // GODILCO" y abajo se dibujaban 4 miniaturas y un "+4", porque la tira
+  // volvía a buscar por carga + lugar y el endpoint manda TODO el historial.
+  const HOY_N = '2026-09-10'
+  const cuando = (iso: string) => Date.parse(iso + 'T12:00:00Z')
+  const cargaN = {
+    REF: 'A8121', CLIENTE: 'DEMO', ETD: '2026-08-01', ETA: '2026-09-05', PAIS: 'UY',
+    POD: 'MONTEVIDEO', POL: 'SHANGHAI', TERMINAL: 'TCP', N: 1, CNTR: 'X1', MODE: 'fcl',
+    operativas: [{ REF: 'A8121', CNTR_OP: 'X1', OPERATIVA: 'TRASIEGO', DEPOSITO: 'GODILCO' }],
+  } as unknown as ParsedShipment
+  const mezcla = [
+    { id: 'hoy', shipmentRef: 'A8121', photoType: 'uruguay', createdAt: cuando('2026-09-09'), thumbnailUrl: 'https://firmada/hoy' },
+    ...Array.from({ length: 7 }, (_, i) => ({
+      id: `vieja${i}`, shipmentRef: 'A8121', photoType: 'uruguay',
+      createdAt: cuando('2026-08-05') + i, thumbnailUrl: `https://firmada/vieja${i}`,
+    })),
+  ]
+
+  it('1 foto anunciada = 1 miniatura, sin el "+4" de las del mes pasado', () => {
+    const [fila] = novedadesCliente([cargaN], mezcla, [], HOY_N)
+    expect(fila.cantidad).toBe(1)
+    expect(fila.lugar).toBe('en depósito GODILCO')
+    expect(fila.fotoIds).toEqual(['hoy'])
+
+    const galeria = galeriaDeNovedad(mezcla, fila)
+    expect(galeria.map(f => f.id)).toEqual(['hoy'])
+
+    const tira = tiraDeMiniaturas(galeria)
+    expect(tira.visibles.map(f => f.id)).toEqual(['hoy'])
+    expect(tira.mas).toBe(0)
+    // Lo que no puede volver a pasar: el texto dice una cosa y la tira otra.
+    expect(tira.total).toBe(fila.cantidad)
+  })
+
+  it('con nuevas y viejas mezcladas, la tira cuenta solo las que anuncia', () => {
+    const nuevas = Array.from({ length: 6 }, (_, i) => ({
+      id: `n${i}`, shipmentRef: 'A8121', photoType: 'uruguay',
+      createdAt: cuando('2026-09-08') + i, thumbnailUrl: `https://firmada/n${i}`,
+    }))
+    const todas = [...mezcla, ...nuevas]
+    const [fila] = novedadesCliente([cargaN], todas, [], HOY_N)
+    expect(fila.cantidad).toBe(7)                       // la de ayer + las seis
+    const tira = tiraDeMiniaturas(galeriaDeNovedad(todas, fila))
+    expect(tira.total).toBe(fila.cantidad)
+    expect(tira.visibles).toHaveLength(4)
+    expect(tira.mas).toBe(3)
+    expect(tira.visibles.map(f => f.id).some(id => id.startsWith('vieja'))).toBe(false)
+    expect(tira.siguiente?.id.startsWith('vieja')).toBe(false)
+  })
+
+  it('cada fila trae SUS fotos: la de origen no arrastra las de Montevideo', () => {
+    const conOrigen = [
+      ...mezcla,
+      { id: 'or-nueva', shipmentRef: 'A8121', photoType: 'origen', createdAt: cuando('2026-09-08'), thumbnailUrl: 'https://firmada/or-nueva' },
+    ]
+    const filas = novedadesCliente([cargaN], conOrigen, [], HOY_N)
+    const origen = filas.find(f => f.lugarFoto === 'origen')!
+    const uy = filas.find(f => f.lugarFoto === 'uruguay')!
+    expect(galeriaDeNovedad(conOrigen, origen).map(f => f.id)).toEqual(['or-nueva'])
+    expect(galeriaDeNovedad(conOrigen, uy).map(f => f.id)).toEqual(['hoy'])
+  })
+
+  it('el visor recorre lo anunciado: ni el historial ni las de origen', () => {
+    // Lo que se veía en /ui: la fila decía "6 fotos en depósito GODILCO", el
+    // botón "Ver las otras 2 fotos de 6…" y el visor abría en "1 / 8", con dos
+    // fotos de origen de hace tres semanas al final.
+    const nuevas = Array.from({ length: 6 }, (_, i) => ({
+      id: `n${i}`, shipmentRef: 'A8121', photoType: 'uruguay',
+      createdAt: cuando('2026-09-08') + i, thumbnailUrl: `https://firmada/n${i}`,
+    }))
+    const origen = {
+      id: 'or-vieja', shipmentRef: 'A8121', photoType: 'origen',
+      createdAt: cuando('2026-08-18'), thumbnailUrl: 'https://firmada/or-vieja',
+    }
+    const todas = [...mezcla, ...nuevas, origen]
+    const fila = novedadesCliente([cargaN], todas, [], HOY_N).find(f => f.lugarFoto === 'uruguay')!
+    expect(fila.cantidad).toBe(7)
+
+    // La galería del visor es la MISMA que dibujó la tira.
+    const galeria = galeriaDeNovedad(todas, fila)
+    const tira = tiraDeMiniaturas(galeria)
+    expect(galeria).toHaveLength(fila.cantidad)          // "1 / 7", no "1 / 15"
+    expect(galeria.map(f => f.id)).not.toContain('or-vieja')
+    expect(galeria.map(f => f.id).some(id => id.startsWith('vieja'))).toBe(false)
+
+    // Y el "+N" abre justo en la primera que no entró en la tira.
+    expect(indiceEnGaleria(galeria, tira.siguiente!.id)).toBe(MAX_MINIATURAS)
+    expect(indiceEnGaleria(galeria, tira.visibles[0].id)).toBe(0)
+
+    // La galería de TODA la carga sigue siendo más grande: es otra cosa, y es
+    // justo la que el visor NO tiene que abrir desde el aviso.
+    expect(galeriaDeCarga(todas, 'A8121').length).toBeGreaterThan(galeria.length)
+  })
+
+  it('una fila de informe no arrastra ninguna foto', () => {
+    const [fila] = novedadesCliente(
+      [cargaN], [],
+      [{ id: 'inf-1', shipmentRef: 'A8121', title: 'Informe', createdAt: cuando('2026-09-09') }],
+      HOY_N,
+    )
+    expect(fila.clase).toBe('informe')
+    expect(fila.fotoIds).toEqual([])
+    expect(galeriaDeNovedad(mezcla, fila)).toEqual([])
+  })
+})
+
+// ── El "+N" no puede contar fotos que no se dibujan ─────────────────────
+
+describe('la tira cuenta sobre lo que se puede dibujar', () => {
+  const HOY_V = '2026-09-10'
+  const cuando = (iso: string) => Date.parse(iso + 'T12:00:00Z')
+  /** Foto vieja sin migrar a Storage: no tiene miniatura de ninguna clase. */
+  const legacy = (id: string, n: number) => ({
+    id, shipmentRef: 'A8121', photoType: 'uruguay', createdAt: cuando(HOY_V) - n * 1000,
+  })
+  const conMini = (id: string, n: number) => ({
+    ...legacy(id, n), thumbnailUrl: `https://firmada/${id}`,
+  })
+  const ids = (fotos: { id: string }[]) => fotos.map(f => f.id)
+  const tira = (fotos: { id: string }[]) =>
+    tiraDeMiniaturas(galeriaDeNovedad(fotos, { ref: 'A8121', lugarFoto: 'uruguay', fotoIds: ids(fotos) }))
+
+  it('sePuedeDibujar: URL firmada, base64 viejo, o nada', () => {
+    expect(sePuedeDibujar({ thumbnailUrl: 'https://firmada/x' })).toBe(true)
+    expect(sePuedeDibujar({ thumbnailData: 'data:image/jpeg;base64,AAA' })).toBe(true)
+    expect(sePuedeDibujar({ thumbnailUrl: null, thumbnailData: '' })).toBe(false)
+    expect(sePuedeDibujar(null)).toBe(false)
+    expect(fuenteMiniatura({ thumbnailUrl: null, thumbnailData: 'data:x' })).toBe('data:x')
+  })
+
+  it('siete fotos y solo dos con miniatura: dos miniaturas y NINGÚN "+5"', () => {
+    const t = tira([
+      conMini('a', 1), conMini('b', 2),
+      ...Array.from({ length: 5 }, (_, i) => legacy(`vieja${i}`, 3 + i)),
+    ])
+    expect(ids(t.visibles)).toEqual(['a', 'b'])
+    expect(t.mas).toBe(0)          // antes: 3 (7 − 4) y se dibujaban dos
+    expect(t.total).toBe(2)
+    expect(t.siguiente).toBeNull()
+  })
+
+  it('si las primeras cuatro son viejas sin migrar, la tira NO desaparece', () => {
+    // El caso peor del bug: `visibles` eran las cuatro legacy, el componente
+    // las descartaba al pintar y devolvía null — se perdía la tira entera,
+    // "+N" y fotos con miniatura incluidas.
+    const t = tira([
+      ...Array.from({ length: 4 }, (_, i) => legacy(`vieja${i}`, i)),
+      conMini('c', 5), conMini('d', 6),
+    ])
+    expect(ids(t.visibles)).toEqual(['c', 'd'])
+    expect(t.mas).toBe(0)
+    expect(t.total).toBe(2)
+  })
+
+  it('con seis dibujables el "+N" sigue siendo el de siempre', () => {
+    const t = tira(Array.from({ length: 6 }, (_, i) => conMini(`f${i}`, i)))
+    expect(t.visibles).toHaveLength(4)
+    expect(t.mas).toBe(2)
+    expect(t.siguiente?.id).toBe('f4')
+  })
+
+  it('sin ninguna dibujable la tira sale vacía (la fila queda como estaba)', () => {
+    const t = tira(Array.from({ length: 3 }, (_, i) => legacy(`v${i}`, i)))
+    expect(t).toEqual({ visibles: [], mas: 0, total: 0, siguiente: null })
   })
 })
 

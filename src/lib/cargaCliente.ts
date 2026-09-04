@@ -31,7 +31,7 @@ import { refsCliente, type RefsCliente } from './refsCliente'
 import {
   estadoCliente, etiquetaEstado, proximoHito, puertoEsDestino, porUruguay,
   rutaDe, tipoDe, ESTADO_CLIENTE_ORDEN, ESTADO_CLIENTE_CLASE,
-  type EstadoCliente, type HitoCliente, type Ruta, type Tipo,
+  type EstadoCliente, type HitoCliente, type Ruta, type Tipo, type LugarFoto,
 } from './hoyCliente'
 
 const ISO_RE = /^\d{4}-\d{2}-\d{2}/
@@ -267,13 +267,19 @@ export function contenedoresDeCarga(s: ParsedShipment, hoyISO: string): Contened
 
 // ── Fotos e informes de la carga (pestañas Fotos / Informes) ──────────────
 
-export type LugarFoto = 'origen' | 'uruguay'
+/** Una sola definición: la canónica vive en `hoyCliente` (que es de quien
+ *  depende este archivo), acá se re-exporta para no partirla en dos. */
+export type { LugarFoto }
 
 interface FotoMin {
   id?: string
   shipmentRef?: string | null
   photoType?: string | null
   createdAt?: number | null
+  /** URL firmada de la miniatura (fotos ya migradas a Storage). */
+  thumbnailUrl?: string | null
+  /** El base64 viejo, de las que todavía no se migraron. */
+  thumbnailData?: string | null
 }
 
 export interface GrupoFotos<T> {
@@ -293,6 +299,17 @@ const TITULO_LUGAR: Record<LugarFoto, string> = {
 
 const mismaRef = (a: unknown, b: unknown): boolean =>
   txt(a).toUpperCase() === txt(b).toUpperCase()
+
+/**
+ * Dónde se sacó una foto. `photo_type` es texto libre en la base (lo escribe
+ * el que sube), así que la regla es la del server: lo que no dice "uruguay"
+ * es de origen. Una sola función, porque agrupar y armar la tira de
+ * miniaturas tienen que coincidir o el cliente ve tres fotos en el aviso y
+ * cuatro en la ficha.
+ */
+export function lugarDeFoto(f: { photoType?: string | null } | null | undefined): LugarFoto {
+  return txt(f?.photoType).toLowerCase() === 'uruguay' ? 'uruguay' : 'origen'
+}
 
 /** dd/mm/yyyy de un timestamp, en la hora del que mira. */
 export function fechaDeSubida(ts: unknown): string {
@@ -318,7 +335,7 @@ export function agruparFotosPorLugar<T extends FotoMin>(fotos: T[], ref: string)
   const mias = (fotos || []).filter(f => mismaRef(f?.shipmentRef, ref))
   const grupos = new Map<string, { lugar: LugarFoto; dia: string; fotos: T[] }>()
   for (const f of mias) {
-    const lugar: LugarFoto = txt(f?.photoType).toLowerCase() === 'uruguay' ? 'uruguay' : 'origen'
+    const lugar = lugarDeFoto(f)
     const dia = diaDeSubida(f?.createdAt)
     const clave = `${lugar}|${dia}`
     const g = grupos.get(clave) || { lugar, dia, fotos: [] }
@@ -340,6 +357,123 @@ interface InformeMin {
   id?: string
   shipmentRef?: string | null
   createdAt?: number | null
+}
+
+// ── Miniaturas en el aviso de HOY (spec 04/09, D3) ───────────────────────
+
+/**
+ * Cuántas miniaturas entran en una fila de "Novedades de tus cargas".
+ *
+ * Brian (04/09): "que aparezca miniatura de las fotos al mostrar el aviso de
+ * la carga de hoy". Cuatro es lo que entra en el ancho de un celular sin que
+ * la foto quede del tamaño de una estampilla; el resto se dice con "+N".
+ */
+export const MAX_MINIATURAS = 4
+
+/**
+ * Todas las fotos de una carga, la más nueva primero: es LA galería que abre
+ * el visor cuando el cliente toca una miniatura. Con `lugar`, solo las de ese
+ * lugar (que es lo que anuncia la fila: "3 fotos en depósito GODILCO"); con
+ * `ids`, solo esas — que es como una fila de novedades le pasa SU ventana sin
+ * que acá adentro haya que saber nada de fechas.
+ */
+export function galeriaDeCarga<T extends FotoMin>(
+  fotos: T[], ref: string, lugar?: LugarFoto, ids?: readonly string[] | null,
+): T[] {
+  const soloEstas = ids ? new Set(ids.map(i => txt(i)).filter(Boolean)) : null
+  return (fotos || [])
+    .filter(f => mismaRef(f?.shipmentRef, ref)
+      && (!lugar || lugarDeFoto(f) === lugar)
+      && (!soloEstas || soloEstas.has(txt(f?.id))))
+    .slice()
+    .sort((a, b) => Number(b?.createdAt || 0) - Number(a?.createdAt || 0))
+}
+
+/** Lo que una fila de novedades (`hoyCliente.novedadesCliente`) le dice a la
+ *  galería: qué carga, de qué lugar, y CUÁLES fotos contó. */
+export interface FuenteNovedad {
+  ref: string
+  lugarFoto: LugarFoto | null
+  fotoIds: string[]
+}
+
+/**
+ * Las fotos que ANUNCIA una fila de novedades: las de esa carga, ese lugar y
+ * esa ventana. Es la lista que dibuja la tira y la que recorre el visor: una
+ * sola, para que el texto y lo que se ve no puedan discrepar.
+ *
+ * Antes la tira volvía a decidir sola —todas las de la carga y el lugar, sin
+ * fecha— y el endpoint manda el historial completo: una carga con 1 foto de
+ * esta semana y 7 del mes pasado decía "1 foto en depósito GODILCO" y abajo
+ * dibujaba 4 miniaturas y un "+4".
+ */
+export function galeriaDeNovedad<T extends FotoMin>(fotos: T[], n: FuenteNovedad): T[] {
+  return galeriaDeCarga(fotos, n.ref, n.lugarFoto ?? undefined, n.fotoIds)
+}
+
+export interface TiraMiniaturas<T> {
+  /** Las que se dibujan (hasta `max`). */
+  visibles: T[]
+  /** Cuántas quedaron afuera: el "+N". 0 = no va el "+N". */
+  mas: number
+  /** Cuántas de las que anunció la fila se pueden dibujar. */
+  total: number
+  /** La primera que NO entró: es donde abre el visor al tocar el "+N", así el
+   *  cliente sigue justo donde la tira se cortó. null si entraron todas. */
+  siguiente: T | null
+}
+
+/**
+ * La fuente con la que se dibuja una miniatura: la URL firmada, o el base64
+ * viejo de las fotos que todavía no se migraron a Storage. '' = no hay nada
+ * que dibujar.
+ */
+export const fuenteMiniatura = (f: FotoMin | null | undefined): string =>
+  String(f?.thumbnailUrl || f?.thumbnailData || '')
+
+/** ¿Se puede DIBUJAR como miniatura? Una foto vieja sin migrar no tiene:
+ *  el visor la abre igual (pide el full al server), pero en la tira no va. */
+export const sePuedeDibujar = (f: FotoMin | null | undefined): boolean =>
+  fuenteMiniatura(f) !== ''
+
+/**
+ * La tira de miniaturas de una fila de novedades: hasta `max` fotos y el "+N"
+ * con lo que no entró.
+ *
+ * Recibe la galería YA DECIDIDA (`galeriaDeNovedad`). Acá no se elige qué
+ * fotos son —eso lo decidió la fila, que es la que puso el texto—: solo
+ * cuántas entran. Sin fotos la tira sale vacía y la fila sigue siendo la de
+ * antes (texto + fecha): nunca un hueco.
+ *
+ * `visibles` y el "+N" se deciden sobre las que SE PUEDEN DIBUJAR. Antes se
+ * contaban sobre la lista cruda y el componente descartaba las que no tenían
+ * miniatura recién al pintar: salían dos miniaturas y un "+5", y si las
+ * primeras cuatro eran viejas sin migrar la tira desaparecía entera —"+N"
+ * incluido— porque no quedaba ninguna imagen que dibujar.
+ */
+export function tiraDeMiniaturas<T extends FotoMin>(
+  galeria: T[], max = MAX_MINIATURAS,
+): TiraMiniaturas<T> {
+  const todas = (galeria || []).filter(sePuedeDibujar)
+  const tope = Math.max(0, Math.floor(Number(max) || 0))
+  return {
+    visibles: todas.slice(0, tope),
+    mas: Math.max(0, todas.length - tope),
+    total: todas.length,
+    siguiente: todas[tope] ?? null,
+  }
+}
+
+/**
+ * En qué posición de la galería está una foto: el índice con el que abre el
+ * visor. Si no se la encuentra abre en la primera, que es lo más nuevo — un
+ * visor en blanco sería peor que uno en la foto equivocada.
+ */
+export function indiceEnGaleria<T extends FotoMin>(galeria: T[], id: unknown): number {
+  const buscado = txt(id)
+  if (!buscado) return 0
+  const i = (galeria || []).findIndex(f => txt(f?.id) === buscado)
+  return i >= 0 ? i : 0
 }
 
 /** Los informes de una carga, el más nuevo primero. */

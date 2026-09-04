@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { ShipmentTableSkeleton } from '@/components/SkeletonLoaders'
 import BrandLogo from './BrandLogo'
@@ -41,13 +41,14 @@ import { authFetch } from '@/lib/authClient'
 import { fetchClientReports, fetchClientOriginPhotos } from '@/lib/dataClient'
 import { agendaCliente, EVENTO_LABELS } from '@/lib/clientAgenda'
 import { fmtDateDMY, hoyISO as hoyISOLocal } from '@/lib/format'
-import ClientShipmentDialog from './client/ClientShipmentDialog'
+import ClientShipmentDialog, { type PestanaFicha } from './client/ClientShipmentDialog'
 import FilaCarga from './client/FilaCarga'
 import AgendaCalendar from './agenda/AgendaCalendar'
 import { matchesPattern, findClientByEmail } from '@/lib/clientMatching'
 import { useBrand } from '@/lib/brand'
 import { saludoPersonal } from '@/lib/saludo'
 import { downloadClientStatusPdf } from '@/lib/clientStatusPdf'
+import { crearRefrescoFirmas, TICK_FIRMAS_MS, type MotivoRefresco, type RefrescoFirmas } from '@/lib/firmasFotos'
 import HoyCliente from './HoyCliente'
 import {
   estadoCliente, ESTADO_CLIENTE_LABEL, ESTADO_CLIENTE_ORDEN, traducirAlerta,
@@ -84,6 +85,10 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
   const [activeTab, setActiveTab] = useState('active')
   const [selectedShipment, setSelectedShipment] = useState<ParsedShipment | null>(null)
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false)
+  // Con qué pestaña abre la ficha: desde el aviso de fotos de HOY abre en
+  // Fotos (spec 04/09, D3). Va en la `key` del modal para que remonte y el
+  // `defaultValue` de las pestañas se aplique de nuevo.
+  const [pestanaFicha, setPestanaFicha] = useState<PestanaFicha>('resumen')
   // Una fila por carga; el detalle vive en la ficha (ClientShipmentDialog), no
   // en un desplegable. Esto es lo que se resalta al llegar desde una card de
   // HOY, para que el cliente vea CUÁL de todas es la suya.
@@ -116,6 +121,10 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
   const [serverShipments, setServerShipments] = useState<ParsedShipment[]>([])
   const [serverReports, setServerReports] = useState<OperativeReport[]>([])
   const [serverPhotos, setServerPhotos] = useState<OriginPhoto[]>([])
+  /** El refresco de las firmas de las fotos: cuándo se pidieron por última vez
+   *  CON ÉXITO y si hay un pedido en vuelo (lib/firmasFotos). */
+  const refrescoFirmas = useRef<RefrescoFirmas | null>(null)
+  if (!refrescoFirmas.current) refrescoFirmas.current = crearRefrescoFirmas()
   const [isLoadingData, setIsLoadingData] = useState(true)
 
   // ── Filter states ──
@@ -156,6 +165,8 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
         }
         if (photosData.status === 'fulfilled' && photosData.value) {
           setServerPhotos(photosData.value)
+          // Las firmas son de recién: desde acá corren las 8 h.
+          refrescoFirmas.current?.termino(true)
         }
       } catch (err) {
         console.warn('Failed to fetch client data from server:', err)
@@ -165,6 +176,45 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
     }
     fetchClientData()
   }, [clientEmail, preview])
+
+  // ── Las firmas de las fotos vencen a las 8 h ──────────────────────────
+  // Las miniaturas llegan con una URL firmada (THUMB_TTL = 8 h). Un portal
+  // abierto toda la jornada —lo normal en una oficina— pasa ese plazo y a
+  // partir de ahí muestra imágenes rotas, sin error visible. Se vuelven a
+  // pedir por reloj y al volver a la pestaña, igual que el Diario
+  // (`useNoticias`); cuándo toca lo decide `lib/firmasFotos`.
+  const refrescarFotos = useCallback((motivo: MotivoRefresco) => {
+    if (preview) return   // la vista previa del admin no habla con el server
+    const refresco = refrescoFirmas.current
+    if (!refresco || !refresco.pedir(motivo)) return
+    fetchClientOriginPhotos()
+      .then(fotos => {
+        // La ventana corre recién cuando el pedido TRAJO firmas nuevas: uno
+        // que falla no puede dejarnos otras 4 h sin volver a intentar.
+        refresco.termino(true)
+        if (fotos && fotos.length > 0) setServerPhotos(fotos)
+      })
+      .catch(() => {
+        // Se conserva lo que había: mejor una firma vieja que nada. Y el
+        // próximo tick del reloj (minutos) reintenta.
+        refresco.termino(false)
+      })
+  }, [preview])
+
+  useEffect(() => {
+    if (preview) return
+    // El reloj PREGUNTA cada pocos minutos; el que decide es el umbral de
+    // `tocaRefrescarFirmas`. Con el pulso igual al umbral (como estaba) el
+    // primer tick caía con `edad = 4 h − latencia` y se salteaba siempre: el
+    // refresco terminaba ocurriendo a las 8 h, justo cuando la firma vencía.
+    const timer = window.setInterval(() => refrescarFotos('intervalo'), TICK_FIRMAS_MS)
+    const alVolver = () => { if (document.visibilityState === 'visible') refrescarFotos('volvio') }
+    document.addEventListener('visibilitychange', alVolver)
+    return () => {
+      window.clearInterval(timer)
+      document.removeEventListener('visibilitychange', alVolver)
+    }
+  }, [preview, refrescarFotos])
 
   // Por email SOLO si hay email (email vacío matcheaba al primer cliente sin
   // email del catálogo — "Bienvenido CENA HNOS"); sin match, manda el token.
@@ -358,9 +408,19 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
     }
   }
 
-  const handleViewDetails = (shipment: ParsedShipment) => {
+  const handleViewDetails = (shipment: ParsedShipment, pestana: PestanaFicha = 'resumen') => {
     setSelectedShipment(shipment)
+    setPestanaFicha(pestana)
     setDetailsDialogOpen(true)
+  }
+
+  /** Desde una card de HOY: abrir la FICHA de esa carga. Si la carga no está
+   *  en la lista visible (un filtro, una carga vieja) se cae al camino de
+   *  antes —llevar a la lista— en vez de no hacer nada. */
+  const abrirFicha = (ref: string, pestana: PestanaFicha = 'resumen') => {
+    const carga = clientShipments.find(s => s.REF === ref)
+    if (carga) handleViewDetails(carga, pestana)
+    else verCarga(ref)
   }
 
   return (
@@ -538,6 +598,8 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
           alerts={visibleAlerts.filter(a => a.severity === 'critical' || a.severity === 'warning')}
           hoyISO={hoyISO}
           onVerCarga={verCarga}
+          onAbrirFicha={abrirFicha}
+          onFirmasVencidas={() => refrescarFotos('rota')}
           onVerAlertas={() => setActiveTab('alerts')}
         />
 
@@ -984,7 +1046,9 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
           Tracking y HOY del admin. */}
       {selectedShipment && (
         <ClientShipmentDialog
+          key={`${selectedShipment.REF}|${pestanaFicha}`}
           shipment={selectedShipment}
+          pestanaInicial={pestanaFicha}
           open={detailsDialogOpen}
           onOpenChange={setDetailsDialogOpen}
           hoyISO={hoyISO}
