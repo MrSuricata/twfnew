@@ -33,6 +33,7 @@
  */
 import type { ParsedShipment, OperativasRecord, ShipmentAlert } from './shipmentTypes'
 import { fmtDateDMY } from './format'
+import { refsCliente, type RefsCliente } from './refsCliente'
 
 const ISO_RE = /^\d{4}-\d{2}-\d{2}/
 const txt = (v: unknown): string => String(v ?? '').trim()
@@ -182,25 +183,8 @@ const tieneFiscal = (s: ParsedShipment): boolean => ops(s).some(o => !!txt(o.FIS
 const puertoEsDestino = (s: ParsedShipment): boolean =>
   !porUruguay(s) && (rutaDe(s) === 'CL' || (!tieneFiscal(s) && ops(s).every(sinTramo)))
 
-// ── Referencias ──────────────────────────────────────────────────────────
-
-export interface RefsCliente {
-  /** Lo que va grande: la ref propia del cliente, o "TWF 8216" si no cargó una. */
-  principal: string
-  /** Lo que va chico: "TWF 7996" cuando la principal es la propia; '' si no. */
-  secundaria: string
-  /** true = el cliente tiene su propia referencia cargada. */
-  propia: boolean
-}
-
-/** Una sola regla para nombrar la carga en toda la pantalla (Brian 02/09:
- *  "sin ref propia se ve TWF 8216 y no una ref sin dueño"). */
-export function refsCliente(s: { REF?: unknown; CLIENT_REF?: unknown } | null | undefined): RefsCliente {
-  const propia = txt(s?.CLIENT_REF)
-  const twf = 'TWF ' + txt(s?.REF).replace(/^A(?=\d)/, '')
-  if (propia) return { principal: propia, secundaria: twf, propia: true }
-  return { principal: twf, secundaria: '', propia: false }
-}
+// Las referencias (principal / secundaria) las decide lib/refsCliente: UNA
+// regla para todo el portal (spec D2). Acá solo se las cuelga a cada fila.
 
 // ── Estado en lenguaje del cliente ────────────────────────────────────────
 
@@ -363,7 +347,11 @@ interface FilaBase {
   ruta: Ruta
   tipo: Tipo
 }
-const base = (s: ParsedShipment): FilaBase => ({ ref: txt(s.REF), refs: refsCliente(s), ruta: rutaDe(s), tipo: tipoDe(s) })
+/** `nombreCliente` lo pasa el portal: el server manda CLIENTE vacío (ya sabe
+ *  quién es), y sin el nombre no se puede descartar la `client_ref` que dice
+ *  literalmente el nombre del cliente (refsCliente). */
+const base = (s: ParsedShipment, nombreCliente = ''): FilaBase =>
+  ({ ref: txt(s.REF), refs: refsCliente(s, nombreCliente), ruta: rutaDe(s), tipo: tipoDe(s) })
 
 // ── Card 1: Llegan a destino ──────────────────────────────────────────────
 
@@ -392,7 +380,7 @@ export const DESTINO_DIAS_ADELANTE = 7
  *  cargada que van hacia el fiscal (ya salieron, salen hoy o en los próximos
  *  días), y en rutas directas los buques que llegan al puerto de destino en
  *  los próximos días. Sin SALIDA no hay nada que "llegue": eso es card 2. */
-export function llegadasADestino(shipments: ParsedShipment[], hoyISO: string, adelante = DESTINO_DIAS_ADELANTE): FilaDestino[] {
+export function llegadasADestino(shipments: ParsedShipment[], hoyISO: string, adelante = DESTINO_DIAS_ADELANTE, nombreCliente = ''): FilaDestino[] {
   const out: FilaDestino[] = []
   for (const s of shipments || []) {
     if (!porUruguay(s) && ops(s).every(sinTramo)) {
@@ -403,7 +391,7 @@ export function llegadasADestino(shipments: ParsedShipment[], hoyISO: string, ad
       if (d < 0 || d > adelante) continue
       const o = ops(s)[0]
       out.push({
-        ...base(s), descripcion: txt(o?.DESCRIPCION), cntr: txt(s.CNTR), camion: '',
+        ...base(s, nombreCliente), descripcion: txt(o?.DESCRIPCION), cntr: txt(s.CNTR), camion: '',
         fecha: eta, dias: d, estado: 'llega', salida: '', fiscal: txt(s.POD),
       })
       continue
@@ -419,7 +407,7 @@ export function llegadasADestino(shipments: ParsedShipment[], hoyISO: string, ad
       const estado: EstadoLlegadaDestino = dSalida < 0 ? 'en_frontera' : dSalida === 0 ? 'sale_hoy' : 'sale'
       const fiscal = isoDia(o.ETA_FISC) || ''
       out.push({
-        ...base(s),
+        ...base(s, nombreCliente),
         descripcion: txt(o.DESCRIPCION),
         cntr: txt(o.CNTR_OP),
         camion: txt(o.CAMION),
@@ -461,7 +449,7 @@ export interface FilaEsperando extends FilaBase {
 /** Contenedores/consolidados arribados (ETA anterior a hoy) sin salida cargada
  *  hacia el fiscal: el cliente tiene que decidir cuándo los quiere. Vía
  *  Montevideo, o ruta directa con fiscal (en el puerto de destino). */
-export function esperandoSalida(shipments: ParsedShipment[], hoyISO: string): FilaEsperando[] {
+export function esperandoSalida(shipments: ParsedShipment[], hoyISO: string, nombreCliente = ''): FilaEsperando[] {
   const out: FilaEsperando[] = []
   for (const s of shipments || []) {
     if (puertoEsDestino(s)) continue // ya está en destino: no espera nada
@@ -479,7 +467,7 @@ export function esperandoSalida(shipments: ParsedShipment[], hoyISO: string): Fi
           ? (txt(s.TERMINAL) ? `terminal ${txt(s.TERMINAL)}` : 'terminal')
           : (txt(s.POD) ? `puerto ${txt(s.POD)}` : 'puerto'))
       out.push({
-        ...base(s),
+        ...base(s, nombreCliente),
         descripcion: txt(o.DESCRIPCION),
         cntr: txt(o.CNTR_OP),
         lugar,
@@ -556,6 +544,7 @@ export function novedadesCliente(
   informes: SubidaInforme[],
   hoyISO: string,
   dias = NOVEDADES_DIAS,
+  nombreCliente = '',
 ): NovedadCliente[] {
   const porRef = new Map<string, ParsedShipment>()
   for (const s of shipments || []) {
@@ -604,7 +593,7 @@ export function novedadesCliente(
     const d = dentroDeVentana(fecha)
     if (d === null) continue
     out.push({
-      ...base(s),
+      ...base(s, nombreCliente),
       clase: 'informe',
       lugar: txt(i.title) || 'Informe operativo',
       cantidad: 1,
@@ -647,7 +636,7 @@ export function pasoSiguiente(s: ParsedShipment): string {
   return ''
 }
 
-export function llegadasAMontevideo(shipments: ParsedShipment[], hoyISO: string, adelante = MVD_DIAS_ADELANTE): FilaLlegadaMvd[] {
+export function llegadasAMontevideo(shipments: ParsedShipment[], hoyISO: string, adelante = MVD_DIAS_ADELANTE, nombreCliente = ''): FilaLlegadaMvd[] {
   const out: FilaLlegadaMvd[] = []
   for (const s of shipments || []) {
     if (!porUruguay(s)) continue
@@ -657,7 +646,7 @@ export function llegadasAMontevideo(shipments: ParsedShipment[], hoyISO: string,
     if (d < 0 || d > adelante) continue
     const lista = ops(s)
     out.push({
-      ...base(s),
+      ...base(s, nombreCliente),
       buque: txt(s.BUQUE),
       descripcion: txt(lista[0]?.DESCRIPCION),
       eta,
@@ -691,6 +680,7 @@ export function embarcadas(
   hoyISO: string,
   atras = EMBARQUE_DIAS_ATRAS,
   adelante = EMBARQUE_DIAS_ADELANTE,
+  nombreCliente = '',
 ): FilaEmbarque[] {
   const out: FilaEmbarque[] = []
   for (const s of shipments || []) {
@@ -703,7 +693,7 @@ export function embarcadas(
     const d = diffDias(hoyISO, etd)
     if (d < -atras || d > adelante) continue
     out.push({
-      ...base(s),
+      ...base(s, nombreCliente),
       buque: txt(s.BUQUE),
       descripcion: txt(ops(s)[0]?.DESCRIPCION),
       etd,
@@ -729,14 +719,14 @@ export interface AlertaCliente {
 /** Las alertas del portal hablan en nuestro idioma ("Días libres vencidos").
  *  Acá se traducen: la ref del cliente sale de `shipmentRef` (el texto ya no
  *  la trae, spec 04/09) y se dice qué puede hacer. */
-export function alertasCliente(alerts: ShipmentAlert[], shipments: ParsedShipment[]): AlertaCliente[] {
+export function alertasCliente(alerts: ShipmentAlert[], shipments: ParsedShipment[], nombreCliente = ''): AlertaCliente[] {
   const porRef = new Map<string, ParsedShipment>()
   for (const s of shipments || []) porRef.set(txt(s.REF), s)
   const out: AlertaCliente[] = []
   for (const a of alerts || []) {
     if (a.severity !== 'critical' && a.severity !== 'warning') continue
     const s = porRef.get(txt(a.shipmentRef))
-    const refs = refsCliente(s || { REF: a.shipmentRef })
+    const refs = refsCliente(s || { REF: a.shipmentRef }, nombreCliente)
     let titulo = a.title
     let detalle = a.message
     if (a.type === 'libre_vencido') {
@@ -760,12 +750,12 @@ export interface HoyCliente {
   embarques: FilaEmbarque[]
 }
 
-export function hoyCliente(shipments: ParsedShipment[], hoyISO: string): HoyCliente {
+export function hoyCliente(shipments: ParsedShipment[], hoyISO: string, nombreCliente = ''): HoyCliente {
   return {
-    destino: llegadasADestino(shipments, hoyISO),
-    esperando: esperandoSalida(shipments, hoyISO),
-    montevideo: llegadasAMontevideo(shipments, hoyISO),
-    embarques: embarcadas(shipments, hoyISO),
+    destino: llegadasADestino(shipments, hoyISO, DESTINO_DIAS_ADELANTE, nombreCliente),
+    esperando: esperandoSalida(shipments, hoyISO, nombreCliente),
+    montevideo: llegadasAMontevideo(shipments, hoyISO, MVD_DIAS_ADELANTE, nombreCliente),
+    embarques: embarcadas(shipments, hoyISO, EMBARQUE_DIAS_ATRAS, EMBARQUE_DIAS_ADELANTE, nombreCliente),
   }
 }
 

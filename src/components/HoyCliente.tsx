@@ -19,8 +19,9 @@ import { Anchor, Boat, Camera, CheckCircle, EnvelopeSimple, Timer, Warehouse, Wa
 import type { ParsedShipment, ShipmentAlert } from '@/lib/shipmentTypes'
 import {
   hoyCliente, alertasCliente, textoDias, RUTA_CHIP, TIPO_LABEL,
-  type RefsCliente, type EstadoLlegadaDestino, type Ruta, type Tipo, novedadesCliente,
+  type EstadoLlegadaDestino, type Ruta, type Tipo, novedadesCliente,
 } from '@/lib/hoyCliente'
+import type { RefsCliente } from '@/lib/refsCliente'
 import { fmtDateDMY } from '@/lib/format'
 import { useBrand } from '@/lib/brand'
 import PanelCard from './partner/PanelCard'

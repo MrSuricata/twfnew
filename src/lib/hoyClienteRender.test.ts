@@ -41,7 +41,8 @@ describe('HoyCliente (render estático)', () => {
       expect(html).toContain(t)
     }
     expect(html).toContain('1400')
-    expect(html).toContain('TWF 2')          // sin ref propia → TWF grande
+    expect(html).toContain('>2<')            // sin ref del cliente → nuestro número pelado
+    expect(html).not.toContain('TWF')        // nunca la marca adelante (Brian 04/09)
     expect(html).toContain('EN CAMINO')
     expect(html).toContain('LLEGA AL PUERTO') // Chile: el puerto es el destino
     expect(html).toContain('Camión C463')     // LCL en camión

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import type { ParsedShipment, OperativasRecord, ShipmentAlert } from './shipmentTypes'
 import {
-  refsCliente, estadoCliente, etiquetaEstado, proximoHito, progresoCliente, esActivaParaCliente,
+  estadoCliente, etiquetaEstado, proximoHito, progresoCliente, esActivaParaCliente,
   llegadasADestino, esperandoSalida, llegadasAMontevideo, embarcadas, hoyCliente, alertasCliente,
   pasoSiguiente, textoDias, rutaDe, tipoDe, filtrarCargas, opcionesFiltro, FILTRO_TODO,
   DESTINO_DIAS_ADELANTE, MVD_DIAS_ADELANTE, CLIENTE_ENTREGADA_DIAS, DIAS_LLEGADA_SUPUESTA,
@@ -39,16 +39,6 @@ const lcl = (c: Partial<ParsedShipment> & Extra = {}, operativas: OperativasReco
   carga({ REF: 'E234', CLIENT_REF: '', MODE: 'lcl', CNTR: '', N: 0, ...c }, operativas)
 const opCamion = (o: Partial<OperativasRecord> & { CAMION?: string } = {}) =>
   op({ OPERATIVA: 'CONSOLIDADO', CNTR_OP: '', CAMION: 'C463', DEPOSITO: 'PLANIR', LUGAR_SALIDA: 'PLANIR', FISCAL: 'ZF RAFAELA', ...o })
-
-describe('refsCliente — una sola regla para nombrar la carga', () => {
-  it('con ref propia: la propia grande y "TWF 8045" chica', () => {
-    expect(refsCliente({ REF: 'A8045', CLIENT_REF: '1417' })).toEqual({ principal: '1417', secundaria: 'TWF 8045', propia: true })
-  })
-  it('sin ref propia: "TWF 8216" grande y nada chico (no una ref sin dueño)', () => {
-    expect(refsCliente({ REF: 'A8216', CLIENT_REF: '' })).toEqual({ principal: 'TWF 8216', secundaria: '', propia: false })
-    expect(refsCliente({ REF: 'E234' })).toEqual({ principal: 'TWF E234', secundaria: '', propia: false })
-  })
-})
 
 describe('ruta, tipo y filtros (Brian 02/09: por país y por tipo)', () => {
   it('rutaDe y tipoDe leen PAIS y MODE con defaults sanos', () => {
@@ -237,7 +227,7 @@ describe('llegadasADestino — card 1', () => {
     ], HOY)
     expect(l.map(f => f.ref + ':' + f.estado)).toEqual(['A2:en_frontera', 'A3:sale_hoy', 'A1:sale'])
     expect(l[0]).toMatchObject({ fecha: dia(1), dias: 1, cntr: 'FANU1858496', descripcion: 'MOTOPARTES', fiscal: 'CACEC', ruta: 'UY', tipo: 'fcl', camion: '' })
-    expect(l[2].refs.principal).toBe('TWF 1')
+    expect(l[2].refs.principal).toBe('1')
   })
   it('rutas directas: el buque que llega al puerto de destino en los próximos 7 días entra como "llega"', () => {
     const l = llegadasADestino([
@@ -264,7 +254,7 @@ describe('llegadasADestino — card 1', () => {
     const l = llegadasADestino([lcl({ ETA: dia(-10) }, [opCamion({ SALIDA: dia(-1), ETA_FISC: dia(1) })])], HOY)
     expect(l).toHaveLength(1)
     expect(l[0]).toMatchObject({ estado: 'en_frontera', camion: 'C463', cntr: '', fiscal: 'ZF RAFAELA', tipo: 'lcl', ruta: 'UY' })
-    expect(l[0].refs.principal).toBe('TWF E234')
+    expect(l[0].refs.principal).toBe('E234')
   })
   it('sin SALIDA no entra (es "esperando salida"); ya llegado, lejano, en el mar y devuelto tampoco', () => {
     const l = llegadasADestino([
@@ -399,9 +389,16 @@ describe('alertasCliente — card Atención en idioma del cliente', () => {
     expect(l.map(a => a.id)).toEqual(['w'])
     expect(l[0].titulo).toBe('Llegó a depósito')
   })
-  it('sin la carga a mano, la ref cae a TWF', () => {
+  it('sin la carga a mano, la ref cae a nuestro número (sin la A)', () => {
     const [a] = alertasCliente([alerta({ shipmentRef: 'A9999' })], [])
-    expect(a.refs.principal).toBe('TWF 9999')
+    expect(a.refs.principal).toBe('9999')
+  })
+  it('el nombre del cliente llega hasta las filas: una client_ref que lo repite se descarta', () => {
+    const chiapero = carga({ REF: 'A8121', CLIENT_REF: 'CHIAPERO S.R.L.' })
+    const [con] = alertasCliente([alerta({ shipmentRef: 'A8121' })], [chiapero], 'CHIAPERO S.R.L.')
+    expect(con.refs).toEqual({ principal: '8121', secundaria: '', propia: false })
+    const [sin] = alertasCliente([alerta({ shipmentRef: 'A8121' })], [chiapero])
+    expect(sin.refs.principal).toBe('CHIAPERO S.R.L.')
   })
 })
 

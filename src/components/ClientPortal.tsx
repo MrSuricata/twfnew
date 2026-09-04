@@ -53,10 +53,11 @@ import { saludoPersonal } from '@/lib/saludo'
 import { downloadClientStatusPdf } from '@/lib/clientStatusPdf'
 import HoyCliente from './HoyCliente'
 import {
-  estadoCliente, etiquetaEstado, ESTADO_CLIENTE_LABEL, ESTADO_CLIENTE_CLASE, ESTADO_CLIENTE_ORDEN, progresoCliente, proximoHito, refsCliente,
+  estadoCliente, etiquetaEstado, ESTADO_CLIENTE_LABEL, ESTADO_CLIENTE_CLASE, ESTADO_CLIENTE_ORDEN, progresoCliente, proximoHito,
   esActivaParaCliente, filtrarCargas, opcionesFiltro, rutaDe, tipoDe, FILTRO_TODO, RUTA_LABEL, RUTA_CHIP, TIPO_LABEL,
   type EstadoCliente, type FiltroCargas,
 } from '@/lib/hoyCliente'
+import { refsCliente } from '@/lib/refsCliente'
 
 interface ClientPortalProps {
   onLogout: () => void
