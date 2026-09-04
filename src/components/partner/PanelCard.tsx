@@ -23,6 +23,7 @@
 import { useState, type ReactNode } from 'react'
 import { CaretDown } from '@phosphor-icons/react'
 import { useBrand } from '@/lib/brand'
+import type { RefsCliente } from '@/lib/refsCliente'
 
 export type TonoPanel = 'info' | 'aviso' | 'alerta' | 'ok' | 'neutro'
 
@@ -203,6 +204,25 @@ export function FilaDatos({ children }: { children: ReactNode }) {
 /** La referencia de la carga: lo primero que se busca con la vista. */
 export function Ref({ children }: { children: ReactNode }) {
   return <span className="ref-med text-base font-bold">{children}</span>
+}
+
+/**
+ * Las dos referencias de una carga VISTA POR EL CLIENTE (spec 04/09, D2):
+ * la que él usa grande, la otra en chico. Las dos siempre, porque llama o
+ * escribe citando cualquiera de las dos y el equipo tiene que encontrarla.
+ * Qué va en cada lugar lo decide `refsCliente` — acá solo se pinta.
+ */
+export function RefsCarga({ refs }: { refs: RefsCliente }) {
+  return (
+    <>
+      <Ref>{refs.principal}</Ref>
+      {refs.secundaria && (
+        <span className="text-xs text-muted-foreground tabular-nums" title="Nuestra referencia">
+          {refs.secundaria}
+        </span>
+      )}
+    </>
+  )
 }
 
 /** Chip de color (depósito, terminal, operativa). */

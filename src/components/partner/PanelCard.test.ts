@@ -6,7 +6,7 @@
 import { describe, it, expect } from 'vitest'
 import { createElement as h, type ReactNode } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import PanelCard, { PanelPlegable, PillConteo, Chip, Dato, clasesTono, type TonoPanel } from './PanelCard'
+import PanelCard, { PanelPlegable, PillConteo, Chip, Dato, RefsCarga, clasesTono, type TonoPanel } from './PanelCard'
 
 const TONOS: TonoPanel[] = ['info', 'aviso', 'alerta', 'ok', 'neutro']
 const FILA = 'FILA-ADENTRO'
@@ -81,6 +81,25 @@ describe('piezas exportadas (para que los pasos 1-4 no las copien)', () => {
     expect(dato).toContain('Llega')
     expect(dato).toContain('03/09')
     expect(dato).toContain('font-bold')
+  })
+})
+
+describe('RefsCarga — las dos refs del cliente (spec 04/09, D2)', () => {
+  const refs = (r: { principal: string; secundaria: string; propia: boolean }) =>
+    renderToStaticMarkup(h(RefsCarga, { refs: r }))
+
+  it('con ref del cliente: la de él grande y la nuestra al lado, en chico', () => {
+    const html = refs({ principal: '1410', secundaria: '8121', propia: true })
+    expect(html).toContain('>1410<')
+    expect(html).toContain('title="Nuestra referencia">8121<')
+    expect(html.indexOf('1410')).toBeLessThan(html.indexOf('8121'))
+    expect(html).not.toContain('TWF')
+  })
+
+  it('sin ref del cliente: solo nuestro número, sin un segundo elemento vacío', () => {
+    const html = refs({ principal: '8216', secundaria: '', propia: false })
+    expect(html).toContain('>8216<')
+    expect(html).not.toContain('Nuestra referencia')
   })
 })
 

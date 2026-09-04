@@ -21,10 +21,9 @@ import {
   hoyCliente, alertasCliente, textoDias, RUTA_CHIP, TIPO_LABEL,
   type EstadoLlegadaDestino, type Ruta, type Tipo, novedadesCliente,
 } from '@/lib/hoyCliente'
-import type { RefsCliente } from '@/lib/refsCliente'
 import { fmtDateDMY } from '@/lib/format'
 import { useBrand } from '@/lib/brand'
-import PanelCard from './partner/PanelCard'
+import PanelCard, { RefsCarga } from './partner/PanelCard'
 
 interface HoyClienteProps {
   /** Cargas activas del cliente, YA filtradas por ruta/tipo (sin el buscador de la lista). */
@@ -37,6 +36,9 @@ interface HoyClienteProps {
   mostrarRuta?: boolean
   /** Ídem tipo (FCL / LCL). */
   mostrarTipo?: boolean
+  /** Nombre del cliente que está mirando: se usa para descartar la ref propia
+   *  mal cargada (la que dice el nombre del cliente) — spec 04/09, D2. */
+  nombreCliente?: string
   /** Fotos subidas (origen / Uruguay) e informes operativos del cliente. */
   fotos?: { shipmentRef?: string | null; photoType?: string | null; createdAt?: number | null }[]
   informes?: { shipmentRef?: string | null; title?: string | null; createdAt?: number | null }[]
@@ -95,15 +97,6 @@ function Fila({ med, onClick, children, extra }: { med: boolean; onClick: () => 
   )
 }
 
-function Refs({ med, refs }: { med: boolean; refs: RefsCliente }) {
-  return (
-    <>
-      <span className={med ? 'ref-med text-sm' : 'font-bold text-sm'}>{refs.principal}</span>
-      {refs.secundaria && <span className="text-[11px] text-muted-foreground" title="Nuestra referencia">{refs.secundaria}</span>}
-    </>
-  )
-}
-
 /** Marcas de ruta y tipo: solo cuando el cliente ve mezcla (props del portal). */
 function Marcas({ ruta, tipo, mostrarRuta, mostrarTipo }: { ruta: Ruta; tipo: Tipo; mostrarRuta?: boolean; mostrarTipo?: boolean }) {
   if (!mostrarRuta && !mostrarTipo) return null
@@ -145,16 +138,16 @@ const Derecha = ({ label, valor, detalle }: { label: string; valor: string; deta
   </span>
 )
 
-export default function HoyCliente({ shipments, alerts, hoyISO, mostrarRuta, mostrarTipo, fotos = [], informes = [], onVerCarga, onVerAlertas }: HoyClienteProps) {
+export default function HoyCliente({ shipments, alerts, hoyISO, nombreCliente = '', mostrarRuta, mostrarTipo, fotos = [], informes = [], onVerCarga, onVerAlertas }: HoyClienteProps) {
   const brand = useBrand()
   const med = brand.id === 'med'
-  const hoy = useMemo(() => hoyCliente(shipments, hoyISO), [shipments, hoyISO])
-  const atencion = useMemo(() => alertasCliente(alerts, shipments), [alerts, shipments])
+  const hoy = useMemo(() => hoyCliente(shipments, hoyISO, nombreCliente), [shipments, hoyISO, nombreCliente])
+  const atencion = useMemo(() => alertasCliente(alerts, shipments, nombreCliente), [alerts, shipments, nombreCliente])
   // Fotos e informes subidos esta semana: es lo que el cliente pregunta por
   // teléfono ("¿ya cargaron?", "¿hay fotos?") — Brian 03/09.
   const novedades = useMemo(
-    () => novedadesCliente(shipments, fotos, informes, hoyISO),
-    [shipments, fotos, informes, hoyISO],
+    () => novedadesCliente(shipments, fotos, informes, hoyISO, undefined, nombreCliente),
+    [shipments, fotos, informes, hoyISO, nombreCliente],
   )
   const nada = hoy.destino.length === 0 && hoy.esperando.length === 0 && hoy.montevideo.length === 0 && hoy.embarques.length === 0
   const mailSalida = (refPrincipal: string) =>
@@ -177,7 +170,7 @@ export default function HoyCliente({ shipments, alerts, hoyISO, mostrarRuta, mos
         >
           {hoy.destino.slice(0, MAX_FILAS).map(f => (
             <Fila key={`${f.ref}|${f.cntr}|${f.camion}`} med={med} onClick={() => onVerCarga(f.ref)}>
-              <Refs med={med} refs={f.refs} />
+              <RefsCarga refs={f.refs} />
               <Marcas ruta={f.ruta} tipo={f.tipo} {...marcasMixtas} />
               <Desc texto={f.descripcion} />
               <Cntr cntr={f.cntr} camion={f.camion} />
@@ -201,7 +194,7 @@ export default function HoyCliente({ shipments, alerts, hoyISO, mostrarRuta, mos
         >
           {novedades.slice(0, MAX_FILAS).map(n => (
             <Fila key={`${n.ref}|${n.clase}|${n.lugar}`} med={med} onClick={() => onVerCarga(n.ref)}>
-              <Refs med={med} refs={n.refs} />
+              <RefsCarga refs={n.refs} />
               <Marcas ruta={n.ruta} tipo={n.tipo} {...marcasMixtas} />
               <span className="text-sm">
                 {n.clase === 'fotos'
@@ -244,7 +237,7 @@ export default function HoyCliente({ shipments, alerts, hoyISO, mostrarRuta, mos
                 </a>
               )}
             >
-              <Refs med={med} refs={f.refs} />
+              <RefsCarga refs={f.refs} />
               <Marcas ruta={f.ruta} tipo={f.tipo} {...(esperandoEnPuerto ? marcasSoloTipo : marcasMixtas)} />
               <Desc texto={f.descripcion} />
               <Cntr cntr={f.cntr} />
@@ -272,7 +265,7 @@ export default function HoyCliente({ shipments, alerts, hoyISO, mostrarRuta, mos
         >
           {hoy.montevideo.slice(0, MAX_FILAS).map(f => (
             <Fila key={f.ref} med={med} onClick={() => onVerCarga(f.ref)}>
-              <Refs med={med} refs={f.refs} />
+              <RefsCarga refs={f.refs} />
               <Marcas ruta={f.ruta} tipo={f.tipo} {...marcasSoloTipo} />
               <Desc texto={f.descripcion} />
               {f.buque && <span className="text-[11px] text-muted-foreground truncate max-w-[160px]">{f.buque}</span>}
@@ -294,7 +287,7 @@ export default function HoyCliente({ shipments, alerts, hoyISO, mostrarRuta, mos
         >
           {hoy.embarques.slice(0, MAX_FILAS).map(f => (
             <Fila key={f.ref} med={med} onClick={() => onVerCarga(f.ref)}>
-              <Refs med={med} refs={f.refs} />
+              <RefsCarga refs={f.refs} />
               <Marcas ruta={f.ruta} tipo={f.tipo} {...marcasMixtas} />
               <Desc texto={f.descripcion} />
               {f.buque && <span className="text-[11px] text-muted-foreground truncate max-w-[160px]">{f.buque}</span>}
@@ -315,7 +308,7 @@ export default function HoyCliente({ shipments, alerts, hoyISO, mostrarRuta, mos
         >
           {atencion.slice(0, MAX_FILAS).map(a => (
             <Fila key={a.id} med={med} onClick={() => onVerCarga(a.ref)}>
-              <Refs med={med} refs={a.refs} />
+              <RefsCarga refs={a.refs} />
               <span className="text-sm font-semibold">{a.titulo}</span>
               <span className="text-xs text-muted-foreground truncate max-w-[420px]" title={a.detalle}>{a.detalle}</span>
             </Fila>

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
+import { RefsCarga } from '@/components/partner/PanelCard'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Select,
@@ -43,7 +44,7 @@ import AvisoOperativo from '@/components/AvisoOperativo'
 import { ClientAccount, OperativeReport, OriginPhoto } from '@/lib/quotationTypes'
 import { authFetch } from '@/lib/authClient'
 import { fetchClientReports, fetchClientOriginPhotos } from '@/lib/dataClient'
-import { agendaCliente, EVENTO_LABELS, refParaCliente } from '@/lib/clientAgenda'
+import { agendaCliente, EVENTO_LABELS } from '@/lib/clientAgenda'
 import { fmtDateDMY, hoyISO as hoyISOLocal } from '@/lib/format'
 import ShipmentDetailsDialog from './ShipmentDetailsDialog'
 import AgendaCalendar from './agenda/AgendaCalendar'
@@ -57,7 +58,7 @@ import {
   esActivaParaCliente, filtrarCargas, opcionesFiltro, rutaDe, tipoDe, FILTRO_TODO, RUTA_LABEL, RUTA_CHIP, TIPO_LABEL,
   type EstadoCliente, type FiltroCargas,
 } from '@/lib/hoyCliente'
-import { refsCliente } from '@/lib/refsCliente'
+import { refsCliente, refsEnLinea } from '@/lib/refsCliente'
 
 interface ClientPortalProps {
   onLogout: () => void
@@ -178,6 +179,10 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
   // En la vista previa del admin el cliente viene resuelto: casi ningún cliente
   // del catálogo tiene email, así que buscarlo por email dejaba el portal vacío.
   const currentClient = clienteResuelto || findClientByEmail(clients, clientEmail)
+  // Quién está mirando. Se necesita para nombrar las cargas (D2): el server
+  // manda CLIENTE vacío, así que sin esto no se puede descartar la ref propia
+  // que dice literalmente el nombre del cliente.
+  const nombreCliente = currentClient?.name || clientName
   const brand = useBrand()
   const med = brand.id === 'med'
   // Hoy en ISO LOCAL (lib/format): toISOString() es UTC y después de las
@@ -190,6 +195,12 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
     : (shipments?.filter(s =>
         currentClient?.clientePattern && matchesPattern(s.CLIENTE, currentClient.clientePattern)
       ) || [])
+
+  /** La ref de una alerta, dicha como la nombra el cliente (D2): las alertas
+   *  traen `shipmentRef` interna ("A8121") y la carga puede no estar en la
+   *  lista visible (una alerta vieja), así que se cae a nuestro número. */
+  const refAlerta = (shipmentRef: string): string =>
+    refsEnLinea(refsCliente(clientShipments.find(s => s.REF === shipmentRef) || { REF: shipmentRef }, nombreCliente))
 
   const getDaysUntilFree = (libreHasta: string): number => {
     if (!libreHasta) return 999
@@ -457,7 +468,7 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
                           <span>{alert.title}</span>
                           {/* La ref ya no viene en el texto (spec 04/09, D2): se pinta
                               desde shipmentRef, como en las pestañas de abajo. */}
-                          <Badge variant="outline" className="font-mono text-xs">{alert.shipmentRef}</Badge>
+                          <Badge variant="outline" className="font-mono text-xs">{refAlerta(alert.shipmentRef)}</Badge>
                         </div>
                         <div className="text-xs text-muted-foreground mt-0.5">{alert.message}</div>
                         {alert.date && (
@@ -530,6 +541,7 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
         )}
         <HoyCliente
           shipments={activeShipmentsRaw}
+          nombreCliente={nombreCliente}
           mostrarRuta={mostrarRuta}
           mostrarTipo={mostrarTipo}
           fotos={serverPhotos.length > 0 ? serverPhotos : fotos}
@@ -588,7 +600,7 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
                               : <Package size={16} weight="fill" className="text-green-600 shrink-0" />}
                           <span className="font-semibold tabular-nums whitespace-nowrap">{fmtDateDMY(e.fecha)}</span>
                           <span className="truncate">
-                            {EVENTO_LABELS[e.tipo]} — <b>Ref. {refParaCliente({ REF: e.ref, CLIENT_REF: e.clientRef })}</b>
+                            {EVENTO_LABELS[e.tipo]} — <b>Ref. {refsEnLinea(refsCliente({ REF: e.ref, CLIENT_REF: e.clientRef }, nombreCliente))}</b>
                             {e.cntr ? <span className="text-muted-foreground font-mono text-xs"> · {e.cntr}</span> : null}
                           </span>
                           <span className="ml-auto text-xs text-muted-foreground whitespace-nowrap">
@@ -616,7 +628,7 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
                         <div key={`ull-${e.ref}-${i}`} className="flex items-center gap-2.5 text-sm min-w-0">
                           <Anchor size={16} weight="fill" className="text-primary shrink-0" />
                           <span className="font-semibold tabular-nums whitespace-nowrap">{fmtDateDMY(e.fecha)}</span>
-                          <span className="truncate"><b>Ref. {refParaCliente({ REF: e.ref, CLIENT_REF: e.clientRef })}</b>{e.buque ? ` · ${e.buque}` : ''}</span>
+                          <span className="truncate"><b>Ref. {refsEnLinea(refsCliente({ REF: e.ref, CLIENT_REF: e.clientRef }, nombreCliente))}</b>{e.buque ? ` · ${e.buque}` : ''}</span>
                           <span className="ml-auto text-xs text-muted-foreground whitespace-nowrap">hace {-e.dias}d</span>
                         </div>
                       ))}
@@ -640,6 +652,7 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
             <AgendaCalendar
               shipments={cargasFiltradas}
               clientView={true}
+              nombreCliente={nombreCliente}
               defaultView="month"
             />
           </TabsContent>
@@ -673,7 +686,7 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => downloadClientStatusPdf(activeShipmentsRaw, currentClient?.name || clientName || clientEmail, brand)}
+                  onClick={() => downloadClientStatusPdf(activeShipmentsRaw, nombreCliente || clientEmail, brand)}
                   disabled={activeShipmentsRaw.length === 0}
                   className="gap-1.5 shrink-0"
                   title="Descargar PDF con el estado de las cargas que estás viendo"
@@ -810,7 +823,7 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
                   const daysLibre = getDaysUntilFree(shipment.LIBRE_HASTA)
                   // UNA referencia protagonista: la del cliente, o la nuestra
                   // sin la A; la TWF corta queda como dato secundario.
-                  const refs = refsCliente(shipment)
+                  const refs = refsCliente(shipment, nombreCliente)
                   const estado = estadoCliente(shipment, hoyISO)
                   const progreso = progresoCliente(estado)
                   const expanded = expandedRefs.has(shipment.REF)
@@ -857,12 +870,7 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
                         <div className="flex-1 min-w-0 px-3 sm:px-4 py-3.5 flex items-center gap-3 sm:gap-4">
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2 flex-wrap">
-                              <span className="ref-med text-base font-bold">{refs.principal}</span>
-                              {refs.secundaria && (
-                                <span className="text-xs text-muted-foreground" title="Nuestra referencia">
-                                  {refs.secundaria}
-                                </span>
-                              )}
+                              <RefsCarga refs={refs} />
                               <Badge className={ESTADO_CLIENTE_CLASE[estado]}>{etiquetaEstado(shipment, estado)}</Badge>
                               {(mostrarTipo || mostrarRuta) && (
                                 <span className="text-xs text-muted-foreground">
@@ -1081,7 +1089,7 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
                               <div className="text-sm font-medium">{alert.title}</div>
                               <div className="text-xs text-muted-foreground">{alert.message}</div>
                             </div>
-                            <Badge variant="outline" className="font-mono text-xs">{alert.shipmentRef}</Badge>
+                            <Badge variant="outline" className="font-mono text-xs">{refAlerta(alert.shipmentRef)}</Badge>
                           </div>
                         ))}
                       </CardContent>
@@ -1116,7 +1124,7 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
                               <div className="text-sm font-medium">{alert.title}</div>
                               <div className="text-xs text-muted-foreground">{alert.message}</div>
                             </div>
-                            <Badge variant="outline" className="font-mono text-xs">{alert.shipmentRef}</Badge>
+                            <Badge variant="outline" className="font-mono text-xs">{refAlerta(alert.shipmentRef)}</Badge>
                           </div>
                         ))}
                       </CardContent>
@@ -1151,7 +1159,7 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
                               <div className="text-sm font-medium">{alert.title}</div>
                               <div className="text-xs text-muted-foreground">{alert.message}</div>
                             </div>
-                            <Badge variant="outline" className="font-mono text-xs">{alert.shipmentRef}</Badge>
+                            <Badge variant="outline" className="font-mono text-xs">{refAlerta(alert.shipmentRef)}</Badge>
                           </div>
                         ))}
                       </CardContent>
@@ -1183,7 +1191,9 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
                       <div className="flex items-center justify-between">
                         <div className="flex-1">
                           <div className="flex items-center gap-3 mb-2 flex-wrap">
-                            <h3 className="text-lg font-bold">Ref. {refParaCliente(shipment)}</h3>
+                            <h3 className="text-lg font-bold flex items-center gap-2">
+                              Ref. <RefsCarga refs={refsCliente(shipment, nombreCliente)} />
+                            </h3>
                             <Badge variant="secondary">{shipment.N} CNTR</Badge>
                             {isShipmentCompleted(shipment) && (
                               <Badge className="bg-gray-500">
@@ -1240,6 +1250,8 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
           onOpenChange={setDetailsDialogOpen}
           onSave={() => {}}
           clientView
+          refsDelCliente
+          nombreCliente={nombreCliente}
           reports={clientReports}
           originPhotos={serverPhotos}
         />

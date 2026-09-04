@@ -5,6 +5,7 @@
 import type { ParsedShipment } from './shipmentTypes'
 import { getShipmentStatus } from './shipmentTypes'
 import type { Brand } from './brand'
+import { refsCliente, refsEnLinea } from './refsCliente'
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/
 const HEADER_BLUE = '#4A90D9'              // azul header plan-operativo (TWF)
@@ -125,7 +126,9 @@ export async function downloadClientStatusPdf(
   const rows = shipments.map((s, i) => {
     const st = statuses[i]
     return [
-      (s.REF || '').replace(/^A/i, ''),
+      // La ref como la nombra el cliente y la nuestra al lado ("1410 · 8121"),
+      // con la regla única del portal (spec 04/09, D2). Nunca "TWF".
+      refsEnLinea(refsCliente(s, clientName)),
       st.label,
       s.TIPO || '',
       sumOp(s, 'PKGS'),
@@ -155,7 +158,8 @@ export async function downloadClientStatusPdf(
     headStyles: { fillColor: ACCENT, textColor: '#ffffff', fontStyle: 'bold', fontSize: 7.5 },
     alternateRowStyles: { fillColor: ALT_ROW },
     columnStyles: {
-      0: { cellWidth: 16 }, 1: { cellWidth: 30 }, 2: { cellWidth: 14 }, 3: { cellWidth: 14, halign: 'right' },
+      // Dos refs en la misma celda: entra en dos renglones cuando hace falta.
+      0: { cellWidth: 22, overflow: 'linebreak' }, 1: { cellWidth: 30 }, 2: { cellWidth: 14 }, 3: { cellWidth: 14, halign: 'right' },
       4: { cellWidth: 18, halign: 'right' }, 5: { cellWidth: 50, overflow: 'linebreak' }, 8: { cellWidth: 20 },
       9: { cellWidth: 20 }, 10: { cellWidth: 20 },
     },

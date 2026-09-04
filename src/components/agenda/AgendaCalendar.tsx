@@ -17,7 +17,7 @@ import { computeTruckTotals, getTruckLimits, effectiveTruckLoads } from '@/lib/t
 import { avisoAlPublicar } from '@/lib/lclSugerencias'
 import { hoyISO } from '@/lib/format'
 import { shipmentsToEvents, trucksToEvents, countAlertsInRange, getWeekDates, toDateKey } from '@/lib/agendaUtils'
-import { refParaCliente } from '@/lib/clientAgenda'
+import { refsCliente, refsEnLinea } from '@/lib/refsCliente'
 
 // Shipment is "pending to coordinate" only if it's already at MVD port or
 // arrives within this many days. Farther-out ETAs aren't actionable yet.
@@ -54,6 +54,9 @@ interface AgendaCalendarProps {
   partnerView?: boolean
   /** Client view — restricts what the details dialog exposes (same trimming as client portal). */
   clientView?: boolean
+  /** Nombre del cliente que mira (solo con clientView): descarta la ref propia
+   *  mal cargada al nombrar cada chip. */
+  nombreCliente?: string
   /** Initial calendar view. Defaults to 'week'. Clients prefer 'month' for monthly overview. */
   defaultView?: AgendaView
   /** Admin-only: enables ContainerQuickEdit on event click instead of read-only dialog. */
@@ -81,6 +84,7 @@ export default function AgendaCalendar({
   transportFilter,
   partnerView = false,
   clientView = false,
+  nombreCliente = '',
   defaultView = 'week',
   editable = false,
   onPatchShipment,
@@ -163,12 +167,13 @@ export default function AgendaCalendar({
     const list = shipmentsToEvents(shipments, depotFilter, transportFilter)
     if (trucks?.length) list.push(...trucksToEvents(trucks, truckLoads || [], sinTelexRefs, depoByRef))
     // Vista cliente: cada chip nombra la carga como la nombra ÉL — su ref
-    // propia, o la nuestra sin la A. Acá los eventos son read-only (sin drag
-    // ni patch), así que `ref` es puro display (Brian 27/08).
-    if (clientView) for (const e of list) e.ref = refParaCliente(e.shipment) || e.ref
+    // primero y la nuestra al lado ("1410 · 8121"), por la regla única de D2.
+    // Acá los eventos son read-only (sin drag ni patch), así que `ref` es puro
+    // display (Brian 27/08).
+    if (clientView) for (const e of list) e.ref = refsEnLinea(refsCliente(e.shipment, nombreCliente)) || e.ref
     list.sort((a, b) => a.date.localeCompare(b.date))
     return list
-  }, [shipments, trucks, truckLoads, depotFilter, transportFilter, sinTelexRefs, depoByRef, clientView])
+  }, [shipments, trucks, truckLoads, depotFilter, transportFilter, sinTelexRefs, depoByRef, clientView, nombreCliente])
 
   // Extract unique depots from events
   const availableDepots = useMemo(() => {
@@ -743,6 +748,8 @@ export default function AgendaCalendar({
         onOpenChange={setDialogOpen}
         onSave={() => {}}
         clientView
+        refsDelCliente={clientView && !partnerView}
+        nombreCliente={nombreCliente}
         partnerView={partnerView}
         highlightCntr={selectedCntr}
       />

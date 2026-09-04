@@ -59,6 +59,22 @@ describe('HoyCliente (render estático)', () => {
     expect(html).not.toContain('Sin movimientos')
   })
 
+  // Spec 04/09 (D2). El cliente ve SU número grande y el nuestro chico; las dos
+  // siempre, porque cita cualquiera cuando llama. La `client_ref` que dice el
+  // nombre del cliente es un dato mal cargado y no se muestra.
+  it('la ref del cliente manda, la nuestra queda en chico, y la mal cargada se descarta', () => {
+    const html = render([
+      carga({ REF: 'A8121', CLIENT_REF: '1410', ETA: dia(4) }),
+      carga({ REF: 'A8216', CLIENT_REF: 'CHIAPERO S.R.L.', ETA: dia(5) }),
+    ], { nombreCliente: 'CHIAPERO S.R.L.' })
+    expect(html).toContain('>1410<')                              // principal
+    expect(html).toContain('title="Nuestra referencia">8121<')    // secundaria, a la vista
+    expect(html).toContain('>8216<')                              // sin ref propia: la nuestra, pelada
+    expect(html).not.toContain('CHIAPERO')                        // el nombre del cliente no es una ref
+    expect(html).not.toContain('TWF')
+    expect(html).not.toContain('A8121')                           // REF interna: no se muestra
+  })
+
   it('sin mezcla no marca ruta ni tipo', () => {
     const html = render([carga({ REF: 'A3', ETA: dia(4) })])
     expect(html).not.toContain('vía Montevideo')
