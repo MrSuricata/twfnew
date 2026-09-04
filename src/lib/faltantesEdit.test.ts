@@ -13,6 +13,25 @@ describe('buildFaltantePatch — arma el patch de un campo faltante', () => {
     expect(buildFaltantePatch('agente', 'Trans-China')).toEqual({ ok: true, patch: { agente: 'Trans-China' } })
   })
 
+  // Madera (spec 04/09): booleano en la columna y 'SI'/'' en el array — de ahí
+  // lo leen el portal del depósito y el rollup del espejo FCL.
+  it('madera: SI/NO → booleano, y propaga WOOD a todos los contenedores', () => {
+    expect(buildFaltantePatch('wood', 'SI')).toEqual({ ok: true, patch: { wood: true } })
+    expect(buildFaltantePatch('wood', 'NO')).toEqual({ ok: true, patch: { wood: false } })
+    expect(buildFaltantePatch('wood', 'SI', [rec(), rec({ CNTR_OP: 'MSKU2222222' })])).toEqual({
+      ok: true,
+      patch: {
+        wood: true,
+        operativas: [rec({ WOOD: 'SI' }), rec({ CNTR_OP: 'MSKU2222222', WOOD: 'SI' })],
+      },
+    })
+    expect(buildFaltantePatch('wood', 'NO', [rec({ WOOD: 'SI' })])).toEqual({
+      ok: true, patch: { wood: false, operativas: [rec({ WOOD: '' })] },
+    })
+    expect(buildFaltantePatch('wood', 'quizás').ok).toBe(false)
+    expect(FALTANTE_INPUTS.wood?.widget).toBe('select')
+  })
+
   it('números: coma decimal, bultos redondeados, rechaza basura y no-positivos', () => {
     expect(buildFaltantePatch('kg', '8399,75')).toEqual({ ok: true, patch: { kg: 8399.75 } })
     expect(buildFaltantePatch('pkgs', '18')).toEqual({ ok: true, patch: { pkgs: 18 } })

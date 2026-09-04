@@ -23,6 +23,7 @@
 
 import { parseLocalDate } from './shipmentTypes'
 import { isPorUruguay } from './checksTypes'
+import { refClienteSana } from './refsCliente'
 
 export interface CargaCampos {
   mode?: string | null
@@ -53,6 +54,10 @@ export interface CargaCampos {
   fiscal?: string | null
   /** Terminal de llegada MVD (TCP/MONTECON): define el vencimiento del pago. */
   terminal?: string | null
+  /** Madera en el embalaje: true = sí · false = no · null/undefined = a
+   *  confirmar. Decide si hay que pedir SENASA el día de carga y va en el
+   *  Word de AD/AT. Tri-estado: `false` es una respuesta, no un vacío. */
+  wood?: boolean | null
   /** Terminal/depósito de DEVOLUCIÓN del vacío (STL/MPS/TCP…): Pagos saca de
    *  acá a QUIÉN se le paga la devolución y su costo default. */
   dev?: string | null
@@ -93,7 +98,29 @@ const cero = (n: number | null | undefined): boolean => !(Number(n) > 0)
  *  "EQUIPO ORIGINAL VMG" y todas las variantes de tipeo. */
 export const CLIENTES_CON_REF_PROPIA = /CHIAPERO|VMG/i
 
-export function datosFaltantes(c: CargaCampos, hoy: Date): CampoFaltante[] {
+/** Nombre de cliente comparable (mayúsculas, sin espacios de más). */
+const claveCliente = (v: unknown): string => String(v || '').trim().toUpperCase().replace(/\s+/g, ' ')
+
+/**
+ * Clientes que DEMOSTRADAMENTE trabajan con su propia referencia: alguna de
+ * sus cargas ya la tiene cargada y sana.
+ *
+ * Es lo que evita el modo de falla de `devFecha` (revisión 31/08): pedirle la
+ * ref propia a los ~300 clientes que no usan ninguna llenaría la tarjeta con
+ * un faltante que nunca se puede completar. Así el pedido aparece donde el
+ * dato existe, y se enciende solo para un cliente nuevo apenas el equipo le
+ * carga la primera. CHIAPERO/VMG entran siempre (Brian los nombró).
+ */
+export function clientesConRefPropia(cargas: CargaCampos[]): Set<string> {
+  const out = new Set<string>()
+  for (const c of cargas || []) {
+    if (refClienteSana(c.clientRef, c.cliente)) out.add(claveCliente(c.cliente))
+  }
+  out.delete('')
+  return out
+}
+
+export function datosFaltantes(c: CargaCampos, hoy: Date, conRefPropia?: ReadonlySet<string>): CampoFaltante[] {
   if (c.archived) return []
   const m = String(c.mode || '').toLowerCase()
 
@@ -127,9 +154,20 @@ export function datosFaltantes(c: CargaCampos, hoy: Date): CampoFaltante[] {
     // Ref del cliente (Brian 26/08): CHIAPERO/VMG nombran cada carga con SU
     // número — sin cargarlo acá no hay cómo mapear sus mails ni sus planes.
     // Existe desde el booking, así que se pide junto con buque/BL.
-    if (CLIENTES_CON_REF_PROPIA.test(String(c.cliente || '')) && vacio(c.clientRef)) {
-      falta('clientRef', 'Ref cliente')
+    //
+    // Desde el rediseño 04/09 el portal MUESTRA esa ref cuando está, así que
+    // se pide también a los demás clientes que ya la usan (`conRefPropia`), y
+    // se vuelve a pedir cuando lo cargado NO sirve de referencia: hay cargas
+    // cuya `client_ref` dice literalmente el nombre del cliente.
+    const usaRefPropia = CLIENTES_CON_REF_PROPIA.test(String(c.cliente || ''))
+      || (conRefPropia?.has(claveCliente(c.cliente)) ?? false)
+    if (usaRefPropia && !refClienteSana(c.clientRef, c.cliente)) {
+      falta('clientRef', 'Ref. del cliente')
     }
+    // Madera: se sabe desde el packing list y define si hay que pedir SENASA
+    // el día de carga. Tri-estado — `false` ya es respuesta; falta solo cuando
+    // nadie la definió (39 FCL activas al 04/09).
+    if (m === 'fcl' && (c.wood === null || c.wood === undefined)) falta('wood', 'Madera')
   }
 
   // Ventana de checks: sin bultos/kg/m³ no se arma AD/AT ni se factura bien;
@@ -210,6 +248,9 @@ export function faltantesUrgentes(
   hoy: Date,
 ): FaltanteUrgente[] {
   const h = medianoche(hoy).getTime()
+  // Quién usa su propia referencia se deduce de TODAS las cargas, no de la
+  // fila: una carga sin ref propia solo la debe si su cliente ya usa una.
+  const conRefPropia = clientesConRefPropia(cargas)
   const out: FaltanteUrgente[] = []
   for (const c of cargas) {
     const eta = parseLocalDate(String(c.eta || '').trim())
@@ -217,7 +258,7 @@ export function faltantesUrgentes(
       // Sin ETA no hay ventana que aplicar: se reclaman solo los básicos
       // (cliente/país/eta — datosFaltantes sin ETA no abre ninguna etapa).
       // Antes el continue la hacía invisible en todas las listas.
-      const faltantes = datosFaltantes(c, hoy)
+      const faltantes = datosFaltantes(c, hoy, conRefPropia)
       if (faltantes.length > 0) out.push({ carga: c, faltantes, diasAEta: null })
       continue
     }
@@ -227,7 +268,7 @@ export function faltantesUrgentes(
     // hoy (Brian 28/08: "que no me pida tan anteriores" — el piso viejo de 28
     // días llenó la tarjeta de cargas de hace un mes al sumar la devolución).
     if (dias < -FALTANTES_DIAS_COORDINACION) continue
-    const faltantes = datosFaltantes(c, hoy)
+    const faltantes = datosFaltantes(c, hoy, conRefPropia)
     if (faltantes.length === 0) continue
     // Llegada con salida ya coordinada: sigue en la tarjeta SOLO por la
     // devolución (lugar/fecha, etapa post-arribo) — el resto de sus faltantes
@@ -258,6 +299,7 @@ export function faltantesFuturos(
   hoy: Date,
 ): FaltanteUrgente[] {
   const h = medianoche(hoy).getTime()
+  const conRefPropia = clientesConRefPropia(cargas)
   const out: FaltanteUrgente[] = []
   for (const c of cargas) {
     const eta = parseLocalDate(String(c.eta || '').trim())
@@ -265,7 +307,7 @@ export function faltantesFuturos(
     const dias = Math.round((medianoche(eta).getTime() - h) / MS_DIA)
     if (dias <= FALTANTES_DIAS_COORDINACION) continue   // esas ya están en lo urgente
     const vispera = new Date(medianoche(eta).getTime() - MS_DIA)
-    const faltantes = datosFaltantes(c, vispera)
+    const faltantes = datosFaltantes(c, vispera, conRefPropia)
     if (faltantes.length === 0) continue
     out.push({ carga: c, faltantes, diasAEta: dias })
   }

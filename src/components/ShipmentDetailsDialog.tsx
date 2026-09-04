@@ -36,6 +36,8 @@ import { ParsedShipment, getShipmentStatus } from '@/lib/shipmentTypes'
 import { ShipmentDocument, OperativeReport, OriginPhoto } from '@/lib/quotationTypes'
 import { fetchReportFile } from '@/lib/dataClient'
 import OriginPhotoGallery from './OriginPhotoGallery'
+import { refsCliente } from '@/lib/refsCliente'
+import { RefsCarga } from './partner/PanelCard'
 
 interface ShipmentDetailsDialogProps {
   shipment: ParsedShipment | null
@@ -43,6 +45,12 @@ interface ShipmentDetailsDialogProps {
   onOpenChange: (open: boolean) => void
   onSave: (updatedShipment: ParsedShipment) => void
   clientView?: boolean
+  /** El que mira ES el cliente dueño de la carga: la ficha la nombra con SU
+   *  referencia (spec 04/09, D2). No alcanza `clientView`: la Agenda del admin
+   *  también abre esta ficha en modo lectura y ahí manda NUESTRA ref. */
+  refsDelCliente?: boolean
+  /** Nombre del cliente que mira (para descartar la ref propia mal cargada). */
+  nombreCliente?: string
   partnerView?: boolean
   documents?: ShipmentDocument[]
   reports?: OperativeReport[]
@@ -57,6 +65,8 @@ export default function ShipmentDetailsDialog({
   onOpenChange,
   onSave,
   clientView = false,
+  refsDelCliente = false,
+  nombreCliente = '',
   partnerView = false,
   documents = [],
   reports = [],
@@ -189,13 +199,17 @@ export default function ShipmentDetailsDialog({
                 <Package size={26} className="text-accent" weight="duotone" />
                 Detalles de Carga
               </DialogTitle>
-              <p className="text-sm text-muted-foreground mt-1.5">
-                REF: <button
-                  type="button"
-                  title="Click para copiar"
-                  onClick={() => copyToClipboard(editedShipment.REF, 'REF')}
-                  className="font-mono font-semibold text-foreground text-base hover:bg-accent/10 hover:text-accent transition-colors cursor-pointer rounded px-1 -mx-1"
-                >{editedShipment.REF}</button>
+              <p className="text-sm text-muted-foreground mt-1.5 flex items-center gap-2 flex-wrap">
+                REF: {refsDelCliente ? (
+                  <RefsCarga refs={refsCliente(editedShipment, nombreCliente)} />
+                ) : (
+                  <button
+                    type="button"
+                    title="Click para copiar"
+                    onClick={() => copyToClipboard(editedShipment.REF, 'REF')}
+                    className="font-mono font-semibold text-foreground text-base hover:bg-accent/10 hover:text-accent transition-colors cursor-pointer rounded px-1 -mx-1"
+                  >{editedShipment.REF}</button>
+                )}
                 {!clientView && editedShipment.CLIENTE && (
                   <span className="ml-4">
                     Cliente: <span className="font-semibold text-foreground">{editedShipment.CLIENTE}</span>
@@ -446,7 +460,9 @@ export default function ShipmentDetailsDialog({
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <Label className="text-muted-foreground text-xs">Referencia</Label>
-                  <div className="font-mono font-semibold text-lg">{editedShipment.REF}</div>
+                  {refsDelCliente
+                    ? <div className="flex items-center gap-2"><RefsCarga refs={refsCliente(editedShipment, nombreCliente)} /></div>
+                    : <div className="font-mono font-semibold text-lg">{editedShipment.REF}</div>}
                 </div>
                 <div className="space-y-1">
                   <Label className="text-muted-foreground text-xs">Contenedores</Label>

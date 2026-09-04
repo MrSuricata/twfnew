@@ -22,6 +22,28 @@ describe('DATOS_CLAVE — cada dato clave es una columna que el API acepta', () 
   })
 })
 
+describe('DATOS_CLAVE.fcl — lo que HOY reclama al alta (spec 04/09)', () => {
+  it('la ref del cliente y la madera se reclaman', () => {
+    const rec = reclamables('fcl').map(d => d.key)
+    expect(rec).toContain('client_ref')
+    expect(rec).toContain('wood')
+  })
+
+  it('la ref del cliente se llama como la nombró Brian y no es obligatoria al alta', () => {
+    const d = DATOS_CLAVE.fcl.find(x => x.key === 'client_ref')
+    expect(d?.label).toBe('Ref. del cliente')
+    expect(d?.obligatorioAlta).toBe(false)
+  })
+
+  it('la madera es tri-estado: sin definir falta, false no', () => {
+    const d = DATOS_CLAVE.fcl.find(x => x.key === 'wood')!
+    expect(d.control).toBe('madera')
+    expect(faltaDato(d, { wood: null })).toBe(true)
+    expect(faltaDato(d, {})).toBe(true)
+    expect(faltaDato(d, { wood: false })).toBe(false)
+  })
+})
+
 describe('DATOS_CLAVE.lcl — la lista de Brian, en su orden', () => {
   it('14 datos: ref primero, después los 12 del alta, y al final llegada a MVD y depósito', () => {
     expect(DATOS_CLAVE.lcl.map(d => d.key)).toEqual([

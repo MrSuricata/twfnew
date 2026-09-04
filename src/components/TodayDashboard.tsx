@@ -326,6 +326,9 @@ export default function TodayDashboard({
         operativa: s.operativa, transporte: s.transporte, fiscal: s.fiscal,
         despacho: s.despacho,
         terminal: s.terminal, dev: s.dev,
+        // Madera: tri-estado (null = a confirmar) — NO colapsar a false, que
+        // es una respuesta válida y apagaría el faltante sin que nadie la dé.
+        wood: s.wood ?? null,
         devFecha: s.dev_fecha || (Array.isArray(s.operativas) ? (s.operativas.find(o => o.DEV_FECHA)?.DEV_FECHA || '') : ''),
         libre: s.libre || (Array.isArray(s.operativas) ? (s.operativas.find(o => o.LIBRE)?.LIBRE || '') : ''),
         salida: s.salida,
@@ -1799,7 +1802,9 @@ function IncompletaRow({ u, dbRow, expanded, onToggle, onPatchShipment, onOpenDe
               const sigueFaltando = u.faltantes.some(x => x.campo === f.campo)
               if (!sigueFaltando) {
                 const col = columnaDeCampo(f.campo)
-                const valor = col ? String((dbRow as unknown as Record<string, unknown>)[col] ?? '') : ''
+                const crudo = col ? (dbRow as unknown as Record<string, unknown>)[col] : ''
+                // Los booleanos (madera) se dicen Sí/No: "true" no es una respuesta.
+                const valor = typeof crudo === 'boolean' ? (crudo ? 'Sí' : 'No') : String(crudo ?? '')
                 return (
                   <span
                     key={f.campo}
@@ -1849,6 +1854,13 @@ function IncompletaRow({ u, dbRow, expanded, onToggle, onPatchShipment, onOpenDe
 // el array `operativas`, reponer el snapshot completo pisaría commits
 // posteriores de la misma fila (misma razón por la que el revert de App es
 // granular por clave — con el array, la clave ES el conjunto entero).
+/** Lo que muestra el toast de un dato guardado: un booleano se dice "Sí"/"No"
+ *  (madera), y lo que no tiene valor cae al texto que eligió la UI. */
+function descripcionPatch(valor: unknown, texto: string): string {
+  if (typeof valor === 'boolean') return valor ? 'Sí' : 'No'
+  return String(valor ?? texto)
+}
+
 function CampoFaltanteInput({ campo, etiqueta, dbRow, onPatchShipment, transportes, agentes, lineas, clientes }: {
   campo: CampoFaltante['campo']
   etiqueta: string
@@ -1879,7 +1891,9 @@ function CampoFaltanteInput({ campo, etiqueta, dbRow, onPatchShipment, transport
     )
     onPatchShipment(dbRow.id, r.patch)
     toast.success(`${etiqueta} guardado · ${dbRow.ref}`, {
-      description: String((r.patch as Record<string, unknown>)[Object.keys(r.patch)[0]] ?? texto),
+      // Los faltantes booleanos (madera) guardan true/false: al operador se le
+      // dice "Sí"/"No", no el literal del campo.
+      description: descripcionPatch((r.patch as Record<string, unknown>)[Object.keys(r.patch)[0]], texto),
       ...(conArray ? {} : { action: { label: 'Deshacer', onClick: () => onPatchShipment(dbRow.id, previos) } }),
     })
   }

@@ -49,7 +49,7 @@ import type { CatalogClient } from '@/lib/clientCatalog'
 import { canonicalizarLista, DEV_ALIASES } from '@/lib/fuzzyCatalog'
 import { fiscalSugerido, fiscalesRecientes } from '@/lib/sugerenciaHistorica'
 import { recomendarTransporte } from '@/lib/distribucionTransportes'
-import { datosFaltantes, resumenFaltantes } from '@/lib/datosFaltantes'
+import { datosFaltantes, clientesConRefPropia, resumenFaltantes } from '@/lib/datosFaltantes'
 import { useTransporteCuotas } from '@/hooks/useTransporteCuotas'
 import {
   buildOperations,
@@ -467,10 +467,13 @@ export default function OperationsGrid({
   // Solo cargas activas — completar datos de una carga cerrada no es tarea.
   const faltantesPorUid = useMemo(() => {
     const today = new Date(); today.setHours(0, 0, 0, 0)
+    // La ref del cliente se le pide a quien ya la usa: sin este set, la misma
+    // carga mostraba "Ref. del cliente" en HOY y no acá (HOY sí lo pasa).
+    const conRefPropia = clientesConRefPropia(visibleOps)
     const m = new Map<string, string>()
     for (const o of visibleOps) {
       if (!isOperationActive(o, truckByRef.get(o.ref)?.status, today)) continue
-      const f = datosFaltantes(o, today)
+      const f = datosFaltantes(o, today, conRefPropia)
       if (f.length) m.set(o.uid, resumenFaltantes(f))
     }
     return m
