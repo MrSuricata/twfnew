@@ -23,6 +23,13 @@ interface PartnerDashboardShellProps {
   pantalla?: string
   /** Vista previa (/ui o "Ver como"): la caja se ve pero no manda nada. */
   preview?: boolean
+  /**
+   * Barra de accesos directos a las secciones. Va DENTRO del `<header>` para
+   * que se pegue junto con la barra violeta, como un solo bloque: así el salto
+   * a una sección puede descontar el alto real del encabezado y la sección no
+   * queda tapada.
+   */
+  barra?: ReactNode
   /** Main content area (below the header). */
   children: ReactNode
 }
@@ -39,6 +46,7 @@ export default function PartnerDashboardShell({
   onLogout,
   pantalla,
   preview = false,
+  barra,
   children,
 }: PartnerDashboardShellProps) {
   return (
@@ -76,6 +84,7 @@ export default function PartnerDashboardShell({
             </Button>
           </div>
         </div>
+        {barra}
       </header>
 
       {/* 7xl y no 1600px: con filas de dos renglones, más ancho solo estira

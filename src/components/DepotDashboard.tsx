@@ -45,9 +45,11 @@ import { formatKg, formatM3 } from '@/lib/truckUtils'
 import { colorDeposito } from '@/lib/depositoColor'
 import { ETIQUETA_RETIRO, DETALLE_RETIRO, ETIQUETA_DEVOLUCION, DETALLE_DEVOLUCION } from '@/lib/hoyDeposito'
 import {
-  ordenSeccionesDeposito, anclaSeccion, claveCardsDeposito, IDS_SECCIONES_DEPOSITO,
+  ordenSeccionesDeposito, chipsSeccionesDeposito, hayBarraSecciones,
+  anclaSeccion, claveCardsDeposito, IDS_SECCIONES_DEPOSITO,
   type EstadoSeccionesDeposito, type SeccionDepositoId,
 } from '@/lib/seccionesDeposito'
+import BarraSecciones from './partner/BarraSecciones'
 import { useCardsPlegadas } from '@/hooks/useCardsPlegadas'
 
 interface DepotDashboardProps {
@@ -244,6 +246,9 @@ export default function DepotDashboard({ shipments, depotName, userName, onLogou
   // Sin trabajo hoy, la card vacía deja de ser lo primero que se lee y suben
   // los vacíos que sangran y los retiros que ya se pueden ir a buscar.
   const orden = useMemo(() => ordenSeccionesDeposito(estadoSecciones), [estadoSecciones])
+  // Los accesos directos: solo las secciones que existen hoy, en el mismo orden
+  // en que se ven las cards.
+  const chips = useMemo(() => chipsSeccionesDeposito(estadoSecciones), [estadoSecciones])
 
   const clave = (ref: string, cntr: string) => `${ref}|${cntr}`
 
@@ -596,6 +601,7 @@ export default function DepotDashboard({ shipments, depotName, userName, onLogou
       onLogout={onLogout}
       pantalla="HOY del depósito"
       preview={preview}
+      barra={hayBarraSecciones(chips) ? <BarraSecciones secciones={chips} /> : undefined}
     >
       <div className="space-y-4">
         <AvisoOperativo />
