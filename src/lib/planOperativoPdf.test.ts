@@ -40,6 +40,21 @@ describe('buildPlanOperativoData — filtro por cliente y una fila por contenedo
     expect(rows[0].ref).toBe('7600') // sin la "A" — regla de cara al cliente
   })
 
+  it('la "A" se saca solo si le sigue un dígito: no mutila refs de otro formato', () => {
+    // Antes era un `replace(/^A/i,'')` sin lookahead: "AIT-1" salía "IT-1" en
+    // el PDF que ve el cliente. Ahora comparte `numeroNuestro` con el portal.
+    const cache = [
+      fcl({ REF: 'AIT-1', CLIENTE: 'AIT S.A' }),
+      fcl({ REF: 'A8068 B', CLIENTE: 'AIT S.A' }),
+      fcl({ REF: 'E200', CLIENTE: 'AIT S.A' }),
+    ]
+    const data = buildPlanOperativoData(cache, [], ['AIT'], HOY)
+    const refs = [...data.blocks[0].programadas, ...data.blocks[0].pendientes].map(r => r.ref)
+    expect(refs).toContain('AIT-1')    // no "IT-1"
+    expect(refs).toContain('8068 B')   // el sufijo de operación dividida se conserva
+    expect(refs).toContain('E200')     // LCL: no hay "A" que sacar
+  })
+
   it('ETA_FISC pasada → afuera; futura o vacía → adentro', () => {
     const cache = [fcl({
       operativas: [

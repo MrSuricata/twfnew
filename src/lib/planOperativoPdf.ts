@@ -13,6 +13,7 @@ import { matchesPattern } from './clientMatching'
 import { fmtDateDMY, fmtNum } from './format'
 import type { Brand } from './brand'
 import { logoDataUrl } from './clientStatusPdf'
+import { numeroNuestro } from '@/lib/refsCliente'
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/
 const HEADER_BLUE = '#4A90D9'                               // azul plan-operativo TWF
@@ -81,7 +82,7 @@ function activeFcl(cache: ParsedShipment[], dbShipments: DbShipment[]): ParsedSh
 
 function rowFrom(s: ParsedShipment, o: OperativasRecord | null, db?: DbShipment): PlanRow {
   return {
-    ref: (s.REF || '').replace(/^A/i, ''),
+    ref: numeroNuestro(s.REF),
     cntr: o?.CNTR_OP || s.CNTR || '',
     tipo: o?.TIPO || s.TIPO || '',
     // Carga sin operativas (recién creada): bultos/kg desde la fila de la DB,

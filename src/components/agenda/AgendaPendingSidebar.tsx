@@ -4,6 +4,7 @@ import { parseLocalDate } from '@/lib/shipmentTypes'
 import { Package, Truck, MapPin, X, Warning, Calendar } from '@phosphor-icons/react'
 import { useBrand } from '@/lib/brand'
 import { etaVigente } from '@/lib/salidaCheck'
+import { numeroNuestro } from '@/lib/refsCliente'
 
 interface AgendaPendingSidebarProps {
   shipments: ParsedShipment[]
@@ -124,7 +125,7 @@ export default function AgendaPendingSidebar({ shipments, windowDays = 4, onClos
 
         items.push({
           shipment: s,
-          ref: (s.REF || '').replace(/^A/i, ''),
+          ref: numeroNuestro(s.REF),
           cliente: s.CLIENTE || op.CLIENTE_OP || '—',
           deposito: deposito.toUpperCase(),
           transporte,

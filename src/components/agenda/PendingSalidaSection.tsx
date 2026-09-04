@@ -5,6 +5,7 @@ import { getOperativaColor } from '@/lib/agendaTypes'
 import { refsEnConsolidado, type Truck, type TruckLoad } from '@/lib/truckTypes'
 import { useMemo, useState } from 'react'
 import { Package } from '@phosphor-icons/react'
+import { numeroNuestro } from '@/lib/refsCliente'
 
 interface PendingSalidaSectionProps {
   shipments: ParsedShipment[]
@@ -164,7 +165,7 @@ export default function PendingSalidaSection({ shipments, editable, onCoordinar,
       <div className="p-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
         {filteredItems.map(({ shipment: s, op, arrival }, idx) => {
           const cntr = (op.CNTR_OP || s.CNTR || '').trim()
-          const ref = (s.REF || '').replace(/^A/i, '')
+          const ref = numeroNuestro(s.REF)
           const cliente = s.CLIENTE || op.CLIENTE_OP || '—'
           const deposito = (op.DEPOSITO || '').toUpperCase() || '—'
           const transporte = (op.TRANSPORTE || '').trim()
