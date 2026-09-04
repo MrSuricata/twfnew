@@ -642,6 +642,8 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
               shipments={cargasFiltradas}
               clientView={true}
               nombreCliente={nombreCliente}
+              fotosCliente={serverPhotos.length > 0 ? serverPhotos : fotos}
+              informesCliente={clientReports.length > 0 ? clientReports : informes}
               defaultView="month"
             />
           </TabsContent>

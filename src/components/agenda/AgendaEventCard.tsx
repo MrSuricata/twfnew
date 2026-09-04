@@ -237,7 +237,10 @@ export default function AgendaEventCard({ event, compact = true, onClick, dragga
 
         {/* Info cards row */}
         <div className="grid grid-cols-3 gap-3">
-          {/* Libre Hasta */}
+          {/* Libre Hasta. Sin fecha no se dibuja la caja: en la agenda del
+              CLIENTE el LIBRE viaja vacío a propósito (es dato nuestro), y una
+              caja "Libre Hasta —" seguiría nombrándoselo. */}
+          {event.libre && (
           <div className="bg-muted/50 rounded-lg p-3">
             <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">
               Libre Hasta
@@ -249,7 +252,7 @@ export default function AgendaEventCard({ event, compact = true, onClick, dragga
                   ? 'text-orange-600'
                   : 'text-foreground'
             }`}>
-              {event.libre ? formatDateShort(event.libre) : '—'}
+              {formatDateShort(event.libre)}
             </div>
             {libreRemaining !== null && libreRemaining !== 999 && (
               <div className={`text-xs mt-0.5 ${
@@ -264,6 +267,7 @@ export default function AgendaEventCard({ event, compact = true, onClick, dragga
               </div>
             )}
           </div>
+          )}
 
           {/* Salida MVD */}
           <div className="bg-muted/50 rounded-lg p-3">

@@ -9,6 +9,7 @@ import {
   type DragStartEvent,
 } from '@dnd-kit/core'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
+import type { OriginPhoto, OperativeReport } from '@/lib/quotationTypes'
 import { parseLocalDate } from '@/lib/shipmentTypes'
 import type { AgendaView, CalendarEvent } from '@/lib/agendaTypes'
 import type { Truck, TruckLoad } from '@/lib/truckTypes'
@@ -32,6 +33,7 @@ import AgendaPendingSidebar from './AgendaPendingSidebar'
 import AgendaEventCard from './AgendaEventCard'
 import PendingSalidaSection from './PendingSalidaSection'
 import ShipmentDetailsDialog from '../ShipmentDetailsDialog'
+import ClientShipmentDialog from '../client/ClientShipmentDialog'
 import TruckAgendaDialog from './TruckAgendaDialog'
 import ContainerQuickEdit, { buildPatchedOperativas } from '../operations/ContainerQuickEdit'
 import { deriveKnownTransportes } from '@/lib/operationsTypes'
@@ -57,6 +59,10 @@ interface AgendaCalendarProps {
   /** Nombre del cliente que mira (solo con clientView): descarta la ref propia
    *  mal cargada al nombrar cada chip. */
   nombreCliente?: string
+  /** Fotos e informes del cliente: alimentan la ficha (ClientShipmentDialog)
+   *  que se abre al tocar un chip en la agenda del portal. */
+  fotosCliente?: OriginPhoto[]
+  informesCliente?: OperativeReport[]
   /** Initial calendar view. Defaults to 'week'. Clients prefer 'month' for monthly overview. */
   defaultView?: AgendaView
   /** Admin-only: enables ContainerQuickEdit on event click instead of read-only dialog. */
@@ -85,6 +91,8 @@ export default function AgendaCalendar({
   partnerView = false,
   clientView = false,
   nombreCliente = '',
+  fotosCliente,
+  informesCliente,
   defaultView = 'week',
   editable = false,
   onPatchShipment,
@@ -170,7 +178,13 @@ export default function AgendaCalendar({
     // primero y la nuestra al lado ("1410 · 8121"), por la regla única de D2.
     // Acá los eventos son read-only (sin drag ni patch), así que `ref` es puro
     // display (Brian 27/08).
-    if (clientView) for (const e of list) e.ref = refsEnLinea(refsCliente(e.shipment, nombreCliente)) || e.ref
+    if (clientView) for (const e of list) {
+      e.ref = refsEnLinea(refsCliente(e.shipment, nombreCliente)) || e.ref
+      // Cuándo tenemos que devolver el contenedor vacío es dato NUESTRO: no
+      // va a la vista del cliente (spec 02/09, refrendada el 04/09). Se vacía
+      // acá, en el único lugar donde ya se sabe quién está mirando.
+      e.libre = ''
+    }
     list.sort((a, b) => a.date.localeCompare(b.date))
     return list
   }, [shipments, trucks, truckLoads, depotFilter, transportFilter, sinTelexRefs, depoByRef, clientView, nombreCliente])
@@ -739,20 +753,38 @@ export default function AgendaCalendar({
         />
       )}
 
-      {/* Read-only shipment details dialog — client/partner views + truck/non-FCL events.
-          Always rendered as clientView so the no-op onSave doesn't show a misleading
-          enabled "Guardar Cambios" button (Fix 5). FCL edits use ContainerQuickEdit above. */}
-      <ShipmentDetailsDialog
-        shipment={selectedShipment}
-        open={dialogOpen}
-        onOpenChange={setDialogOpen}
-        onSave={() => {}}
-        clientView
-        refsDelCliente={clientView && !partnerView}
-        nombreCliente={nombreCliente}
-        partnerView={partnerView}
-        highlightCntr={selectedCntr}
-      />
+      {/* En el portal del CLIENTE se abre su ficha (la misma que en la lista):
+          un solo vocabulario, contenedores contados y sin "Libre" —que acá
+          seguía a la vista (spec 04/09, D5). El admin y los partners siguen
+          con ShipmentDetailsDialog, intacto. */}
+      {clientView && !partnerView ? (
+        selectedShipment && (
+          <ClientShipmentDialog
+            shipment={selectedShipment}
+            open={dialogOpen}
+            onOpenChange={setDialogOpen}
+            hoyISO={hoyISO()}
+            nombreCliente={nombreCliente}
+            fotos={fotosCliente}
+            informes={informesCliente}
+          />
+        )
+      ) : (
+        /* Read-only shipment details dialog — partner views + truck/non-FCL events.
+           Always rendered as clientView so the no-op onSave doesn't show a misleading
+           enabled "Guardar Cambios" button (Fix 5). FCL edits use ContainerQuickEdit above. */
+        <ShipmentDetailsDialog
+          shipment={selectedShipment}
+          open={dialogOpen}
+          onOpenChange={setDialogOpen}
+          onSave={() => {}}
+          clientView
+          refsDelCliente={false}
+          nombreCliente={nombreCliente}
+          partnerView={partnerView}
+          highlightCntr={selectedCntr}
+        />
+      )}
 
       {/* Modal moderno de camión consolidado — cabecera + cargas clickeables. */}
       <TruckAgendaDialog
