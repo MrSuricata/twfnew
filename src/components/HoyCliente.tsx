@@ -21,7 +21,7 @@ import {
   hoyCliente, alertasCliente, textoDias, RUTA_CHIP, TIPO_LABEL,
   type EstadoLlegadaDestino, type Ruta, type Tipo, novedadesCliente,
 } from '@/lib/hoyCliente'
-import { galeriaDeCarga, galeriaDeNovedad, indiceEnGaleria, tiraDeMiniaturas } from '@/lib/cargaCliente'
+import { galeriaDeNovedad, indiceEnGaleria, tiraDeMiniaturas, type FuenteNovedad } from '@/lib/cargaCliente'
 import { fmtDateDMY } from '@/lib/format'
 import { useBrand } from '@/lib/brand'
 import PanelCard, { RefsCarga, clasesTono, type TonoPanel } from './partner/PanelCard'
@@ -186,15 +186,20 @@ export default function HoyCliente({ shipments, alerts, hoyISO, nombreCliente = 
   const brand = useBrand()
   const med = brand.id === 'med'
   // El visor de fotos: se abre DESDE la miniatura del aviso, sin pasar por la
-  // lista ni por la ficha (spec 04/09, D3). Recorre toda la galería de esa
-  // carga, arrancando en la foto que se tocó.
-  const [visor, setVisor] = useState<{ ref: string; indice: number } | null>(null)
+  // lista ni por la ficha (spec 04/09, D3). Recorre EXACTAMENTE lo que anunció
+  // la fila —esa carga, ese lugar, esa ventana—, arrancando en la foto que se
+  // tocó. Antes abría la galería de toda la carga: la fila decía "6 fotos en
+  // depósito GODILCO", el botón "Ver las otras 2 fotos de 6…", y el visor
+  // abría en "1 / 8" con dos fotos de origen de hace tres semanas al final.
+  // Por eso guarda la FUENTE de la fila y no una ref suelta: con la ref no
+  // alcanza para volver a armar la misma lista cuando llegan firmas nuevas.
+  const [visor, setVisor] = useState<{ fuente: FuenteNovedad; indice: number } | null>(null)
   const galeriaVisor = useMemo(
-    () => (visor ? galeriaDeCarga(fotos, visor.ref) : []),
+    () => (visor ? galeriaDeNovedad(fotos, visor.fuente) : []),
     [visor, fotos],
   )
-  const abrirVisor = (ref: string, foto: OriginPhoto) => {
-    setVisor({ ref, indice: indiceEnGaleria(galeriaDeCarga(fotos, ref), foto.id) })
+  const abrirVisor = (fuente: FuenteNovedad, galeria: OriginPhoto[], foto: OriginPhoto) => {
+    setVisor({ fuente, indice: indiceEnGaleria(galeria, foto.id) })
   }
   // La fila lleva a la FICHA (si el portal la ofrece); si no, a la lista.
   const irACarga = (ref: string, pestana: PestanaFicha) =>
@@ -296,7 +301,7 @@ export default function HoyCliente({ shipments, alerts, hoyISO, nombreCliente = 
                     mas={tira.mas}
                     siguiente={tira.siguiente}
                     etiqueta={texto}
-                    onAbrir={f => abrirVisor(n.ref, f)}
+                    onAbrir={f => abrirVisor(n, galeria, f)}
                     onRota={onFirmasVencidas}
                   />
                 )}

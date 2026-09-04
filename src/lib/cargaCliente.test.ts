@@ -402,6 +402,38 @@ describe('la tira dibuja lo que el texto anuncia, no el historial entero', () =>
     expect(galeriaDeNovedad(conOrigen, uy).map(f => f.id)).toEqual(['hoy'])
   })
 
+  it('el visor recorre lo anunciado: ni el historial ni las de origen', () => {
+    // Lo que se veía en /ui: la fila decía "6 fotos en depósito GODILCO", el
+    // botón "Ver las otras 2 fotos de 6…" y el visor abría en "1 / 8", con dos
+    // fotos de origen de hace tres semanas al final.
+    const nuevas = Array.from({ length: 6 }, (_, i) => ({
+      id: `n${i}`, shipmentRef: 'A8121', photoType: 'uruguay',
+      createdAt: cuando('2026-09-08') + i, thumbnailUrl: `https://firmada/n${i}`,
+    }))
+    const origen = {
+      id: 'or-vieja', shipmentRef: 'A8121', photoType: 'origen',
+      createdAt: cuando('2026-08-18'), thumbnailUrl: 'https://firmada/or-vieja',
+    }
+    const todas = [...mezcla, ...nuevas, origen]
+    const fila = novedadesCliente([cargaN], todas, [], HOY_N).find(f => f.lugarFoto === 'uruguay')!
+    expect(fila.cantidad).toBe(7)
+
+    // La galería del visor es la MISMA que dibujó la tira.
+    const galeria = galeriaDeNovedad(todas, fila)
+    const tira = tiraDeMiniaturas(galeria)
+    expect(galeria).toHaveLength(fila.cantidad)          // "1 / 7", no "1 / 15"
+    expect(galeria.map(f => f.id)).not.toContain('or-vieja')
+    expect(galeria.map(f => f.id).some(id => id.startsWith('vieja'))).toBe(false)
+
+    // Y el "+N" abre justo en la primera que no entró en la tira.
+    expect(indiceEnGaleria(galeria, tira.siguiente!.id)).toBe(MAX_MINIATURAS)
+    expect(indiceEnGaleria(galeria, tira.visibles[0].id)).toBe(0)
+
+    // La galería de TODA la carga sigue siendo más grande: es otra cosa, y es
+    // justo la que el visor NO tiene que abrir desde el aviso.
+    expect(galeriaDeCarga(todas, 'A8121').length).toBeGreaterThan(galeria.length)
+  })
+
   it('una fila de informe no arrastra ninguna foto', () => {
     const [fila] = novedadesCliente(
       [cargaN], [],

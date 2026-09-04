@@ -133,3 +133,19 @@ describe('Novedades de tus cargas — la foto se ve donde está el aviso', () =>
     expect(render([])).not.toContain('Novedades de tus cargas')
   })
 })
+
+describe('Novedades — el visor abre lo que la fila prometió', () => {
+  it('la card arma UNA sola galería por fila, la anunciada', async () => {
+    // El visor no se puede abrir en un render estático (necesita el click),
+    // así que lo que se fija acá es la fuente: la card ya no puede volver a
+    // armar una galería por su cuenta. `galeriaDeCarga(fotos, ref)` —sin
+    // lugar ni ventana— es lo que hacía que la fila dijera "6 fotos en
+    // depósito GODILCO" y el visor abriera en "1 / 8" con dos fotos de origen.
+    const { readFileSync } = await import('node:fs')
+    const src = readFileSync(new URL('./HoyCliente.tsx', import.meta.url), 'utf8')
+    expect(src).not.toMatch(/galeriaDeCarga\s*\(/)
+    expect(src).toMatch(/galeriaDeNovedad\s*\(/)
+    // La tira y el visor comparten la misma variable: si se separan, esto cae.
+    expect(src).toMatch(/onAbrir=\{f => abrirVisor\(n, galeria, f\)\}/)
+  })
+})
