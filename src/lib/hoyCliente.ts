@@ -487,6 +487,13 @@ export interface NovedadCliente extends FilaBase {
   clase: 'fotos' | 'informe'
   /** "en origen", "en Montevideo", "en depósito GODILCO". */
   lugar: string
+  /** De qué lugar son las fotos de esta fila. null en un informe.
+   *  Es lo que le permite a la card traer LAS miniaturas de esta fila y no
+   *  las de la otra (una carga puede tener las dos filas). */
+  lugarFoto: LugarFoto | null
+  /** El id del informe de esta fila ('' en una fila de fotos): con eso la
+   *  card pinta la tarjeta del documento y el botón "Abrir". */
+  informeId: string
   /** Cuántas fotos nuevas (1 para un informe). */
   cantidad: number
   /** Día de la subida (ISO). */
@@ -501,7 +508,7 @@ export interface NovedadCliente extends FilaBase {
 export const NOVEDADES_DIAS = 7
 
 interface SubidaFoto { shipmentRef?: string | null; photoType?: string | null; createdAt?: number | null }
-interface SubidaInforme { shipmentRef?: string | null; title?: string | null; createdAt?: number | null }
+interface SubidaInforme { id?: string; shipmentRef?: string | null; title?: string | null; createdAt?: number | null }
 
 const diaDeTimestamp = (ms: unknown): string => {
   const n = Number(ms)
@@ -555,14 +562,17 @@ export function novedadesCliente(
   const out: NovedadCliente[] = []
 
   // Fotos: una fila por (carga, lugar), con la subida más reciente.
-  const grupos = new Map<string, { s: ParsedShipment; tipo: string; n: number; fecha: string }>()
+  const grupos = new Map<string, { s: ParsedShipment; tipo: LugarFoto; n: number; fecha: string }>()
   for (const f of fotos || []) {
     const ref = txt(f.shipmentRef).toUpperCase()
     const s = porRef.get(ref)
     if (!s) continue                                  // carga de otro cliente o archivada
     const fecha = diaDeTimestamp(f.createdAt)
     if (dentroDeVentana(fecha) === null) continue
-    const tipo = txt(f.photoType) || 'origen'
+    // La MISMA regla que usa la ficha para agrupar (cargaCliente.lugarDeFoto):
+    // `photo_type` es texto libre, y si acá dijera "MVD" y allá "origen" la
+    // fila anunciaría fotos que la tira de miniaturas no encuentra.
+    const tipo: LugarFoto = txt(f.photoType).toLowerCase() === 'uruguay' ? 'uruguay' : 'origen'
     const clave = `${ref}|${tipo}`
     const g = grupos.get(clave)
     if (g) { g.n += 1; if (fecha > g.fecha) g.fecha = fecha }
@@ -570,9 +580,11 @@ export function novedadesCliente(
   }
   for (const g of grupos.values()) {
     out.push({
-      ...base(g.s),
+      ...base(g.s, nombreCliente),
       clase: 'fotos',
       lugar: lugarDeFotos(g.s, g.tipo),
+      lugarFoto: g.tipo,
+      informeId: '',
       cantidad: g.n,
       fecha: g.fecha,
       dias: dentroDeVentana(g.fecha) ?? 0,
@@ -591,6 +603,8 @@ export function novedadesCliente(
       ...base(s, nombreCliente),
       clase: 'informe',
       lugar: txt(i.title) || 'Informe operativo',
+      lugarFoto: null,
+      informeId: txt(i.id),
       cantidad: 1,
       fecha,
       dias: d,

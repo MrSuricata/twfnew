@@ -10,6 +10,7 @@ import { describe, it, expect } from 'vitest'
 import {
   contenedoresCarga, textoContenedores, filaCargaCliente, lineaTiempoCliente,
   datosFicha, contenedoresDeCarga, agruparFotosPorLugar, informesDeCarga, fechaDeSubida,
+  lugarDeFoto, galeriaDeCarga, tiraDeMiniaturas, indiceEnGaleria, MAX_MINIATURAS,
 } from './cargaCliente'
 import { estadoCliente, etiquetaEstado, traducirAlerta } from './hoyCliente'
 import type { ParsedShipment, OperativasRecord, ShipmentAlert } from './shipmentTypes'
@@ -254,6 +255,72 @@ describe('informesDeCarga', () => {
       { id: 'ajeno', shipmentRef: 'A9999', createdAt: ts(2026, 9, 3) },
     ]
     expect(informesDeCarga(informes, 'A8121').map(r => r.id)).toEqual(['nuevo', 'viejo'])
+  })
+})
+
+// ── Miniaturas en el aviso de HOY (D3) ───────────────────────────────────
+
+describe('las miniaturas del aviso: hasta 4 y "+N"', () => {
+  // Seis fotos en Montevideo y dos en origen, de la misma carga.
+  const muchas = [
+    ...Array.from({ length: 6 }, (_, i) => ({
+      id: `uy${i}`, shipmentRef: 'A8121', photoType: 'uruguay', createdAt: ts(2026, 9, 1) + i,
+    })),
+    { id: 'or1', shipmentRef: 'A8121', photoType: 'origen', createdAt: ts(2026, 8, 20) },
+    { id: 'or2', shipmentRef: 'A8121', photoType: 'origen', createdAt: ts(2026, 8, 21) },
+    { id: 'ajena', shipmentRef: 'A9999', photoType: 'uruguay', createdAt: ts(2026, 9, 3) },
+  ]
+
+  it('lugarDeFoto: lo que no dice "uruguay" es de origen (photo_type es texto libre)', () => {
+    expect(lugarDeFoto({ photoType: 'uruguay' })).toBe('uruguay')
+    expect(lugarDeFoto({ photoType: 'URUGUAY' })).toBe('uruguay')
+    expect(lugarDeFoto({ photoType: 'origen' })).toBe('origen')
+    expect(lugarDeFoto({ photoType: '' })).toBe('origen')
+    expect(lugarDeFoto(null)).toBe('origen')
+  })
+
+  it('muestra 4 y dice cuántas quedaron afuera', () => {
+    const tira = tiraDeMiniaturas(muchas, 'A8121', 'uruguay')
+    expect(MAX_MINIATURAS).toBe(4)
+    expect(tira.visibles).toHaveLength(4)
+    expect(tira.mas).toBe(2)
+    expect(tira.total).toBe(6)
+  })
+
+  it('con 4 o menos no hay "+N"', () => {
+    const tira = tiraDeMiniaturas(muchas, 'A8121', 'origen')
+    expect(tira.visibles.map(f => f.id)).toEqual(['or2', 'or1'])   // la más nueva primero
+    expect(tira.mas).toBe(0)
+  })
+
+  it('la tira es la del LUGAR de la fila, no la de toda la carga', () => {
+    expect(tiraDeMiniaturas(muchas, 'A8121', 'origen').total).toBe(2)
+    expect(tiraDeMiniaturas(muchas, 'A8121', 'uruguay').total).toBe(6)
+  })
+
+  it('sin fotos de esa carga la tira sale vacía (la fila no queda con un hueco)', () => {
+    expect(tiraDeMiniaturas(muchas, 'A0000', 'uruguay')).toEqual({ visibles: [], mas: 0, total: 0 })
+    expect(tiraDeMiniaturas([], 'A8121', 'uruguay').total).toBe(0)
+  })
+
+  it('la galería que abre el visor es la de TODA la carga, lo más nuevo primero', () => {
+    const galeria = galeriaDeCarga(muchas, 'a8121')
+    expect(galeria).toHaveLength(8)
+    expect(galeria[0].id).toBe('uy5')
+    expect(galeria.map(f => f.id)).not.toContain('ajena')
+  })
+
+  it('el índice del visor cae en la foto tocada', () => {
+    const galeria = galeriaDeCarga(muchas, 'A8121')
+    expect(indiceEnGaleria(galeria, 'or1')).toBe(7)
+    expect(indiceEnGaleria(galeria, 'uy5')).toBe(0)
+  })
+
+  it('una foto que no está en la galería abre en la primera, no en blanco', () => {
+    const galeria = galeriaDeCarga(muchas, 'A8121')
+    expect(indiceEnGaleria(galeria, 'no-existe')).toBe(0)
+    expect(indiceEnGaleria(galeria, '')).toBe(0)
+    expect(indiceEnGaleria([], 'or1')).toBe(0)
   })
 })
 

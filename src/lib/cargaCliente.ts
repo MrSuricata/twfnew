@@ -31,7 +31,7 @@ import { refsCliente, type RefsCliente } from './refsCliente'
 import {
   estadoCliente, etiquetaEstado, proximoHito, puertoEsDestino, porUruguay,
   rutaDe, tipoDe, ESTADO_CLIENTE_ORDEN, ESTADO_CLIENTE_CLASE,
-  type EstadoCliente, type HitoCliente, type Ruta, type Tipo,
+  type EstadoCliente, type HitoCliente, type Ruta, type Tipo, type LugarFoto,
 } from './hoyCliente'
 
 const ISO_RE = /^\d{4}-\d{2}-\d{2}/
@@ -267,7 +267,9 @@ export function contenedoresDeCarga(s: ParsedShipment, hoyISO: string): Contened
 
 // ── Fotos e informes de la carga (pestañas Fotos / Informes) ──────────────
 
-export type LugarFoto = 'origen' | 'uruguay'
+/** Una sola definición: la canónica vive en `hoyCliente` (que es de quien
+ *  depende este archivo), acá se re-exporta para no partirla en dos. */
+export type { LugarFoto }
 
 interface FotoMin {
   id?: string
@@ -294,6 +296,17 @@ const TITULO_LUGAR: Record<LugarFoto, string> = {
 const mismaRef = (a: unknown, b: unknown): boolean =>
   txt(a).toUpperCase() === txt(b).toUpperCase()
 
+/**
+ * Dónde se sacó una foto. `photo_type` es texto libre en la base (lo escribe
+ * el que sube), así que la regla es la del server: lo que no dice "uruguay"
+ * es de origen. Una sola función, porque agrupar y armar la tira de
+ * miniaturas tienen que coincidir o el cliente ve tres fotos en el aviso y
+ * cuatro en la ficha.
+ */
+export function lugarDeFoto(f: { photoType?: string | null } | null | undefined): LugarFoto {
+  return txt(f?.photoType).toLowerCase() === 'uruguay' ? 'uruguay' : 'origen'
+}
+
 /** dd/mm/yyyy de un timestamp, en la hora del que mira. */
 export function fechaDeSubida(ts: unknown): string {
   const n = Number(ts)
@@ -318,7 +331,7 @@ export function agruparFotosPorLugar<T extends FotoMin>(fotos: T[], ref: string)
   const mias = (fotos || []).filter(f => mismaRef(f?.shipmentRef, ref))
   const grupos = new Map<string, { lugar: LugarFoto; dia: string; fotos: T[] }>()
   for (const f of mias) {
-    const lugar: LugarFoto = txt(f?.photoType).toLowerCase() === 'uruguay' ? 'uruguay' : 'origen'
+    const lugar = lugarDeFoto(f)
     const dia = diaDeSubida(f?.createdAt)
     const clave = `${lugar}|${dia}`
     const g = grupos.get(clave) || { lugar, dia, fotos: [] }
@@ -340,6 +353,63 @@ interface InformeMin {
   id?: string
   shipmentRef?: string | null
   createdAt?: number | null
+}
+
+// ── Miniaturas en el aviso de HOY (spec 04/09, D3) ───────────────────────
+
+/**
+ * Cuántas miniaturas entran en una fila de "Novedades de tus cargas".
+ *
+ * Brian (04/09): "que aparezca miniatura de las fotos al mostrar el aviso de
+ * la carga de hoy". Cuatro es lo que entra en el ancho de un celular sin que
+ * la foto quede del tamaño de una estampilla; el resto se dice con "+N".
+ */
+export const MAX_MINIATURAS = 4
+
+/**
+ * Todas las fotos de una carga, la más nueva primero: es LA galería que abre
+ * el visor cuando el cliente toca una miniatura. Con `lugar`, solo las de ese
+ * lugar (que es lo que anuncia la fila: "3 fotos en depósito GODILCO").
+ */
+export function galeriaDeCarga<T extends FotoMin>(fotos: T[], ref: string, lugar?: LugarFoto): T[] {
+  return (fotos || [])
+    .filter(f => mismaRef(f?.shipmentRef, ref) && (!lugar || lugarDeFoto(f) === lugar))
+    .slice()
+    .sort((a, b) => Number(b?.createdAt || 0) - Number(a?.createdAt || 0))
+}
+
+export interface TiraMiniaturas<T> {
+  /** Las que se dibujan (hasta `max`). */
+  visibles: T[]
+  /** Cuántas quedaron afuera: el "+N". 0 = no va el "+N". */
+  mas: number
+  /** Cuántas hay en total en ese lugar. */
+  total: number
+}
+
+/**
+ * La tira de miniaturas de una fila de novedades: hasta `max` fotos y el
+ * "+N" con lo que no entró. Sin fotos migradas a Storage la tira sale vacía
+ * y la fila sigue siendo la de antes (texto + fecha): nunca un hueco.
+ */
+export function tiraDeMiniaturas<T extends FotoMin>(
+  fotos: T[], ref: string, lugar: LugarFoto, max = MAX_MINIATURAS,
+): TiraMiniaturas<T> {
+  const todas = galeriaDeCarga(fotos, ref, lugar)
+  const tope = Math.max(0, Math.floor(Number(max) || 0))
+  return { visibles: todas.slice(0, tope), mas: Math.max(0, todas.length - tope), total: todas.length }
+}
+
+/**
+ * En qué posición de la galería está una foto: el índice con el que abre el
+ * visor. Si no se la encuentra abre en la primera, que es lo más nuevo — un
+ * visor en blanco sería peor que uno en la foto equivocada.
+ */
+export function indiceEnGaleria<T extends FotoMin>(galeria: T[], id: unknown): number {
+  const buscado = txt(id)
+  if (!buscado) return 0
+  const i = (galeria || []).findIndex(f => txt(f?.id) === buscado)
+  return i >= 0 ? i : 0
 }
 
 /** Los informes de una carga, el más nuevo primero. */
