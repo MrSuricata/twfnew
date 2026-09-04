@@ -33,9 +33,6 @@ function firstEtaFisc(s: ParsedShipment): string {
   const ds = (s.operativas || []).map(o => o.ETA_FISC).filter((d): d is string => !!d && ISO.test(d)).sort()
   return ds[0] || ''
 }
-function libreHasta(s: ParsedShipment): string {
-  return isoOr(s.calculatedLibreHasta) || isoOr(s.LIBRE_HASTA)
-}
 function sumOp(s: ParsedShipment, k: 'PKGS' | 'KG'): string {
   const t = (s.operativas || []).reduce((acc, o) => acc + (Number(o[k]) || 0), 0)
   return t ? (k === 'KG' ? Math.round(t) : t).toLocaleString('es-UY') : ''
@@ -138,19 +135,20 @@ export async function downloadClientStatusPdf(
       s.TERMINAL || '',
       dmy(firstSalida(s)),
       dmy(firstEtaFisc(s)),
-      dmy(libreHasta(s)),
       s.BUQUE || '',
     ]
   })
 
   autoTable(doc, {
     startY: 38,
-    head: [['Ref', 'Estado', 'Tipo', 'Bultos', 'Kg', 'Descripción', 'ETA MVD', 'Terminal', 'Salida', 'ETA Fiscal', 'Libre', 'Buque']],
+    // Sin columna "Libre": cuándo devolvemos el contenedor vacío es dato
+    // nuestro y no va en un PDF que se lleva el cliente (spec 02/09, 04/09).
+    head: [['Ref', 'Estado', 'Tipo', 'Bultos', 'Kg', 'Descripción', 'ETA MVD', 'Terminal', 'Salida', 'ETA Fiscal', 'Buque']],
     body: rows.length
       ? rows
       : [[{
           content: 'Sin cargas activas',
-          colSpan: 12,
+          colSpan: 11,
           styles: { halign: 'center' as const, textColor: [156, 163, 175] as [number, number, number], fontStyle: 'italic' as const },
         }]],
     margin: { left: margin, right: margin },
@@ -161,7 +159,7 @@ export async function downloadClientStatusPdf(
       // Dos refs en la misma celda: entra en dos renglones cuando hace falta.
       0: { cellWidth: 22, overflow: 'linebreak' }, 1: { cellWidth: 30 }, 2: { cellWidth: 14 }, 3: { cellWidth: 14, halign: 'right' },
       4: { cellWidth: 18, halign: 'right' }, 5: { cellWidth: 50, overflow: 'linebreak' }, 8: { cellWidth: 20 },
-      9: { cellWidth: 20 }, 10: { cellWidth: 20 },
+      9: { cellWidth: 20 },
     },
     // Columna Estado con el color semántico del status (bold + tinte).
     didParseCell: data => {

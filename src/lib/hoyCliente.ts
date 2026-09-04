@@ -180,7 +180,7 @@ const tieneFiscal = (s: ParsedShipment): boolean => ops(s).some(o => !!txt(o.FIS
  *  tramo interno); Buenos Aires / otros solo si no hay fiscal ni tramo cargado.
  *  Con fiscal, la carga sigue el flujo puerto → salida → en camino → destino,
  *  así el estado no retrocede cuando el equipo carga la salida (revisión 02/09). */
-const puertoEsDestino = (s: ParsedShipment): boolean =>
+export const puertoEsDestino = (s: ParsedShipment): boolean =>
   !porUruguay(s) && (rutaDe(s) === 'CL' || (!tieneFiscal(s) && ops(s).every(sinTramo)))
 
 // Las referencias (principal / secundaria) las decide lib/refsCliente: UNA
@@ -224,11 +224,6 @@ export const ESTADO_CLIENTE_CLASE: Record<EstadoCliente, string> = {
   en_camino: 'bg-orange-100 text-orange-700',
   en_deposito: 'bg-emerald-100 text-emerald-700',
   entregada: 'bg-gray-100 text-gray-600',
-}
-
-/** Avance 0..100 para la barra de la fila expandida: derivado del estado. */
-export function progresoCliente(estado: EstadoCliente): number {
-  return Math.round((ESTADO_CLIENTE_ORDEN.indexOf(estado) / (ESTADO_CLIENTE_ORDEN.length - 1)) * 100)
 }
 
 export function estadoCliente(s: ParsedShipment, hoyISO: string): EstadoCliente {
@@ -716,27 +711,50 @@ export interface AlertaCliente {
   critica: boolean
 }
 
+/** Un aviso ya dicho en el idioma del cliente. `null` = no es asunto suyo. */
+export interface TextoAlerta {
+  titulo: string
+  detalle: string
+  /** La fecha del aviso se le puede mostrar (la de un LIBRE, no). */
+  conFecha: boolean
+}
+
+/**
+ * Traduce UNA alerta al idioma del cliente. Es la única puerta por la que
+ * pasan los avisos del portal —la card "Atención", la campana y la pestaña
+ * Alertas—, así que el vocabulario es uno solo.
+ *
+ * Los avisos de LIBRE se traducen a lo único accionable para él ("conviene
+ * coordinar la salida"): cuándo tenemos que devolver el contenedor vacío es
+ * dato NUESTRO y no va a la vista del cliente (spec 02/09, refrendada el
+ * 04/09). El aviso "próximo vencimiento", que no pide ninguna acción, no se
+ * le muestra: devuelve `null`.
+ */
+export function traducirAlerta(a: ShipmentAlert): TextoAlerta | null {
+  if (a.type === 'libre_proximo') return null
+  if (a.type === 'libre_vencido') {
+    return { titulo: 'Conviene coordinar la salida', detalle: 'El contenedor ya está generando costos de demora en Montevideo.', conFecha: false }
+  }
+  if (a.type === 'libre_urgente') {
+    return { titulo: 'Conviene coordinar la salida', detalle: 'El contenedor está por generar costos de demora en Montevideo.', conFecha: false }
+  }
+  return { titulo: a.title, detalle: a.message, conFecha: true }
+}
+
 /** Las alertas del portal hablan en nuestro idioma ("Días libres vencidos").
- *  Acá se traducen: la ref del cliente sale de `shipmentRef` (el texto ya no
- *  la trae, spec 04/09) y se dice qué puede hacer. */
+ *  Acá se traducen con `traducirAlerta`: la ref del cliente sale de
+ *  `shipmentRef` (el texto ya no la trae, spec 04/09) y se dice qué puede hacer. */
 export function alertasCliente(alerts: ShipmentAlert[], shipments: ParsedShipment[], nombreCliente = ''): AlertaCliente[] {
   const porRef = new Map<string, ParsedShipment>()
   for (const s of shipments || []) porRef.set(txt(s.REF), s)
   const out: AlertaCliente[] = []
   for (const a of alerts || []) {
     if (a.severity !== 'critical' && a.severity !== 'warning') continue
+    const t = traducirAlerta(a)
+    if (!t) continue
     const s = porRef.get(txt(a.shipmentRef))
     const refs = refsCliente(s || { REF: a.shipmentRef }, nombreCliente)
-    let titulo = a.title
-    let detalle = a.message
-    if (a.type === 'libre_vencido') {
-      titulo = 'Conviene coordinar la salida'
-      detalle = 'El contenedor ya está generando costos de demora en Montevideo.'
-    } else if (a.type === 'libre_urgente') {
-      titulo = 'Conviene coordinar la salida'
-      detalle = 'El contenedor está por generar costos de demora en Montevideo.'
-    }
-    out.push({ id: a.id, ref: txt(a.shipmentRef), refs, titulo, detalle, critica: a.severity === 'critical' })
+    out.push({ id: a.id, ref: txt(a.shipmentRef), refs, titulo: t.titulo, detalle: t.detalle, critica: a.severity === 'critical' })
   }
   return out
 }

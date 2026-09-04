@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
-import { RefsCarga } from '@/components/partner/PanelCard'
+import PanelCard from '@/components/partner/PanelCard'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import {
   Select,
@@ -20,9 +20,7 @@ import {
   Package,
   FileText,
   ClockCounterClockwise,
-  Eye,
   Truck,
-  Cube,
   Bell,
   BellRinging,
   Warning,
@@ -30,23 +28,21 @@ import {
   Info,
   X as XIcon,
   CalendarBlank,
-  Timer,
   Anchor,
-  ArrowRight,
   MagnifyingGlass,
   Funnel,
   Boat,
   FilePdf,
-  CaretDown,
 } from '@phosphor-icons/react'
-import { ParsedShipment, getShipmentStatus, generateShipmentAlerts, isShipmentCompleted, parseLocalDate } from '@/lib/shipmentTypes'
+import { ParsedShipment, ShipmentAlert, generateShipmentAlerts, parseLocalDate } from '@/lib/shipmentTypes'
 import AvisoOperativo from '@/components/AvisoOperativo'
 import { ClientAccount, OperativeReport, OriginPhoto } from '@/lib/quotationTypes'
 import { authFetch } from '@/lib/authClient'
 import { fetchClientReports, fetchClientOriginPhotos } from '@/lib/dataClient'
 import { agendaCliente, EVENTO_LABELS } from '@/lib/clientAgenda'
 import { fmtDateDMY, hoyISO as hoyISOLocal } from '@/lib/format'
-import ShipmentDetailsDialog from './ShipmentDetailsDialog'
+import ClientShipmentDialog from './client/ClientShipmentDialog'
+import FilaCarga from './client/FilaCarga'
 import AgendaCalendar from './agenda/AgendaCalendar'
 import { matchesPattern, findClientByEmail } from '@/lib/clientMatching'
 import { useBrand } from '@/lib/brand'
@@ -54,11 +50,15 @@ import { saludoPersonal } from '@/lib/saludo'
 import { downloadClientStatusPdf } from '@/lib/clientStatusPdf'
 import HoyCliente from './HoyCliente'
 import {
-  estadoCliente, etiquetaEstado, ESTADO_CLIENTE_LABEL, ESTADO_CLIENTE_CLASE, ESTADO_CLIENTE_ORDEN, progresoCliente, proximoHito,
-  esActivaParaCliente, filtrarCargas, opcionesFiltro, rutaDe, tipoDe, FILTRO_TODO, RUTA_LABEL, RUTA_CHIP, TIPO_LABEL,
+  estadoCliente, ESTADO_CLIENTE_LABEL, ESTADO_CLIENTE_ORDEN, traducirAlerta,
+  esActivaParaCliente, filtrarCargas, opcionesFiltro, FILTRO_TODO, RUTA_LABEL, TIPO_LABEL,
   type EstadoCliente, type FiltroCargas,
 } from '@/lib/hoyCliente'
+import { filaCargaCliente } from '@/lib/cargaCliente'
 import { refsCliente, refsEnLinea } from '@/lib/refsCliente'
+
+/** Una alerta ya traducida al idioma del cliente (hoyCliente.traducirAlerta). */
+type AvisoPortal = ShipmentAlert & { titulo: string; detalle: string; conFecha: boolean }
 
 interface ClientPortalProps {
   onLogout: () => void
@@ -84,10 +84,10 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
   const [activeTab, setActiveTab] = useState('active')
   const [selectedShipment, setSelectedShipment] = useState<ParsedShipment | null>(null)
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false)
-  // Cards de cargas colapsadas por defecto: una fila por carga, click expande.
-  // Antes cada carga era una tarjeta gigante y había que scrollear por cada
-  // una (Brian 27/08).
-  const [expandedRefs, setExpandedRefs] = useState<Set<string>>(new Set())
+  // Una fila por carga; el detalle vive en la ficha (ClientShipmentDialog), no
+  // en un desplegable. Esto es lo que se resalta al llegar desde una card de
+  // HOY, para que el cliente vea CUÁL de todas es la suya.
+  const [refDestacada, setRefDestacada] = useState<string>('')
   // Selectores de ruta (por dónde entra) y tipo (FCL/LCL) — Brian 02/09: "que
   // puedan ver las cargas por país, por tipo, o por país y tipo". Filtran las
   // cards de HOY Y la lista (un solo universo). Se recuerda en este navegador.
@@ -102,20 +102,12 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
   useEffect(() => {
     try { localStorage.setItem(filtroKey, JSON.stringify(filtroCargas)) } catch { /* sin storage */ }
   }, [filtroCargas, filtroKey])
-  const toggleExpanded = (ref: string) => {
-    setExpandedRefs(prev => {
-      const next = new Set(prev)
-      if (next.has(ref)) next.delete(ref)
-      else next.add(ref)
-      return next
-    })
-  }
-  // Desde una card de HOY: abrir la carga en la lista, desplegada, y llevar la
-  // vista hasta ella (el cliente viene de arriba de todo).
+  // Desde una card de HOY: llevar la vista hasta esa carga en la lista y
+  // dejarla resaltada (el cliente viene de arriba de todo).
   const verCarga = (ref: string) => {
     clearFilters() // con un filtro/búsqueda activo la fila no estaría en el DOM
     setActiveTab('active')
-    setExpandedRefs(prev => { const n = new Set(prev); n.add(ref); return n })
+    setRefDestacada(ref)
     requestAnimationFrame(() => {
       document.getElementById(`carga-${ref}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     })
@@ -201,20 +193,6 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
    *  lista visible (una alerta vieja), así que se cae a nuestro número. */
   const refAlerta = (shipmentRef: string): string =>
     refsEnLinea(refsCliente(clientShipments.find(s => s.REF === shipmentRef) || { REF: shipmentRef }, nombreCliente))
-
-  const getDaysUntilFree = (libreHasta: string): number => {
-    if (!libreHasta) return 999
-    try {
-      const freeDate = parseLocalDate(libreHasta)
-      if (!freeDate) return 999
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      const diff = Math.floor((freeDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
-      return diff
-    } catch {
-      return 999
-    }
-  }
 
   // Activa / Historial con la MISMA regla que el chip de estado del cliente
   // (hoyCliente.esActivaParaCliente). isShipmentCompleted (admin) daba por
@@ -323,7 +301,18 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
     return effectiveReports.filter(r => clientRefs.has(r.shipmentRef))
   }, [effectiveReports, clientShipments])
 
-  const allAlerts = useMemo(() => generateShipmentAlerts(activeAll, clientReports), [activeAll, clientReports])
+  // Los avisos, dichos en el idioma del cliente. `traducirAlerta` es la ÚNICA
+  // puerta: los vencimientos de LIBRE salen como "conviene coordinar la
+  // salida" y el de "próximo vencimiento" no sale (spec 02/09 y 04/09 —
+  // cuándo devolvemos el vacío es dato nuestro, no suyo).
+  const allAlerts = useMemo(() => {
+    const out: AvisoPortal[] = []
+    for (const a of generateShipmentAlerts(activeAll, clientReports)) {
+      const t = traducirAlerta(a)
+      if (t) out.push({ ...a, ...t })
+    }
+    return out
+  }, [activeAll, clientReports])
 
   // La agenda del cliente (Brian 26/08): próximos movimientos, últimas
   // llegadas y contadores de semana/mes — derivada de las cargas activas.
@@ -465,14 +454,14 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
                       {getAlertIcon(alert.severity)}
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-medium flex items-center gap-2 flex-wrap">
-                          <span>{alert.title}</span>
+                          <span>{alert.titulo}</span>
                           {/* La ref ya no viene en el texto (spec 04/09, D2): se pinta
                               desde shipmentRef, como en las pestañas de abajo. */}
                           <Badge variant="outline" className="font-mono text-xs">{refAlerta(alert.shipmentRef)}</Badge>
                         </div>
-                        <div className="text-xs text-muted-foreground mt-0.5">{alert.message}</div>
-                        {alert.date && (
-                          <div className="text-xs text-muted-foreground mt-1 font-mono">{alert.date}</div>
+                        <div className="text-xs text-muted-foreground mt-0.5">{alert.detalle}</div>
+                        {alert.conFecha && alert.date && (
+                          <div className="text-xs text-muted-foreground mt-1 font-mono">{fmtDateDMY(alert.date) || alert.date}</div>
                         )}
                       </div>
                       <Button
@@ -653,6 +642,8 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
               shipments={cargasFiltradas}
               clientView={true}
               nombreCliente={nombreCliente}
+              fotosCliente={serverPhotos.length > 0 ? serverPhotos : fotos}
+              informesCliente={clientReports.length > 0 ? clientReports : informes}
               defaultView="month"
             />
           </TabsContent>
@@ -813,238 +804,27 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
                 </CardContent>
               </Card>
             ) : (
-              activeShipments.map((shipment) => {
-                  const ops = shipment.operativas || []
-                  const firstOp = ops[0]
-                  const totalKg = ops.reduce((sum, o) => sum + o.KG, 0)
-                  const totalM3 = ops.reduce((sum, o) => sum + o.M3, 0)
-                  const desc = firstOp?.DESCRIPCION || ''
-                  const status = getShipmentStatus(shipment)
-                  const daysLibre = getDaysUntilFree(shipment.LIBRE_HASTA)
-                  // UNA referencia protagonista: la del cliente, o la nuestra
-                  // sin la A; la TWF corta queda como dato secundario.
-                  const refs = refsCliente(shipment, nombreCliente)
-                  const estado = estadoCliente(shipment, hoyISO)
-                  const progreso = progresoCliente(estado)
-                  const expanded = expandedRefs.has(shipment.REF)
-
-                  // Build container list: from operativas or fallback to main CNTR
-                  const containerList: { number: string; salida: string; etaFisc: string; tipo: string }[] = []
-                  if (ops.length > 0) {
-                    for (const op of ops) {
-                      containerList.push({
-                        number: op.CNTR_OP || '-',
-                        salida: op.SALIDA || '',
-                        etaFisc: op.ETA_FISC || '',
-                        tipo: op.TIPO || ''
-                      })
-                    }
-                  } else if (shipment.containers.length > 0) {
-                    for (const c of shipment.containers) {
-                      containerList.push({ number: c.number, salida: '', etaFisc: '', tipo: '' })
-                    }
-                  }
-
-                  // Próximo hito: SIEMPRE el mismo dato para el mismo estado
-                  // (antes alternaba ETA Montevideo / Llega a depósito por fila).
-                  const hito = proximoHito(shipment, hoyISO)
-
-                  const stripClass =
-                    status.color === 'green' ? 'bg-green-500' :
-                    status.color === 'yellow' ? 'bg-yellow-500' :
-                    status.color === 'red' ? 'bg-red-500' :
-                    status.color === 'gray' ? 'bg-gray-400' :
-                    'bg-blue-500'
-
-                  return (
-                  <Card key={shipment.REF} id={`carga-${shipment.REF}`} className="overflow-hidden py-0 gap-0">
-                    {/* ── Fila compacta: siempre visible, click expande ── */}
-                    <button
-                      type="button"
-                      onClick={() => toggleExpanded(shipment.REF)}
-                      aria-expanded={expanded}
-                      className="w-full text-left hover:bg-muted/30 transition-colors"
-                    >
-                      <div className="flex items-stretch">
-                        <div className={`w-1.5 shrink-0 ${stripClass}`} />
-                        <div className="flex-1 min-w-0 px-3 sm:px-4 py-3.5 flex items-center gap-3 sm:gap-4">
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <RefsCarga refs={refs} />
-                              <Badge className={ESTADO_CLIENTE_CLASE[estado]}>{etiquetaEstado(shipment, estado)}</Badge>
-                              {(mostrarTipo || mostrarRuta) && (
-                                <span className="text-xs text-muted-foreground">
-                                  {[mostrarTipo ? TIPO_LABEL[tipoDe(shipment)] : null, mostrarRuta ? RUTA_CHIP[rutaDe(shipment)] : null].filter(Boolean).join(' · ')}
-                                </span>
-                              )}
-                              {shipment.N > 0 && <Badge variant="secondary" className="text-xs">{shipment.N} CNTR</Badge>}
-                              {shipment.LIBRE_HASTA && daysLibre <= 3 && (
-                                <Badge className={daysLibre < 0 ? 'bg-red-100 text-red-700' : 'bg-orange-100 text-orange-700'}>
-                                  {daysLibre < 0 ? 'Libre vencido' : daysLibre === 0 ? 'Libre vence HOY' : `Libre: ${daysLibre}d`}
-                                </Badge>
-                              )}
-                            </div>
-                            {(desc || shipment.BUQUE) && (
-                              <div className="text-sm text-muted-foreground truncate mt-1">
-                                {desc || shipment.BUQUE}
-                              </div>
-                            )}
-                          </div>
-                          <div className="text-right shrink-0">
-                            <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{hito.label}</div>
-                            <div className="text-base font-bold tabular-nums">{hito.fecha}</div>
-                          </div>
-                          <CaretDown
-                            size={16}
-                            className={`shrink-0 text-muted-foreground transition-transform ${expanded ? 'rotate-180' : ''}`}
-                          />
-                        </div>
-                      </div>
-                    </button>
-
-                    {expanded && (
-                    <CardContent className="pt-4 pb-4 border-t">
-                      {/* ── Row 1: acción ── */}
-                      <div className="flex items-center justify-end mb-3">
-                        <Button size="sm" onClick={() => handleViewDetails(shipment)} className="gap-1.5">
-                          <Eye size={16} />
-                          Ver detalle completo
-                        </Button>
-                      </div>
-
-                      {/* ── Row 2: Progress bar ── */}
-                      <div className="mb-4">
-                        <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
-                          <span>{etiquetaEstado(shipment, estado)}</span>
-                          <span>{progreso}%</span>
-                        </div>
-                        <div className="w-full bg-muted rounded-full h-1.5">
-                          <div
-                            className={`h-1.5 rounded-full transition-all duration-500 ${
-                              status.color === 'green' ? 'bg-green-500' :
-                              status.color === 'yellow' ? 'bg-yellow-500' :
-                              status.color === 'gray' ? 'bg-gray-400' :
-                              'bg-blue-500'
-                            }`}
-                            style={{ width: `${progreso}%` }}
-                          />
-                        </div>
-                      </div>
-
-                      {/* ── Row 3: Key info cards (Libre Hasta + Salida) ── */}
-                      <div className="grid grid-cols-2 gap-3 mb-4">
-                        {/* Libre Hasta */}
-                        <div className={`rounded-lg border p-3 ${
-                          !shipment.LIBRE_HASTA ? 'bg-muted/30' :
-                          daysLibre < 0 ? 'bg-red-50 border-red-200' :
-                          daysLibre <= 3 ? 'bg-orange-50 border-orange-200' :
-                          'bg-green-50 border-green-200'
-                        }`}>
-                          <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
-                            <Timer size={14} />
-                            <span className="font-medium">Libre Hasta</span>
-                          </div>
-                          {shipment.LIBRE_HASTA ? (
-                            <>
-                              <div className="text-sm font-bold">{fmtDateDMY(shipment.LIBRE_HASTA)}</div>
-                              <div className={`text-xs font-semibold mt-0.5 ${
-                                daysLibre < 0 ? 'text-red-600' :
-                                daysLibre <= 3 ? 'text-orange-600' :
-                                'text-green-600'
-                              }`}>
-                                {daysLibre < 0 ? `Vencido hace ${Math.abs(daysLibre)} día${Math.abs(daysLibre) === 1 ? '' : 's'}` :
-                                 daysLibre === 0 ? 'Vence HOY' :
-                                 `${daysLibre} día${daysLibre === 1 ? '' : 's'} restante${daysLibre === 1 ? '' : 's'}`}
-                              </div>
-                            </>
-                          ) : (
-                            <div className="text-sm text-muted-foreground italic">Sin información</div>
-                          )}
-                        </div>
-
-                        {/* Salida prevista */}
-                        {(() => {
-                          const hasSalida = ops.some(o => o.SALIDA && o.SALIDA.trim() !== '')
-                          const salidaDate = ops.find(o => o.SALIDA)?.SALIDA
-                          return (
-                            <div className={`rounded-lg border p-3 ${
-                              hasSalida ? 'bg-blue-50 border-blue-200' : 'bg-muted/30'
-                            }`}>
-                              <div className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1">
-                                <Truck size={14} />
-                                <span className="font-medium">Salida Montevideo</span>
-                              </div>
-                              {hasSalida ? (
-                                <div className="text-sm font-bold text-blue-700">{fmtDateDMY(salidaDate || '')}</div>
-                              ) : (
-                                <div className="text-sm font-semibold text-orange-600">A CONFIRMAR</div>
-                              )}
-                              {firstOp?.FISCAL && (
-                                <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-1">
-                                  <ArrowRight size={10} />
-                                  {firstOp.FISCAL}
-                                </div>
-                              )}
-                            </div>
-                          )
-                        })()}
-                      </div>
-
-                      {/* ── Row 4: Description ── */}
-                      {desc && (
-                        <div className="text-sm text-muted-foreground mb-3 flex items-center gap-2">
-                          <Cube size={16} className="shrink-0 text-accent" />
-                          <span className="font-medium text-foreground">{desc}</span>
-                          {totalKg > 0 && <span className="text-xs">• {totalKg.toLocaleString()} kg</span>}
-                          {totalM3 > 0 && <span className="text-xs">• {totalM3.toFixed(1)} m³</span>}
-                        </div>
-                      )}
-
-                      {/* ── Row 5: Container list (if multiple or has ops) ── */}
-                      {containerList.length > 0 && (
-                        <div className="mb-3">
-                          <div className="text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-wide">Contenedores</div>
-                          <div className="rounded-lg border divide-y text-sm overflow-hidden">
-                            {containerList.map((c, idx) => (
-                              <div key={idx} className="flex items-center justify-between px-3 py-2 bg-muted/20 hover:bg-muted/40 transition-colors">
-                                <div className="flex items-center gap-2">
-                                  <span className={`w-2 h-2 rounded-full shrink-0 ${c.salida ? 'bg-green-500' : 'bg-orange-400'}`} />
-                                  <span className="font-mono text-xs font-medium">{c.number}</span>
-                                  {c.tipo && <span className="text-xs text-muted-foreground bg-muted px-1.5 py-0.5 rounded">{c.tipo}</span>}
-                                </div>
-                                <div className="text-xs">
-                                  {c.salida ? (
-                                    <span className="text-green-700 font-medium">Salida: {fmtDateDMY(c.salida)}</span>
-                                  ) : (
-                                    <span className="text-orange-600 font-medium">Salida: A CONFIRMAR</span>
-                                  )}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* ── Row 6: Shipping details (compact) ── */}
-                      <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground border-t pt-3">
-                        {shipment.BUQUE && (
-                          <span><Anchor size={12} className="inline mr-1" />{shipment.BUQUE}</span>
-                        )}
-                        {shipment.LINEA && (
-                          <span>Línea: <span className="font-medium text-foreground">{shipment.LINEA}</span></span>
-                        )}
-                        {shipment.TERMINAL && (
-                          <span>Terminal: <span className="font-medium text-foreground">{shipment.TERMINAL}</span></span>
-                        )}
-                        {shipment.ETA && (
-                          <span>ETA: <span className="font-medium text-foreground">{fmtDateDMY(shipment.ETA)}</span></span>
-                        )}
-                      </div>
-                    </CardContent>
-                    )}
-                  </Card>
-                  )
-                })
+              /* La lista, con la piel común: una fila por carga (spec 04/09,
+                 D4). El detalle vive en la ficha, no en un desplegable. */
+              <PanelCard
+                tono="info"
+                icono={<Package size={20} weight="fill" />}
+                titulo="Tus cargas activas"
+                subtitulo="Tocá una carga para ver dónde está, sus fotos y sus informes."
+                contador={activeShipments.length}
+              >
+                {activeShipments.map(shipment => (
+                  <FilaCarga
+                    key={shipment.REF}
+                    id={`carga-${shipment.REF}`}
+                    fila={filaCargaCliente(shipment, hoyISO, nombreCliente)}
+                    onAbrir={() => handleViewDetails(shipment)}
+                    mostrarRuta={mostrarRuta}
+                    mostrarTipo={mostrarTipo}
+                    destacada={refDestacada === shipment.REF}
+                  />
+                ))}
+              </PanelCard>
             )}
           </TabsContent>
 
@@ -1062,7 +842,8 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
               </Card>
             ) : (
               <>
-                {/* Libre expiration alerts */}
+                {/* Salidas que conviene coordinar (lo que para nosotros es un
+                    LIBRE por vencer; al cliente se le dice qué puede hacer). */}
                 {(() => {
                   const libreAlerts = allAlerts.filter(a => a.type.startsWith('libre_'))
                   if (libreAlerts.length === 0) return null
@@ -1071,7 +852,7 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
                       <CardHeader className="pb-3">
                         <CardTitle className="text-base flex items-center gap-2">
                           <Warning size={20} className="text-orange-500" />
-                          Vencimiento de Días Libres
+                          Salidas a coordinar
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-2">
@@ -1086,8 +867,8 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
                           >
                             {getAlertIcon(alert.severity)}
                             <div className="flex-1">
-                              <div className="text-sm font-medium">{alert.title}</div>
-                              <div className="text-xs text-muted-foreground">{alert.message}</div>
+                              <div className="text-sm font-medium">{alert.titulo}</div>
+                              <div className="text-xs text-muted-foreground">{alert.detalle}</div>
                             </div>
                             <Badge variant="outline" className="font-mono text-xs">{refAlerta(alert.shipmentRef)}</Badge>
                           </div>
@@ -1121,8 +902,8 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
                           >
                             {getAlertIcon(alert.severity)}
                             <div className="flex-1">
-                              <div className="text-sm font-medium">{alert.title}</div>
-                              <div className="text-xs text-muted-foreground">{alert.message}</div>
+                              <div className="text-sm font-medium">{alert.titulo}</div>
+                              <div className="text-xs text-muted-foreground">{alert.detalle}</div>
                             </div>
                             <Badge variant="outline" className="font-mono text-xs">{refAlerta(alert.shipmentRef)}</Badge>
                           </div>
@@ -1156,8 +937,8 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
                           >
                             {getAlertIcon(alert.severity)}
                             <div className="flex-1">
-                              <div className="text-sm font-medium">{alert.title}</div>
-                              <div className="text-xs text-muted-foreground">{alert.message}</div>
+                              <div className="text-sm font-medium">{alert.titulo}</div>
+                              <div className="text-xs text-muted-foreground">{alert.detalle}</div>
                             </div>
                             <Badge variant="outline" className="font-mono text-xs">{refAlerta(alert.shipmentRef)}</Badge>
                           </div>
@@ -1171,89 +952,45 @@ export default function ClientPortal({ onLogout, clientEmail, clientName = '', s
           </TabsContent>
 
           <TabsContent value="history" className="space-y-4 mt-6">
-            {historyShipments.length === 0 ? (
-              <Card>
-                <CardContent className="pt-12 pb-12 text-center">
-                  <ClockCounterClockwise size={48} className="mx-auto mb-4 text-muted-foreground" />
-                  <h3 className="text-lg font-semibold mb-2">Sin historial</h3>
-                  <p className="text-muted-foreground">
-                    No hay cargas completadas aún
-                  </p>
-                </CardContent>
-              </Card>
-            ) : (
-              historyShipments.map((shipment) => {
-                const ops = shipment.operativas || []
-                const firstOp = ops[0]
-                return (
-                  <Card key={shipment.REF} className="opacity-80 hover:opacity-100 transition-opacity">
-                    <CardContent className="pt-6">
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-3 mb-2 flex-wrap">
-                            <h3 className="text-lg font-bold flex items-center gap-2">
-                              Ref. <RefsCarga refs={refsCliente(shipment, nombreCliente)} />
-                            </h3>
-                            <Badge variant="secondary">{shipment.N} CNTR</Badge>
-                            {isShipmentCompleted(shipment) && (
-                              <Badge className="bg-gray-500">
-                                <CheckCircle size={14} className="mr-1" />
-                                Completada
-                              </Badge>
-                            )}
-                          </div>
-                          <div className="grid grid-cols-2 md:grid-cols-3 gap-x-6 gap-y-1 text-sm">
-                            <div>
-                              <span className="text-muted-foreground">ETD:</span>
-                              <span className="ml-2">{fmtDateDMY(shipment.ETD) || '-'}</span>
-                            </div>
-                            <div>
-                              <span className="text-muted-foreground">ETA:</span>
-                              <span className="ml-2">{fmtDateDMY(shipment.ETA) || '-'}</span>
-                            </div>
-                            <div>
-                              <span className="text-muted-foreground">Buque:</span>
-                              <span className="ml-2">{shipment.BUQUE || '-'}</span>
-                            </div>
-                            {firstOp?.DESCRIPCION && (
-                              <div className="col-span-2 md:col-span-3">
-                                <span className="text-muted-foreground">Carga:</span>
-                                <span className="ml-2">{firstOp.DESCRIPCION}</span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        <Button
-                          onClick={() => handleViewDetails(shipment)}
-                          variant="outline"
-                          size="sm"
-                        >
-                          Ver Detalle
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )
-              })
-
-            )}
+            {/* El historial usa LA MISMA fila que la lista: una carga cerrada
+                no se mira distinto (spec 04/09, D4). */}
+            <PanelCard
+              tono="neutro"
+              icono={<ClockCounterClockwise size={20} weight="fill" />}
+              titulo="Historial"
+              subtitulo="Cargas que ya llegaron a destino."
+              contador={historyShipments.length}
+              vacio="Todavía no hay cargas cerradas."
+            >
+              {historyShipments.map(shipment => (
+                <FilaCarga
+                  key={shipment.REF}
+                  fila={filaCargaCliente(shipment, hoyISO, nombreCliente)}
+                  onAbrir={() => handleViewDetails(shipment)}
+                  mostrarRuta={mostrarRuta}
+                  mostrarTipo={mostrarTipo}
+                  apagada
+                />
+              ))}
+            </PanelCard>
           </TabsContent>
         </Tabs>
         </>
         )}
       </div>
 
+      {/* La ficha de la carga: modal PROPIO del cliente (spec 04/09, D5).
+          `ShipmentDetailsDialog` sigue intacto — lo comparten la Agenda, el
+          Tracking y HOY del admin. */}
       {selectedShipment && (
-        <ShipmentDetailsDialog
+        <ClientShipmentDialog
           shipment={selectedShipment}
           open={detailsDialogOpen}
           onOpenChange={setDetailsDialogOpen}
-          onSave={() => {}}
-          clientView
-          refsDelCliente
+          hoyISO={hoyISO}
           nombreCliente={nombreCliente}
-          reports={clientReports}
-          originPhotos={serverPhotos}
+          informes={clientReports.length > 0 ? clientReports : informes}
+          fotos={serverPhotos.length > 0 ? serverPhotos : fotos}
         />
       )}
     </div>

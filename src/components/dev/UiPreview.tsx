@@ -32,19 +32,41 @@ const VISTAS: { id: Vista; label: string }[] = [
 
 const haceDias = (n: number): number => Date.now() - n * 86400000
 
-/** Subidas de ejemplo, para ver la card "Novedades de tus cargas". */
+/** Miniatura inventada (SVG embebido): sin esto la galería de la ficha se ve
+ *  con imágenes rotas y no se puede juzgar el diseño. */
+const miniatura = (texto: string, color: string): string =>
+  'data:image/svg+xml;utf8,' + encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="320"><rect width="320" height="320" fill="${color}"/>` +
+    `<text x="160" y="170" font-family="sans-serif" font-size="34" fill="#ffffff" text-anchor="middle">${texto}</text></svg>`,
+  )
+
+/** Subidas de ejemplo: alimentan la card "Novedades de tus cargas" y la
+ *  pestaña Fotos de la ficha (agrupada por lugar y día). */
 const foto = (ref: string, tipo: 'origen' | 'uruguay', dias: number, i: number) => ({
   id: `f-${ref}-${i}`, shipmentRef: ref, photoType: tipo, createdAt: haceDias(dias),
   fileName: `foto-${i}.jpg`, fileType: 'image/jpeg', createdBy: 'demo',
+  thumbnailData: miniatura(`${tipo === 'origen' ? 'ORIGEN' : 'MVD'} ${i}`, tipo === 'origen' ? '#0f766e' : '#1d4ed8'),
 }) as never
 const fotosDemo = [
-  foto('D9001', 'uruguay', 0, 1), foto('D9001', 'uruguay', 0, 2),
-  foto('D9005', 'origen', 2, 3), foto('D9005', 'origen', 2, 4), foto('D9005', 'origen', 3, 5),
+  // D9001 tiene los DOS lugares y dos días: es la carga para mirar la ficha.
+  foto('D9001', 'uruguay', 0, 1), foto('D9001', 'uruguay', 0, 2), foto('D9001', 'uruguay', 0, 3),
+  foto('D9001', 'origen', 21, 4), foto('D9001', 'origen', 21, 5),
+  foto('D9005', 'origen', 2, 6), foto('D9005', 'origen', 2, 7), foto('D9005', 'origen', 3, 8),
 ]
-const informesDemo = [{
-  id: 'i-1', shipmentRef: 'D9004', title: 'Informe operativo', content: '',
-  fileName: 'informe.pdf', fileType: 'application/pdf', createdAt: haceDias(1), createdBy: 'demo',
-} as never]
+/** PDF mínimo de verdad, así el botón "Abrir" de la ficha se puede probar. */
+const PDF_DEMO = 'data:application/pdf;base64,JVBERi0xLjEKMSAwIG9iajw8L1R5cGUvQ2F0YWxvZy9QYWdlcyAyIDAgUj4+ZW5kb2JqCjIgMCBvYmo8PC9UeXBlL1BhZ2VzL0tpZHNbMyAwIFJdL0NvdW50IDE+PmVuZG9iagozIDAgb2JqPDwvVHlwZS9QYWdlL1BhcmVudCAyIDAgUi9NZWRpYUJveFswIDAgMjAwIDIwMF0+PmVuZG9iagp0cmFpbGVyPDwvUm9vdCAxIDAgUj4+'
+const informesDemo = [
+  {
+    id: 'i-1', shipmentRef: 'D9001', title: 'Informe de trasiego', content: '',
+    containerNumber: 'DEMO1000001', fileName: 'informe-D9001.pdf', fileType: 'application/pdf',
+    fileData: PDF_DEMO, createdAt: haceDias(0), createdBy: 'demo',
+  },
+  {
+    id: 'i-2', shipmentRef: 'D9004', title: 'Informe operativo', content: '',
+    fileName: 'informe-D9004.pdf', fileType: 'application/pdf', fileData: PDF_DEMO,
+    createdAt: haceDias(1), createdBy: 'demo',
+  },
+] as never[]
 
 export default function UiPreview() {
   const [vista, setVista] = useState<Vista>('deposito')
