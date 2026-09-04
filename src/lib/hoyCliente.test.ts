@@ -251,11 +251,11 @@ describe('llegadasADestino — card 1', () => {
     expect(l[0]).toMatchObject({ estado: 'en_frontera', camion: 'C463', cntr: '', fiscal: 'ZF RAFAELA', tipo: 'lcl', ruta: 'UY' })
     expect(l[0].refs.principal).toBe('E234')
   })
-  it('sin SALIDA no entra (es "esperando salida"); ya llegado, lejano, en el mar y devuelto tampoco', () => {
+  it('sin SALIDA no entra (es "esperando salida"); ya llegado, lejano, en el mar sin fiscal y devuelto tampoco', () => {
     const l = llegadasADestino([
       carga({ REF: 'SINSALIDA', ETA: dia(-1) }, [op({ ETA_FISC: dia(3) })]),
       carga({ REF: 'LLEGO', ETA: dia(-9) }, [op({ SALIDA: dia(-4), ETA_FISC: dia(-1) })]),
-      carga({ REF: 'ENMAR', ETA: dia(2) }, [op({ SALIDA: dia(4), ETA_FISC: dia(6) })]),
+      carga({ REF: 'ENMAR', ETA: dia(2) }, [op({ SALIDA: dia(4) })]),
       carga({ REF: 'LEJOS', ETA: dia(-1) }, [op({ SALIDA: dia(DESTINO_DIAS_ADELANTE + 1) })]),
       carga({ REF: 'DEVUELTA', ETA: dia(-9) }, [op({ SALIDA: dia(-1), LIBRE: 'DEVUELTO' })]),
     ], HOY)
@@ -264,6 +264,90 @@ describe('llegadasADestino — card 1', () => {
   it('salió sin fecha de llegada: en frontera con llegada a confirmar', () => {
     const [f] = llegadasADestino([carga({ ETA: dia(-3) }, [op({ SALIDA: dia(-1) })])], HOY)
     expect(f).toMatchObject({ estado: 'en_frontera', fecha: '', dias: null, salida: dia(-1) })
+  })
+})
+
+// El caso que lo motivó (Brian, 04/09, mirando el portal como CHIAPERO): la
+// A8045 llega a Montevideo el 8, sale el 9 y arriba a RAFAELA el 11, y no
+// aparecía en "Llegan a destino" porque el buque todavía no había atracado.
+// Decisión: que aparezca MARCADA —fecha estimada + "todavía en el buque, llega
+// a Montevideo el 8"—, no que desaparezca.
+describe('llegadasADestino — todavía en el buque (Brian 04/09)', () => {
+  const a8045 = (o: Partial<OperativasRecord> = {}) =>
+    carga({ REF: 'A8045', ETA: dia(4) }, [op({ SALIDA: dia(5), ETA_FISC: dia(7), FISCAL: 'ZP RAFAELA', ...o })])
+
+  it('con fecha de fiscal entra marcada `en_buque`, con la ETA a Montevideo al lado', () => {
+    const l = llegadasADestino([a8045()], HOY)
+    expect(l).toHaveLength(1)
+    expect(l[0]).toMatchObject({
+      ref: 'A8045', estado: 'en_buque', fecha: dia(7), dias: 7,
+      etaPuerto: dia(4), salida: dia(5), fiscal: 'ZP RAFAELA', cntr: 'FANU1858496',
+    })
+  })
+
+  it('sin fecha de fiscal no entra: no hay nada que anunciar', () => {
+    expect(llegadasADestino([a8045({ ETA_FISC: '' })], HOY)).toEqual([])
+    // ni siquiera sin salida cargada todavía
+    expect(llegadasADestino([a8045({ ETA_FISC: '', SALIDA: '' })], HOY)).toEqual([])
+  })
+
+  it('con fecha de fiscal pero sin salida cargada entra igual (la fecha ya es un dato)', () => {
+    const l = llegadasADestino([a8045({ SALIDA: '' })], HOY)
+    expect(l).toHaveLength(1)
+    expect(l[0]).toMatchObject({ estado: 'en_buque', salida: '', fecha: dia(7) })
+  })
+
+  it('la ventana es la de la card de llegada que le toca: 14 días por Montevideo, 7 en ruta directa', () => {
+    const uyBorde = carga({ REF: 'UY14', ETA: dia(MVD_DIAS_ADELANTE) }, [op({ ETA_FISC: dia(MVD_DIAS_ADELANTE + 2) })])
+    const uyLejos = carga({ REF: 'UY15', ETA: dia(MVD_DIAS_ADELANTE + 1) }, [op({ ETA_FISC: dia(MVD_DIAS_ADELANTE + 3) })])
+    expect(llegadasADestino([uyBorde], HOY).map(f => f.ref + ':' + f.estado)).toEqual(['UY14:en_buque'])
+    expect(llegadasADestino([uyLejos], HOY)).toEqual([])
+    const ar = (n: number) => carga(
+      { REF: 'AR' + n, PAIS: 'AR', POD: 'BUENOS AIRES', ETA: dia(n) },
+      [op({ FISCAL: 'CACEC', ETA_FISC: dia(n + 2) })],
+    )
+    expect(llegadasADestino([ar(DESTINO_DIAS_ADELANTE)], HOY).map(f => f.estado)).toEqual(['en_buque'])
+    expect(llegadasADestino([ar(DESTINO_DIAS_ADELANTE + 1)], HOY)).toEqual([])
+  })
+
+  it('lo estimado va al final: primero lo que está en tierra', () => {
+    const l = llegadasADestino([
+      a8045(),
+      carga({ REF: 'SALE', ETA: dia(-6) }, [op({ SALIDA: dia(3), ETA_FISC: dia(5) })]),
+      carga({ REF: 'FRONTERA', ETA: dia(-6) }, [op({ SALIDA: dia(-2), ETA_FISC: dia(1) })]),
+      carga({ REF: 'HOY', ETA: dia(-6) }, [op({ SALIDA: dia(0), ETA_FISC: dia(2) })]),
+    ], HOY)
+    expect(l.map(f => f.ref)).toEqual(['FRONTERA', 'HOY', 'SALE', 'A8045'])
+  })
+
+  it('el estado de la carga no se toca: sigue "embarcada" y su hito sigue siendo la llegada a Montevideo', () => {
+    const s = a8045()
+    expect(estadoCliente(s, HOY)).toBe('embarcada')
+    expect(proximoHito(s, HOY)).toEqual({ label: 'Llega a Montevideo', fecha: '06/09/2026', iso: dia(4) })
+  })
+
+  it('sigue anunciándose en "Llegan a Montevideo" y no se repite en Embarcadas ni aparece dos veces', () => {
+    const h = hoyCliente([a8045()], HOY)
+    expect(h.destino.map(f => f.ref)).toEqual(['A8045'])
+    expect(h.montevideo.map(f => f.ref)).toEqual(['A8045'])   // no desaparece de la card 3
+    expect(h.embarques).toEqual([])
+    expect(h.esperando).toEqual([])
+    // una fila por card, nunca dos filas de la misma operativa en la misma card
+    expect(h.destino).toHaveLength(1)
+  })
+
+  it('la fecha de fiscal ya pasada con el buque en el mar es un dato viejo: no entra', () => {
+    expect(llegadasADestino([a8045({ ETA_FISC: dia(-1) })], HOY)).toEqual([])
+    expect(llegadasADestino([a8045({ ETA_FISC: HOY })], HOY)).toEqual([])
+  })
+
+  it('dos contenedores: entra el que tiene fecha de fiscal, el otro espera', () => {
+    const s = carga({ REF: 'A8100', ETA: dia(3) }, [
+      op({ CNTR_OP: 'A', SALIDA: dia(4), ETA_FISC: dia(6) }),
+      op({ CNTR_OP: 'B' }),
+    ])
+    const l = llegadasADestino([s], HOY)
+    expect(l.map(f => f.cntr + ':' + f.estado)).toEqual(['A:en_buque'])
   })
 })
 
@@ -329,6 +413,11 @@ describe('embarcadas — card 4', () => {
   })
 })
 
+// Una carga (de un contenedor) vive en UNA sola card. La única excepción, y es
+// a propósito (Brian 04/09), es la que todavía viaja en el buque con fecha de
+// fiscal cargada: se anuncia en "Llegan a Montevideo" (cuándo atraca) y en
+// "Llegan a destino" marcada como estimada (cuándo llega al fiscal). Nunca en
+// más de esas dos, ni dos veces en la misma.
 describe('las cards son excluyentes: una carga (de un contenedor) está en UNA sola', () => {
   const casos: [string, ParsedShipment][] = [
     ['ETA hoy sin salida', carga({ ETD: dia(-20), ETA: dia(0) }, [op()])],
@@ -358,10 +447,25 @@ describe('las cards son excluyentes: una carga (de un contenedor) está en UNA s
   for (const [nombre, s] of casos) {
     it(nombre, () => {
       const h = hoyCliente([s], HOY)
-      const n = [h.destino, h.esperando, h.montevideo, h.embarques].filter(l => l.length > 0).length
-      expect(n).toBeLessThanOrEqual(1)
+      const conFilas = [h.destino, h.esperando, h.montevideo, h.embarques].filter(l => l.length > 0)
+      const enBuque = h.destino.some(f => f.estado === 'en_buque')
+      if (enBuque) {
+        // La excepción: destino (estimado) + Montevideo (firme), nada más.
+        expect(conFilas).toEqual([h.destino, h.montevideo])
+        expect(h.destino).toHaveLength(1)
+        expect(h.montevideo).toHaveLength(1)
+      } else {
+        expect(conFilas.length).toBeLessThanOrEqual(1)
+      }
     })
   }
+  it('la única carga que está en dos cards es la del buque con fecha de fiscal', () => {
+    const enBuque = carga({ REF: 'BUQUE', ETD: dia(-20), ETA: dia(4) }, [op({ SALIDA: dia(5), ETA_FISC: dia(7) })])
+    const h = hoyCliente([enBuque], HOY)
+    expect(h.destino.map(f => f.estado)).toEqual(['en_buque'])
+    expect(h.montevideo.map(f => f.ref)).toEqual(['BUQUE'])
+    expect([...h.esperando, ...h.embarques]).toEqual([])
+  })
 })
 
 describe('alertasCliente — card Atención en idioma del cliente', () => {

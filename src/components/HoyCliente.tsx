@@ -172,6 +172,11 @@ function ChipEstadoDestino({ med, estado, salida }: { med: boolean; estado: Esta
   if (estado === 'llega') {
     return <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 text-blue-700">LLEGA AL PUERTO</span>
   }
+  if (estado === 'en_buque') {
+    // La señal de que la fecha es estimada. Tono suave —no es un riesgo, es un
+    // "todavía no": el naranja y el rojo están tomados por lo que sí lo es.
+    return <span className={med ? 'text-[10px] font-bold px-1.5 py-0.5 rounded bg-med-lila text-med-violeta' : 'text-[10px] font-bold px-1.5 py-0.5 rounded bg-sky-100 text-sky-800'}>TODAVÍA EN EL BUQUE</span>
+  }
   return <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-700">Sale el {fmtDateDMY(salida)}</span>
 }
 
@@ -227,7 +232,7 @@ export default function HoyCliente({ shipments, alerts, hoyISO, nombreCliente = 
         <CardHoy
           med={med} tono="info" icon={<Warehouse size={18} weight="fill" />}
           titulo="Llegan a destino"
-          subtitulo="Lo que llega a tu depósito fiscal, o al puerto de destino, en los próximos días."
+          subtitulo="Lo que llega a tu depósito fiscal, o al puerto de destino, en los próximos días. Lo que todavía viaja en el buque va marcado: esa fecha es estimada."
           count={hoy.destino.length}
           onVerMas={() => onVerCarga(hoy.destino[MAX_FILAS].ref)}
         >
@@ -239,8 +244,19 @@ export default function HoyCliente({ shipments, alerts, hoyISO, nombreCliente = 
               <Cntr cntr={f.cntr} camion={f.camion} />
               <ChipEstadoDestino med={med} estado={f.estado} salida={f.salida} />
               {f.fiscal && <span className="text-[11px] text-muted-foreground">→ {f.fiscal}</span>}
+              {/* Por qué la fecha de la derecha es estimada: el barco todavía
+                  navega. Se dice con la fecha, no con un "aprox." suelto. */}
+              {f.estado === 'en_buque' && f.etaPuerto && (
+                <span className="text-[11px] text-muted-foreground">
+                  {f.ruta === 'UY' ? 'llega a Montevideo' : 'llega al puerto'} el {fmtDateDMY(f.etaPuerto)}
+                </span>
+              )}
               {f.fecha
-                ? <Derecha label={f.estado === 'llega' ? 'Llega a destino' : 'Llega'} valor={fmtDateDMY(f.fecha)} detalle={textoDias(f.dias)} />
+                ? <Derecha
+                    label={f.estado === 'en_buque' ? 'Llega (estimado)' : f.estado === 'llega' ? 'Llega a destino' : 'Llega'}
+                    valor={fmtDateDMY(f.fecha)}
+                    detalle={textoDias(f.dias)}
+                  />
                 : <Derecha label="Llegada" valor="A confirmar" />}
             </Fila>
           ))}
