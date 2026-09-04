@@ -29,8 +29,12 @@ export type CommitLibre = (valor: string) => void | Promise<void>
  *  · LIBRE fecha/vacío → 'DEVUELTO' + toast con "Deshacer" que restaura el
  *    valor EXACTO anterior (fecha ISO o vacío, capturado ANTES de pisarlo).
  *  · LIBRE ya DEVUELTO → '' (sin toast: el cambio se ve al instante).
- * El toast sale DESPUÉS del commit — si el guardado falla (el modal hace
- * await de un patch que puede tirar), no se ofrece deshacer algo que no pasó.
+ * El toast sale DESPUÉS del commit: si el guardado TIRA, la excepción sube y no
+ * se ofrece deshacer algo que no pasó. Ojo con el límite — un commit que vuelve
+ * sin guardar y sin tirar (los early-return del guard anti doble-save, o una
+ * pregunta que el usuario cancela) resuelve igual y el toast sale lo mismo. Es
+ * el comportamiento que ya tenía este botón antes de compartirse, y es casi
+ * inalcanzable desde la UI: el blur del input comitea antes que el click.
  */
 export async function toggleLibreDevuelto(libre: unknown, commit: CommitLibre): Promise<void> {
   const { next, prev } = libreDevueltoToggle(libre)

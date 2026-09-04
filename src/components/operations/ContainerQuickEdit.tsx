@@ -109,8 +109,13 @@ function containerMicroStatus(shipment: ParsedShipment, op: OperativasRecord): s
 /**
  * El color de la card según el micro-estado del contenedor. Reemplaza al viejo
  * `statusBadgeClass`, que traía su propia paleta: ahora el color lo resuelve la
- * piel común (`clasesTono`), que ya sale bien en TWF y en Mediterránea. Los
- * casos son los MISMOS que antes; solo cambia de qué escala salen.
+ * piel común (`clasesTono`), que ya sale bien en TWF y en Mediterránea.
+ *
+ * Los casos son los mismos, pero los COLORES pasan de 5 a 4: "salió/hoy" y
+ * "embarcado/en viaje" caían en dos azules distintos (`blue` y `sky`) y ahora
+ * comparten `info`. Es a propósito — los cinco tonos de la piel común son
+ * semánticos, no decorativos — y no se pierde información: el chip sigue
+ * diciendo con todas las letras en cuál de los dos está.
  */
 function tonoDeEstado(label: string): TonoPanel {
   const l = label.toLowerCase()
@@ -439,7 +444,12 @@ export default function ContainerQuickEdit({
           tono={tono}
           icono={<ShippingContainer size={18} weight="fill" />}
           titulo={shipment.REF}
-          subtitulo={cntr || 'Carga sin contenedor asignado'}
+          subtitulo={cntr
+            // Monoespaciada: el CNTR se coteja carácter por carácter contra el
+            // BL y el MIC (MRKU1234567 vs MRKU1234571 no se distinguen a ojo
+            // en tipografía proporcional).
+            ? <span className="font-mono">{cntr}</span>
+            : 'Carga sin contenedor asignado'}
           extras={
             <>
               <Chip clase={`${clases.pill} border-transparent`}>{status}</Chip>
