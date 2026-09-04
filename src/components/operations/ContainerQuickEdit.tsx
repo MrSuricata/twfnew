@@ -13,8 +13,7 @@ import type { ParsedShipment, OperativasRecord } from '@/lib/shipmentTypes'
 import { getShipmentStatus } from '@/lib/shipmentTypes'
 import { buildPerContainerPatch, applyLugarSalida, lugarOrDeposito } from '@/lib/operationsTypes'
 import { isSalidaBeforeArrival, avisoSalida, fmtDMY, etaVigente } from '@/lib/salidaCheck'
-import { sugerirEtaFiscal, nombreDia } from '@/lib/transitoFiscal'
-import { isSinTelex, mensajeConfirmarSinTelex } from '@/lib/telexCheck'
+import { reglaSalidaAntesDeLlegada, reglaSugerirEtaFiscal, reglaSinTelex } from '@/lib/quickEditReglas'
 import { fmtDateDMY } from '@/lib/format'
 import { isLibreDevuelto, libreDevueltoToggle, LIBRE_DEVUELTO } from '@/lib/libreDevuelto'
 
@@ -221,41 +220,27 @@ export default function ContainerQuickEdit({
     const libreV = overrides?.libre ?? libreVal
     const serialized = JSON.stringify({ salida, etaFisc, lugar: lugarVal, transporte: transVal, libre: libreV })
     if (serialized === lastCommittedRef.current) return // no change → skip
-    // Solo al COORDINAR la salida (cuando la fecha de salida CAMBIÓ): no puede ser
-    // anterior a la llegada a MVD → avisar y pedir confirmación. Editar arribo/lugar
-    // con una salida ya puesta NO vuelve a preguntar.
+    // Las tres preguntas (salida antes de la llegada, sugerencia de fiscal,
+    // sin telex) las decide quickEditReglas.ts — acá solo se pregunta.
+    // Regla 1: solo al COORDINAR la salida (cuando la fecha CAMBIÓ): no puede
+    // ser anterior a la llegada a MVD. Editar arribo/lugar con una salida ya
+    // puesta NO vuelve a preguntar.
     let prevSalida = ''
     try { prevSalida = (JSON.parse(lastCommittedRef.current).salida as string) || '' } catch { /* sin commit previo */ }
-    if (salida !== prevSalida && isSalidaBeforeArrival(salida, etaArrival)) {
-      const ok = window.confirm(
-        `⏰ La salida de MVD (${fmtDMY(salida)}) queda ANTES de la llegada de la carga a MVD (${fmtDMY(etaArrival)}).\n\n¿Guardar igual?`
-      )
-      if (!ok) {
-        setDrafts(d => ({ ...d, salida: prevSalida })) // revertir a la última salida confirmada, no guardar
-        return
-      }
+    const antes = reglaSalidaAntesDeLlegada({ salida, prevSalida, etaLlegada: etaArrival })
+    if (antes.preguntar && !window.confirm(antes.mensaje)) {
+      setDrafts(d => ({ ...d, salida: prevSalida })) // revertir a la última salida confirmada, no guardar
+      return
     }
-    // Salida movida SIN tocar el fiscal en este commit → ofrecer la llegada
-    // normal del tránsito (salida+2, finde → lunes; regla Brian 13/08). Si el
-    // usuario también editó el arribo, eligió él y no se pregunta.
+    // Regla 2: salida movida SIN tocar el fiscal en este commit → ofrecer la
+    // llegada normal del tránsito (salida+2, finde → lunes; regla Brian 13/08).
     let etaFiscFinal = etaFisc
     let prevEtaFisc = ''
     try { prevEtaFisc = (JSON.parse(lastCommittedRef.current).etaFisc as string) || '' } catch { /* sin commit previo */ }
-    if (salida !== prevSalida && etaFisc === prevEtaFisc) {
-      const sugerida = sugerirEtaFiscal(salida)
-      if (sugerida && sugerida !== etaFisc) {
-        const actualTxt = etaFisc ? `${nombreDia(etaFisc)} ${fmtDMY(etaFisc)}`.trim() : 'sin fecha'
-        const llevar = window.confirm(
-          `🚛 La salida queda el ${nombreDia(salida)} ${fmtDMY(salida)}.
-
-` +
-          `¿Llevar la llegada a fiscal al ${nombreDia(sugerida)} ${fmtDMY(sugerida)}? (ahora: ${actualTxt})`
-        )
-        if (llevar) {
-          etaFiscFinal = sugerida
-          setDrafts(d => ({ ...d, etaFisc: sugerida }))
-        }
-      }
+    const sugerencia = reglaSugerirEtaFiscal({ salida, prevSalida, etaFisc, prevEtaFisc })
+    if (sugerencia.preguntar && window.confirm(sugerencia.mensaje)) {
+      etaFiscFinal = sugerencia.sugerida
+      setDrafts(d => ({ ...d, etaFisc: sugerencia.sugerida }))
     }
     const serializedFinal = JSON.stringify({ salida, etaFisc: etaFiscFinal, lugar: lugarVal, transporte: transVal, libre: libreV })
     // Actualizar el ref ANTES del await: onPatch es optimista (revert propio en
@@ -311,16 +296,13 @@ export default function ContainerQuickEdit({
         propagated = applyLugarSalida(propagated, lugarVal)
         fields.operativas = propagated
       }
-      // Sin telex se pregunta ANTES de guardar: agendar igual es una decisión.
-      if (salida !== prevSalida && (salida || '').trim() && isSinTelex(currentOp.TLX)) {
-        const seguir = window.confirm(
-          mensajeConfirmarSinTelex({ ref: shipment.REF, cntr: currentOp.CNTR_OP, fecha: salida }),
-        )
-        if (!seguir) {
-          // Recommit posible: el usuario puede corregir la fecha y reintentar.
-          lastCommittedRef.current = serializedPrevio
-          return
-        }
+      // Regla 3: sin telex se pregunta ANTES de guardar — agendar igual es
+      // una decisión.
+      const telex = reglaSinTelex({ salida, prevSalida, tlx: currentOp.TLX, ref: shipment.REF, cntr: currentOp.CNTR_OP })
+      if (telex.preguntar && !window.confirm(telex.mensaje)) {
+        // Recommit posible: el usuario puede corregir la fecha y reintentar.
+        lastCommittedRef.current = serializedPrevio
+        return
       }
       await onPatch(shipment.__dbId!, fields)
       // NO cerrar al guardar: el usuario edita varios campos (salida → arribo →
