@@ -37,6 +37,10 @@ describe('El aviso de fotos bajo Mediterránea', () => {
     expect(html).toContain('bg-med-violeta')     // el pill del "+N"
     expect(html).not.toContain('sky-200')
     expect(html).not.toContain('#')
+    // El "+N" NO puede llevar dos fondos: entre `bg-muted` y `bg-med-violeta`
+    // gana el que esté después en el CSS, y salía gris con el texto blanco.
+    const mas = (html.match(/class="[^"]*bg-med-violeta[^"]*"/) || [''])[0]
+    expect(mas).not.toContain('bg-muted')
   })
 
   it('el ícono del PDF va en violeta (spec D3), no en el rojo de TWF', () => {

@@ -57,7 +57,13 @@ export default function TiraMiniaturas({
     onRota?.()
   }
 
-  const caja = `relative shrink-0 w-16 h-16 sm:w-[72px] sm:h-[72px] rounded-lg overflow-hidden border-2 ${t.borde} bg-muted transition-transform hover:scale-[1.04] focus-visible:outline-2 focus-visible:outline-offset-2`
+  // OJO: el fondo y el borde van UNA sola vez por caja. Poner `bg-muted` en la
+  // base y `bg-med-violeta` en el "+N" no funciona: dos utilidades del mismo
+  // grupo se resuelven por el ORDEN DEL CSS, no por el orden en el atributo, y
+  // el "+N" salía gris con el texto blanco encima (invisible).
+  const cajaBase = 'relative shrink-0 w-16 h-16 sm:w-[72px] sm:h-[72px] rounded-lg overflow-hidden border-2 transition-transform hover:scale-[1.04] focus-visible:outline-2 focus-visible:outline-offset-2'
+  const cajaFoto = `${cajaBase} ${t.borde} bg-muted`
+  const cajaMas = `${cajaBase} border-transparent ${t.pill} flex flex-col items-center justify-center gap-0.5`
 
   return (
     <div className="flex items-center gap-2 flex-wrap" role="group" aria-label={`Fotos: ${etiqueta}`}>
@@ -70,7 +76,7 @@ export default function TiraMiniaturas({
             onClick={() => onAbrir(f)}
             title={f.caption || `Ver las fotos — ${etiqueta}`}
             aria-label={`Ver la foto ${i + 1} de ${etiqueta}`}
-            className={caja}
+            className={cajaFoto}
           >
             {rota
               ? (
@@ -96,7 +102,7 @@ export default function TiraMiniaturas({
           type="button"
           onClick={() => onAbrir(siguiente || conFuente[conFuente.length - 1])}
           aria-label={`Ver las otras ${mas} fotos de ${etiqueta}`}
-          className={`${caja} ${t.pill} flex flex-col items-center justify-center gap-0.5 border-transparent`}
+          className={cajaMas}
         >
           <Images size={18} weight="fill" />
           <span className="text-sm font-bold tabular-nums">+{mas}</span>
