@@ -3,7 +3,8 @@
  * cliente con datos inventados, sin pedir cuenta.
  *
  * Desde el rediseño 04/09 también muestra el modal de cambios rápidos del
- * admin, que tiene el mismo problema: solo se ve con una carga real cargada.
+ * admin, que tiene el mismo problema: solo se ve con una carga real cargada,
+ * y la cola de Seguimientos con sus dos áreas (FCL / LCL).
  *
  * Existe porque esas pantallas solo se ven entrando con una cuenta real:
  * trabajar su diseño a ciegas es cómo se llegó a que Brian dijera "mucho
@@ -18,19 +19,52 @@ import DepotDashboard from '../DepotDashboard'
 import TransportDashboard from '../TransportDashboard'
 import ClientPortal from '../ClientPortal'
 import ContainerQuickEdit from '../operations/ContainerQuickEdit'
+import SeguimientosBoard from '../SeguimientosBoard'
 import { demoPartnerShipments } from '@/lib/demoPartner'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
+import type { DbShipment } from '@/lib/operationsTypes'
+import { areaInicial, type AreaSeguimiento } from '@/lib/seguimientos'
 
-type Vista = 'deposito' | 'transporte' | 'cliente' | 'modal'
+type Vista = 'deposito' | 'transporte' | 'cliente' | 'modal' | 'seguimientos'
 
 const VISTAS: { id: Vista; label: string }[] = [
   { id: 'deposito', label: 'Depósito (GODILCO)' },
   { id: 'transporte', label: 'Transporte (TRANSCAL)' },
   { id: 'cliente', label: 'Cliente' },
   { id: 'modal', label: 'Modal rápido (admin)' },
+  { id: 'seguimientos', label: 'Seguimientos (FCL/LCL)' },
 ]
 
 const haceDias = (n: number): number => Date.now() - n * 86400000
+
+/** Fecha relativa a hoy (ISO) — la cola de seguimientos es toda ventanas de
+ *  días, así que los datos fijos se vencerían solos. */
+const isoRelativo = (dias: number): string => {
+  const d = new Date()
+  d.setDate(d.getDate() + dias)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/** Cargas de mentira para la cola de seguimientos: dos áreas, buques
+ *  repetidos (así se ve el agrupado por viaje) y una ya enviada hoy en cada
+ *  una, para mirar el progreso del día. */
+const cargaSeg = (o: Partial<DbShipment>): DbShipment => ({
+  id: `seg-${o.ref}`, ref: 'A9001', cliente: 'DEMO ALPHA S.A.', mode: 'fcl',
+  archived: false, buque: 'TIGER GAUCHO 0935S', linea: 'ONE', dest_country: 'UY',
+  discharge_port: 'MONTEVIDEO', etd: isoRelativo(-14), eta: isoRelativo(9),
+  seguimiento: '', ...o,
+} as unknown as DbShipment)
+
+const seguimientosDemo: DbShipment[] = [
+  cargaSeg({ ref: 'A9001', cliente: 'BICI PERETTI S.A.' }),
+  cargaSeg({ ref: 'A9002', cliente: 'CHIAPERO S.R.L.' }),
+  cargaSeg({ ref: 'A9003', cliente: 'REMONTAR S.R.L.', buque: 'MAERSK SAN LAZARO 512W', linea: 'MAERSK', dest_country: 'AR', discharge_port: 'BUENOS AIRES', seguimiento: isoRelativo(-9) }),
+  cargaSeg({ ref: 'A9004', cliente: 'TOMASELLI S.A.', seguimiento: isoRelativo(0) }),
+  cargaSeg({ ref: 'A9005', cliente: 'PELLACANI SRL', buque: '', eta: isoRelativo(4) }),
+  cargaSeg({ ref: 'LCL910', cliente: 'GACELA', mode: 'lcl', buque: 'MSC LORETO 336A', linea: 'MSC' }),
+  cargaSeg({ ref: 'LCL911', cliente: 'TOOL SHOP', mode: 'lcl', buque: 'MSC LORETO 336A', linea: 'MSC' }),
+  cargaSeg({ ref: 'LCL912', cliente: 'VMG', mode: 'lcl', seguimiento: isoRelativo(0) }),
+]
 
 /** Miniatura inventada (SVG embebido): sin esto la galería de la ficha se ve
  *  con imágenes rotas y no se puede juzgar el diseño. */
@@ -93,6 +127,8 @@ export default function UiPreview() {
   const [modalAbierto, setModalAbierto] = useState(true)
   const shipments = demoPartnerShipments()
   const salir = () => { /* en el preview no hay sesión que cerrar */ }
+  // El área arranca donde arrancaría en la app (sin sesión: lo guardado o FCL).
+  const [areaSeg, setAreaSeg] = useState<AreaSeguimiento>(() => areaInicial('', null))
   // Una carga FCL de mentira con __dbId, para que el modal salga editable.
   // Los guardados no van a ningún lado: acá se mira la piel, no el guardado.
   const cargaModal = { ...shipments.find(s => s.CNTR), __dbId: 'demo' } as ParsedShipment
@@ -144,6 +180,16 @@ export default function UiPreview() {
             onOpenChange={setModalAbierto}
             onPatch={() => {}}
             onMasDatos={() => setModalAbierto(false)}
+          />
+        </div>
+      )}
+      {vista === 'seguimientos' && (
+        <div className="max-w-[1600px] mx-auto p-6">
+          <SeguimientosBoard
+            dbShipments={seguimientosDemo}
+            area={areaSeg}
+            onAreaChange={setAreaSeg}
+            onPatchShipment={() => {}}
           />
         </div>
       )}
