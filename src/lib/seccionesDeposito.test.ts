@@ -9,7 +9,7 @@ import { describe, it, expect } from 'vitest'
 import {
   SECCIONES_DEPOSITO, ORDEN_BASE_DEPOSITO, IDS_SECCIONES_DEPOSITO, SIN_NADA,
   ordenSeccionesDeposito, seccionConContenido, chipsSeccionesDeposito,
-  hayBarraSecciones, anclaSeccion, seccionActiva, claveCardsDeposito,
+  hayBarraSecciones, anclaSeccion, seccionActiva, claveCardsDeposito, puedeAdoptarOrden,
   type EstadoSeccionesDeposito, type SeccionDepositoId,
 } from './seccionesDeposito'
 
@@ -175,5 +175,34 @@ describe('claveCardsDeposito', () => {
 
   it('sin nombre no explota', () => {
     expect(claveCardsDeposito('')).toBe('depositoCardsCerradas:sin-usuario')
+  })
+})
+
+// ── El orden no se mueve abajo del dedo ─────────────────────────────────────
+describe('puedeAdoptarOrden — el orden no cambia mientras el usuario apunta', () => {
+  const A: SeccionDepositoId[] = ['hoy', 'retiros', 'vacios', 'lcl', 'plan', 'avisos']
+  const B: SeccionDepositoId[] = ['vacios', 'retiros', 'hoy', 'lcl', 'plan', 'avisos']
+
+  it('el primer orden se adopta siempre, esté donde esté la página', () => {
+    expect(puedeAdoptarOrden(null, A, 0)).toBe(true)
+    expect(puedeAdoptarOrden(null, A, 5000)).toBe(true)
+  })
+
+  it('arriba de todo, un orden distinto entra', () => {
+    expect(puedeAdoptarOrden(A, B, 0)).toBe(true)
+    expect(puedeAdoptarOrden(A, B, 24)).toBe(true)
+  })
+
+  it('SCROLLEADO no entra: es el caso que rompe (tocó "Devolví" y se reacomoda)', () => {
+    expect(puedeAdoptarOrden(A, B, 25)).toBe(false)
+    expect(puedeAdoptarOrden(A, B, 900)).toBe(false)
+  })
+
+  it('si el orden es el mismo no se adopta nada, ni arriba', () => {
+    expect(puedeAdoptarOrden(A, [...A], 0)).toBe(false)
+  })
+
+  it('los dos ordenes que la regla puede producir son permutaciones del mismo set', () => {
+    expect([...A].sort()).toEqual([...B].sort())
   })
 })

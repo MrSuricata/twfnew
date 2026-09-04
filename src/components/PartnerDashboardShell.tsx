@@ -58,8 +58,13 @@ export default function PartnerDashboardShell({
             <div className="min-w-0">
               {/* El saludo es lo primero que se lee al entrar y estaba en letra
                   chica (Brian 04/09): ahora es el renglón grande del encabezado
-                  y el nombre del depósito queda de contexto, abajo. */}
-              <p className="text-lg sm:text-xl font-semibold text-white leading-tight">{saludoPersonal(userName)}</p>
+                  y el nombre del depósito queda de contexto, abajo.
+                  `truncate` y el escalón de tamaño NO son decoración: sin ellos,
+                  a 375 px "Hola Ana, buenas tardes" se parte en dos renglones y
+                  a 342 px en CUATRO, y el encabezado —que es fijo— pasa de 83 a
+                  192 px, un cuarto de la pantalla del que trabaja parado en el
+                  predio con el celular. Grande sí, pero en un solo renglón. */}
+              <p className="text-base sm:text-xl font-semibold text-white leading-tight truncate">{saludoPersonal(userName)}</p>
               <h1 className="titulo-med text-base text-white/90 leading-tight truncate">{title}</h1>
               <div className="flex items-center gap-1.5 text-xs text-white/70">
                 <User size={12} />
@@ -77,13 +82,13 @@ export default function PartnerDashboardShell({
             </a>
             <Button variant="outline" size="sm" className="h-8 border-white/30 bg-transparent text-white hover:bg-white/10 hover:text-white" asChild>
               <a href="/">
-                <House size={16} className="mr-1.5" />
-                Inicio
+                <House size={16} className="sm:mr-1.5" />
+                <span className="hidden sm:inline">Inicio</span>
               </a>
             </Button>
             <Button variant="outline" size="sm" className="h-8 border-white/30 bg-transparent text-white hover:bg-white/10 hover:text-white" onClick={onLogout}>
-              <SignOut size={16} className="mr-1.5" />
-              Salir
+              <SignOut size={16} className="sm:mr-1.5" />
+              <span className="hidden sm:inline">Salir</span>
             </Button>
           </div>
         </div>

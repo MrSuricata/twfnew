@@ -15,7 +15,7 @@
  *
  * Toda la lógica es de `lib/hoyDeposito.ts` (testeada); este archivo pinta.
  */
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import {
   Warehouse, Anchor, ArrowUUpLeft, Package, ChatCircleDots,
@@ -45,7 +45,7 @@ import { formatKg, formatM3 } from '@/lib/truckUtils'
 import { colorDeposito } from '@/lib/depositoColor'
 import { ETIQUETA_RETIRO, DETALLE_RETIRO, ETIQUETA_DEVOLUCION, DETALLE_DEVOLUCION } from '@/lib/hoyDeposito'
 import {
-  ordenSeccionesDeposito, chipsSeccionesDeposito, hayBarraSecciones,
+  ordenSeccionesDeposito, puedeAdoptarOrden, chipsSeccionesDeposito, hayBarraSecciones,
   anclaSeccion, claveCardsDeposito, IDS_SECCIONES_DEPOSITO,
   type EstadoSeccionesDeposito, type SeccionDepositoId,
 } from '@/lib/seccionesDeposito'
@@ -245,7 +245,29 @@ export default function DepotDashboard({ shipments, depotName, userName, onLogou
 
   // Sin trabajo hoy, la card vacía deja de ser lo primero que se lee y suben
   // los vacíos que sangran y los retiros que ya se pueden ir a buscar.
-  const orden = useMemo(() => ordenSeccionesDeposito(estadoSecciones), [estadoSecciones])
+  const ordenCalculado = useMemo(() => ordenSeccionesDeposito(estadoSecciones), [estadoSecciones])
+  // …pero el orden NO se mueve mientras el usuario está apuntando a una fila.
+  // Los datos cambian solos (al mandar un aviso se refrescan, y una
+  // confirmación del equipo puede sacar un retiro de "en verde"): si el orden
+  // se reacomodara ahí, el toque siguiente caería sobre otro contenedor.
+  // Solo se adopta arriba de todo — ver `puedeAdoptarOrden`.
+  const [orden, setOrden] = useState<readonly SeccionDepositoId[]>(ordenCalculado)
+  const ordenRef = useRef<readonly SeccionDepositoId[] | null>(null)
+  useEffect(() => {
+    if (!puedeAdoptarOrden(ordenRef.current, ordenCalculado, window.scrollY)) return
+    ordenRef.current = ordenCalculado
+    setOrden(ordenCalculado)
+  }, [ordenCalculado])
+  // Al volver arriba se aplica el orden que quedó pendiente, sin esperar datos.
+  useEffect(() => {
+    const alScrollear = () => {
+      if (!puedeAdoptarOrden(ordenRef.current, ordenCalculado, window.scrollY)) return
+      ordenRef.current = ordenCalculado
+      setOrden(ordenCalculado)
+    }
+    window.addEventListener('scroll', alScrollear, { passive: true })
+    return () => window.removeEventListener('scroll', alScrollear)
+  }, [ordenCalculado])
   // Los accesos directos: solo las secciones que existen hoy, en el mismo orden
   // en que se ven las cards.
   const chips = useMemo(() => chipsSeccionesDeposito(estadoSecciones), [estadoSecciones])

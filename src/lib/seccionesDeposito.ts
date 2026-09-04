@@ -194,3 +194,30 @@ export function seccionActiva(
  */
 export const claveCardsDeposito = (usuario: string): string =>
   `depositoCardsCerradas:${String(usuario || '').trim().toLowerCase() || 'sin-usuario'}`
+
+/**
+ * ¿Se puede adoptar un orden nuevo AHORA, o hay que esperar?
+ *
+ * El orden se recalcula con datos vivos, y los datos cambian solos: apenas el
+ * depósito toca "Devolví el vacío", se refrescan los avisos, y si el equipo
+ * confirmó un retiro en el medio, ese retiro deja de estar "en verde" y las
+ * cards se reordenan **abajo del dedo**. El toque siguiente cae sobre otro
+ * contenedor.
+ *
+ * Es el mismo modo de falla que hizo que el banner tuviera que dejar de
+ * cambiar de alto, y con el mismo costo: marcar el contenedor equivocado.
+ *
+ * Por eso el orden solo cambia cuando el usuario está **arriba de todo**, que
+ * es cuando todavía no está apuntando a ninguna fila. Si está scrolleado, el
+ * orden que tiene en pantalla se queda quieto hasta que vuelva a subir.
+ */
+export function puedeAdoptarOrden(
+  actual: readonly SeccionDepositoId[] | null,
+  nuevo: readonly SeccionDepositoId[],
+  scrollY: number,
+  umbral = 24,
+): boolean {
+  if (!actual) return true                                   // primer render
+  if (actual.length === nuevo.length && actual.every((id, i) => id === nuevo[i])) return false
+  return scrollY <= umbral
+}
