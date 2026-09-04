@@ -600,6 +600,9 @@ export default function TodayDashboard({
   // Lo que la card seguiría gritando con el cuerpo plegado. Son los MISMOS
   // criterios que ya pintan las filas adentro (no una regla nueva): el chip
   // solo adelanta lo que verías al desplegar.
+  // Los dos son GRAVES: `todayFilters` define `grave = margen <= 0` ("sale antes
+  // o el mismo día que llega"). Se separan solo para decir CUÁL es el problema;
+  // el tono de los dos chips es `alerta`, igual que el rojo de la fila.
   const pisadasImposibles = snapshot.salidasPisadas.filter(a => a.margen < 0).length
   const pisadasMismoDia = snapshot.salidasPisadas.filter(a => a.margen === 0).length
   const sinLiberarLlegadas = snapshot.sinLiberar.filter(a => a.severity === 'vencido').length
@@ -687,7 +690,7 @@ export default function TodayDashboard({
           contador={snapshot.salidasPisadas.length}
           extras={chipsHeader(
             pisadasImposibles > 0 && <ChipUrgente tono="alerta">{pisadasImposibles} imposible{pisadasImposibles === 1 ? '' : 's'}</ChipUrgente>,
-            pisadasMismoDia > 0 && <ChipUrgente tono="aviso">{pisadasMismoDia} mismo día</ChipUrgente>,
+            pisadasMismoDia > 0 && <ChipUrgente tono="alerta">{pisadasMismoDia} mismo día</ChipUrgente>,
           )}
         >
           <CuerpoCardHoy>

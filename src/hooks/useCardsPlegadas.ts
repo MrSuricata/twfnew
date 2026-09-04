@@ -11,7 +11,11 @@
  *
  * Reglas que este hook garantiza:
  *  · Lo plegado NO se reabre solo: ni entre recargas, ni entre refetches de
- *    datos, ni porque cambie el contador de la card.
+ *    datos, ni porque cambie el contador de la card. Para que eso valga TAMBIÉN
+ *    cuando el operador pliega y recarga en el mismo segundo, al ocultar o
+ *    abandonar la página se fuerza el envío de lo que espera el debounce
+ *    (`flushUserPrefs`): si no, el server contestaría el valor viejo y la card
+ *    se abriría sola.
  *  · Lo que el usuario tocó ANTES de que llegaran las prefs del server no se
  *    pierde ni se deshace: se re-aplica encima (`aplicarToques`) y recién ahí
  *    se guarda.
@@ -22,7 +26,7 @@
  * existe — no hay tabla ni columna nueva.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { fetchUserPrefs, saveUserPrefsDebounced } from '@/lib/dataClient'
+import { fetchUserPrefs, saveUserPrefsDebounced, flushUserPrefs } from '@/lib/dataClient'
 import {
   parseCardsCerradas, cardAbierta, conCardAbierta, alternarCard, aplicarToques,
   type CardsPlegadas,
@@ -98,6 +102,18 @@ export function useCardsPlegadas(clave: string, idsValidos: readonly string[]): 
       })
     return () => { vivo = false }
   }, [clave, aplicar])
+
+  // Al irse o esconder la pestaña, lo que espera el debounce sale YA. Sin esto,
+  // plegar y recargar enseguida pierde el cambio (ver el docblock de arriba).
+  useEffect(() => {
+    const alSalir = () => { if (document.visibilityState === 'hidden') flushUserPrefs() }
+    window.addEventListener('pagehide', flushUserPrefs)
+    document.addEventListener('visibilitychange', alSalir)
+    return () => {
+      window.removeEventListener('pagehide', flushUserPrefs)
+      document.removeEventListener('visibilitychange', alSalir)
+    }
+  }, [])
 
   const estaAbierta = useCallback((id: string) => cardAbierta(cerradas, id), [cerradas])
 
