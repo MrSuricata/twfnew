@@ -1,12 +1,13 @@
 import { useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { Input } from '@/components/ui/input'
-import { LockSimple, CheckCircle, ArrowCounterClockwise, ClockCounterClockwise, Scales } from '@phosphor-icons/react'
+import { LockSimple, ClockCounterClockwise, Scales } from '@phosphor-icons/react'
 import type { UnifiedOperation } from '@/lib/operationsTypes'
 import { DEPOSITOS_UY } from '@/lib/operationsTypes'
 import { matchCanonico, upperCat, DEV_ALIASES, canonicalizarLista } from '@/lib/fuzzyCatalog'
 import { fmtDateDMY } from '@/lib/format'
-import { isLibreDevuelto, libreDevueltoToggle, LIBRE_DEVUELTO } from '@/lib/libreDevuelto'
+import { isLibreDevuelto } from '@/lib/libreDevuelto'
+import { BotonDevuelto, toggleLibreDevuelto, CLASE_LIBRE_DEVUELTO } from './LibreDevueltoBlock'
 import { hasTelex } from '@/lib/telexCheck'
 import type { Sugerencia } from '@/lib/sugerenciaHistorica'
 import type { Recomendacion } from '@/lib/distribucionTransportes'
@@ -83,12 +84,11 @@ export default function ViabilityBlock({
   const terminalOptions = canonicalizarLista([...TERMINAL_OPTIONS, ...knownTerminales])
 
   // Botón rápido "Devuelto" (regla del repo: 'DEVUELTO' vive en LIBRE y
-  // reemplaza la fecha — así la carga sale de las alertas de LIBRE). Va por el
-  // MISMO commit que editar LIBRE a mano: onCommit('libre', …) → el panel
-  // propaga a la columna + TODOS los contenedores vía buildPerContainerPatch.
-  // El toast permite deshacer restaurando el valor EXACTO anterior (capturado
-  // ANTES de pisar). Con LIBRE ya DEVUELTO, el botón pasa a "Deshacer devuelto"
-  // y limpia a '' (sin toast: el cambio se ve al instante).
+  // reemplaza la fecha — así la carga sale de las alertas de LIBRE). El botón,
+  // el toggle y el toast con "Deshacer" son los MISMOS que usa el modal rápido
+  // (LibreDevueltoBlock, antes duplicado); el commit sigue siendo el de acá:
+  // onCommit('libre', …) → el panel propaga a la columna + TODOS los
+  // contenedores vía buildPerContainerPatch.
   const libreDevuelto = isLibreDevuelto(op.libre)
   // ¿Los contenedores tienen terminales de devolución DISTINTAS? Editar el
   // cuadro "Devuelve en" propaga UN valor a todos (nivel-carga) — avisar antes.
@@ -98,13 +98,7 @@ export default function ViabilityBlock({
   const devVaria = devsDistintos.length > 1
   const toggleDevuelto = () => {
     if (!editable) return
-    const { next, prev } = libreDevueltoToggle(op.libre)
-    onCommit('libre', next)
-    if (next === LIBRE_DEVUELTO) {
-      toast.success('Contenedor devuelto', {
-        action: { label: 'Deshacer', onClick: () => onCommit('libre', prev) },
-      })
-    }
+    void toggleLibreDevuelto(op.libre, v => onCommit('libre', v))
   }
 
   return (
@@ -224,18 +218,15 @@ export default function ViabilityBlock({
           value={op.libre}
           kind="date"
           editable={editable}
-          valueClass={libreDevuelto ? 'text-emerald-600' : ''}
+          valueClass={libreDevuelto ? CLASE_LIBRE_DEVUELTO : ''}
           footer={
-            <button
-              type="button"
-              onClick={toggleDevuelto}
-              disabled={!editable}
-              title={!editable ? 'Solo lectura (viene de la planilla)' : libreDevuelto ? 'Quitar la marca DEVUELTO (LIBRE queda vacío)' : 'Marcar contenedor devuelto (LIBRE = DEVUELTO)'}
-              className="mt-1.5 inline-flex items-center gap-1 h-7 px-2 rounded-md border border-input bg-background text-[11px] font-medium text-muted-foreground transition-colors enabled:hover:bg-muted enabled:hover:text-foreground disabled:opacity-50"
-            >
-              {libreDevuelto ? <ArrowCounterClockwise size={12} /> : <CheckCircle size={12} />}
-              {libreDevuelto ? 'Deshacer devuelto' : 'Devuelto'}
-            </button>
+            <BotonDevuelto
+              devuelto={libreDevuelto}
+              habilitado={editable}
+              onToggle={toggleDevuelto}
+              clase="mt-1.5"
+              tituloSoloLectura="Solo lectura (viene de la planilla)"
+            />
           }
           onCommit={v => onCommit('libre', v)}
         />
