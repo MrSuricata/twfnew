@@ -36,6 +36,11 @@ const carga = (
   MBL: 'DEMO' + ref, LINEA: 'MAERSK', BUQUE: 'DEMO VESSEL ' + ref.slice(-1),
   TERMINAL: 'TCP', LIBRE_HASTA: '', PAIS: 'UY', POL: 'SHANGHAI', POD: 'MONTEVIDEO',
   MODE: 'fcl', containers: [], calculatedN: ops.length, calculatedLibreHasta: '',
+  // Los numéricos que el server SIEMPRE manda (rowToClientShipment los pone en
+  // 0: al cliente no le viajan montos). Sin ellos la ficha de la carga rompía
+  // en /ui — el bloque de costos los lee aunque la pestaña esté oculta.
+  FT: 0, C_TERMINAL: 0, C_DEV: 0, LOCALES: 0, FLETE: 0, FORMA_DE_PAGO: 'al arribo', VTO: '',
+  CR: false, BL: false, AD: false, AT: false, SEGUIMIENTO: '', TIPO: ops[0]?.TIPO || 'FCL',
   // Los booleanos que decide el equipo y mira el depósito (Brian 03/09):
   // si puede retirar y si puede devolver el vacío.
   LIBERADA: true, TERMINAL_PAGADA: true, DEVOLUCION_PAGADA: true,
@@ -55,7 +60,7 @@ export function demoPartnerShipments(): ParsedShipment[] {
         PKGS: 420, KG: 8400, M3: 42, DESCRIPCION: 'MOTOPARTES', WOOD: 'SI',
         NO_APILABLE: 'SI', LUGAR_SALIDA: 'GODILCO', DEV: 'STL',
       } as Partial<OperativasRecord>),
-    ]),
+    ], { CLIENT_REF: '1410' } as Partial<ParsedShipment>),
     // Retiro próximo desde TCP hacia GODILCO, libre venciendo
     carga('D9002', 'DEMO BETA SRL', dia(1), [
       op({
@@ -63,7 +68,9 @@ export function demoPartnerShipments(): ParsedShipment[] {
         FISCAL: 'CACEC', LIBRE: dia(2), PKGS: 180, KG: 3200, M3: 26,
         DESCRIPCION: 'REPUESTOS AGRÍCOLAS',
       }),
-    ], { TERMINAL: 'TCP', TERMINAL_PAGADA: false } as Partial<ParsedShipment>),
+      // La ref propia MAL cargada: dice el nombre del cliente que está mirando.
+      // El portal la descarta y muestra la nuestra (spec 04/09, D2).
+    ], { TERMINAL: 'TCP', TERMINAL_PAGADA: false, CLIENT_REF: 'DEMO ALPHA S.A.' } as Partial<ParsedShipment>),
     // Ya en depósito, libre VENCIDO (el rojo de la card)
     carga('D9003', 'DEMO GAMMA S.A.', dia(-12), [
       op({
@@ -119,6 +126,14 @@ export function demoPartnerShipments(): ParsedShipment[] {
         LUGAR_SALIDA: 'GODILCO',
       }),
     ]),
+    // Ref con el formato de la planilla (A####) y ref propia del cliente: en el
+    // portal se ve "1433" grande y "9010" chico — nunca "A9010" ni "TWF 9010".
+    carga('A9010', 'DEMO ALPHA S.A.', dia(2), [
+      op({
+        CNTR_OP: 'DEMO1000010', DEPOSITO: 'GODILCO', TRANSPORTE: 'TRANSCAL',
+        FISCAL: 'CACEC', PKGS: 300, KG: 7200, M3: 40, DESCRIPCION: 'BICICLETAS',
+      }),
+    ], { CLIENT_REF: '1433', TERMINAL: 'TCP' } as Partial<ParsedShipment>),
     // Llega la semana que viene: alimenta "próximos 14 días"
     carga('D9007', 'DEMO ETA S.A.', dia(7), [
       op({
