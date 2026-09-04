@@ -23,6 +23,13 @@ interface PartnerDashboardShellProps {
   pantalla?: string
   /** Vista previa (/ui o "Ver como"): la caja se ve pero no manda nada. */
   preview?: boolean
+  /**
+   * Barra de accesos directos a las secciones. Va DENTRO del `<header>` para
+   * que se pegue junto con la barra violeta, como un solo bloque: así el salto
+   * a una sección puede descontar el alto real del encabezado y la sección no
+   * queda tapada.
+   */
+  barra?: ReactNode
   /** Main content area (below the header). */
   children: ReactNode
 }
@@ -39,6 +46,7 @@ export default function PartnerDashboardShell({
   onLogout,
   pantalla,
   preview = false,
+  barra,
   children,
 }: PartnerDashboardShellProps) {
   return (
@@ -48,8 +56,16 @@ export default function PartnerDashboardShell({
           <div className="flex items-center gap-3 min-w-0">
             <div className="p-2 bg-white/10 rounded-lg ring-1 ring-inset ring-white/20 shrink-0 [&_svg]:text-white">{icon}</div>
             <div className="min-w-0">
-              <p className="text-xs text-white/80 leading-tight">{saludoPersonal(userName)}</p>
-              <h1 className="titulo-med text-base text-white leading-tight truncate">{title}</h1>
+              {/* El saludo es lo primero que se lee al entrar y estaba en letra
+                  chica (Brian 04/09): ahora es el renglón grande del encabezado
+                  y el nombre del depósito queda de contexto, abajo.
+                  `truncate` y el escalón de tamaño NO son decoración: sin ellos,
+                  a 375 px "Hola Ana, buenas tardes" se parte en dos renglones y
+                  a 342 px en CUATRO, y el encabezado —que es fijo— pasa de 83 a
+                  192 px, un cuarto de la pantalla del que trabaja parado en el
+                  predio con el celular. Grande sí, pero en un solo renglón. */}
+              <p className="text-base sm:text-xl font-semibold text-white leading-tight truncate">{saludoPersonal(userName)}</p>
+              <h1 className="titulo-med text-base text-white/90 leading-tight truncate">{title}</h1>
               <div className="flex items-center gap-1.5 text-xs text-white/70">
                 <User size={12} />
                 <span className="truncate">{userName}</span>
@@ -66,16 +82,17 @@ export default function PartnerDashboardShell({
             </a>
             <Button variant="outline" size="sm" className="h-8 border-white/30 bg-transparent text-white hover:bg-white/10 hover:text-white" asChild>
               <a href="/">
-                <House size={16} className="mr-1.5" />
-                Inicio
+                <House size={16} className="sm:mr-1.5" />
+                <span className="hidden sm:inline">Inicio</span>
               </a>
             </Button>
             <Button variant="outline" size="sm" className="h-8 border-white/30 bg-transparent text-white hover:bg-white/10 hover:text-white" onClick={onLogout}>
-              <SignOut size={16} className="mr-1.5" />
-              Salir
+              <SignOut size={16} className="sm:mr-1.5" />
+              <span className="hidden sm:inline">Salir</span>
             </Button>
           </div>
         </div>
+        {barra}
       </header>
 
       {/* 7xl y no 1600px: con filas de dos renglones, más ancho solo estira

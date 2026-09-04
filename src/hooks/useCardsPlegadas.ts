@@ -24,6 +24,13 @@
  *
  * La clave (`hoyFclCardsCerradas`) va DENTRO del JSON de `user_prefs` que ya
  * existe — no hay tabla ni columna nueva.
+ *
+ * `sincronizar: false` apaga la parte del server y deja SOLO el caché local.
+ * Es lo que usa el portal del depósito: `/api/data/user-prefs` es del admin
+ * (`payload.role !== 'admin'` → 401) y un 401 con token puesto le dispara al
+ * depósito el cartel de "Tu sesión venció", que no venció nada. Ahí la memoria
+ * es por navegador —que es el celular del que está parado en el predio— y la
+ * clave va por usuario, porque la compu del mostrador la usan varios.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { fetchUserPrefs, saveUserPrefsDebounced, flushUserPrefs } from '@/lib/dataClient'
@@ -31,6 +38,12 @@ import {
   parseCardsCerradas, cardAbierta, conCardAbierta, alternarCard, aplicarToques,
   type CardsPlegadas,
 } from '@/lib/cardsPlegadas'
+
+export interface OpcionesCardsPlegadas {
+  /** Guardar también en `user_prefs` (viaja con el login a otro dispositivo).
+   *  `false` = solo localStorage. Ver el docblock del archivo. */
+  sincronizar?: boolean
+}
 
 /** Clave de HOY FCL dentro de `user_prefs`. Cambiarla = perder lo plegado. */
 export const CLAVE_HOY_FCL = 'hoyFclCardsCerradas'
@@ -41,11 +54,17 @@ const mismaLista = (a: readonly string[], b: readonly string[]) =>
   a === b || (a.length === b.length && a.every((v, i) => v === b[i]))
 
 /**
- * @param clave      clave dentro del JSON de `user_prefs` (ej. `CLAVE_HOY_FCL`).
+ * @param clave      clave dentro del JSON de `user_prefs` (ej. `CLAVE_HOY_FCL`)
+ *                   y sufijo del localStorage.
  * @param idsValidos ids de las cards que existen hoy. Tiene que ser una
  *                   CONSTANTE de módulo: se toma una sola vez, al montar.
+ * @param opciones   `sincronizar: false` = solo caché local (portales).
  */
-export function useCardsPlegadas(clave: string, idsValidos: readonly string[]): CardsPlegadas {
+export function useCardsPlegadas(
+  clave: string,
+  idsValidos: readonly string[],
+  { sincronizar = true }: OpcionesCardsPlegadas = {},
+): CardsPlegadas {
   const lsKey = LS_PREFIJO + clave
   const idsRef = useRef(idsValidos)
 
@@ -71,18 +90,21 @@ export function useCardsPlegadas(clave: string, idsValidos: readonly string[]): 
     cerradasRef.current = next
     setCerradas(next)
     try { localStorage.setItem(lsKey, JSON.stringify(next)) } catch { /* incógnito / sin storage */ }
-    if (prefsListas.current) saveUserPrefsDebounced({ [clave]: next })
-  }, [clave, lsKey])
+    if (sincronizar && prefsListas.current) saveUserPrefsDebounced({ [clave]: next })
+  }, [clave, lsKey, sincronizar])
 
   const toggle = useCallback((id: string, abierta?: boolean) => {
     const prev = cerradasRef.current
     const next = abierta === undefined ? alternarCard(prev, id) : conCardAbierta(prev, id, abierta)
     if (next === prev) return
-    if (!prefsListas.current) toques.current.push([id, cardAbierta(next, id)])
+    if (sincronizar && !prefsListas.current) toques.current.push([id, cardAbierta(next, id)])
     aplicar(next)
-  }, [aplicar])
+  }, [aplicar, sincronizar])
 
   useEffect(() => {
+    // Sin sincronización no hay nada que esperar del server: lo que se toca
+    // queda en el localStorage y se lee de ahí en la próxima visita.
+    if (!sincronizar) { prefsListas.current = true; return }
     let vivo = true
     fetchUserPrefs()
       .then(prefs => {
@@ -101,11 +123,12 @@ export function useCardsPlegadas(clave: string, idsValidos: readonly string[]): 
         }
       })
     return () => { vivo = false }
-  }, [clave, aplicar])
+  }, [clave, aplicar, sincronizar])
 
   // Al irse o esconder la pestaña, lo que espera el debounce sale YA. Sin esto,
   // plegar y recargar enseguida pierde el cambio (ver el docblock de arriba).
   useEffect(() => {
+    if (!sincronizar) return
     const alSalir = () => { if (document.visibilityState === 'hidden') flushUserPrefs() }
     window.addEventListener('pagehide', flushUserPrefs)
     document.addEventListener('visibilitychange', alSalir)
@@ -113,7 +136,7 @@ export function useCardsPlegadas(clave: string, idsValidos: readonly string[]): 
       window.removeEventListener('pagehide', flushUserPrefs)
       document.removeEventListener('visibilitychange', alSalir)
     }
-  }, [])
+  }, [sincronizar])
 
   const estaAbierta = useCallback((id: string) => cardAbierta(cerradas, id), [cerradas])
 

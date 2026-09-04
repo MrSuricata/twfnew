@@ -1,7 +1,12 @@
 /**
- * HOY del depósito (PLANIR, GODILCO, TCP…). Seis cards, en este orden:
- * operativas de hoy · retiros próximos · LIBRE por vencer · LCL a
- * desconsolidar · plan de carga 14 días · mis avisos. Abajo, el calendario.
+ * HOY del depósito (PLANIR, GODILCO, TCP…). Seis cards: operativas de hoy ·
+ * retiros próximos · LIBRE por vencer · LCL a desconsolidar · plan de carga
+ * 14 días · mis avisos. Abajo, el calendario.
+ *
+ * El ORDEN no es fijo: lo decide `lib/seccionesDeposito.ts` según lo que haya
+ * hoy. Con operativas del día manda el día; sin operativas, la card vacía baja
+ * (sigue estando: que diga "no hay nada" también es información) y suben los
+ * vacíos que sangran y los retiros que ya se pueden ir a buscar.
  *
  * El depósito PROPONE ("Retiré", "Devolví el vacío", "Desconsolidé, stock Nº")
  * y el equipo confirma desde HOY admin: acá no se escribe nada en la operación,
@@ -10,7 +15,7 @@
  *
  * Toda la lógica es de `lib/hoyDeposito.ts` (testeada); este archivo pinta.
  */
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import {
   Warehouse, Anchor, ArrowUUpLeft, Package, ChatCircleDots,
@@ -20,7 +25,8 @@ import AgendaCalendar from '@/components/agenda/AgendaCalendar'
 import PartnerDashboardShell from '@/components/PartnerDashboardShell'
 import ProximasSalidas from '@/components/ProximasSalidas'
 import AvisoOperativo from '@/components/AvisoOperativo'
-import PanelCard, { PanelFila, FilaTitulo, FilaDatos, Ref, Chip as ChipPanel, Dato, type TonoPanel } from './partner/PanelCard'
+import { PanelFila, FilaTitulo, FilaDatos, Ref, Chip as ChipPanel, Dato } from './partner/PanelCard'
+import Seccion from './partner/SeccionPortal'
 import ChipTransporte from './trucks/ChipTransporte'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
 import { fetchPartnerAvisos, crearPartnerAviso, cancelarPartnerAviso } from '@/lib/dataClient'
@@ -38,6 +44,13 @@ import { fmtDateDMY, fmtNum, hoyISO } from '@/lib/format'
 import { formatKg, formatM3 } from '@/lib/truckUtils'
 import { colorDeposito } from '@/lib/depositoColor'
 import { ETIQUETA_RETIRO, DETALLE_RETIRO, ETIQUETA_DEVOLUCION, DETALLE_DEVOLUCION } from '@/lib/hoyDeposito'
+import {
+  ordenSeccionesDeposito, puedeAdoptarOrden, chipsSeccionesDeposito, hayBarraSecciones,
+  anclaSeccion, claveCardsDeposito, IDS_SECCIONES_DEPOSITO,
+  type EstadoSeccionesDeposito, type SeccionDepositoId,
+} from '@/lib/seccionesDeposito'
+import BarraSecciones from './partner/BarraSecciones'
+import { useCardsPlegadas } from '@/hooks/useCardsPlegadas'
 
 interface DepotDashboardProps {
   shipments: ParsedShipment[]
@@ -128,28 +141,6 @@ function EstadoAviso({ aviso, onDeshacer, deshaciendo = false }: {
   return null
 }
 
-/** Cada card con su color, para que se distingan de un vistazo (Brian 02/09). */
-function Seccion({ icono, titulo, subtitulo, cantidad, tono = 'neutro', children }: {
-  icono: ReactNode
-  titulo: string
-  subtitulo?: string
-  cantidad: number
-  tono?: TonoPanel
-  children: ReactNode
-}) {
-  return (
-    <PanelCard
-      tono={cantidad === 0 ? 'neutro' : tono}
-      icono={icono}
-      titulo={titulo}
-      subtitulo={subtitulo}
-      contador={cantidad}
-    >
-      {children}
-    </PanelCard>
-  )
-}
-
 function Vacio({ texto }: { texto: string }) {
   return <p className="px-4 py-4 text-sm text-muted-foreground">{texto}</p>
 }
@@ -197,6 +188,11 @@ function textoFaltaDato(l: LibrePorVencer): string {
 
 export default function DepotDashboard({ shipments, depotName, userName, onLogout, preview = false }: DepotDashboardProps) {
   const hoy = hoyISO()
+  // Plegado con memoria: clave propia del portal (no la de HOY del admin) y por
+  // usuario, porque la computadora del mostrador la usan varios. Sin sincronizar
+  // con `user_prefs`: ese endpoint es del admin y un 401 le mostraría al
+  // depósito un "Tu sesión venció" que no venció. Ver useCardsPlegadas.
+  const plegadas = useCardsPlegadas(claveCardsDeposito(userName), IDS_SECCIONES_DEPOSITO, { sincronizar: false })
   const [avisos, setAvisos] = useState<PartnerAviso[]>([])
   const [avisosError, setAvisosError] = useState<string | null>(null)
   const [enviando, setEnviando] = useState<Set<string>>(new Set())
@@ -229,6 +225,52 @@ export default function DepotDashboard({ shipments, depotName, userName, onLogou
     libresVencidos ? `${libresVencidos} con LIBRE vencido` : '',
     libresSinDato ? `${libresSinDato} esperando un dato nuestro` : '',
   ].filter(Boolean).join(' · ')
+
+  /**
+   * Lo que hay hoy, contado, para decidir el orden de las cards. Son los mismos
+   * números que ya pintan los contadores: las dos señales de urgencia salen de
+   * `hoyDeposito` sin redefinir nada — `motivo === 'vencimiento'` (LIBRE
+   * vencido o a LIBRE_DIAS_AVISO días o menos) y `estado === 'listo'` (liberado
+   * + terminal paga).
+   */
+  const estadoSecciones = useMemo<EstadoSeccionesDeposito>(() => ({
+    operativasHoy: hoyOps.length,
+    retiros: retiros.length,
+    retirosListos: retiros.filter(r => r.estado === 'listo').length,
+    vacios: libres.length,
+    vaciosPorVencer: libres.filter(l => l.motivo === 'vencimiento').length,
+    lcl: lcls.length,
+    avisos: misAvisos.length,
+  }), [hoyOps, retiros, libres, lcls, misAvisos])
+
+  // Sin trabajo hoy, la card vacía deja de ser lo primero que se lee y suben
+  // los vacíos que sangran y los retiros que ya se pueden ir a buscar.
+  const ordenCalculado = useMemo(() => ordenSeccionesDeposito(estadoSecciones), [estadoSecciones])
+  // …pero el orden NO se mueve mientras el usuario está apuntando a una fila.
+  // Los datos cambian solos (al mandar un aviso se refrescan, y una
+  // confirmación del equipo puede sacar un retiro de "en verde"): si el orden
+  // se reacomodara ahí, el toque siguiente caería sobre otro contenedor.
+  // Solo se adopta arriba de todo — ver `puedeAdoptarOrden`.
+  const [orden, setOrden] = useState<readonly SeccionDepositoId[]>(ordenCalculado)
+  const ordenRef = useRef<readonly SeccionDepositoId[] | null>(null)
+  useEffect(() => {
+    if (!puedeAdoptarOrden(ordenRef.current, ordenCalculado, window.scrollY)) return
+    ordenRef.current = ordenCalculado
+    setOrden(ordenCalculado)
+  }, [ordenCalculado])
+  // Al volver arriba se aplica el orden que quedó pendiente, sin esperar datos.
+  useEffect(() => {
+    const alScrollear = () => {
+      if (!puedeAdoptarOrden(ordenRef.current, ordenCalculado, window.scrollY)) return
+      ordenRef.current = ordenCalculado
+      setOrden(ordenCalculado)
+    }
+    window.addEventListener('scroll', alScrollear, { passive: true })
+    return () => window.removeEventListener('scroll', alScrollear)
+  }, [ordenCalculado])
+  // Los accesos directos: solo las secciones que existen hoy, en el mismo orden
+  // en que se ven las cards.
+  const chips = useMemo(() => chipsSeccionesDeposito(estadoSecciones), [estadoSecciones])
 
   const clave = (ref: string, cntr: string) => `${ref}|${cntr}`
 
@@ -308,6 +350,271 @@ export default function DepotDashboard({ shipments, depotName, userName, onLogou
     }
   }
 
+  // Cada bloque del portal, por su id. El ORDEN en que se pintan lo decide
+  // `ordenSeccionesDeposito` (lib pura, testeada): acá no hay lista fija.
+  const secciones: Record<SeccionDepositoId, ReactNode> = {
+    // Operativas de hoy
+    hoy: (
+      <Seccion icono={<ArrowsLeftRight size={22} weight="duotone" />} titulo="Operativas de hoy" subtitulo={fmtDateDMY(hoy)} cantidad={hoyOps.length} tono="ok">
+        {hoyOps.length === 0 ? <Vacio texto="Hoy no tenés cargas ni retiros programados." /> : (
+          <ul className="divide-y divide-border">
+            {hoyOps.map((o, i) => <FilaOperativaHoy key={`${o.ref}-${o.cntr}-${i}`} o={o} />)}
+          </ul>
+        )}
+      </Seccion>
+    ),
+    // Retiros próximos
+    retiros: (
+      <Seccion
+        icono={<Anchor size={22} weight="duotone" />}
+        titulo="Retiros próximos"
+        subtitulo={`de la terminal a tu depósito · en verde, las que ya podés ir a buscar · desde hace ${RETIROS_DIAS_ATRAS} días hasta ${RETIROS_DIAS_ADELANTE} adelante`}
+        cantidad={retiros.length}
+        tono="info"
+      >
+        {retiros.length === 0 ? <Vacio texto="No hay contenedores para retirar en estos días." /> : (
+          <ul className="divide-y divide-border">
+            {retiros.map((r, i) => (
+              <li key={`${r.ref}-${r.cntr}-${i}`}>
+                <PanelFila
+                  tinte={r.estado === 'listo' ? 'bg-emerald-50/70' : undefined}
+                  accion={r.aviso?.estado === 'pendiente'
+                    ? <EstadoAviso aviso={r.aviso} onDeshacer={puedoDeshacer(r.aviso) ? deshacerAviso : undefined} deshaciendo={deshaciendo === r.aviso.id} />
+                    : (
+                      <>
+                        {r.aviso && <EstadoAviso aviso={r.aviso} />}
+                        <button
+                          type="button"
+                          className={btnPrimario}
+                          disabled={ocupado('retire', r.ref, r.cntr)}
+                          onClick={() => retire(r)}
+                          title="El contenedor ya salió de la terminal hacia tu depósito. El equipo lo confirma."
+                        >
+                          Retiré
+                        </button>
+                      </>
+                    )}
+                >
+                  <FilaTitulo>
+                    <Ref>{r.ref}</Ref>
+                    {/* Lo primero que mira el depósito: ¿puedo ir a buscarlo?
+                        Liberación de la naviera + terminal paga (Brian 03/09). */}
+                    <ChipPanel
+                      title={DETALLE_RETIRO[r.estado]}
+                      clase={r.estado === 'listo'
+                        ? 'bg-emerald-600 text-white border-emerald-700'
+                        : 'bg-amber-100 text-amber-900 border-amber-400'}
+                    >
+                      {ETIQUETA_RETIRO[r.estado]}
+                    </ChipPanel>
+                    {r.terminal && <ChipPanel clase={colorDeposito(r.terminal)} title="Terminal de la que se retira">{r.terminal}</ChipPanel>}
+                    <span className="text-sm text-foreground/80 truncate max-w-full sm:max-w-[220px]" title={r.cliente}>{r.cliente || '—'}</span>
+                    <span className="font-mono text-sm whitespace-nowrap">{r.cntr || '—'}{r.tipo && <span className="ml-1 text-muted-foreground">{r.tipo}</span>}</span>
+                    <ChipPanel title="Operativa">{r.operativa}</ChipPanel>
+                  </FilaTitulo>
+                  <FilaDatos>
+                    <Dato label="Llega" fuerte>
+                      {r.eta ? fmtDateDMY(r.eta) : '—'}
+                      <span className="font-normal text-muted-foreground"> · {r.dias === 0 ? 'hoy' : r.dias > 0 ? `en ${r.dias}d` : `hace ${-r.dias}d`}</span>
+                    </Dato>
+                    {r.turno && <Dato label="Turno" fuerte>{fmtDateDMY(r.turno)}</Dato>}
+                    {r.libre && <Dato label="Libre" fuerte>{/^\d{4}-/.test(r.libre) ? fmtDateDMY(r.libre) : r.libre}</Dato>}
+                    <Medidas pkgs={r.pkgs} kg={r.kg} m3={r.m3} />
+                  </FilaDatos>
+                </PanelFila>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Seccion>
+    ),
+    // LIBRE por vencer / vencidos
+    vacios: (
+      <Seccion
+        icono={<ArrowUUpLeft size={22} weight="duotone" />}
+        titulo="Vacíos a devolver"
+        subtitulo={subtituloVacios}
+        cantidad={libres.length}
+        tono="alerta"
+      >
+        {libres.length === 0 ? <Vacio texto="Ningún vacío con el libre por vencer ni con datos faltantes. Todo al día." /> : (
+          <ul>
+            {libres.map((l, i) => {
+              const sev = claseSeveridad[l.severidad]
+              const faltaDato = l.motivo === 'falta_dato'
+              const k = clave(l.ref, l.cntr)
+              const editando = fechaDevolvi[k] !== undefined
+              return (
+                <li key={`${l.ref}-${l.cntr}-${i}`}>
+                  <PanelFila
+                    tinte={faltaDato ? TINTE_FALTA_DATO : sev.fila}
+                    accion={(
+                    <>
+                    {l.aviso?.estado === 'pendiente'
+                      ? <EstadoAviso aviso={l.aviso} onDeshacer={puedoDeshacer(l.aviso) ? deshacerAviso : undefined} deshaciendo={deshaciendo === l.aviso.id} />
+                      : editando
+                        ? (
+                          <>
+                            <input
+                              type="date"
+                              autoFocus
+                              max={hoy}
+                              value={fechaDevolvi[k]}
+                              onChange={e => setFechaDevolvi(prev => ({ ...prev, [k]: e.target.value }))}
+                              onKeyDown={e => {
+                                if (e.key === 'Enter') devolvi(l)
+                                if (e.key === 'Escape') setFechaDevolvi(prev => { const n = { ...prev }; delete n[k]; return n })
+                              }}
+                              title="¿Qué día devolviste el vacío?"
+                              className={inputChico}
+                            />
+                            <button type="button" className={btnPrimario} disabled={ocupado('devolvi', l.ref, l.cntr)} onClick={() => devolvi(l)}>
+                              Avisar
+                            </button>
+                            <button type="button" aria-label="Cancelar" className={btnGris} onClick={() => setFechaDevolvi(prev => { const n = { ...prev }; delete n[k]; return n })}>
+                              ✕
+                            </button>
+                          </>
+                        )
+                        : (
+                          <>
+                            {l.aviso && <EstadoAviso aviso={l.aviso} />}
+                            <button
+                              type="button"
+                              className={btnBorde}
+                              onClick={() => { recordarRefEnFoco(l.ref); setFechaDevolvi(prev => ({ ...prev, [k]: hoy })) }}
+                              title="Ya devolviste el contenedor vacío a la terminal. El equipo lo confirma."
+                            >
+                              Devolví el vacío
+                            </button>
+                          </>
+                        )}
+                    </>
+                    )}
+                  >
+                    <FilaTitulo>
+                      <Ref>{l.ref}</Ref>
+                      {/* ¿Se puede devolver ya? Pago de la devolución +
+                          terminal asignada (Brian 03/09). */}
+                      <ChipPanel
+                        title={DETALLE_DEVOLUCION[l.estado]}
+                        clase={l.estado === 'listo'
+                          ? 'bg-emerald-600 text-white border-emerald-700'
+                          : 'bg-amber-100 text-amber-900 border-amber-400'}
+                      >
+                        {ETIQUETA_DEVOLUCION[l.estado]}
+                      </ChipPanel>
+                      <span className="font-mono text-sm whitespace-nowrap">{l.cntr || '—'}{l.tipo && <span className="ml-1 text-muted-foreground">{l.tipo}</span>}</span>
+                      <span className="text-sm text-foreground/80 truncate max-w-full sm:max-w-[220px]" title={l.cliente}>{l.cliente || '—'}</span>
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${sev.badge}`}>
+                        {textoLibre(l)}
+                      </span>
+                      {/* No es un vencimiento: está en la lista porque falta un
+                          dato NUESTRO (libre o terminal de devolución). */}
+                      {faltaDato && (
+                        <ChipPanel title={textoFaltaDato(l)} clase="bg-sky-100 text-sky-900 border-sky-400">
+                          NOS FALTA UN DATO
+                        </ChipPanel>
+                      )}
+                    </FilaTitulo>
+                    <FilaDatos>
+                      <Dato label="Libre" fuerte>
+                        {l.libre ? fmtDateDMY(l.libre) : <span className="text-sky-700">sin fecha</span>}
+                      </Dato>
+                      <Dato label="Devolver en" fuerte>
+                        {l.dev || <span className="text-sky-700">sin terminal</span>}
+                      </Dato>
+                    </FilaDatos>
+                  </PanelFila>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+      </Seccion>
+    ),
+    // LCL a desconsolidar
+    lcl: (
+      <Seccion icono={<Package size={22} weight="duotone" />} titulo="LCL a desconsolidar" subtitulo="llegaron y todavía no tienen Nº de stock" cantidad={lcls.length} tono="aviso">
+        {lcls.length === 0 ? <Vacio texto="No hay LCL esperando desconsolidación en tu depósito." /> : (
+          <ul className="divide-y divide-border">
+            {lcls.map(c => (
+              <li key={c.ref} className="px-4 py-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                <span className="font-semibold text-sm whitespace-nowrap">{c.ref}</span>
+                <span className="text-xs text-muted-foreground truncate max-w-[180px]" title={c.cliente}>{c.cliente || '—'}</span>
+                <span className="text-xs whitespace-nowrap">
+                  Llegó <b>{fmtDateDMY(c.eta)}</b>
+                  <span className={`ml-1 ${c.diasDesdeEta >= 3 ? 'font-semibold text-amber-700' : 'text-muted-foreground'}`}>
+                    · {c.diasDesdeEta === 0 ? 'hoy' : `hace ${c.diasDesdeEta}d`}
+                  </span>
+                </span>
+                {c.descripcion && <span className="text-xs truncate max-w-[240px]" title={c.descripcion}>{c.descripcion}</span>}
+                <Medidas pkgs={c.pkgs} kg={c.kg} m3={c.m3} />
+                {c.fiscal && <span className="text-xs text-muted-foreground whitespace-nowrap">→ {c.fiscal}</span>}
+                <span className="ml-auto flex items-center gap-2">
+                  {c.aviso?.estado === 'pendiente'
+                    ? (
+                      <>
+                        {c.aviso.dato.stock && <span className="text-xs text-muted-foreground">stock Nº <b className="text-foreground">{c.aviso.dato.stock}</b></span>}
+                        <EstadoAviso aviso={c.aviso} onDeshacer={puedoDeshacer(c.aviso) ? deshacerAviso : undefined} deshaciendo={deshaciendo === c.aviso.id} />
+                      </>
+                    )
+                    : (
+                      <>
+                        {c.aviso && <EstadoAviso aviso={c.aviso} />}
+                        <label className="flex items-center gap-1.5 text-xs whitespace-nowrap">
+                          Stock Nº
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            pattern="\d{3,7}"
+                            placeholder="45012"
+                            value={stockDraft[c.ref] || ''}
+                            onChange={e => { recordarRefEnFoco(c.ref); setStockDraft(prev => ({ ...prev, [c.ref]: e.target.value.replace(/\D/g, '').slice(0, 7) })) }}
+                            onKeyDown={e => { if (e.key === 'Enter') desconsolide(c) }}
+                            aria-invalid={!!stockDraft[c.ref] && !stockValido(stockDraft[c.ref])}
+                            className={`${inputChico} w-24 font-mono`}
+                          />
+                        </label>
+                        <button
+                          type="button"
+                          className={btnPrimario}
+                          disabled={!stockValido(stockDraft[c.ref]) || ocupado('desconsolide', c.ref, '')}
+                          onClick={() => desconsolide(c)}
+                          title="Desconsolidaste la LCL y le diste Nº de stock. El equipo lo confirma."
+                        >
+                          Desconsolidé
+                        </button>
+                      </>
+                    )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Seccion>
+    ),
+    // Próximos 14 días (plan de carga, formato del mail)
+    plan: <ProximasSalidas shipments={shipments} rol="depot" />,
+    // Mis avisos
+    avisos: (
+      <Seccion
+        icono={<ChatCircleDots size={22} weight="duotone" />}
+        titulo="Mis avisos"
+        subtitulo="lo que avisaste y qué dijo el equipo · últimos 30 días"
+        cantidad={misAvisos.length}
+        plegado={{ abierta: plegadas.estaAbierta('avisos'), onToggle: a => plegadas.toggle('avisos', a) }}
+      >
+        {avisosError && <p className="px-4 py-2 text-xs text-red-700 bg-red-50 border-b border-red-200">{avisosError} · <button type="button" className="underline" onClick={cargarAvisos}>reintentar</button></p>}
+        {misAvisos.length === 0 ? <Vacio texto="Todavía no mandaste ningún aviso. Cuando retires, devuelvas o desconsolides, avisá desde las cards de arriba." /> : (
+          <ul className="divide-y divide-border">
+            {misAvisos.map(a => <FilaAviso key={a.id} a={a} onDeshacer={puedoDeshacer(a) ? deshacerAviso : undefined} deshaciendo={deshaciendo === a.id} />)}
+          </ul>
+        )}
+      </Seccion>
+    ),
+  }
+
   return (
     <PartnerDashboardShell
       icon={<Warehouse size={24} className="text-primary" weight="duotone" />}
@@ -316,259 +623,17 @@ export default function DepotDashboard({ shipments, depotName, userName, onLogou
       onLogout={onLogout}
       pantalla="HOY del depósito"
       preview={preview}
+      barra={hayBarraSecciones(chips) ? <BarraSecciones secciones={chips} /> : undefined}
     >
       <div className="space-y-4">
         <AvisoOperativo />
 
-        {/* 1 · Operativas de hoy */}
-        <Seccion icono={<ArrowsLeftRight size={22} weight="duotone" />} titulo="Operativas de hoy" subtitulo={fmtDateDMY(hoy)} cantidad={hoyOps.length} tono="ok">
-          {hoyOps.length === 0 ? <Vacio texto="Hoy no tenés cargas ni retiros programados." /> : (
-            <ul className="divide-y divide-border">
-              {hoyOps.map((o, i) => <FilaOperativaHoy key={`${o.ref}-${o.cntr}-${i}`} o={o} />)}
-            </ul>
-          )}
-        </Seccion>
+        {orden.map(id => (
+          // El ancla a la que salta el chip de la barra. Va un div y no una
+          // <section>: la card ya es una <section> y anidar dos no dice nada.
+          <div key={id} id={anclaSeccion(id)}>{secciones[id]}</div>
+        ))}
 
-        {/* 2 · Retiros próximos */}
-        <Seccion
-          icono={<Anchor size={22} weight="duotone" />}
-          titulo="Retiros próximos"
-          subtitulo={`de la terminal a tu depósito · en verde, las que ya podés ir a buscar · desde hace ${RETIROS_DIAS_ATRAS} días hasta ${RETIROS_DIAS_ADELANTE} adelante`}
-          cantidad={retiros.length}
-          tono="info"
-        >
-          {retiros.length === 0 ? <Vacio texto="No hay contenedores para retirar en estos días." /> : (
-            <ul className="divide-y divide-border">
-              {retiros.map((r, i) => (
-                <li key={`${r.ref}-${r.cntr}-${i}`}>
-                  <PanelFila
-                    tinte={r.estado === 'listo' ? 'bg-emerald-50/70' : undefined}
-                    accion={r.aviso?.estado === 'pendiente'
-                      ? <EstadoAviso aviso={r.aviso} onDeshacer={puedoDeshacer(r.aviso) ? deshacerAviso : undefined} deshaciendo={deshaciendo === r.aviso.id} />
-                      : (
-                        <>
-                          {r.aviso && <EstadoAviso aviso={r.aviso} />}
-                          <button
-                            type="button"
-                            className={btnPrimario}
-                            disabled={ocupado('retire', r.ref, r.cntr)}
-                            onClick={() => retire(r)}
-                            title="El contenedor ya salió de la terminal hacia tu depósito. El equipo lo confirma."
-                          >
-                            Retiré
-                          </button>
-                        </>
-                      )}
-                  >
-                    <FilaTitulo>
-                      <Ref>{r.ref}</Ref>
-                      {/* Lo primero que mira el depósito: ¿puedo ir a buscarlo?
-                          Liberación de la naviera + terminal paga (Brian 03/09). */}
-                      <ChipPanel
-                        title={DETALLE_RETIRO[r.estado]}
-                        clase={r.estado === 'listo'
-                          ? 'bg-emerald-600 text-white border-emerald-700'
-                          : 'bg-amber-100 text-amber-900 border-amber-400'}
-                      >
-                        {ETIQUETA_RETIRO[r.estado]}
-                      </ChipPanel>
-                      {r.terminal && <ChipPanel clase={colorDeposito(r.terminal)} title="Terminal de la que se retira">{r.terminal}</ChipPanel>}
-                      <span className="text-sm text-foreground/80 truncate max-w-full sm:max-w-[220px]" title={r.cliente}>{r.cliente || '—'}</span>
-                      <span className="font-mono text-sm whitespace-nowrap">{r.cntr || '—'}{r.tipo && <span className="ml-1 text-muted-foreground">{r.tipo}</span>}</span>
-                      <ChipPanel title="Operativa">{r.operativa}</ChipPanel>
-                    </FilaTitulo>
-                    <FilaDatos>
-                      <Dato label="Llega" fuerte>
-                        {r.eta ? fmtDateDMY(r.eta) : '—'}
-                        <span className="font-normal text-muted-foreground"> · {r.dias === 0 ? 'hoy' : r.dias > 0 ? `en ${r.dias}d` : `hace ${-r.dias}d`}</span>
-                      </Dato>
-                      {r.turno && <Dato label="Turno" fuerte>{fmtDateDMY(r.turno)}</Dato>}
-                      {r.libre && <Dato label="Libre" fuerte>{/^\d{4}-/.test(r.libre) ? fmtDateDMY(r.libre) : r.libre}</Dato>}
-                      <Medidas pkgs={r.pkgs} kg={r.kg} m3={r.m3} />
-                    </FilaDatos>
-                  </PanelFila>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Seccion>
-
-        {/* 3 · LIBRE por vencer / vencidos */}
-        <Seccion
-          icono={<ArrowUUpLeft size={22} weight="duotone" />}
-          titulo="Vacíos a devolver"
-          subtitulo={subtituloVacios}
-          cantidad={libres.length}
-          tono="alerta"
-        >
-          {libres.length === 0 ? <Vacio texto="Ningún vacío con el libre por vencer ni con datos faltantes. Todo al día." /> : (
-            <ul>
-              {libres.map((l, i) => {
-                const sev = claseSeveridad[l.severidad]
-                const faltaDato = l.motivo === 'falta_dato'
-                const k = clave(l.ref, l.cntr)
-                const editando = fechaDevolvi[k] !== undefined
-                return (
-                  <li key={`${l.ref}-${l.cntr}-${i}`}>
-                    <PanelFila
-                      tinte={faltaDato ? TINTE_FALTA_DATO : sev.fila}
-                      accion={(
-                      <>
-                      {l.aviso?.estado === 'pendiente'
-                        ? <EstadoAviso aviso={l.aviso} onDeshacer={puedoDeshacer(l.aviso) ? deshacerAviso : undefined} deshaciendo={deshaciendo === l.aviso.id} />
-                        : editando
-                          ? (
-                            <>
-                              <input
-                                type="date"
-                                autoFocus
-                                max={hoy}
-                                value={fechaDevolvi[k]}
-                                onChange={e => setFechaDevolvi(prev => ({ ...prev, [k]: e.target.value }))}
-                                onKeyDown={e => {
-                                  if (e.key === 'Enter') devolvi(l)
-                                  if (e.key === 'Escape') setFechaDevolvi(prev => { const n = { ...prev }; delete n[k]; return n })
-                                }}
-                                title="¿Qué día devolviste el vacío?"
-                                className={inputChico}
-                              />
-                              <button type="button" className={btnPrimario} disabled={ocupado('devolvi', l.ref, l.cntr)} onClick={() => devolvi(l)}>
-                                Avisar
-                              </button>
-                              <button type="button" aria-label="Cancelar" className={btnGris} onClick={() => setFechaDevolvi(prev => { const n = { ...prev }; delete n[k]; return n })}>
-                                ✕
-                              </button>
-                            </>
-                          )
-                          : (
-                            <>
-                              {l.aviso && <EstadoAviso aviso={l.aviso} />}
-                              <button
-                                type="button"
-                                className={btnBorde}
-                                onClick={() => { recordarRefEnFoco(l.ref); setFechaDevolvi(prev => ({ ...prev, [k]: hoy })) }}
-                                title="Ya devolviste el contenedor vacío a la terminal. El equipo lo confirma."
-                              >
-                                Devolví el vacío
-                              </button>
-                            </>
-                          )}
-                      </>
-                      )}
-                    >
-                      <FilaTitulo>
-                        <Ref>{l.ref}</Ref>
-                        {/* ¿Se puede devolver ya? Pago de la devolución +
-                            terminal asignada (Brian 03/09). */}
-                        <ChipPanel
-                          title={DETALLE_DEVOLUCION[l.estado]}
-                          clase={l.estado === 'listo'
-                            ? 'bg-emerald-600 text-white border-emerald-700'
-                            : 'bg-amber-100 text-amber-900 border-amber-400'}
-                        >
-                          {ETIQUETA_DEVOLUCION[l.estado]}
-                        </ChipPanel>
-                        <span className="font-mono text-sm whitespace-nowrap">{l.cntr || '—'}{l.tipo && <span className="ml-1 text-muted-foreground">{l.tipo}</span>}</span>
-                        <span className="text-sm text-foreground/80 truncate max-w-full sm:max-w-[220px]" title={l.cliente}>{l.cliente || '—'}</span>
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold ${sev.badge}`}>
-                          {textoLibre(l)}
-                        </span>
-                        {/* No es un vencimiento: está en la lista porque falta un
-                            dato NUESTRO (libre o terminal de devolución). */}
-                        {faltaDato && (
-                          <ChipPanel title={textoFaltaDato(l)} clase="bg-sky-100 text-sky-900 border-sky-400">
-                            NOS FALTA UN DATO
-                          </ChipPanel>
-                        )}
-                      </FilaTitulo>
-                      <FilaDatos>
-                        <Dato label="Libre" fuerte>
-                          {l.libre ? fmtDateDMY(l.libre) : <span className="text-sky-700">sin fecha</span>}
-                        </Dato>
-                        <Dato label="Devolver en" fuerte>
-                          {l.dev || <span className="text-sky-700">sin terminal</span>}
-                        </Dato>
-                      </FilaDatos>
-                    </PanelFila>
-                  </li>
-                )
-              })}
-            </ul>
-          )}
-        </Seccion>
-
-        {/* 4 · LCL a desconsolidar */}
-        <Seccion icono={<Package size={22} weight="duotone" />} titulo="LCL a desconsolidar" subtitulo="llegaron y todavía no tienen Nº de stock" cantidad={lcls.length} tono="aviso">
-          {lcls.length === 0 ? <Vacio texto="No hay LCL esperando desconsolidación en tu depósito." /> : (
-            <ul className="divide-y divide-border">
-              {lcls.map(c => (
-                <li key={c.ref} className="px-4 py-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-                  <span className="font-semibold text-sm whitespace-nowrap">{c.ref}</span>
-                  <span className="text-xs text-muted-foreground truncate max-w-[180px]" title={c.cliente}>{c.cliente || '—'}</span>
-                  <span className="text-xs whitespace-nowrap">
-                    Llegó <b>{fmtDateDMY(c.eta)}</b>
-                    <span className={`ml-1 ${c.diasDesdeEta >= 3 ? 'font-semibold text-amber-700' : 'text-muted-foreground'}`}>
-                      · {c.diasDesdeEta === 0 ? 'hoy' : `hace ${c.diasDesdeEta}d`}
-                    </span>
-                  </span>
-                  {c.descripcion && <span className="text-xs truncate max-w-[240px]" title={c.descripcion}>{c.descripcion}</span>}
-                  <Medidas pkgs={c.pkgs} kg={c.kg} m3={c.m3} />
-                  {c.fiscal && <span className="text-xs text-muted-foreground whitespace-nowrap">→ {c.fiscal}</span>}
-                  <span className="ml-auto flex items-center gap-2">
-                    {c.aviso?.estado === 'pendiente'
-                      ? (
-                        <>
-                          {c.aviso.dato.stock && <span className="text-xs text-muted-foreground">stock Nº <b className="text-foreground">{c.aviso.dato.stock}</b></span>}
-                          <EstadoAviso aviso={c.aviso} onDeshacer={puedoDeshacer(c.aviso) ? deshacerAviso : undefined} deshaciendo={deshaciendo === c.aviso.id} />
-                        </>
-                      )
-                      : (
-                        <>
-                          {c.aviso && <EstadoAviso aviso={c.aviso} />}
-                          <label className="flex items-center gap-1.5 text-xs whitespace-nowrap">
-                            Stock Nº
-                            <input
-                              type="text"
-                              inputMode="numeric"
-                              pattern="\d{3,7}"
-                              placeholder="45012"
-                              value={stockDraft[c.ref] || ''}
-                              onChange={e => { recordarRefEnFoco(c.ref); setStockDraft(prev => ({ ...prev, [c.ref]: e.target.value.replace(/\D/g, '').slice(0, 7) })) }}
-                              onKeyDown={e => { if (e.key === 'Enter') desconsolide(c) }}
-                              aria-invalid={!!stockDraft[c.ref] && !stockValido(stockDraft[c.ref])}
-                              className={`${inputChico} w-24 font-mono`}
-                            />
-                          </label>
-                          <button
-                            type="button"
-                            className={btnPrimario}
-                            disabled={!stockValido(stockDraft[c.ref]) || ocupado('desconsolide', c.ref, '')}
-                            onClick={() => desconsolide(c)}
-                            title="Desconsolidaste la LCL y le diste Nº de stock. El equipo lo confirma."
-                          >
-                            Desconsolidé
-                          </button>
-                        </>
-                      )}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Seccion>
-
-        {/* 5 · Próximos 14 días (plan de carga, formato del mail) */}
-        <ProximasSalidas shipments={shipments} rol="depot" />
-
-        {/* 6 · Mis avisos */}
-        <Seccion icono={<ChatCircleDots size={22} weight="duotone" />} titulo="Mis avisos" subtitulo="lo que avisaste y qué dijo el equipo · últimos 30 días" cantidad={misAvisos.length}>
-          {avisosError && <p className="px-4 py-2 text-xs text-red-700 bg-red-50 border-b border-red-200">{avisosError} · <button type="button" className="underline" onClick={cargarAvisos}>reintentar</button></p>}
-          {misAvisos.length === 0 ? <Vacio texto="Todavía no mandaste ningún aviso. Cuando retires, devuelvas o desconsolides, avisá desde las cards de arriba." /> : (
-            <ul className="divide-y divide-border">
-              {misAvisos.map(a => <FilaAviso key={a.id} a={a} onDeshacer={puedoDeshacer(a) ? deshacerAviso : undefined} deshaciendo={deshaciendo === a.id} />)}
-            </ul>
-          )}
-        </Seccion>
 
         <AgendaCalendar shipments={shipments} depotFilter={depotName} partnerView={true} />
       </div>

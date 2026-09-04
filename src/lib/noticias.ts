@@ -361,6 +361,90 @@ export function ajustarColumna(
   return res
 }
 
+// ── El banner de los portales no puede cambiar de alto (Brian 04/09) ──────
+// El banner rota cada AVISO_ROTACION_MS y cada nota tiene un largo distinto,
+// así que la tarjeta crecía y encogía y EMPUJABA todo lo de abajo. No es un
+// problema estético: si el del depósito está por tocar "Retiré" justo cuando
+// rota, se le mueve el botón y puede marcar el contenedor equivocado.
+//
+// Se resuelve con las mismas herramientas que el texto cortado del Diario
+// (`lineasEstimadas`), pero con la cuenta al revés: allá se recorta para que
+// entre en un alto dado; acá se RESERVA el alto de la nota más larga de la
+// rotación y todas se recortan a ese mismo tope de renglones.
+//
+// La garantía no depende de que la estimación sea exacta: todas las notas se
+// recortan a las MISMAS líneas y el bloque reserva ese alto, así que la nota
+// más corta y la más larga miden igual aunque la estimación se pase o se quede
+// corta. Si se pasa, sobra un poco de aire abajo; nunca hay salto.
+
+export interface MedidasAviso {
+  /** Ancho útil del título, en px (la tarjeta menos su padding). */
+  ancho: number
+  /** Ancho útil de la bajada, si es distinto (la bajada tiene `max-w-2xl`). */
+  anchoBajada?: number
+  /** Tamaño del título: 20 (`text-xl`) o 24 (`lg:text-2xl`). */
+  fontTitulo?: number
+  lhTitulo?: number
+  /** Tamaño de la bajada (`text-sm`). */
+  fontBajada?: number
+  lhBajada?: number
+  /** Separación entre título y bajada (`mt-1.5`). */
+  gapBajada?: number
+  /** Techos: una nota larguísima no puede hacer un banner de media pantalla.
+   *  Lo que no entra se lee entero con "Leer en el Diario Logístico". */
+  maxTitulo?: number
+  maxBajada?: number
+}
+
+export interface ReservaAviso {
+  /** Tope de líneas del título — el MISMO para todas las notas de la rotación. */
+  lineasTitulo: number
+  /** Tope de líneas de la bajada. 0 = ninguna nota de la rotación tiene bajada. */
+  lineasBajada: number
+  /** Alto a reservar para el bloque título + bajada, en px. 0 = todavía no se
+   *  midió el ancho (primer render): se deja el alto natural. */
+  alto: number
+}
+
+/**
+ * Cuánto alto hay que reservarle al texto del banner para que la tarjeta no
+ * cambie de tamaño en toda la rotación. Se mira la nota MÁS LARGA de la vuelta,
+ * no la que se está viendo.
+ */
+export function reservaAvisos(
+  avisos: readonly Pick<Noticia, 'titulo' | 'bajada'>[],
+  {
+    ancho,
+    anchoBajada,
+    fontTitulo = 24,
+    lhTitulo = 1.3,
+    fontBajada = 14,
+    lhBajada = 1.5,
+    gapBajada = 6,
+    maxTitulo = 3,
+    maxBajada = 3,
+  }: MedidasAviso,
+): ReservaAviso {
+  const vacio: ReservaAviso = { lineasTitulo: 0, lineasBajada: 0, alto: 0 }
+  if (avisos.length === 0 || !(ancho > 0)) return vacio
+  const anchoB = anchoBajada && anchoBajada > 0 ? anchoBajada : ancho
+  let lineasTitulo = 0
+  let lineasBajada = 0
+  for (const a of avisos) {
+    lineasTitulo = Math.max(lineasTitulo, Math.min(
+      maxTitulo,
+      lineasEstimadas(tituloPlano(a.titulo), { ancho, fontSize: fontTitulo, factor: ANCHO_CARACTER.titulo }),
+    ))
+    lineasBajada = Math.max(lineasBajada, Math.min(
+      maxBajada,
+      lineasEstimadas(a.bajada, { ancho: anchoB, fontSize: fontBajada, factor: ANCHO_CARACTER.texto }),
+    ))
+  }
+  const alto = lineasTitulo * fontTitulo * lhTitulo
+    + (lineasBajada > 0 ? gapBajada + lineasBajada * fontBajada * lhBajada : 0)
+  return { lineasTitulo, lineasBajada, alto: Math.ceil(alto) }
+}
+
 /** Filas que ocupa la fila del kicker (pill naranja + fecha al lado). Es lo
  *  único de alto variable que no es texto corrido, y el componente recorta pill
  *  y fecha a esta misma cantidad de líneas: así la reserva es exacta. */

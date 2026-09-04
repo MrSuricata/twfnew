@@ -14,12 +14,24 @@
  * saltar a una tarjeta. Con "reducir movimiento" activo no rota solo.
  *
  * El Diario es de Mediterránea; en TWF no se muestra.
+ *
+ * La tarjeta NO cambia de alto al rotar (Brian 04/09). Cada nota tiene un
+ * texto de otro largo y el banner crecía y encogía empujando lo de abajo: si
+ * el del depósito está por tocar "Retiré" justo cuando rota, se le mueve el
+ * botón y puede marcar el contenedor equivocado. Tres cosas lo sostienen:
+ *  · El bloque de texto reserva el alto de la nota MÁS LARGA de la vuelta
+ *    (`reservaAvisos`) y todas se recortan a ese mismo tope de renglones.
+ *  · La fila del kicker no envuelve nunca: pill y fecha se recortan con
+ *    puntos suspensivos antes de saltar a un segundo renglón.
+ *  · El enlace "fuente" ocupa su lugar aunque la nota no tenga link externo,
+ *    así la fila de abajo envuelve igual en todas las notas.
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { useNoticias } from '@/components/NovedadesSection'
 import {
   avisosRotativos, indiceSiguiente, indiceValido, tituloPlano, categoriaMeta,
-  estiloSlide, linkNoticia, linkDiario, AVISO_ROTACION_MS, type EstiloSlide,
+  estiloSlide, linkNoticia, linkDiario, reservaAvisos,
+  AVISO_ROTACION_MS, type EstiloSlide,
 } from '@/lib/noticias'
 import { getBrand } from '@/lib/brand'
 
@@ -33,6 +45,22 @@ const FONDO: Record<EstiloSlide, string> = {
 
 const hoyISO = () => new Date().toISOString().slice(0, 10)
 
+/** `max-w-2xl` de la bajada. */
+const ANCHO_MAX_BAJADA = 672
+const LH_TITULO = 1.3
+const LH_BAJADA = 1.5
+
+/**
+ * Caja de texto con tope de renglones: corta SIEMPRE en un borde de renglón y
+ * termina en puntos suspensivos (igual que el Diario). El `lineHeight` va
+ * explícito porque es el mismo número con el que la lib reservó el alto: si
+ * uno cambia sin el otro, vuelve el salto.
+ */
+const recorte = (lineas: number, lineHeight: number): CSSProperties =>
+  lineas > 0
+    ? { display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: lineas, overflow: 'hidden', lineHeight }
+    : { lineHeight }
+
 export default function AvisoOperativo({ className = '' }: { className?: string }) {
   const { noticias } = useNoticias()
   const avisos = useMemo(
@@ -41,6 +69,37 @@ export default function AvisoOperativo({ className = '' }: { className?: string 
   )
   const [indice, setIndice] = useState(0)
   const [quieto, setQuieto] = useState(false)
+
+  // Cuánto mide el bloque de texto. Se mide en vez de suponerse porque el
+  // banner es fluido (el mismo componente en el portal del depósito, el del
+  // transporte y el del cliente) y cuántos renglones entran depende del ancho.
+  const bloqueRef = useRef<HTMLDivElement>(null)
+  const [medida, setMedida] = useState({ ancho: 0, fontTitulo: 24 })
+  useEffect(() => {
+    const el = bloqueRef.current
+    if (!el) return
+    const medir = () => setMedida(prev => {
+      // `text-xl` en chico, `lg:text-2xl` de 1024 para arriba: el tamaño del
+      // título cambia cuántas palabras entran por renglón.
+      const next = { ancho: el.clientWidth, fontTitulo: window.innerWidth >= 1024 ? 24 : 20 }
+      return prev.ancho === next.ancho && prev.fontTitulo === next.fontTitulo ? prev : next
+    })
+    medir()
+    if (typeof ResizeObserver === 'undefined') return
+    const ro = new ResizeObserver(medir)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [avisos.length])
+
+  // El alto de la nota más larga de la rotación: lo reserva el bloque entero,
+  // así la tarjeta mide lo mismo con la nota más corta y con la más larga.
+  const reserva = useMemo(() => reservaAvisos(avisos, {
+    ancho: medida.ancho,
+    anchoBajada: Math.min(medida.ancho, ANCHO_MAX_BAJADA),
+    fontTitulo: medida.fontTitulo,
+    lhTitulo: LH_TITULO,
+    lhBajada: LH_BAJADA,
+  }), [avisos, medida])
 
   // Rotación: un solo timer, se reinicia al cambiar de tarjeta o al soltar el
   // mouse. Con una sola tarjeta no hay nada que rotar.
@@ -75,22 +134,32 @@ export default function AvisoOperativo({ className = '' }: { className?: string 
         className="absolute -bottom-24 -right-24 w-56 h-56 rounded-full border-[14px] border-white/15 pointer-events-none"
         aria-hidden
       />
-      <div className="flex items-center gap-3 flex-wrap">
-        <span className="inline-block rounded-full border-2 border-[#9bd1e5] px-4 py-1 text-[11px] font-semibold tracking-widest uppercase text-[#9bd1e5]">
+      {/* Sin `flex-wrap`: si esta fila salta a dos renglones en una nota y en
+          otra no, la tarjeta cambia de alto. Antes que eso, se recorta. */}
+      <div className="flex items-center gap-3 flex-nowrap min-w-0">
+        <span title={kicker} className="min-w-0 truncate rounded-full border-2 border-[#9bd1e5] px-4 py-1 text-[11px] font-semibold tracking-widest uppercase text-[#9bd1e5]">
           {kicker}
         </span>
-        {aviso.kickerExtra && <span className="text-sm text-white/70">{aviso.kickerExtra}</span>}
+        {aviso.kickerExtra && <span className="truncate text-sm text-white/70">{aviso.kickerExtra}</span>}
         {avisos.length > 1 && (
-          <span className="ml-auto text-xs text-white/60 tabular-nums">{i + 1} / {avisos.length}</span>
+          <span className="ml-auto shrink-0 text-xs text-white/60 tabular-nums">{i + 1} / {avisos.length}</span>
         )}
       </div>
       {/* Sin animación de entrada: con tw-animate-css el texto quedaba en
-          opacity 0 (visto en /ui el 03/09). El cambio de fondo ya marca el paso. */}
-      <div key={aviso.id}>
-        <h3 className="titulo-med mt-2.5 text-xl lg:text-2xl text-white">{tituloPlano(aviso.titulo)}</h3>
-        {aviso.bajada && (
-          <p className="mt-1.5 text-sm text-white/80 max-w-2xl">{aviso.bajada.replace(/\*\*/g, '')}</p>
-        )}
+          opacity 0 (visto en /ui el 03/09). El cambio de fondo ya marca el paso.
+          El `mt-2.5` va acá y no en el h3: adentro del bloque medido, para que
+          el alto reservado sea el alto real. */}
+      <div ref={bloqueRef} className="mt-2.5" style={{ minHeight: reserva.alto || undefined }}>
+        <div key={aviso.id}>
+          <h3 className="titulo-med text-xl lg:text-2xl text-white" style={recorte(reserva.lineasTitulo, LH_TITULO)}>
+            {tituloPlano(aviso.titulo)}
+          </h3>
+          {aviso.bajada && (
+            <p className="mt-1.5 text-sm text-white/80 max-w-2xl" style={recorte(reserva.lineasBajada, LH_BAJADA)}>
+              {aviso.bajada.replace(/\*\*/g, '')}
+            </p>
+          )}
+        </div>
       </div>
       <div className="mt-4 flex items-center gap-4 flex-wrap">
         <a
@@ -102,17 +171,20 @@ export default function AvisoOperativo({ className = '' }: { className?: string 
         >
           Leer en el Diario Logístico →
         </a>
-        {fuente.externo && (
-          <a
-            href={fuente.href}
-            target="_blank"
-            rel="noopener noreferrer"
-            title="Abrir la nota original en el sitio de origen"
-            className="text-xs text-white/70 underline underline-offset-2 hover:text-white"
-          >
-            fuente
-          </a>
-        )}
+        {/* Ocupa su lugar aunque la nota no tenga fuente externa: si apareciera
+            y desapareciera, esta fila envolvería distinto en cada nota y la
+            tarjeta volvería a cambiar de alto. Oculto no se lee ni se tabula. */}
+        <a
+          href={fuente.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          title="Abrir la nota original en el sitio de origen"
+          aria-hidden={!fuente.externo}
+          tabIndex={fuente.externo ? undefined : -1}
+          className={`text-xs text-white/70 underline underline-offset-2 hover:text-white ${fuente.externo ? '' : 'invisible'}`}
+        >
+          fuente
+        </a>
         {avisos.length > 1 && (
           <div className="flex items-center gap-2" role="tablist" aria-label="Avisos">
             {avisos.map((a, k) => (
