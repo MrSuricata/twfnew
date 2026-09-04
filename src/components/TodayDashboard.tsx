@@ -66,6 +66,7 @@ import { useBrand } from '@/lib/brand'
 import { saludoPersonal } from '@/lib/saludo'
 import { fmtDateDMY } from '@/lib/format'
 import AvisosPartnersCard from './AvisosPartnersCard'
+import ComentariosPartnersCard from './ComentariosPartnersCard'
 import { cargasMontecon, cargasSinTerminal, MONTECON_DIAS_ADELANTE, type AgendaRow, type CargaMontecon, type CargaSinTerminal } from '@/lib/monteconAgenda'
 import { colorDeposito } from '@/lib/depositoColor'
 import { fetchMonteconAgenda, agendarMontecon, desagendarMontecon, marcarMontecon } from '@/lib/dataClient'
@@ -657,6 +658,11 @@ export default function TodayDashboard({
         onResuelto={onAvisoResuelto}
         onAbrirCarga={onOpenDetail ? abrirCargaPorRef : undefined}
       />
+
+      {/* ── Comentarios de partners ("¿algo no funcionó?") ──────────────
+          Al lado de los avisos porque los escribe la misma gente, pero es
+          otra cosa: no se confirma ni se rechaza — se lee y se responde. */}
+      <ComentariosPartnersCard plegadas={plegadas} />
 
       {/* ── Estado de carga inicial (sincronizando, sin datos aún) ── */}
       {initialLoading && (

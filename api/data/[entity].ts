@@ -47,6 +47,14 @@ import {
   puedeCancelarAvisoAPI,
   filaCancelable,
 } from '../_lib/partnerAvisosRules.js'
+import {
+  validarNuevoFeedback,
+  validarResponderFeedback,
+  cambiaEstadoAPI,
+  estadoTrasAccionAPI,
+  mapFilaToComentario,
+} from '../_lib/partnerFeedbackRules.js'
+import { checkRateLimitWithConfig } from '../_lib/rateLimiter.js'
 import { broadcastTrucksLive, clientIdFromRequest } from '../_lib/realtimeBroadcast.js'
 import { z } from 'zod'
 import { uploadPhotoObjects, deletePhotoObjects, signPhotoUrls, signPhotoUrl, THUMB_TTL, FULL_TTL } from '../_lib/photoStorage.js'
@@ -119,6 +127,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     try { return await handlePartnerAvisos(req, res, db, payload) }
     catch (e: any) { console.error('[partner-avisos] error:', e?.message); return res.status(500).json({ error: 'Database error' }) }
+  }
+
+  // Comentarios de partners ("¿algo no funcionó?"): el depósito/transporte
+  // escribe y lee lo SUYO; el equipo los lee todos y responde desde HOY. Misma
+  // puerta compartida que partner-avisos — el reparto fino por rol y método
+  // vive en handlePartnerFeedback. NO es un endpoint nuevo a propósito: Vercel
+  // Hobby está en 12/12 funciones y un archivo más en api/ rompe el deploy.
+  if (entity === 'partner-feedback') {
+    if (!payload || (payload.role !== 'depot' && payload.role !== 'transport' && payload.role !== 'admin')) {
+      return res.status(401).json({ error: 'Authentication required' })
+    }
+    try { return await handlePartnerFeedback(req, res, db, payload) }
+    catch (e: any) { console.error('[partner-feedback] error:', e?.message); return res.status(500).json({ error: 'Database error' }) }
   }
 
   // All other endpoints require admin auth
@@ -3481,6 +3502,160 @@ async function handlePartnerAvisos(req: VercelRequest, res: VercelResponse, db: 
       id, tipo: aviso.tipo, cntr: aviso.cntr, partner: aviso.partner_filter, dato: aviso.dato,
     })
     return res.status(200).json({ aviso: mapFilaToAviso(upd) })
+  }
+
+  return res.status(405).json({ error: 'Method not allowed' })
+}
+
+// ── Comentarios de partners (partner_feedback) ──────────────────────────
+// "¿Algo no funcionó?" desde el portal del depósito / transporte. El encuadre
+// es angosto a propósito (spec docs/superpowers/specs/
+// 2026-09-04-caja-comentarios-partners-design.md): en fase de prueba la gente
+// reporta problemas concretos, no imagina mejoras.
+//
+// GET        → partner: los SUYOS (60 d, por el email releído del token)
+//              admin: los no respondidos + los respondidos de los últimos 7 d
+// POST       → solo depot/transport: {texto, contexto?}
+// PATCH ?id= → solo admin/owner: {accion:'visto'|'responder', respuesta?}
+//
+// Un comentario NO es un aviso: no se confirma, no se rechaza y no tiene ref
+// obligatoria. Por eso tabla propia y no un tipo más en partner_avisos, que
+// modela propuestas operativas sobre una carga.
+
+const FEEDBACK_COLS = 'id,partner_email,partner_name,partner_role,partner_filter,texto,contexto,estado,respuesta,respondido_por,respondido_at,created_at'
+/** Ventana de lo que el partner ve de lo suyo. */
+const FEEDBACK_DIAS_PARTNER = 60
+/** Los ya respondidos siguen a la vista del equipo unos días (el rastro). */
+const FEEDBACK_DIAS_RESPONDIDOS_ADMIN = 7
+/** Tope: 5 comentarios por hora por usuario. Alcanza de sobra para la primera
+ *  semana de uso y frena un botón trabado o un script. */
+const FEEDBACK_MAX_POR_HORA = 5
+const FEEDBACK_VENTANA_MS = 60 * 60_000
+
+async function handlePartnerFeedback(req: VercelRequest, res: VercelResponse, db: any, payload: TokenPayload) {
+  const esPartner = payload.role === 'depot' || payload.role === 'transport'
+  const esAdmin = payload.role === 'admin'
+  // El email SIEMPRE sale del token verificado, nunca del request: es la única
+  // forma de que nadie lea ni firme comentarios ajenos.
+  const partnerEmail = esPartner ? String((payload as any).email || '').trim().toLowerCase() : ''
+
+  if (req.method === 'GET') {
+    if (esPartner) {
+      // partnerAlcanceVivo relee partner_users: un partner dado de baja no
+      // entra ni a leer lo suyo (revocación efectiva, igual que en avisos).
+      const quien = await partnerAlcanceVivo(db, payload)
+      if ('status' in quien) return res.status(quien.status).json({ error: quien.error })
+      if (!partnerEmail) return res.status(200).json({ comentarios: [] })
+      const desde = new Date(Date.now() - FEEDBACK_DIAS_PARTNER * 86_400_000).toISOString()
+      const { data, error } = await db.from('partner_feedback')
+        .select(FEEDBACK_COLS)
+        .eq('partner_email', partnerEmail)
+        .gte('created_at', desde)
+        .order('created_at', { ascending: false })
+        .limit(100)
+      if (error) throw error
+      return res.status(200).json({ comentarios: (data || []).map(mapFilaToComentario) })
+    }
+    // Equipo: lo que falta atender + el rastro reciente de lo respondido.
+    // NO se filtra por cartera de cliente (allowedRefsForPayload): un
+    // comentario es sobre la herramienta, no sobre una carga — filtrarlo por
+    // una ref que puede no existir lo escondería sin motivo.
+    const desde = new Date(Date.now() - FEEDBACK_DIAS_RESPONDIDOS_ADMIN * 86_400_000).toISOString()
+    const { data, error } = await db.from('partner_feedback')
+      .select(FEEDBACK_COLS)
+      .or(`estado.neq.respondido,respondido_at.gte.${desde}`)
+      .order('created_at', { ascending: false })
+      .limit(500)
+    if (error) throw error
+    return res.status(200).json({ comentarios: (data || []).map(mapFilaToComentario) })
+  }
+
+  if (req.method === 'POST') {
+    if (!esPartner) return res.status(403).json({ error: 'Los comentarios los escribe el depósito o el transporte.' })
+    const v = validarNuevoFeedback(req.body)
+    if (!v.ok) return res.status(v.status).json({ error: v.error })
+
+    // IDENTIDAD Y ALCANCE VIVOS: nombre y filter_value se releen de
+    // `partner_users`; el rol sale del token verificado y el email también.
+    // Del body no se cree NADA que diga quién es: es la misma regla que ya
+    // siguen los avisos.
+    const quien = await partnerAlcanceVivo(db, payload)
+    if ('status' in quien) return res.status(quien.status).json({ error: quien.error })
+    if (!partnerEmail) return res.status(403).json({ error: 'Tu usuario no tiene email: no podemos identificar el comentario.' })
+
+    const { limited } = await checkRateLimitWithConfig(
+      `feedback:${partnerEmail}`, FEEDBACK_MAX_POR_HORA, FEEDBACK_VENTANA_MS, FEEDBACK_VENTANA_MS,
+    )
+    if (limited) {
+      return res.status(429).json({ error: 'Ya nos mandaste varios comentarios seguidos: los estamos leyendo. Escribinos el próximo en un rato.' })
+    }
+
+    const { data: nuevo, error } = await db.from('partner_feedback')
+      .insert({
+        partner_email: partnerEmail,
+        partner_name: quien.nombre || '',
+        partner_role: payload.role,
+        partner_filter: quien.alcance || '',
+        texto: v.data.texto,
+        contexto: v.data.contexto,
+        estado: 'nuevo',
+      })
+      .select(FEEDBACK_COLS)
+      .single()
+    if (error) throw error
+    // Auditoría con el EMAIL del partner (su token no trae name/user de admin).
+    // La ref del contexto va en `details`, NO como `ref` del log: la manda el
+    // cliente y acá no se coteja contra el alcance del partner (a diferencia de
+    // partner-avisos, que sí lo hace). Usándola como `ref` del log, un POST
+    // armado a mano metería una fila en el rastro de cualquier carga. Un
+    // comentario es sobre la herramienta, no sobre una carga: no necesita
+    // aparecer en ese rastro.
+    logAudit(db, { email: partnerEmail } as any, 'comentario_partner', 'partner_feedback', '', {
+      id: nuevo.id, partner: quien.alcance || '', pantalla: v.data.contexto.pantalla,
+      movil: v.data.contexto.movil, refDeclarada: v.data.contexto.ref || '',
+    })
+    return res.status(200).json({ comentario: mapFilaToComentario(nuevo) })
+  }
+
+  if (req.method === 'PATCH') {
+    if (!esAdmin) return res.status(403).json({ error: 'Los comentarios los responde el equipo.' })
+    const id = String(req.query.id || '').trim()
+    if (!id) return res.status(400).json({ error: 'id required' })
+    const v = validarResponderFeedback(req.body)
+    if (!v.ok) return res.status(v.status).json({ error: v.error })
+
+    const { data: fila, error: errFila } = await db.from('partner_feedback').select(FEEDBACK_COLS).eq('id', id).maybeSingle()
+    if (errFila) throw errFila
+    if (!fila) return res.status(404).json({ error: 'Comentario no encontrado' })
+
+    const estadoActual = String(fila.estado || 'nuevo') as 'nuevo' | 'leido' | 'respondido'
+    // Marcar visto lo ya visto (o lo ya respondido) no escribe: el estado
+    // nunca retrocede y un UPDATE al pedo ensucia el rastro.
+    if (!cambiaEstadoAPI(estadoActual, v.data.accion)) {
+      return res.status(200).json({ comentario: mapFilaToComentario(fila) })
+    }
+
+    const patch: Record<string, unknown> = { estado: estadoTrasAccionAPI(estadoActual, v.data.accion) }
+    if (v.data.accion === 'responder') {
+      patch.respuesta = v.data.respuesta
+      // Quién respondió = la identidad de LOGIN del token (el email), la misma
+      // que estampa `by` en ref_checks e `invoiced_by` en billing. NO el nombre
+      // visible: es la que se puede cotejar después.
+      patch.respondido_por = String((payload as AdminPayload | null)?.user || '').trim() || auditUser(payload as any)
+      patch.respondido_at = new Date().toISOString()
+    }
+
+    const { data: upd, error } = await db.from('partner_feedback')
+      .update(patch)
+      .eq('id', id)
+      .select(FEEDBACK_COLS)
+      .maybeSingle()
+    if (error) throw error
+    if (!upd) return res.status(404).json({ error: 'Comentario no encontrado' })
+    logAudit(db, payload, `comentario_partner_${v.data.accion}`, 'partner_feedback', String(upd.contexto?.ref || ''), {
+      id, partner: fila.partner_filter, estado: upd.estado,
+    })
+    return res.status(200).json({ comentario: mapFilaToComentario(upd) })
   }
 
   return res.status(405).json({ error: 'Method not allowed' })

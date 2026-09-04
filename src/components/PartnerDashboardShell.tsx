@@ -3,6 +3,7 @@ import { saludoPersonal } from '@/lib/saludo'
 import { Button } from '@/components/ui/button'
 import { SignOut, User, House } from '@phosphor-icons/react'
 import BrandLogo from './BrandLogo'
+import CajaComentarios from './partner/CajaComentarios'
 
 interface PartnerDashboardShellProps {
   /** Decorative icon shown on the left (e.g. <Warehouse ... /> or <Truck ... />). */
@@ -13,6 +14,15 @@ interface PartnerDashboardShellProps {
   userName: string
   /** Logout handler. */
   onLogout: () => void
+  /**
+   * Pantalla actual ("HOY del depósito"): precarga el "¿en qué estabas?" de la
+   * caja de comentarios. Va acá y no en cada dashboard porque el armazón lo
+   * comparten los dos portales: puesta una vez, la caja aparece en depósito y
+   * transporte sin duplicar nada (spec 04/09, D3). Sin esta prop no se muestra.
+   */
+  pantalla?: string
+  /** Vista previa (/ui o "Ver como"): la caja se ve pero no manda nada. */
+  preview?: boolean
   /** Main content area (below the header). */
   children: ReactNode
 }
@@ -27,6 +37,8 @@ export default function PartnerDashboardShell({
   title,
   userName,
   onLogout,
+  pantalla,
+  preview = false,
   children,
 }: PartnerDashboardShellProps) {
   return (
@@ -68,7 +80,14 @@ export default function PartnerDashboardShell({
 
       {/* 7xl y no 1600px: con filas de dos renglones, más ancho solo estira
           el texto y cuesta leerlo (Brian 02/09). */}
-      <main className="max-w-7xl mx-auto p-4 space-y-5">{children}</main>
+      <main className="max-w-7xl mx-auto p-4 space-y-5">
+        {/* La caja de comentarios va PRIMERO: lo que trae para mostrar es la
+            respuesta del equipo, y una respuesta abajo de todo es una
+            respuesta que no se lee. El botón es `fixed`, así que no importa
+            dónde esté en el DOM. */}
+        {pantalla && <CajaComentarios pantalla={pantalla} preview={preview} />}
+        {children}
+      </main>
     </div>
   )
 }

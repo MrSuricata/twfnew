@@ -1191,3 +1191,60 @@ export async function resolverPartnerAviso(id: string, accion: 'confirmar' | 're
   const data = await res.json()
   return data.aviso
 }
+
+// ─── Comentarios de partners ("¿algo no funcionó?") ────────────────────────
+// Contrato: src/lib/partnerFeedback.ts · Spec: docs/superpowers/specs/2026-09-04-caja-comentarios-partners-design.md
+// Un solo endpoint para los dos mundos: el server decide por el rol del token
+// (partner = los suyos; admin = todos). No hay función nueva en api/ — Vercel
+// Hobby está en 12/12.
+
+/** Partner: los comentarios que escribió él (60 días, para ver las respuestas).
+ *  Admin/owner: los no respondidos + los respondidos de los últimos 7 días.
+ *  Si la entidad todavía no existe en el deploy (404), se trata como "sin
+ *  comentarios": ni la card de HOY ni el portal muestran un error por eso. */
+export async function fetchPartnerFeedback(): Promise<import('./partnerFeedback').PartnerComentario[]> {
+  const res = await authFetch('/api/data/partner-feedback')
+  if (res.status === 404) return []
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const data = await res.json()
+  return data.comentarios || []
+}
+
+/** Partner: mandar un comentario. La identidad (email, nombre, rol y alcance)
+ *  NO viaja: el server la relee de `partner_users`. Solo van el texto y el
+ *  contexto que se capturó solo. */
+export async function enviarPartnerFeedback(
+  input: import('./partnerFeedback').NuevoComentario,
+): Promise<import('./partnerFeedback').PartnerComentario> {
+  const res = await authFetch('/api/data/partner-feedback', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
+  const data = await res.json()
+  return data.comentario
+}
+
+/** Equipo: responder en una línea, o marcar visto. `respondido_por` lo estampa
+ *  el server con el email del token (nunca viaja desde acá). */
+export async function responderPartnerFeedback(
+  id: string,
+  accion: 'visto' | 'responder',
+  respuesta?: string,
+): Promise<import('./partnerFeedback').PartnerComentario> {
+  const res = await authFetch(`/api/data/partner-feedback?id=${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(accion === 'responder' ? { accion, respuesta } : { accion }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error || `HTTP ${res.status}`)
+  }
+  const data = await res.json()
+  return data.comentario
+}

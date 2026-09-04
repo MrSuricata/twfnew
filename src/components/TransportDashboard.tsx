@@ -22,6 +22,7 @@ import type { ParsedShipment } from '@/lib/shipmentTypes'
 import { fmtDateDMY, fmtNum, hoyISO } from '@/lib/format'
 import { formatKg, formatM3 } from '@/lib/truckUtils'
 import { fetchPartnerAvisos, crearPartnerAviso, cancelarPartnerAviso } from '@/lib/dataClient'
+import { recordarRefEnFoco } from '@/lib/refEnFoco'
 import {
   avisoPendiente, senasaSolicitado, ultimoAviso, PARTNER_AVISO_LABEL, puedeCancelarAviso,
   type PartnerAviso, type PartnerAvisoEstado,
@@ -208,6 +209,9 @@ export default function TransportDashboard({ shipments, transportName, userName,
   const totalEspeciales = useMemo(() => new Set(especiales.flatMap(g => g.cargas.map(c => `${c.ref}|${c.cntr}`))).size, [especiales])
 
   const solicitarSenasa = async (c: CargaHoy) => {
+    // La carga sobre la que acaba de actuar: si algo falla y abre la caja de
+    // comentarios, el comentario viaja con esta ref (lib/refEnFoco).
+    recordarRefEnFoco(c.ref)
     if (preview) {
       toast.info('Vista previa', { description: 'Acá el transporte avisa que pidió SENASA y el equipo lo confirma desde HOY.' })
       return
@@ -259,6 +263,8 @@ export default function TransportDashboard({ shipments, transportName, userName,
       title={transportName}
       userName={userName}
       onLogout={onLogout}
+      pantalla="HOY del transporte"
+      preview={preview}
     >
       <div className="space-y-4">
         {/* Un paro o un paso cerrado le cambia el día al transporte igual que
