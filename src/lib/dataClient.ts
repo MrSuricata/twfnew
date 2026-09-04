@@ -667,6 +667,20 @@ export function saveUserPrefsDebounced(patch: Record<string, unknown>): void {
   }, 800)
 }
 
+/**
+ * Manda YA lo que esté esperando el debounce. Se llama al ocultar o abandonar
+ * la página: sin esto, tocar algo y recargar dentro de los 800 ms pierde el
+ * cambio, y al volver el server contesta el valor viejo (se "deshace" solo).
+ */
+export function flushUserPrefs(): void {
+  if (!prefsTimer) return
+  clearTimeout(prefsTimer)
+  prefsTimer = null
+  const send = prefsBuffer
+  prefsBuffer = {}
+  void saveUserPrefs(send).catch(() => { /* queda el caché local */ })
+}
+
 export async function saveBilling(rows: BillingRecord[]): Promise<void> {
   if (rows.length === 0) return
   const res = await authFetch('/api/data/billing', {
