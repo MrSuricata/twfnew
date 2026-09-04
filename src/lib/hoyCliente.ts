@@ -351,8 +351,9 @@ const base = (s: ParsedShipment, nombreCliente = ''): FilaBase =>
 // ── Card 1: Llegan a destino ──────────────────────────────────────────────
 
 /** en_frontera = viajando · sale_hoy · sale = salida programada · llega =
- *  ruta directa, el buque llega al puerto de destino. */
-export type EstadoLlegadaDestino = 'en_frontera' | 'sale_hoy' | 'sale' | 'llega'
+ *  ruta directa, el buque llega al puerto de destino · en_buque = todavía
+ *  navegando, con fecha de arribo a fiscal cargada (fecha estimada). */
+export type EstadoLlegadaDestino = 'en_frontera' | 'sale_hoy' | 'sale' | 'llega' | 'en_buque'
 
 export interface FilaDestino extends FilaBase {
   descripcion: string
@@ -364,17 +365,43 @@ export interface FilaDestino extends FilaBase {
   /** días hasta la llegada (null si no hay fecha). */
   dias: number | null
   estado: EstadoLlegadaDestino
-  /** SALIDA ISO ('' en rutas directas sin tramo). */
+  /** SALIDA ISO ('' en rutas directas sin tramo, y a veces en `en_buque`). */
   salida: string
   fiscal: string
+  /** ETA del buque al puerto (ISO). En `en_buque` es EL dato que explica por
+   *  qué la fecha de destino es estimada: el barco todavía no atracó. */
+  etaPuerto: string
 }
 
 export const DESTINO_DIAS_ADELANTE = 7
 
+/** Hasta dónde mira la card de llegada que le corresponde a esta carga: dos
+ *  semanas para lo que viene por Montevideo (card 3) y 7 días para las rutas
+ *  directas (card 1). Una sola definición porque la usan tres reglas: el tope
+ *  de las filas `en_buque`, y `embarcadas` para no repetir lo que ya se
+ *  anuncia como "llegando". */
+export const ventanaLlegada = (s: ParsedShipment): number =>
+  porUruguay(s) ? MVD_DIAS_ADELANTE : DESTINO_DIAS_ADELANTE
+
 /** Lo que está llegando a destino: contenedores/consolidados con SALIDA
  *  cargada que van hacia el fiscal (ya salieron, salen hoy o en los próximos
- *  días), y en rutas directas los buques que llegan al puerto de destino en
- *  los próximos días. Sin SALIDA no hay nada que "llegue": eso es card 2. */
+ *  días), en rutas directas los buques que llegan al puerto de destino en los
+ *  próximos días, y —desde el 04/09— lo que TODAVÍA VIAJA EN EL BUQUE pero ya
+ *  tiene fecha de arribo al fiscal cargada.
+ *
+ *  Ese último caso lo pidió Brian mirando el portal como CHIAPERO: la A8045
+ *  llegaba a Montevideo el 8, salía el 9 y arribaba a RAFAELA el 11, y la card
+ *  no la mostraba porque el corte era "el buque tiene que haber atracado". La
+ *  regla vieja se cuidaba de no prometer una fecha que se mueve sola; la nueva
+ *  la muestra MARCADA (`en_buque`, con la ETA a Montevideo al lado) en vez de
+ *  esconderla: "más información sin prometer una fecha firme". Sin fecha de
+ *  fiscal no entra — no habría nada que anunciar; eso sigue siendo card 3.
+ *
+ *  Es la ÚNICA fila que se solapa con otra card a propósito: la carga sigue
+ *  anunciándose en "Llegan a Montevideo" (es la misma llegada, contada desde
+ *  el otro lado). Por eso su ventana es la de esa card (`ventanaLlegada`) y no
+ *  `adelante`: lo que ya se anuncia como "llegando" puede mostrar acá su fecha
+ *  de fiscal, y nada más que eso. */
 export function llegadasADestino(shipments: ParsedShipment[], hoyISO: string, adelante = DESTINO_DIAS_ADELANTE, nombreCliente = ''): FilaDestino[] {
   const out: FilaDestino[] = []
   for (const s of shipments || []) {
@@ -387,11 +414,35 @@ export function llegadasADestino(shipments: ParsedShipment[], hoyISO: string, ad
       const o = ops(s)[0]
       out.push({
         ...base(s, nombreCliente), descripcion: txt(o?.DESCRIPCION), cntr: txt(s.CNTR), camion: '',
-        fecha: eta, dias: d, estado: 'llega', salida: '', fiscal: txt(s.POD),
+        fecha: eta, dias: d, estado: 'llega', salida: '', fiscal: txt(s.POD), etaPuerto: eta,
       })
       continue
     }
-    if (!llegoAPuerto(s, hoyISO)) continue
+    if (!llegoAPuerto(s, hoyISO)) {
+      // Todavía en el buque: entra solo si ya tiene fecha de arribo a fiscal.
+      const etaPuerto = isoDia(s.ETA)
+      if (!etaPuerto) continue                                   // llegoAPuerto ya cubre esto; el tipo no lo sabe
+      if (diffDias(hoyISO, etaPuerto) > ventanaLlegada(s)) continue
+      for (const o of ops(s)) {
+        const fiscal = isoDia(o.ETA_FISC)
+        if (!fiscal) continue                                    // sin fecha no hay nada que anunciar
+        if (diffDias(hoyISO, fiscal) <= 0) continue              // fiscal ya pasada con el buque en el mar: dato viejo
+        if (entregada(o, s.LIBRE_HASTA)) continue
+        out.push({
+          ...base(s, nombreCliente),
+          descripcion: txt(o.DESCRIPCION),
+          cntr: txt(o.CNTR_OP),
+          camion: txt(o.CAMION),
+          fecha: fiscal,
+          dias: diffDias(hoyISO, fiscal),
+          estado: 'en_buque',
+          salida: isoDia(o.SALIDA) || '',
+          fiscal: txt(o.FISCAL),
+          etaPuerto,
+        })
+      }
+      continue
+    }
     for (const o of ops(s)) {
       if (llegoAlDestino(o, hoyISO)) continue // ya está en destino (o se da por llegado)
       if (entregada(o, s.LIBRE_HASTA)) continue
@@ -411,11 +462,14 @@ export function llegadasADestino(shipments: ParsedShipment[], hoyISO: string, ad
         estado,
         salida,
         fiscal: txt(o.FISCAL),
+        etaPuerto: isoDia(s.ETA) || '',
       })
     }
   }
-  // Lo que ya viene primero (en frontera / sale hoy), después por fecha de llegada.
-  const rango = (e: EstadoLlegadaDestino) => (e === 'en_frontera' ? 0 : e === 'sale_hoy' ? 1 : 2)
+  // Lo que ya viene primero (en frontera / sale hoy), después por fecha de
+  // llegada. Lo estimado (todavía en el buque) va último: primero lo firme.
+  const rango = (e: EstadoLlegadaDestino) =>
+    (e === 'en_frontera' ? 0 : e === 'sale_hoy' ? 1 : e === 'en_buque' ? 3 : 2)
   return out.sort((a, b) =>
     rango(a.estado) - rango(b.estado)
     || (a.fecha || '9999').localeCompare(b.fecha || '9999')
@@ -715,8 +769,7 @@ export function embarcadas(
     if (!etd) continue
     const eta = isoDia(s.ETA)
     // Lo que ya está en una card de llegada no se repite acá.
-    const topeLlegada = porUruguay(s) ? MVD_DIAS_ADELANTE : DESTINO_DIAS_ADELANTE
-    if (eta && diffDias(hoyISO, eta) <= topeLlegada) continue
+    if (eta && diffDias(hoyISO, eta) <= ventanaLlegada(s)) continue
     const d = diffDias(hoyISO, etd)
     if (d < -atras || d > adelante) continue
     out.push({
