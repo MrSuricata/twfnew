@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   esCargaDeClienteActiva, rowToClientShipment, CLIENT_SHIPMENT_COLS, camionesPorRef,
-  CLIENTE_ETA_MAX_DIAS, CLIENTE_ENTREGADA_DIAS,
+  CLIENTE_ETA_MAX_DIAS, CLIENTE_ENTREGADA_DIAS, cantidadContenedores,
 } from '../../api/_lib/clientShipments'
 
 // El portal de clientes es la superficie MÁS expuesta de la app: estos tests
@@ -168,5 +168,51 @@ describe('rowToClientShipment — modalidad y LCL en camión (Brian 02/09)', () 
     expect(m.get('E234')?.code).toBe('C462')
     expect(m.has('E235')).toBe(false)
     expect(m.has('E236')).toBe(false)
+  })
+})
+
+describe('cantidadContenedores — el "0 contenedor(es)" que vio Brian (spec 04/09)', () => {
+  it('n_cntr > 0 se respeta tal cual (es lo que cargó el equipo)', () => {
+    expect(cantidadContenedores({ mode: 'fcl', n_cntr: 3, contenedor: 'AAAA1111111' })).toBe(3)
+    expect(cantidadContenedores({ mode: 'fcl', n_cntr: '2', contenedor: '' })).toBe(2)
+  })
+
+  it('n_cntr en 0 o nulo → cuenta la columna contenedor (coma y/o espacio)', () => {
+    expect(cantidadContenedores({ mode: 'fcl', n_cntr: 0, contenedor: 'CSNU7743374, FFAU3573668' })).toBe(2)
+    expect(cantidadContenedores({ mode: 'fcl', n_cntr: null, contenedor: 'CSNU7743374 FFAU3573668 MRKU1234567' })).toBe(3)
+    expect(cantidadContenedores({ mode: 'fcl', contenedor: 'CSNU7743374' })).toBe(1)
+  })
+
+  it('suma operativas[].CNTR_OP y NO duplica el mismo contenedor escrito en los dos lados', () => {
+    const d = {
+      mode: 'fcl', n_cntr: 0, contenedor: 'CSNU7743374, FFAU3573668',
+      operativas: [{ CNTR_OP: 'csnu7743374' }, { CNTR_OP: 'TGHU 9999999' }, { CNTR_OP: '' }],
+    }
+    expect(cantidadContenedores(d)).toBe(3)
+  })
+
+  it('sin nada cargado sigue siendo 0 (no inventa)', () => {
+    expect(cantidadContenedores({ mode: 'fcl', n_cntr: 0, contenedor: '', operativas: [] })).toBe(0)
+    expect(cantidadContenedores({ mode: 'fcl' })).toBe(0)
+  })
+
+  it('LCL: el 0 es correcto y se respeta aunque haya texto en contenedor', () => {
+    expect(cantidadContenedores({ mode: 'lcl', n_cntr: 0, contenedor: 'CONSOLIDADO C463' })).toBe(0)
+    expect(cantidadContenedores({ mode: 'LCL', n_cntr: null, operativas: [{ CNTR_OP: 'X' }] })).toBe(0)
+  })
+
+  it('rowToClientShipment: N y calculatedN salen derivados cuando n_cntr quedó en 0', () => {
+    const v = rowToClientShipment({
+      ref: 'A8121', mode: 'fcl', n_cntr: 0, contenedor: 'MRKU1234567, MRKU2345678', eta: '2026-09-06',
+      operativas: [{ CNTR_OP: 'MRKU1234567' }, { CNTR_OP: 'MRKU2345678' }],
+    }) as any
+    expect(v.N).toBe(2)
+    expect(v.calculatedN).toBe(2)
+  })
+
+  it('rowToClientShipment: una LCL sigue viajando con N = 0', () => {
+    const v = rowToClientShipment({ ref: 'E240', mode: 'lcl', n_cntr: 0, contenedor: '', eta: '2026-09-06' }) as any
+    expect(v.N).toBe(0)
+    expect(v.calculatedN).toBe(0)
   })
 })

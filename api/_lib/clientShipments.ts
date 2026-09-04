@@ -68,6 +68,36 @@ const num = (v: unknown): number => {
 }
 
 /**
+ * Cuántos contenedores tiene la carga, mirando la lista REAL.
+ *
+ * `n_cntr` se escribe solo al alta y no se recalcula: 121 cargas activas lo
+ * tienen en 0 con contenedor cargado, y el cliente veía "0 contenedor(es)"
+ * (Brian, spec rediseño 04/09). Regla:
+ *  · LCL (mode 'lcl'): no tiene contenedor propio, el 0 es correcto → se
+ *    respeta lo declarado tal cual.
+ *  · Si `n_cntr` > 0 se respeta (es lo que cargó el equipo).
+ *  · Si es 0 o nulo, se cuentan los contenedores DISTINTOS entre la columna
+ *    `contenedor` (separada por coma y/o espacio) y `operativas[].CNTR_OP`.
+ * Pura: sirve igual para N y para calculatedN, y se testea sin DB.
+ */
+export function cantidadContenedores(d: {
+  mode?: unknown; n_cntr?: unknown; contenedor?: unknown; operativas?: unknown
+}): number {
+  if (txt(d.mode).toLowerCase() === 'lcl') return num(d.n_cntr)
+  const declarado = num(d.n_cntr)
+  if (declarado > 0) return declarado
+  const distintos = new Set<string>()
+  for (const c of txt(d.contenedor).split(/[\s,]+/)) if (c) distintos.add(c.toUpperCase())
+  if (Array.isArray(d.operativas)) {
+    for (const o of d.operativas as Row[]) {
+      const c = txt(o?.CNTR_OP).replace(/\s+/g, '').toUpperCase()
+      if (c) distintos.add(c)
+    }
+  }
+  return distintos.size
+}
+
+/**
  * Fila de la DB → shape ParsedShipment que el portal ya consume.
  * Espejo servidor de dbFclToParsedShipment (src/lib/operationsTypes) con la
  * whitelist puesta: financieros en cero, CLIENTE/CLIENTE_OP vacíos.
@@ -182,7 +212,8 @@ function rowToClientShipmentBase(d: Row): Record<string, unknown> {
     CLIENTE: '',                      // no viaja: el portal ya sabe quién es
     ETD: txt(d.etd), ETA: txt(d.eta),
     FT: 0, LIBRE_HASTA: txt(d.libre),
-    CNTR: txt(d.contenedor), N: num(d.n_cntr),
+    // N derivado de la lista real cuando n_cntr quedó en 0 (ver cantidadContenedores).
+    CNTR: txt(d.contenedor), N: cantidadContenedores(d),
     MBL: txt(d.doc_number), LINEA: txt(d.linea), BUQUE: txt(d.buque), TERMINAL: txt(d.terminal),
     C_TERMINAL: 0, C_DEV: 0, LOCALES: 0, FLETE: 0, FORMA_DE_PAGO: 'al arribo', VTO: '',
     CR: false, BL: false, AD: false, AT: false,
@@ -191,7 +222,7 @@ function rowToClientShipmentBase(d: Row): Record<string, unknown> {
     // Modalidad (fcl / lcl / air): el portal filtra y etiqueta por tipo (Brian 02/09).
     MODE: txt(d.mode).toLowerCase() || 'fcl',
     SEGUIMIENTO: txt(d.seguimiento), TIPO: txt(d.tipo),
-    containers: [], calculatedN: num(d.n_cntr), calculatedLibreHasta: txt(d.libre),
+    containers: [], calculatedN: cantidadContenedores(d), calculatedLibreHasta: txt(d.libre),
     operativas: ops,
   }
 }
