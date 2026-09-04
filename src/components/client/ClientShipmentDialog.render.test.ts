@@ -78,6 +78,20 @@ describe('ClientShipmentDialog — el diálogo se anuncia y se nombra como el cl
     expect(html).not.toContain('A8121')
   })
 
+  it('abre en la pestaña que pide el aviso de HOY (spec 04/09, D3)', () => {
+    const datos = {
+      fotos: [{ id: 'f1', shipmentRef: 'A8121', photoType: 'uruguay', createdAt: ts(2026, 9, 2) }],
+      informes: [{ id: 'r1', shipmentRef: 'A8121', title: 'Informe de trasiego', createdAt: ts(2026, 9, 2), fileName: 'i.pdf' }],
+    }
+    // Radix marca la pestaña activa con aria-selected en su trigger, y dice
+    // cuál es en `aria-controls` ("…-content-fotos").
+    const activa = (html: string): string =>
+      (html.match(/aria-selected="true" aria-controls="[^"]*-content-(resumen|fotos|informes)"/) || [])[1] || ''
+    expect(activa(render(datos))).toBe('resumen')
+    expect(activa(render({ ...datos, pestanaInicial: 'fotos' }))).toBe('fotos')
+    expect(activa(render({ ...datos, pestanaInicial: 'informes' }))).toBe('informes')
+  })
+
   it('cerrado no renderiza nada', () => {
     expect(render({ open: false })).toBe('')
   })

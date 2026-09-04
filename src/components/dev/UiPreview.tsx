@@ -49,8 +49,12 @@ const foto = (ref: string, tipo: 'origen' | 'uruguay', dias: number, i: number) 
 }) as never
 const fotosDemo = [
   // D9001 tiene los DOS lugares y dos días: es la carga para mirar la ficha.
+  // Y SEIS fotos en Montevideo, para ver la tira de 4 miniaturas con el "+2"
+  // en la card "Novedades de tus cargas" (spec 04/09, D3).
   foto('D9001', 'uruguay', 0, 1), foto('D9001', 'uruguay', 0, 2), foto('D9001', 'uruguay', 0, 3),
+  foto('D9001', 'uruguay', 0, 9), foto('D9001', 'uruguay', 0, 10), foto('D9001', 'uruguay', 0, 11),
   foto('D9001', 'origen', 21, 4), foto('D9001', 'origen', 21, 5),
+  // D9005: tres fotos de origen, para ver la tira SIN "+N".
   foto('D9005', 'origen', 2, 6), foto('D9005', 'origen', 2, 7), foto('D9005', 'origen', 3, 8),
 ]
 /** PDF mínimo de verdad, así el botón "Abrir" de la ficha se puede probar. */
