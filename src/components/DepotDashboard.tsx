@@ -24,6 +24,7 @@ import PanelCard, { PanelFila, FilaTitulo, FilaDatos, Ref, Chip as ChipPanel, Da
 import ChipTransporte from './trucks/ChipTransporte'
 import type { ParsedShipment } from '@/lib/shipmentTypes'
 import { fetchPartnerAvisos, crearPartnerAviso, cancelarPartnerAviso } from '@/lib/dataClient'
+import { recordarRefEnFoco } from '@/lib/refEnFoco'
 import {
   PARTNER_AVISO_LABEL, stockValido, puedeCancelarAviso,
   type PartnerAviso, type NuevoPartnerAviso,
@@ -233,6 +234,9 @@ export default function DepotDashboard({ shipments, depotName, userName, onLogou
 
   /** Crea el aviso y lo refleja al instante; después se resincroniza con el server. */
   const mandarAviso = async (input: NuevoPartnerAviso, ok: string) => {
+    // La carga sobre la que acaba de actuar: si algo falla y abre la caja de
+    // comentarios, el comentario viaja con esta ref (lib/refEnFoco).
+    recordarRefEnFoco(input.ref)
     if (preview) {
       toast.info('Vista previa', { description: 'Acá el depósito manda el aviso y el equipo lo confirma desde HOY.' })
       return false
@@ -310,6 +314,8 @@ export default function DepotDashboard({ shipments, depotName, userName, onLogou
       title={depotName}
       userName={userName}
       onLogout={onLogout}
+      pantalla="HOY del depósito"
+      preview={preview}
     >
       <div className="space-y-4">
         <AvisoOperativo />
@@ -440,7 +446,7 @@ export default function DepotDashboard({ shipments, depotName, userName, onLogou
                               <button
                                 type="button"
                                 className={btnBorde}
-                                onClick={() => setFechaDevolvi(prev => ({ ...prev, [k]: hoy }))}
+                                onClick={() => { recordarRefEnFoco(l.ref); setFechaDevolvi(prev => ({ ...prev, [k]: hoy })) }}
                                 title="Ya devolviste el contenedor vacío a la terminal. El equipo lo confirma."
                               >
                                 Devolví el vacío
@@ -527,7 +533,7 @@ export default function DepotDashboard({ shipments, depotName, userName, onLogou
                               pattern="\d{3,7}"
                               placeholder="45012"
                               value={stockDraft[c.ref] || ''}
-                              onChange={e => setStockDraft(prev => ({ ...prev, [c.ref]: e.target.value.replace(/\D/g, '').slice(0, 7) }))}
+                              onChange={e => { recordarRefEnFoco(c.ref); setStockDraft(prev => ({ ...prev, [c.ref]: e.target.value.replace(/\D/g, '').slice(0, 7) })) }}
                               onKeyDown={e => { if (e.key === 'Enter') desconsolide(c) }}
                               aria-invalid={!!stockDraft[c.ref] && !stockValido(stockDraft[c.ref])}
                               className={`${inputChico} w-24 font-mono`}
