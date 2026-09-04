@@ -24,6 +24,7 @@ import {
   armarEventos, filtrarEventos, agruparPorDia,
   type Evento, type FilaLog, type TipoEvento,
 } from '@/lib/historialSeguimientos'
+import type { AreaSeguimiento } from '@/lib/seguimientos'
 
 const hoyIso = (): string => {
   const d = new Date()
@@ -62,13 +63,17 @@ interface Props {
   /** REF (mayúsculas) → cliente. El log no guarda el cliente: se pega desde
    *  las cargas que la pestaña ya tiene en memoria. */
   clientePorRef: Map<string, string>
+  /** REF (mayúsculas) → área. Ídem: el log tampoco guarda la modalidad. */
+  areaPorRef?: Map<string, AreaSeguimiento>
+  /** Área elegida arriba: el historial muestra lo de esa cola. */
+  area?: AreaSeguimiento
   /** Abre la ficha completa de la carga. */
   onOpenDetail?: (ref: string) => void
   /** Cambia cuando la cola registra algo nuevo, para refrescar sin recargar. */
   recargarToken?: number
 }
 
-export default function HistorialSeguimientos({ clientePorRef, onOpenDetail, recargarToken }: Props) {
+export default function HistorialSeguimientos({ clientePorRef, areaPorRef, area, onOpenDetail, recargarToken }: Props) {
   const [filas, setFilas] = useState<FilaLog[] | null>(null)
   const [error, setError] = useState('')
   const [truncado, setTruncado] = useState(false)
@@ -93,10 +98,13 @@ export default function HistorialSeguimientos({ clientePorRef, onOpenDetail, rec
   useEffect(() => { cargar() }, [cargar, recargarToken])
 
   const eventos = useMemo(
-    () => armarEventos(filas || [], clientePorRef),
-    [filas, clientePorRef],
+    () => armarEventos(filas || [], clientePorRef, areaPorRef),
+    [filas, clientePorRef, areaPorRef],
   )
-  const visibles = useMemo(() => filtrarEventos(eventos, { tipos, texto }), [eventos, tipos, texto])
+  const visibles = useMemo(
+    () => filtrarEventos(eventos, { tipos, texto, area }),
+    [eventos, tipos, texto, area],
+  )
   const grupos = useMemo(() => agruparPorDia(visibles, hoyIso()), [visibles])
 
   const toggleTipo = (t: TipoEvento) => {

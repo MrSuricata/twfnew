@@ -30,7 +30,7 @@ import {
 } from '@phosphor-icons/react'
 import { toast } from 'sonner'
 import { authFetch, getAdminLevel, getAdminHomeArea } from '@/lib/authClient'
-import { colaSeguimientos } from '@/lib/seguimientos'
+import { colaSeguimientos, areaInicial, SEGUIMIENTOS_AREA_KEY, type AreaSeguimiento } from '@/lib/seguimientos'
 import { isPushSupported, isSubscribed, subscribePush, unsubscribePush, isIosWithoutStandalone, getPushPrefs, patchPushPrefs, DEFAULT_PUSH_PREFS, type PushPrefs } from '@/lib/push'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Switch } from '@/components/ui/switch'
@@ -167,13 +167,26 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
     }
     return set
   }, [dbShipments])
-  // Cola de seguimientos: cuántos updates tocan hoy (badge de la pestaña).
+  // Área de la cola de Seguimientos: FCL (Nico) o LCL (consolidados). Vive
+  // acá y no adentro del tablero para que el badge de la pestaña cuente lo
+  // MISMO que se ve al abrirla. Mismo criterio que el área de HOY: manda el
+  // home_area del usuario, después la última elección en este navegador.
+  const [seguimientosArea, setSeguimientosArea] = useState<AreaSeguimiento>(() => {
+    let guardada: string | null = null
+    try { guardada = localStorage.getItem(SEGUIMIENTOS_AREA_KEY) } catch { /* sin storage: default */ }
+    return areaInicial(getAdminHomeArea(), guardada)
+  })
+  const cambiarSeguimientosArea = useCallback((a: AreaSeguimiento) => {
+    setSeguimientosArea(a)
+    try { localStorage.setItem(SEGUIMIENTOS_AREA_KEY, a) } catch { /* ignorar */ }
+  }, [])
+  // Cola de seguimientos: cuántos updates tocan hoy EN SU ÁREA (badge).
   const seguimientosCount = useMemo(() => {
     const cargas = (dbShipments || []).map(s => ({
       ref: s.ref, etd: s.etd, eta: s.eta, seguimiento: s.seguimiento, mode: s.mode, archived: s.archived,
     }))
-    return colaSeguimientos(cargas, new Date()).pendientes.length
-  }, [dbShipments])
+    return colaSeguimientos(cargas, new Date(), seguimientosArea).pendientes.length
+  }, [dbShipments, seguimientosArea])
   // TWF brand has no ops tabs → land on the first content tab.
   // Pantalla de inicio POR USUARIO (admin_users.home_area, viaja en el JWT):
   // Nico arranca en Seguimientos, el resto donde diga su selector de Equipo.
@@ -687,6 +700,8 @@ export default function DashboardEnhanced({ onLogout, isDataLoading = false, cli
               dbShipments={dbShipments}
               onPatchShipment={onPatchShipment}
               onOpenDetail={onOpenDetail}
+              area={seguimientosArea}
+              onAreaChange={cambiarSeguimientosArea}
             />
           </TabsContent>
 
