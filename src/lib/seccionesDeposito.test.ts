@@ -4,6 +4,11 @@
  * Lo que estos tests no dejan pasar es el reclamo de Brian del 04/09: entrar y
  * leer "Operativas de hoy: 0" con ocho retiros esperando abajo. Si alguien
  * vuelve el orden a una lista fija, acá se cae.
+ *
+ * 04/09, más tarde: la regla se endureció. Antes la card vacía bajaba SOLO si
+ * había algo urgente; ahora baja siempre que esté en cero, haya o no urgencia.
+ * Cinco tests de acá fijaban la versión con excepción y se actualizaron: cada
+ * uno dice al lado qué cambió y por qué.
  */
 import { describe, it, expect } from 'vitest'
 import {
@@ -31,7 +36,7 @@ describe('ordenSeccionesDeposito — con trabajo hoy manda el día', () => {
   })
 })
 
-describe('ordenSeccionesDeposito — sin trabajo hoy sube lo urgente', () => {
+describe('ordenSeccionesDeposito — sin trabajo hoy la card vacía baja siempre', () => {
   it('el caso de Bruno: 0 operativas y 8 retiros con verdes → los retiros arriba, "Hoy" ya no primera', () => {
     const orden = ordenSeccionesDeposito(estado({ operativasHoy: 0, retiros: 8, retirosListos: 3 }))
     expect(orden[0]).toBe('retiros')
@@ -45,9 +50,12 @@ describe('ordenSeccionesDeposito — sin trabajo hoy sube lo urgente', () => {
     expect(orden.slice(0, 2)).toEqual(['vacios', 'retiros'])
   })
 
-  it('solo vacíos por vencer: suben ellos y el resto queda en el orden de siempre', () => {
+  it('solo vacíos por vencer: suben ellos y "Hoy" queda debajo de las dos cards de trabajo', () => {
+    // ACTUALIZADO 04/09: antes "Hoy" quedaba SEGUNDA (['vacios','hoy','retiros',…]).
+    // Con la regla sin excepción, arriba van siempre retiros y vacíos —acá los
+    // vacíos primero porque sangran— y la card vacía cae tercera.
     const orden = ordenSeccionesDeposito(estado({ vacios: 2, vaciosPorVencer: 2 }))
-    expect(orden).toEqual(['vacios', 'hoy', 'retiros', 'lcl', 'plan', 'avisos', 'agenda'])
+    expect(orden).toEqual(['vacios', 'retiros', 'hoy', 'lcl', 'plan', 'avisos', 'agenda'])
   })
 
   it('la card de "Hoy" BAJA pero nunca desaparece: siempre están las seis', () => {
@@ -62,19 +70,45 @@ describe('ordenSeccionesDeposito — sin trabajo hoy sube lo urgente', () => {
     }
   })
 
-  it('vacíos que están solo por un dato faltante NO son urgentes: no suben nada', () => {
+  it('vacíos que están solo por un dato faltante NO son urgentes: no se adelantan a los retiros', () => {
     // `vacios` cuenta filas; `vaciosPorVencer` solo las que corren contra el reloj.
+    // ACTUALIZADO 04/09: antes esto daba el ORDEN_BASE entero (con "Hoy"
+    // primera). Lo que el test sigue cuidando es lo suyo: sin vencimiento, los
+    // vacíos NO se adelantan a los retiros. "Hoy" baja por la regla general.
     const orden = ordenSeccionesDeposito(estado({ vacios: 6, vaciosPorVencer: 0 }))
-    expect(orden).toEqual(ORDEN_BASE_DEPOSITO)
+    expect(orden).toEqual(['retiros', 'vacios', 'hoy', 'lcl', 'plan', 'avisos', 'agenda'])
   })
 
-  it('retiros que no están en verde no suben la card', () => {
+  it('retiros que no están en verde no se adelantan a los vacíos', () => {
+    // ACTUALIZADO 04/09: antes daba el ORDEN_BASE entero. Sigue probando que un
+    // retiro que todavía no se puede ir a buscar no gana prioridad; lo único que
+    // cambió es que "Hoy", en cero, ya no encabeza.
     const orden = ordenSeccionesDeposito(estado({ retiros: 8, retirosListos: 0 }))
-    expect(orden).toEqual(ORDEN_BASE_DEPOSITO)
+    expect(orden).toEqual(['retiros', 'vacios', 'hoy', 'lcl', 'plan', 'avisos', 'agenda'])
   })
 
-  it('sin nada urgente el orden es el de siempre (un día vacío se lee como vacío)', () => {
-    expect(ordenSeccionesDeposito(SIN_NADA)).toEqual(ORDEN_BASE_DEPOSITO)
+  it('con el portal en CERO la card vacía igual baja: es la regla sin excepción', () => {
+    // ACTUALIZADO 04/09: antes un día sin nada urgente devolvía el ORDEN_BASE y
+    // "Operativas de hoy: 0" volvía a ser el titular. Brian dijo que le daba lo
+    // mismo y que decidiéramos: gana la regla que se explica en una línea.
+    expect(ordenSeccionesDeposito(SIN_NADA)).toEqual(['retiros', 'vacios', 'hoy', 'lcl', 'plan', 'avisos', 'agenda'])
+  })
+
+  it('la invariante: con 0 operativas, "Hoy" NUNCA es la primera', () => {
+    const casos: Partial<EstadoSeccionesDeposito>[] = [
+      {}, { retiros: 8 }, { retiros: 8, retirosListos: 3 }, { vacios: 5 },
+      { vacios: 5, vaciosPorVencer: 2 }, { vacios: 5, vaciosPorVencer: 2, retirosListos: 1 },
+      { lcl: 9, avisos: 4 },
+    ]
+    for (const c of casos) {
+      const orden = ordenSeccionesDeposito(estado(c))
+      expect(orden[0]).not.toBe('hoy')
+      expect(orden.indexOf('hoy')).toBe(2)   // justo debajo de retiros y vacíos
+    }
+  })
+
+  it('con una sola operativa hoy vuelve a encabezar: la regla mira el contador, no la urgencia', () => {
+    expect(ordenSeccionesDeposito(estado({ operativasHoy: 1, retiros: 8, retirosListos: 8 }))[0]).toBe('hoy')
   })
 })
 
@@ -85,9 +119,13 @@ describe('chips de la barra', () => {
   })
 
   it('sin LCL no hay chip de LCL', () => {
+    // ACTUALIZADO 04/09: la lista esperada arranca con 'retiros' y no con 'hoy'
+    // porque el estado no tiene operativas hoy — los chips van en el orden de
+    // las cards, así que heredan la bajada de "Hoy". El chip de LCL sigue sin
+    // aparecer, que es lo que este test mira.
     const chips = chipsSeccionesDeposito(estado({ retiros: 1, vacios: 1, lcl: 0, avisos: 1 }))
     expect(chips.map(c => c.id)).not.toContain('lcl')
-    expect(chips.map(c => c.id)).toEqual(['hoy', 'retiros', 'vacios', 'plan', 'avisos', 'agenda'])
+    expect(chips.map(c => c.id)).toEqual(['retiros', 'vacios', 'hoy', 'plan', 'avisos', 'agenda'])
   })
 
   it('el plan de 14 días SÍ va a la barra: se ve en la página, se navega', () => {
