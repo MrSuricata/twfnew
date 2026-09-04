@@ -601,6 +601,7 @@ export default function AgendaCalendar({
                   onSelectShipment={handleSelectShipment}
                   avisos={avisosCal}
                   onAbrirAviso={editable ? abrirAviso : undefined}
+                  vistaCliente={clientView}
                 />
               )}
 
@@ -613,6 +614,7 @@ export default function AgendaCalendar({
                   editable={editable}
                   avisos={avisosCal}
                   onAbrirAviso={editable ? abrirAviso : undefined}
+                  vistaCliente={clientView}
                 />
               )}
 
@@ -656,6 +658,7 @@ export default function AgendaCalendar({
                   event={dragActiveEvent}
                   compact={true}
                   draggable={false}
+                  vistaCliente={clientView}
                 />
               </div>
             )}
@@ -672,6 +675,7 @@ export default function AgendaCalendar({
                 onSelectShipment={handleSelectShipment}
                 avisos={avisosCal}
                 onAbrirAviso={editable ? abrirAviso : undefined}
+                vistaCliente={clientView}
               />
             )}
 
@@ -681,6 +685,7 @@ export default function AgendaCalendar({
                 events={filteredEvents}
                 onSelectShipment={handleSelectShipment}
                 onDayClick={handleDayClick}
+                vistaCliente={clientView}
               />
             )}
 

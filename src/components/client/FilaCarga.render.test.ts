@@ -81,8 +81,12 @@ describe('FilaCarga — lo que el cliente lee de un vistazo', () => {
     expect(html.toLowerCase()).not.toContain('libre')
   })
 
-  it('tampoco el transporte ni el depósito de trabajo interno', () => {
-    expect(render(carga())).not.toContain('TRANSCAL')
+  it('tampoco el transporte, que es dato de trabajo nuestro', () => {
+    // El DEPÓSITO sí se le muestra al cliente ("tu carga está en GODILCO",
+    // regla de Brian del ciclo de retiro): el que no va es el transporte.
+    const html = render(carga())
+    expect(html).not.toContain('TRANSCAL')
+    expect(html).not.toContain('RIGATOSSO')
   })
 
   it('marca ruta y tipo solo cuando el cliente ve mezcla', () => {

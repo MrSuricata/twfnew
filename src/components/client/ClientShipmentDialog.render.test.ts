@@ -90,6 +90,10 @@ describe('ClientShipmentDialog — el diálogo se anuncia y se nombra como el cl
     expect(html).toContain('Resumen')
     expect(html).toContain('Fotos')
     expect(html).toContain('Informes')
+    // Y los contadores, que era lo que el nombre del test prometía: si los
+    // badges desaparecieran, las tres líneas de arriba pasaban igual.
+    expect(html).toMatch(/Fotos[\s\S]{0,400}>1</)
+    expect(html).toMatch(/Informes[\s\S]{0,400}>1</)
   })
 })
 
@@ -149,8 +153,11 @@ describe('ClientShipmentDialog — Fotos e Informes', () => {
         { id: 'f2', shipmentRef: 'A9999', photoType: 'origen', createdAt: ts(2026, 8, 20) },
       ],
     })
-    // 1 foto propia (la de la otra carga no cuenta)
+    // 1 foto propia (la de la otra carga no cuenta). El `not` es el que
+    // realmente atrapa la fuga: sin el filtro por ref, el badge diría 2.
     expect(html).toContain('>1<')
+    expect(html).not.toContain('>2<')
+    expect(html).not.toContain('A9999')
   })
 })
 

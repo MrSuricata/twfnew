@@ -19,9 +19,14 @@ interface AgendaEventCardProps {
   compact?: boolean       // true for week/month views
   onClick?: () => void
   draggable?: boolean     // enables DnD (week view, editable=true only)
+  /** Agenda del CLIENTE: apaga los datos que son nuestros (LIBRE, transporte).
+   *  Se decide por VISTA y no por dato vacío: para un depósito, un LIBRE sin
+   *  cargar es información — "todavía no nos pasaron la fecha" — y la caja
+   *  tiene que seguir ahí diciendo "—". */
+  vistaCliente?: boolean
 }
 
-export default function AgendaEventCard({ event, compact = true, onClick, draggable = false }: AgendaEventCardProps) {
+export default function AgendaEventCard({ event, compact = true, onClick, draggable = false, vistaCliente = false }: AgendaEventCardProps) {
   const { setNodeRef, listeners, attributes, isDragging } = useDraggable({
     id: event.id,
     data: { event },
@@ -237,10 +242,11 @@ export default function AgendaEventCard({ event, compact = true, onClick, dragga
 
         {/* Info cards row */}
         <div className="grid grid-cols-3 gap-3">
-          {/* Libre Hasta. Sin fecha no se dibuja la caja: en la agenda del
-              CLIENTE el LIBRE viaja vacío a propósito (es dato nuestro), y una
-              caja "Libre Hasta —" seguiría nombrándoselo. */}
-          {event.libre && (
+          {/* Libre Hasta. En la agenda del CLIENTE no se dibuja: es dato
+              nuestro, y una caja "Libre Hasta —" se lo nombraría igual. Para
+              el depósito y el admin la caja va SIEMPRE, con "—" cuando falta:
+              esa ausencia es justamente lo que tienen que reclamarnos. */}
+          {!vistaCliente && (
           <div className="bg-muted/50 rounded-lg p-3">
             <div className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-1">
               Libre Hasta
@@ -292,7 +298,8 @@ export default function AgendaEventCard({ event, compact = true, onClick, dragga
             <div className="text-sm font-bold text-foreground">
               {event.deposito || '—'}
             </div>
-            {event.transporte && (
+            {/* El transporte es dato de trabajo nuestro: no va al cliente. */}
+            {!vistaCliente && event.transporte && (
               <div className="text-xs text-muted-foreground mt-0.5 truncate">
                 🚛 {event.transporte}
               </div>

@@ -12,11 +12,13 @@ interface AgendaDayViewProps {
   /** Feriados, paros y demas: no cuelgan de una carga, son del dia. */
   avisos?: EventoCalendario[]
   onAbrirAviso?: (aviso: EventoCalendario) => void
+  /** Agenda del CLIENTE: apaga los datos nuestros (LIBRE, transporte). */
+  vistaCliente?: boolean
 }
 
 const EVENT_ORDER: EventType[] = ['salida', 'eta_fisc', 'libre', 'descarga', 'dev']
 
-export default function AgendaDayView({ date, events, onSelectShipment, avisos = [], onAbrirAviso }: AgendaDayViewProps) {
+export default function AgendaDayView({ date, events, onSelectShipment, avisos = [], onAbrirAviso, vistaCliente = false }: AgendaDayViewProps) {
   const dateKey = toDateKey(date)
   const dayEvents = events.filter(e => e.date === dateKey)
   const avisosDelDia = eventosDelDia(avisos, dateKey)
@@ -96,6 +98,7 @@ export default function AgendaDayView({ date, events, onSelectShipment, avisos =
                 event={event}
                 compact={false}
                 onClick={() => onSelectShipment(event)}
+                vistaCliente={vistaCliente}
               />
             ))}
           </div>

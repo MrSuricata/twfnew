@@ -190,13 +190,20 @@ function Informes({ informes, ref_ }: { informes: OperativeReport[]; ref_: strin
       const data = r.fileData || await fetchReportFile(r.id)
       if (!data) { toast.error('No pudimos traer el informe. Probá de nuevo en un rato.'); return }
       const url = urlDeArchivo(data)
-      const ventana = window.open(url, '_blank', 'noopener')
-      if (!ventana) {
-        // Con el bloqueador de pop-ups puesto: se descarga, que es lo que el
-        // cliente quería igual.
+      // OJO con 'noopener' en el tercer argumento: por spec hace que
+      // window.open devuelva null SIEMPRE, haya abierto la pestaña o no. Con
+      // eso, el fallback se disparaba siempre y el cliente se llevaba la
+      // pestaña Y una descarga en cada click. La protección va por rel.
+      const ventana = window.open(url, '_blank')
+      if (ventana) {
+        ventana.opener = null
+      } else {
+        // Bloqueador de pop-ups: se descarga, que es lo que el cliente
+        // quería igual.
         const a = document.createElement('a')
         a.href = url
         a.download = r.fileName || 'informe.pdf'
+        a.rel = 'noopener'
         a.click()
       }
       if (!/^https?:/i.test(data)) setTimeout(() => URL.revokeObjectURL(url), 60_000)
