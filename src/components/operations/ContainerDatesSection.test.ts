@@ -385,3 +385,42 @@ describe('computeFlush — flush de borradores al cerrar el Sheet', () => {
     expect(next).toBeNull()
   })
 })
+
+// ── TIPO por contenedor (pedido Brian 05/09) ────────────────────────────────
+
+describe('TIPO — es del contenedor, no de la carga', () => {
+  it('cambiar el tipo de UN contenedor no toca el de los hermanos', () => {
+    const cntrs = ['AAAA1111111', 'BBBB2222222']
+    const existing = [
+      record({ CNTR_OP: 'AAAA1111111', TIPO: '20GP' }),
+      record({ CNTR_OP: 'BBBB2222222', TIPO: '20GP' }),
+    ]
+    const o = op('AAAA1111111, BBBB2222222', existing)
+    const next = buildNextOperativas(cntrs, existing, o, 1, { TIPO: '40HQ' })
+    expect(next[0].TIPO).toBe('20GP')   // el hermano queda como estaba
+    expect(next[1].TIPO).toBe('40HQ')
+    // y no se lleva puesto nada más del contenedor editado
+    expect(next[1].DESCARGA).toBe('2026-06-20')
+    expect(next[1].KG).toBe(500)
+  })
+
+  it('un contenedor NUEVO no hereda basura del nivel carga (FCL ni "20GP + 40HQ")', () => {
+    const cntrs = ['AAAA1111111']
+    // op() de este archivo trae tipo '40HC' a nivel carga → se siembra como 40HQ
+    expect(resolveRecord(cntrs, [], 0, op('AAAA1111111')).TIPO).toBe('40HQ')
+
+    const conFcl = { ...op('AAAA1111111'), tipo: 'FCL' } as UnifiedOperation
+    expect(resolveRecord(cntrs, [], 0, conFcl).TIPO).toBe('')
+
+    const mixta = { ...op('AAAA1111111'), tipo: '20GP + 40HQ' } as UnifiedOperation
+    expect(resolveRecord(cntrs, [], 0, mixta).TIPO).toBe('')
+  })
+
+  it('el tipo ya cargado de un contenedor existente se preserva al editar otra cosa', () => {
+    const cntrs = ['AAAA1111111']
+    const existing = [record({ CNTR_OP: 'AAAA1111111', TIPO: '40FR' })]
+    const o = op('AAAA1111111', existing)
+    const next = buildNextOperativas(cntrs, existing, o, 0, { KG: 999 })
+    expect(next[0].TIPO).toBe('40FR')
+  })
+})

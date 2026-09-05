@@ -563,3 +563,37 @@ describe('deriveKnownValues', () => {
     expect(deriveKnownValues([])).toEqual([])
   })
 })
+
+// ── Tipo a nivel carga: derivado de los contenedores (05/09) ────────────────
+// El tipo vive POR CONTENEDOR. El nivel carga es una LECTURA de ese array: con
+// contenedores distintos no puede mentir con uno solo, y la columna vieja
+// (donde 51 filas decían "FCL", que es la modalidad) queda de puro fallback.
+describe('dbShipmentToOperation — tipo derivado de los contenedores', () => {
+  const fcl = (over: Partial<DbShipment> = {}): DbShipment =>
+    ({ id: 'x', ref: 'A8200', mode: 'fcl', source: 'fcl', ...over } as unknown as DbShipment)
+  const c = (TIPO: string, CNTR_OP: string) => ({ TIPO, CNTR_OP } as unknown as OperativasRecord)
+
+  it('todos los contenedores del mismo tipo → ese tipo (y 40HC sale 40HQ)', () => {
+    expect(dbShipmentToOperation(fcl({ tipo: 'FCL', operativas: [c('40HC', 'C1'), c('40HQ', 'C2')] })).tipo)
+      .toBe('40HQ')
+  })
+
+  it('contenedores distintos → los muestra a los dos, no elige uno', () => {
+    expect(dbShipmentToOperation(fcl({ tipo: '40HQ', operativas: [c('20GP', 'C1'), c('40HQ', 'C2')] })).tipo)
+      .toBe('20GP + 40HQ')
+  })
+
+  it('sin tipo por contenedor cae a la columna, normalizada', () => {
+    expect(dbShipmentToOperation(fcl({ tipo: '20 gp', operativas: [c('', 'C1')] })).tipo).toBe('20GP')
+    expect(dbShipmentToOperation(fcl({ tipo: '40HC' })).tipo).toBe('40HQ')
+  })
+
+  it('sin nada (o con la columna diciendo "FCL") sigue mostrando FCL, como antes', () => {
+    expect(dbShipmentToOperation(fcl({ tipo: 'FCL', operativas: [c('', 'C1')] })).tipo).toBe('FCL')
+    expect(dbShipmentToOperation(fcl({})).tipo).toBe('FCL')
+  })
+
+  it('LCL/aéreo siguen mostrando la modalidad, no el tipo de contenedor', () => {
+    expect(dbShipmentToOperation({ id: 'x', ref: 'LCL-1', mode: 'lcl', tipo: '40HQ' } as never).tipo).toBe('LCL')
+  })
+})
