@@ -10,6 +10,7 @@
 import type { ParsedShipment, OperativasRecord } from './shipmentTypes'
 import { getShipmentStatus, parseLocalDate } from './shipmentTypes'
 import type { Truck, TruckLoad } from './truckTypes'
+import { normalizarTipo, tipoDeCarga } from './tiposContenedor'
 
 // ── Truck-driven status derivation (LCL/aéreo on a truck) ──────────────
 // The truck a cargo is loaded on is, for LCL/aéreo, what the Sheet's operativas
@@ -376,7 +377,12 @@ function fclToOperation(s: ParsedShipment, operatorId: string | null, uid: strin
     desconsol: firstWith('DESCARGA'),   // misma fuente que descarga
     // entregaPlanta queda en false (viene de EMPTY) — no hay dato en el Sheet
     dev: firstWith('DEV'),
-    tipo: s.TIPO || firstWith('TIPO') || 'FCL',
+    // Tipo: acá (FCL de la PLANILLA) la columna sigue mandando, porque TIPO es
+    // un campo del overlay web_edits (EDITABLE_FCL_FIELDS) y esa edición tiene
+    // que verse. Lo que cambia es el fallback: en vez del TIPO del primer
+    // contenedor, se derivan TODOS ("20GP + 40HQ" si son distintos) y se
+    // normaliza (un "FCL" guardado como tipo sale vacío y cae al default).
+    tipo: normalizarTipo(s.TIPO) || tipoDeCarga(ops) || 'FCL',
     terminal: s.TERMINAL || '',
     n: num(s.N),
     wood,
@@ -564,8 +570,12 @@ export function dbShipmentToOperation(s: DbShipment): UnifiedOperation {
     entregaPlanta: !!s.entrega_planta,
     dev: s.dev || '',
     despacho: s.despacho || '',
-    // FCL muestra el tipo de contenedor (40HC/20DRY…); el resto, el label de modalidad.
-    tipo: s.mode === 'fcl' ? (s.tipo || 'FCL') : (MODALITY_LABELS[s.mode] || ''),
+    // FCL muestra el tipo de contenedor (40HQ/20GP…); el resto, el label de
+    // modalidad. Derive-on-read: el tipo vive POR CONTENEDOR (operativas[].TIPO),
+    // así que el nivel carga se calcula desde el array y solo cae a la columna
+    // `tipo` cuando ningún contenedor lo tiene. Si los contenedores son
+    // distintos muestra los dos ("20GP + 40HQ") en vez de mentir con uno.
+    tipo: s.mode === 'fcl' ? (tipoDeCarga(s.operativas, s.tipo) || 'FCL') : (MODALITY_LABELS[s.mode] || ''),
     terminal: s.terminal || '',
     n: s.n_cntr || 0,
     // Tri-estado: null (columna sin dato) = madera a confirmar — NO colapsar a false.
