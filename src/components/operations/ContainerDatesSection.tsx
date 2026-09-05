@@ -11,6 +11,7 @@ import { parseCntr } from '@/lib/cntrUtils'
 import { isSalidaBeforeArrival, avisoSalida, fmtDMY, etaVigente } from '@/lib/salidaCheck'
 import { sugerirEtaFiscal, llegadaFiscalAtipica, nombreDia } from '@/lib/transitoFiscal'
 import { isSinTelex, mensajeConfirmarSinTelex } from '@/lib/telexCheck'
+import { normalizarTipo, esTipoCanonico, opcionesTipoContenedor } from '@/lib/tiposContenedor'
 import { toast } from 'sonner'
 
 /** Handle imperativo que el panel usa para forzar el commit de los borradores
@@ -127,7 +128,12 @@ export function resolveRecord(
     DESCARGA: '',
     DEV: '',
     CLIENTE_OP: op.cliente || '',
-    TIPO: op.tipo || '',
+    // TIPO: se siembra el de la carga SOLO si es un tipo de verdad. El nivel
+    // carga arrastra basura histórica —"FCL" (que es la modalidad) y, ahora que
+    // se deriva de los contenedores, cadenas como "20GP + 40HQ"—: sembrar eso en
+    // un contenedor nuevo es exactamente lo que ensució la base. Si no es
+    // canónico, el contenedor nace sin tipo y el operador lo elige.
+    TIPO: esTipoCanonico(op.tipo) ? normalizarTipo(op.tipo) : '',
     WOOD: op.wood ? 'SI' : '',
     TRANSPORTE: op.transporte || '',
     HORARIO: '',
@@ -147,7 +153,7 @@ export function buildNextOperativas(
   existing: OperativasRecord[],
   op: UnifiedOperation,
   idx: number,
-  patch: Partial<Pick<OperativasRecord, 'SALIDA' | 'ETA_FISC' | 'LUGAR_SALIDA' | 'PKGS' | 'KG' | 'M3'>>
+  patch: Partial<Pick<OperativasRecord, 'SALIDA' | 'ETA_FISC' | 'LUGAR_SALIDA' | 'PKGS' | 'KG' | 'M3' | 'TIPO'>>
 ): OperativasRecord[] {
   return cntrs.map((_, i) => {
     const base = resolveRecord(cntrs, existing, i, op)
@@ -462,6 +468,16 @@ const ContainerDatesSection = forwardRef<ContainerDatesHandle, {
     onCommitOperativas(applyLugarSalida(base, value))
   }
 
+  // Tipo de contenedor — pick discreto: commit onChange (como Lugar de salida,
+  // sin draft). A diferencia del lugar, NO se propaga a los hermanos: el tipo es
+  // del CONTENEDOR, no de la carga (pedido de Brian 05/09 — una carga puede
+  // traer un 20GP y un 40HQ, y hasta ahora eso terminaba escrito como
+  // "20GP + 40HQ" en un solo campo). Mismo camino de guardado que los demás
+  // campos por contenedor: buildNextOperativas → onCommitOperativas.
+  const handleTipoChange = (i: number, value: string) => {
+    onCommitOperativas(buildNextOperativas(cntrs, existing, op, i, { TIPO: normalizarTipo(value) }))
+  }
+
   // Bultos/Kg/M³ por contenedor: inputs numéricos, commit onBlur. El total
   // (Peso/Volumen/Bultos de arriba) pasa a ser la SUMA de los contenedores
   // (se recalcula en el rollup al escribir el array operativas).
@@ -662,6 +678,29 @@ const ContainerDatesSection = forwardRef<ContainerDatesHandle, {
                   ) : (
                     <span className={`text-[13px] font-medium ${rec.M3 ? '' : 'text-muted-foreground'}`}>
                       {rec.M3 ? nf.format(Number(rec.M3)) : '—'}
+                    </span>
+                  )}
+                </div>
+
+                {/* Tipo de contenedor — va DESPUÉS de bultos/kg/m³ (pedido de
+                    Brian). Desplegable y no texto libre: es lo que evita que
+                    vuelvan a entrar "20 GP" y "20GP" como cosas distintas. Un
+                    valor viejo fuera de la lista se ofrece marcado (no se pierde). */}
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-[10px] text-muted-foreground leading-none" title="Tipo de contenedor">Tipo</span>
+                  {editable ? (
+                    <select
+                      value={normalizarTipo(rec.TIPO)}
+                      onChange={e => handleTipoChange(i, e.target.value)}
+                      className="h-9 w-full rounded border border-input bg-background px-1 text-sm text-foreground focus:outline-none focus:ring-1 focus:ring-ring"
+                    >
+                      {opcionesTipoContenedor(rec.TIPO).map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className={`text-[13px] font-medium ${normalizarTipo(rec.TIPO) ? '' : 'text-muted-foreground'}`}>
+                      {normalizarTipo(rec.TIPO) || '—'}
                     </span>
                   )}
                 </div>
